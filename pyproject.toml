@@ -1,0 +1,92 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["pip>=22.0.0", "setuptools", "setuptools_scm", "wheel"]
+
+[project]
+authors = [{ name = "janbjorge"}]
+description = "PgQueuer is a streamlined Python library leveraging PostgreSQL for efficient job queuing, enabling easy management and robust execution of background tasks."
+dynamic = ["version"]
+license = { text = "MIT License" }
+name = "PgQueuer"
+readme = "README.md"
+requires-python = ">=3.10"
+
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Other Environment",
+    "Environment :: Web Environment",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Utilities",
+]
+dependencies = [
+    "asyncpg>=0.27.0",
+    "pydantic>=2.0.0",
+]
+
+[project.urls]
+Documentation = "https://github.com/janbjorge/PgQueuer/"
+Homepage = "https://github.com/janbjorge/PgQueuer/"
+Issues = "https://github.com/janbjorge/PgQueuer/issues"
+Repository = "https://github.com/janbjorge/PgQueuer/"
+
+[project.optional-dependencies]
+dev = [
+    "asyncpg-stubs",
+    "mypy-extensions",
+    "mypy",
+    "pytest-asyncio",
+    "pytest",
+    "ruff",
+]
+docs = [
+    "myst-parser",
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[tool.setuptools_scm]
+write_to = "src/_version.py"
+
+[tool.ruff]
+line-length = 88
+[tool.ruff.lint]
+select = [
+    "C",
+    "E",
+    "F",
+    "I",
+    "PIE",
+    "Q",
+    "RET",
+    "RSE",
+    "SIM",
+    "W",
+    "C90",
+]
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.mypy]
+disallow_untyped_defs = true
+exclude = "^(build|docs)"
+extra_checks = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]
+python_version = "3.10"
+strict_equality = true
+warn_redundant_casts = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
