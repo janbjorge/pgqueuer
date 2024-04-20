@@ -18,7 +18,7 @@ class Job(BaseModel):
     created: AwareDatetime
     status: STATUS
     entrypoint: str
-    payload: bytes
+    payload: bytes | None
 
 
 class Jobs(RootModel[list[Job]]): ...

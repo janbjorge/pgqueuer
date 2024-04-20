@@ -118,6 +118,12 @@ async def main() -> None:
     ) as pool:
         match parsed.command:
             case "install":
-                await queries.Queries(pool=pool, prefix=parsed.prefix).install()
+                await queries.InstallUninstallQueries(
+                    pool=pool,
+                    prefix=parsed.prefix,
+                ).install()
             case "uninstall":
-                await queries.Queries(pool=pool, prefix=parsed.prefix).uninsall()
+                await queries.InstallUninstallQueries(
+                    pool=pool,
+                    prefix=parsed.prefix,
+                ).uninstall()

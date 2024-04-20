@@ -1,0 +1,14 @@
+version: '3.10'
+services:
+  pgq:
+    build:
+      context: .
+      dockerfile: test/db/Dockerfile
+    image: pgq
+    ports:
+      - "5432:5432"
+    tmpfs:
+      - /var/lib/pg/data
+    environment:
+      PGDATA: /var/lib/pg/data
+    restart: "no"

@@ -4,7 +4,7 @@ requires = ["pip>=22.0.0", "setuptools", "setuptools_scm", "wheel"]
 
 [project]
 authors = [{ name = "janbjorge"}]
-description = "PgQueuer is a streamlined Python library leveraging PostgreSQL for efficient job queuing, enabling easy management and robust execution of background tasks."
+description = "PgQueuer is a Python library leveraging PostgreSQL for efficient job queuing."
 dynamic = ["version"]
 license = { text = "MIT License" }
 name = "PgQueuer"
@@ -12,12 +12,11 @@ readme = "README.md"
 requires-python = ">=3.10"
 
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Environment :: Other Environment",
+    "Development Status :: 4 - Beta",
     "Environment :: Web Environment",
     "Framework :: AsyncIO",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3.10",
@@ -27,7 +26,9 @@ classifiers = [
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Utilities",
+    "Topic :: System :: Distributed Computing"
 ]
+
 dependencies = [
     "asyncpg>=0.27.0",
     "pydantic>=2.0.0",
