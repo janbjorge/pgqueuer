@@ -62,7 +62,7 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while (jobs := await self.q.next_jobs()).root:
+                while (jobs := await self.q.dequeue()).root:
                     for job in jobs.root:
                         self._dispatch(job)
                 await listener.get()

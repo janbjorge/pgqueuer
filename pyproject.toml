@@ -31,6 +31,7 @@ classifiers = [
 
 dependencies = [
     "asyncpg>=0.27.0",
+    "pgcachewatch>=0.4",
     "pydantic>=2.0.0",
 ]
 

@@ -1,46 +1,77 @@
 import dataclasses
+import os
+from typing import Final
 
 import asyncpg
 
 from . import models
 
 
+def add_prefix(string: str) -> str:
+    return f"{os.environ.get('PGQUEUER_PREFIX', '')}{string}"
+
+
+@dataclasses.dataclass
+class DBSettings:
+    channel: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("ch_pgqueuer"),
+    )
+    function: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("fn_pgqueuer_changed"),
+    )
+    log_table: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_log"),
+    )
+    log_table_status_type: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_status_log"),
+    )
+    queue_status_type: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_status"),
+    )
+    queue_table: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer"),
+    )
+    trigger: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("tg_pgqueuer_changed"),
+    )
+
+
 @dataclasses.dataclass
 class InstallUninstallQueries:
     pool: asyncpg.Pool
-    prefix: str = dataclasses.field(default="")
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     async def install(self) -> None:
         await self.pool.execute(
             f"""
-    CREATE TYPE {self.prefix}pgqueuer_status AS ENUM ('queued', 'picked');
-    CREATE TYPE {self.prefix}pgqueuer_status_log AS ENUM ('exception', 'successful');
+    CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked');
+    CREATE TABLE {self.settings.queue_table} (
+        id SERIAL PRIMARY KEY,
+        priority INT NOT NULL,
+        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        status {self.settings.queue_status_type} NOT NULL,
+        entrypoint TEXT NOT NULL,
+        payload BYTEA
+    );
+    CREATE UNIQUE INDEX ON {self.settings.queue_table} (priority, id) WHERE status != 'picked';
 
-    CREATE TABLE {self.prefix}pgqueuer_log(
+    CREATE TYPE {self.settings.log_table_status_type} AS ENUM ('exception', 'successful');
+    CREATE TABLE {self.settings.log_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
         created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         duration INTERVAL NOT NULL,
-        status pgqueuer_status_log NOT NULL,
+        status {self.settings.log_table_status_type} NOT NULL,
         entrypoint TEXT NOT NULL
     );
 
-    CREATE TABLE {self.prefix}pgqueuer (
-        id SERIAL PRIMARY KEY,
-        priority INT NOT NULL,
-        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        status pgqueuer_status NOT NULL,
-        entrypoint TEXT NOT NULL,
-        payload BYTEA
-    );
-    CREATE INDEX ON pgqueuer (priority, id) WHERE status != 'picked';
 
-    CREATE FUNCTION {self.prefix}fn_pgqueuer_changed() RETURNS TRIGGER AS $$
+    CREATE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
     BEGIN
         PERFORM pg_notify(
-        '{self.prefix}ch_pgqueuer',
+        '{self.settings.channel}',
         json_build_object(
-            'channel', '{self.prefix}ch_pgqueuer',
+            'channel', '{self.settings.channel}',
             'operation', lower(TG_OP),
             'sent_at', NOW(),
             'table', TG_TABLE_NAME
@@ -49,21 +80,21 @@ class InstallUninstallQueries:
     END;
     $$ LANGUAGE plpgsql;
 
-    CREATE TRIGGER {self.prefix}tg_pgqueuer_changed
-    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {self.prefix}pgqueuer_log
-    EXECUTE FUNCTION fn_pgqueuer_changed();
-    """
+    CREATE TRIGGER {self.settings.trigger}
+    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {self.settings.queue_table}
+    EXECUTE FUNCTION {self.settings.function}();
+    """  # noqa: E501
         )
 
     async def uninstall(self) -> None:
         await self.pool.execute(
             f"""
-    DROP TRIGGER {self.prefix}tg_pgqueuer_changed;
-    DROP FUNCTION {self.prefix}fn_pgqueuer_changed;
-    DROP TABLE {self.prefix}pgqueuer;
-    DROP TABLE {self.prefix}pgqueuer_log;
-    DROP TYPE {self.prefix}pgqueuer_status;
-    DROP TYPE {self.prefix}pgqueuer_status_log;
+    DROP TRIGGER {self.settings.trigger};
+    DROP FUNCTION {self.settings.function};
+    DROP TABLE {self.settings.queue_table};
+    DROP TABLE {self.settings.log_table};
+    DROP TYPE {self.settings.queue_status_type};
+    DROP TYPE {self.settings.log_table_status_type};
     """
         )
 
@@ -71,45 +102,30 @@ class InstallUninstallQueries:
 @dataclasses.dataclass
 class PgQueuerQueries:
     pool: asyncpg.Pool
-    prefix: str = dataclasses.field(default="")
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-    async def next_jobs(self, batch: int = 100) -> models.Jobs:
-        assert batch > 0
-        return models.Jobs.model_validate(
-            map(
-                dict,
-                await self.pool.fetch(
-                    f"""
-    WITH next_jobs as (
-        SELECT id
-        FROM {self.prefix}pgqueuer
-        WHERE status != 'picked'
-        ORDER BY priority, id
-        LIMIT $1
-        FOR UPDATE SKIP LOCKED
-    )
-    UPDATE {self.prefix}pgqueuer
-    SET status = 'picked'
-    WHERE id = ANY(SELECT id FROM next_jobs)
-    RETURNING *;
-    """,
-                    batch,
-                ),
+    async def dequeue(self) -> models.Jobs:
+        query = f"""
+            WITH next_job AS (
+                SELECT p1.id
+                FROM {self.settings.queue_table} p1
+                WHERE p1.status = 'queued' AND NOT EXISTS (
+                    SELECT FROM
+                    {self.settings.queue_table} p2
+                    WHERE p1.entrypoint = p2.entrypoint AND p2.status = 'picked')
+                ORDER BY id
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
             )
-        )
+            UPDATE {self.settings.queue_table}
+            SET status = 'picked'
+            WHERE id = ANY(SELECT id FROM next_job)
+            RETURNING *;
+        """
 
-    async def set_job_status(self, job: models.Job, status: models.STATUS) -> None:
-        await self.pool.execute(
-            f"""
-    UPDATE {self.prefix}pgqueuer
-    SET status = $2
-    WHERE id = $1 AND status != $2
-    """,
-            job.id,
-            status,
-        )
+        return models.Jobs.model_validate(map(dict, await self.pool.fetch(query)))
 
-    async def put(
+    async def enqueue(
         self,
         entrypoint: str,
         payload: bytes | None,
@@ -117,7 +133,7 @@ class PgQueuerQueries:
     ) -> None:
         await self.pool.execute(
             f"""
-    INSERT INTO {self.prefix}pgqueuer (priority, status, entrypoint, payload)
+    INSERT INTO {self.settings.queue_table} (priority, status, entrypoint, payload)
     VALUES ($1, 'queued', $2, $3)""",
             priority,
             entrypoint,
@@ -127,11 +143,11 @@ class PgQueuerQueries:
     async def clear(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
             await self.pool.execute(
-                f"DELETE FROM {self.prefix}pgqueuer WHERE entrypoint = ANY($1)",
+                f"DELETE FROM {self.settings.queue_table} WHERE entrypoint = ANY($1)",
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
         else:
-            await self.pool.execute(f"TRUNCATE {self.prefix}pgqueuer")
+            await self.pool.execute(f"TRUNCATE {self.settings.queue_table}")
 
     async def qsize(self) -> dict[tuple[str, int], int]:
         return {
@@ -142,7 +158,7 @@ class PgQueuerQueries:
             priority,
             entrypoint
         FROM
-            {self.prefix}pgqueuer
+            {self.settings.queue_table}
         GROUP BY priority, entrypoint
         """)
         }
@@ -151,18 +167,18 @@ class PgQueuerQueries:
 @dataclasses.dataclass
 class PgQueuerLogQueries:
     pool: asyncpg.Pool
-    prefix: str = dataclasses.field(default="")
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     async def move_job_log(self, job: models.Job, status: models.STATUS_LOG) -> None:
         await self.pool.execute(
             f"""
     WITH moved_row AS (
-        DELETE FROM {self.prefix}pgqueuer
+        DELETE FROM {self.settings.queue_table}
         WHERE id = $1
         RETURNING id, priority, created, entrypoint
     )
 
-    INSERT INTO {self.prefix}pgqueuer_log (
+    INSERT INTO {self.settings.log_table} (
         id, priority, created, duration, status, entrypoint
     )
         SELECT id, priority, created, NOW() - created, $2, entrypoint
@@ -175,11 +191,11 @@ class PgQueuerLogQueries:
     async def clear(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
             await self.pool.execute(
-                f"DELETE FROM {self.prefix}pgqueuer_log WHERE entrypoint = ANY($1)",
+                f"DELETE FROM {self.settings.log_table} WHERE entrypoint = ANY($1)",
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
         else:
-            await self.pool.execute(f"TRUNCATE {self.prefix}pgqueuer_log")
+            await self.pool.execute(f"TRUNCATE {self.settings.log_table}")
 
     async def qsize(self) -> dict[tuple[str, str, int], int]:
         return {
@@ -191,22 +207,7 @@ class PgQueuerLogQueries:
             priority,
             entrypoint
         FROM
-            {self.prefix}pgqueuer_log
+            {self.settings.log_table}
         GROUP BY status, priority, entrypoint
         """)
         }
-
-
-# @dataclasses.dataclass
-# class Queries:
-#     pool: asyncpg.Pool
-#     prefix: str = dataclasses.field(default="")
-
-#     installuninstallqueries: InstallUninstallQueries = dataclasses.field(init=False)
-#     pgqueuerqueries: PgQueuerQueries = dataclasses.field(init=False)
-#     pgqueuerlogqueries: PgQueuerLogQueries = dataclasses.field(init=False)
-
-#     def __post__init(self) -> None:
-#         self.installuninstallqueries = InstallUninstallQueries(self.pool, self.prefix)
-#         self.pgqueuerqueries = PgQueuerQueries(self.pool, self.prefix)
-#         self.pgqueuerlogqueries = PgQueuerLogQueries(self.pool, self.prefix)

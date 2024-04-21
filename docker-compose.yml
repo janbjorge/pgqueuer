@@ -4,7 +4,6 @@ services:
     build:
       context: .
       dockerfile: test/db/Dockerfile
-    image: pgq
     ports:
       - "5432:5432"
     tmpfs:

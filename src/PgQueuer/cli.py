@@ -106,6 +106,13 @@ def cliparser() -> argparse.Namespace:
 async def main() -> None:
     parsed = cliparser()
 
+    if (
+        "PGQUEUER_PREFIX" not in os.environ
+        and isinstance(prefix := parsed.prefix, str)
+        and prefix
+    ):
+        os.environ["PGQUEUER_PREFIX"] = prefix
+
     async with asyncpg.create_pool(
         parsed.pg_dsn,
         database=parsed.pg_database,
@@ -118,12 +125,6 @@ async def main() -> None:
     ) as pool:
         match parsed.command:
             case "install":
-                await queries.InstallUninstallQueries(
-                    pool=pool,
-                    prefix=parsed.prefix,
-                ).install()
+                await queries.InstallUninstallQueries(pool=pool).install()
             case "uninstall":
-                await queries.InstallUninstallQueries(
-                    pool=pool,
-                    prefix=parsed.prefix,
-                ).uninstall()
+                await queries.InstallUninstallQueries(pool=pool).uninstall()

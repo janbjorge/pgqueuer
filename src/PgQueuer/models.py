@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, RootModel
 
 STATUS = Literal[
-    "queue",
+    "queued",
     "picked",
 ]
 STATUS_LOG = Literal[

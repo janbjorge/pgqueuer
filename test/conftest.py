@@ -27,7 +27,7 @@ async def pgpool() -> AsyncGenerator[asyncpg.Pool, None]:
     async with (
         asyncpg.create_pool(dsn=dsn(database="postgres")) as p1,
         create_test_database(database, p1),
-        asyncpg.create_pool(dsn(database=database), max_size=20) as p2,
+        asyncpg.create_pool(dsn(database=database), max_size=40) as p2,
     ):
         yield p2
 
