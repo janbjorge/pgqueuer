@@ -13,6 +13,11 @@ STATUS_LOG = Literal[
 
 
 class Job(BaseModel):
+    """
+    Represents a job with attributes such as ID, priority,
+    creation time, status, entrypoint, and optional payload.
+    """
+
     id: int
     priority: int
     created: AwareDatetime
@@ -21,4 +26,7 @@ class Job(BaseModel):
     payload: bytes | None
 
 
-class Jobs(RootModel[list[Job]]): ...
+class Jobs(RootModel[list[Job]]):
+    """
+    A collection model that encapsulates a list of Job instances.
+    """

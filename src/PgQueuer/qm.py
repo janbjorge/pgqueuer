@@ -19,6 +19,11 @@ T = TypeVar("T", bound=EntrypointFn)
 
 @dataclasses.dataclass
 class QueueManager:
+    """
+    Manages job queues and dispatches jobs to registered entry points,
+    handling database connections and events.
+    """
+
     pool: asyncpg.Pool
     q: PgQueuerQueries = dataclasses.field(init=False)
     ql: PgQueuerLogQueries = dataclasses.field(init=False)
@@ -42,12 +47,21 @@ class QueueManager:
     )
 
     def __post_init__(self) -> None:
+        """
+        Initializes database query handlers and validates pool size upon
+        instance creation.
+        """
         if self.pool.get_min_size() < 1:
             raise ValueError("... min size must be gt 1.")
         self.q = PgQueuerQueries(self.pool)
         self.ql = PgQueuerLogQueries(self.pool)
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
+        """
+        Decorator to register a function as an entrypoint for
+        handling specific job types.
+        """
+
         def register(func: T) -> T:
             if name in self.registry:
                 raise RuntimeError(f"{name} already in registry, must be unique.")
@@ -57,6 +71,10 @@ class QueueManager:
         return register
 
     async def run(self) -> None:
+        """
+        Starts the event listener and continuously dispatches jobs to
+        registered entry points until stopped.
+        """
         async with self.pool.acquire() as conn:
             listener = PGEventQueue()
             await listener.connect(conn, self.channel)
@@ -70,6 +88,11 @@ class QueueManager:
             await asyncio.gather(*self.tm.tasks)
 
     def _dispatch(self, job: Job) -> None:
+        """
+        Internal method to asynchronously handle job dispatch,
+        including exception logging and job status updates.
+        """
+
         async def runit() -> None:
             logger.debug(
                 "Dispatching entrypoint/id: %s/%s",
