@@ -36,3 +36,11 @@ jobs:
 
       - name: Full test
         run: pytest -v
+
+  check-all-ci-passed:
+    name: Check test matrix passed.
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check status
+        run: echo "All tests passed; ready to merge."
