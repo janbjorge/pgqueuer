@@ -36,10 +36,11 @@ async def test_benchmark(
     for n in range(N):
         await qm.queries.enqueue("fetch", f"{n}".encode())
 
-    for n in range(concurrecy):
+    # Hacky, must fine a bether way to shutdown.
+    for n in range(concurrecy**2):
         await qm.queries.enqueue("fetch", None)
 
     jobs = [jobs_per_second(N, pgpool) for _ in range(concurrecy)]
-    jps = sum(await asyncio.gather(*jobs))
+    jps = sum(await asyncio.wait_for(asyncio.gather(*jobs), timeout=30))
 
     print(f"Concurrecy: {concurrecy} Jobs: {N}, Jobs per second: {jps:.1f}")

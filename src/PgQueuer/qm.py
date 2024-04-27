@@ -85,6 +85,7 @@ class QueueManager:
                 await listener.get()
 
             await asyncio.gather(*self.tm.tasks)
+            await conn.reset()
 
     def _dispatch(self, job: Job) -> None:
         """
