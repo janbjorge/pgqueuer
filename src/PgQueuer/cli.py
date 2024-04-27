@@ -120,11 +120,9 @@ async def main() -> None:
         port=parsed.pg_port,
         user=parsed.pg_user,
         host=parsed.pg_host,
-        min_size=0,
-        max_size=1,
     ) as pool:
         match parsed.command:
             case "install":
-                await queries.InstallUninstallQueries(pool=pool).install()
+                await queries.Queries(pool=pool).install()
             case "uninstall":
-                await queries.InstallUninstallQueries(pool=pool).uninstall()
+                await queries.Queries(pool=pool).uninstall()

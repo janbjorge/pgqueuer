@@ -54,11 +54,10 @@ class DBSettings:
 
 
 @dataclasses.dataclass
-class InstallUninstallQueries:
+class Queries:
     """
-    Provides methods to install (create) and uninstall (drop)
-    database schemas and objects like tables, types, and triggers
-    related to the pgqueuer system.
+    Handles operations related to job queuing such as
+    enqueueing, dequeueing, and querying the size of the queue.
     """
 
     pool: asyncpg.Pool
@@ -129,17 +128,6 @@ class InstallUninstallQueries:
     """
         )
 
-
-@dataclasses.dataclass
-class PgQueuerQueries:
-    """
-    Handles operations related to job queuing such as
-    enqueueing, dequeueing, and querying the size of the queue.
-    """
-
-    pool: asyncpg.Pool
-    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
-
     async def dequeue(self) -> models.Job | None:
         """
         Retrieves and updates the next 'queued' job to 'picked'
@@ -187,7 +175,7 @@ class PgQueuerQueries:
             payload,
         )
 
-    async def clear(self, entrypoint: str | list[str] | None = None) -> None:
+    async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Clears jobs from the queue, optionally filtering by entrypoint if specified.
         """
@@ -199,7 +187,7 @@ class PgQueuerQueries:
         else:
             await self.pool.execute(f"TRUNCATE {self.settings.queue_table}")
 
-    async def qsize(self) -> dict[tuple[str, int], int]:
+    async def queue_size(self) -> dict[tuple[str, int], int]:
         """
         Returns the number of jobs in the queue grouped by entrypoint and priority.
         """
@@ -216,19 +204,7 @@ class PgQueuerQueries:
         """)
         }
 
-
-@dataclasses.dataclass
-class PgQueuerLogQueries:
-    """
-    Manages operations related to job logging,
-    including moving jobs to a log table, clearing logs,
-    and querying the size of log entries.
-    """
-
-    pool: asyncpg.Pool
-    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
-
-    async def move_job_log(self, job: models.Job, status: models.STATUS_LOG) -> None:
+    async def log_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
         """
         Moves a completed or failed job from the queue table to the log
         table, recording its final status and duration.
@@ -251,7 +227,7 @@ class PgQueuerLogQueries:
             status,
         )
 
-    async def clear(self, entrypoint: str | list[str] | None = None) -> None:
+    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Clears entries from the job log table, optionally filtering
         by entrypoint if specified.
@@ -264,7 +240,7 @@ class PgQueuerLogQueries:
         else:
             await self.pool.execute(f"TRUNCATE {self.settings.log_table}")
 
-    async def qsize(self) -> dict[tuple[str, str, int], int]:
+    async def log_size(self) -> dict[tuple[str, str, int], int]:
         """
         Returns the number of log entries grouped by status, entrypoint, and priority.
         """

@@ -10,7 +10,7 @@ from pgcachewatch.models import PGChannel
 
 from .logconfig import logger
 from .models import Job
-from .queries import PgQueuerLogQueries, PgQueuerQueries
+from .queries import Queries
 from .tm import TaskManager
 
 if TYPE_CHECKING:
@@ -26,8 +26,7 @@ class QueueManager:
     """
 
     pool: asyncpg.Pool
-    q: PgQueuerQueries = dataclasses.field(init=False)
-    ql: PgQueuerLogQueries = dataclasses.field(init=False)
+    queries: Queries = dataclasses.field(init=False)
 
     channel: PGChannel = dataclasses.field(
         default=PGChannel("ch_pgqueuer"),
@@ -54,8 +53,7 @@ class QueueManager:
         """
         if self.pool.get_min_size() < 1:
             raise ValueError("... min size must be gt 1.")
-        self.q = PgQueuerQueries(self.pool)
-        self.ql = PgQueuerLogQueries(self.pool)
+        self.queries = Queries(self.pool)
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
         """
@@ -82,7 +80,7 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while job := await self.q.dequeue():
+                while job := await self.queries.dequeue():
                     self._dispatch(job)
                 await listener.get()
 
@@ -108,13 +106,13 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                await self.ql.move_job_log(job, "exception")
+                await self.queries.log_job(job, "exception")
             else:
                 logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
                     job.entrypoint,
                     job.id,
                 )
-                await self.ql.move_job_log(job, "successful")
+                await self.queries.log_job(job, "successful")
 
         self.tm.add(asyncio.create_task(runit()))

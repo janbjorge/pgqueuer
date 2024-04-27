@@ -7,14 +7,14 @@ from PgQueuer import queries
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queries_put(pgpool: asyncpg.Pool, N: int) -> None:
-    q = queries.PgQueuerQueries(pgpool)
+    q = queries.Queries(pgpool)
 
-    assert sum((await q.qsize()).values()) == 0
+    assert sum((await q.queue_size()).values()) == 0
 
     for _ in range(N):
         await q.enqueue("placeholer", None)
 
-    assert sum((await q.qsize()).values()) == N
+    assert sum((await q.queue_size()).values()) == N
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -22,8 +22,7 @@ async def test_queries_next_jobs(
     pgpool: asyncpg.Pool,
     N: int,
 ) -> None:
-    q = queries.PgQueuerQueries(pgpool)
-    ql = queries.PgQueuerLogQueries(pgpool)
+    q = queries.Queries(pgpool)
 
     for n in range(N):
         await q.enqueue("placeholer", f"{n}".encode())
@@ -33,7 +32,7 @@ async def test_queries_next_jobs(
         payoad = job.payload
         assert payoad is not None
         seen.append(int(payoad))
-        await ql.move_job_log(job, "successful")
+        await q.log_job(job, "successful")
 
     assert seen == list(range(N))
 
@@ -46,8 +45,7 @@ async def test_queries_next_jobs_concurrent(
     concurrency: int,
 ) -> None:
     assert pgpool.get_max_size() >= concurrency
-    q = queries.PgQueuerQueries(pgpool)
-    ql = queries.PgQueuerLogQueries(pgpool)
+    q = queries.Queries(pgpool)
 
     for n in range(N):
         await q.enqueue("placeholer", f"{n}".encode())
@@ -59,7 +57,7 @@ async def test_queries_next_jobs_concurrent(
             payload = job.payload
             assert payload is not None
             seen.append(int(payload))
-            await ql.move_job_log(job, "successful")
+            await q.log_job(job, "successful")
 
     await asyncio.wait_for(
         asyncio.gather(*[consumer() for _ in range(concurrency)]),
@@ -70,15 +68,15 @@ async def test_queries_next_jobs_concurrent(
 
 
 async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
-    q = queries.PgQueuerQueries(pgpool)
-    await q.clear()
-    assert sum((await q.qsize()).values()) == 0
+    q = queries.Queries(pgpool)
+    await q.clear_queue()
+    assert sum((await q.queue_size()).values()) == 0
 
     await q.enqueue("placeholer", None)
-    assert sum((await q.qsize()).values()) == 1
+    assert sum((await q.queue_size()).values()) == 1
 
-    await q.clear()
-    assert sum((await q.qsize()).values()) == 0
+    await q.clear_queue()
+    assert sum((await q.queue_size()).values()) == 0
 
 
 @pytest.mark.parametrize("N", (1, 2, 64, 256))
@@ -86,13 +84,12 @@ async def test_move_job_log(
     pgpool: asyncpg.Pool,
     N: int,
 ) -> None:
-    q = queries.PgQueuerQueries(pgpool)
-    ql = queries.PgQueuerLogQueries(pgpool)
+    q = queries.Queries(pgpool)
 
     for n in range(N):
         await q.enqueue("placeholer", f"{n}".encode())
 
     while next_job := await q.dequeue():
-        await ql.move_job_log(next_job, status="successful")
+        await q.log_job(next_job, status="successful")
 
-    assert await ql.qsize() == {("successful", "placeholer", 0): N}
+    assert await q.log_size() == {("successful", "placeholer", 0): N}

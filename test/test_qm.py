@@ -4,7 +4,7 @@ import asyncpg
 import pytest
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
-from PgQueuer.queries import PgQueuerQueries
+from PgQueuer.queries import Queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 32, 500))
@@ -24,10 +24,10 @@ async def test_job_queing(
         seen.append(int(context.payload))
 
     for n in range(N):
-        await c.q.enqueue("fetch", f"{n}".encode())
+        await c.queries.enqueue("fetch", f"{n}".encode())
 
     # Stop flag
-    await c.q.enqueue("fetch", None)
+    await c.queries.enqueue("fetch", None)
 
     await asyncio.wait_for(c.run(), timeout=1)
     assert seen == list(range(N))
@@ -40,7 +40,7 @@ async def test_job_fetch(
     N: int,
     concurrency: int,
 ) -> None:
-    q = PgQueuerQueries(pgpool)
+    q = Queries(pgpool)
     qmpool = [QueueManager(pgpool) for _ in range(concurrency)]
     seen = list[int]()
 
