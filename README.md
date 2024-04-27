@@ -1,40 +1,37 @@
+##  🚀 PgQueuer - Building Smoother Workflows One Queue at a Time 🚀
+[![CI](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml?query=branch%3Amain)
+[![pypi](https://img.shields.io/pypi/v/PgQueuer.svg)](https://pypi.python.org/pypi/PgQueuer)
+[![downloads](https://static.pepy.tech/badge/PgQueuer/month)](https://pepy.tech/project/PgQueuer)
+[![versions](https://img.shields.io/pypi/pyversions/PgQueuer.svg)](https://github.com/janbjorge/PgQueuer)
+
+---
+
+📚 **Documentation**: [Explore the Docs 📖](https://github.com/janbjorge/PgQueuer/wiki/)
+
+🔍 **Source Code**: [View on GitHub 💾](https://github.com/janbjorge/PgQueuer/)
+
+---
 ## PgQueuer
 
-PgQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PgQueuer uses PostgreSQL's native features like transactions, row locking, and LISTEN/NOTIFY to manage job queues effortlessly.
+PgQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PgQueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
 
 ### Features
 
 - **Simple Integration**: Easy to integrate with existing Python applications using PostgreSQL.
 - **Efficient Concurrency Handling**: Utilizes PostgreSQL's `FOR UPDATE SKIP LOCKED` for reliable and concurrent job processing.
 - **Real-time Notifications**: Leverages `LISTEN` and `NOTIFY` for real-time updates on job status changes.
-- **Scalable**: Built to efficiently scale with your application's needs.
 
-### Getting Started
+### Installation
 
-#### Installation
-
-To install PgQueuer, simply run the following command:
+To install PgQueuer, simply install with pip the following command:
 
 ```bash
 pip install PgQueuer
 ```
 
-This command installs PgQueuer along with its dependencies, setting up everything you need to start integrating it into your application.
+### Database Configuration
 
-#### Database Configuration
-
-Configure your database connection settings by setting the appropriate environment variables for your PostgreSQL credentials:
-
-```bash
-export PGHOST='localhost'
-export PGDATABASE='your_database'
-export PGUSER='your_username'
-export PGPASSWORD='your_password'
-```
-
-#### CLI Usage
-
-PgQueuer provides a command-line interface for easy management of installation and uninstallation. Ensure you have configured your environment variables or use the appropriate flags to specify your database credentials.
+PgQueuer provides a command-line interface for easy management of installation and uninstallation. Ensure you have configured your [environment variables](https://magicstack.github.io/asyncpg/current/api/index.html#connection) or use the appropriate flags to specify your database credentials.
 
 - **Installing PgQueuer Database Components**:
   ```bash
@@ -48,7 +45,7 @@ PgQueuer provides a command-line interface for easy management of installation a
 
 The CLI supports several flags to customize the connection settings. Use `--help` to see all available options.
 
-### Use-Case: Processing Incoming Data Messages
+### Show-Case: Processing Incoming Data Messages
 
 In this scenario, the system is designed to manage a queue of incoming data messages that need to be processed. Each message is encapsulated as a job, and these jobs are then processed by a designated function linked to an entrypoint. This is typical in systems where large volumes of data are collected continuously, such as telemetry data from IoT devices, logs from web servers, or transaction data in financial systems.
 
