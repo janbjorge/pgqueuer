@@ -9,12 +9,12 @@ from PgQueuer import queries
 async def test_queries_put(pgpool: asyncpg.Pool, N: int) -> None:
     q = queries.Queries(pgpool)
 
-    assert sum((await q.queue_size()).values()) == 0
+    assert sum(x.count for x in await q.queue_size()) == 0
 
     for _ in range(N):
         await q.enqueue("placeholer", None)
 
-    assert sum((await q.queue_size()).values()) == N
+    assert sum(x.count for x in await q.queue_size()) == N
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -70,13 +70,13 @@ async def test_queries_next_jobs_concurrent(
 async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
     q = queries.Queries(pgpool)
     await q.clear_queue()
-    assert sum((await q.queue_size()).values()) == 0
+    assert sum(x.count for x in await q.queue_size()) == 0
 
     await q.enqueue("placeholer", None)
-    assert sum((await q.queue_size()).values()) == 1
+    assert sum(x.count for x in await q.queue_size()) == 1
 
     await q.clear_queue()
-    assert sum((await q.queue_size()).values()) == 0
+    assert sum(x.count for x in await q.queue_size()) == 0
 
 
 @pytest.mark.parametrize("N", (1, 2, 64, 256))
@@ -92,4 +92,39 @@ async def test_move_job_log(
     while next_job := await q.dequeue():
         await q.log_job(next_job, status="successful")
 
-    assert await q.log_size() == {("successful", "placeholer", 0): N}
+    assert sum(x.count for x in await q.log_size()) == N
+
+
+@pytest.mark.parametrize("N", (1, 2, 5))
+async def test_clear_queue(
+    pgpool: asyncpg.Pool,
+    N: int,
+) -> None:
+    q = queries.Queries(pgpool)
+
+    # Test delete all by listing all
+    for n in range(N):
+        await q.enqueue(f"placeholer{n}", None)
+
+    assert all(x.count == 1 for x in await q.queue_size())
+    assert sum(x.count for x in await q.queue_size()) == N
+    await q.clear_queue([f"placeholer{n}" for n in range(N)])
+    assert sum(x.count for x in await q.queue_size()) == 0
+
+    # Test delete all by None
+    for n in range(N):
+        await q.enqueue(f"placeholer{n}", None)
+
+    assert all(x.count == 1 for x in await q.queue_size())
+    assert sum(x.count for x in await q.queue_size()) == N
+    await q.clear_queue(None)
+    assert sum(x.count for x in await q.queue_size()) == 0
+
+    # Test delete one(1).
+    for n in range(N):
+        await q.enqueue(f"placeholer{n}", None)
+
+    assert all(x.count == 1 for x in await q.queue_size())
+    assert sum(x.count for x in await q.queue_size()) == N
+    await q.clear_queue("placeholer0")
+    assert sum(x.count for x in await q.queue_size()) == N - 1

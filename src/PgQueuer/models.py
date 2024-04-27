@@ -24,3 +24,24 @@ class Job(BaseModel):
     status: STATUS
     entrypoint: str
     payload: bytes | None
+
+
+class QueueSize(BaseModel):
+    """
+    Represents the number of jobs per entrypoint and priority in the queue.
+    """
+
+    count: int
+    entrypoint: str
+    priority: int
+
+
+class LogSize(BaseModel):
+    """
+    Represents log details for jobs based on status, entrypoint, and priority.
+    """
+
+    count: int
+    entrypoint: str
+    priority: int
+    status: STATUS_LOG

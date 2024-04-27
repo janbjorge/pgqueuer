@@ -189,23 +189,23 @@ class Queries:
             query = f"TRUNCATE {self.settings.queue_table}"
             await self.pool.execute(query)
 
-    async def queue_size(self) -> dict[tuple[str, int], int]:
+    async def queue_size(self) -> list[models.QueueSize]:
         """
         Returns the number of jobs in the queue grouped by entrypoint and priority.
         """
         query = f"""
             SELECT
-                count(*) AS cnt,
+                count(*) AS count,
                 priority,
                 entrypoint
             FROM
                 {self.settings.queue_table}
             GROUP BY priority, entrypoint
         """
-        return {
-            (row["entrypoint"], row["priority"]): row["cnt"]
-            for row in await self.pool.fetch(query)
-        }
+        return [
+            models.QueueSize.model_validate(dict(x))
+            for x in await self.pool.fetch(query)
+        ]
 
     async def log_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
         """
@@ -242,13 +242,13 @@ class Queries:
             query = f"TRUNCATE {self.settings.log_table}"
             await self.pool.execute(query)
 
-    async def log_size(self) -> dict[tuple[str, str, int], int]:
+    async def log_size(self) -> list[models.LogSize]:
         """
         Returns the number of log entries grouped by status, entrypoint, and priority.
         """
         query = f"""
             SELECT
-                count(*) AS cnt,
+                count(*) AS count,
                 status,
                 priority,
                 entrypoint
@@ -256,8 +256,6 @@ class Queries:
                 {self.settings.log_table}
             GROUP BY status, priority, entrypoint
         """
-
-        return {
-            (row["status"], row["entrypoint"], row["priority"]): row["cnt"]
-            for row in await self.pool.fetch(query)
-        }
+        return [
+            models.LogSize.model_validate(dict(x)) for x in await self.pool.fetch(query)
+        ]
