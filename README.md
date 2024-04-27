@@ -57,39 +57,32 @@ The `fetch` function, tied to the `fetch` entrypoint, is responsible for process
 
 ```python
 import asyncio
-import time
 
 import asyncpg
-
-from PgQueuer import qm, queries, models
+from PgQueuer.models import Job
+from PgQueuer.qm import QueueManager
 
 
 async def main() -> None:
     # Set up a connection pool with a minimum of 2 connections.
     pool = await asyncpg.create_pool(min_size=2)
     # Initialize the QueueManager with the connection pool and query handler.
-    app = qm.QueueManager(
-        pool, 
-        queries.PgQueuerQueries(pool),
-        queries.PgQueuerLogQueries(pool),
-    )
+    qm = QueueManager(pool)
 
     # Number of messages to simulate.
     N = 10_000
 
     # Enqueue messages.
     for n in range(N):
-        await app.q.enqueue("fetch", f"this is from me: {n}".encode())
+        await qm.queries.enqueue("fetch", f"this is from me: {n}".encode())
 
     # Define a processing function for each message.
-    @c.entrypoint("fetch")
-    async def process_message(context: models.Job) -> None:
-        # Simulate parsing the message.
-        message = context.payload.decode()
+    @qm.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
         # Print the message to simulate processing.
-        print(f"Processed message: {message}")
+        print(f"Processed message: {job}")
 
-    await app.run()
+    await qm.run()
 
 
 if __name__ == "__main__":
