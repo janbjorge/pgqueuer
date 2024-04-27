@@ -2,7 +2,7 @@ import asyncio
 
 import asyncpg
 import pytest
-from PgQueuer import queries
+from PgQueuer import models, queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -128,3 +128,21 @@ async def test_clear_queue(
     assert sum(x.count for x in await q.queue_size()) == N
     await q.clear_queue("placeholer0")
     assert sum(x.count for x in await q.queue_size()) == N - 1
+
+
+@pytest.mark.parametrize("N", (1, 2, 64, 256))
+async def test_queue_priority(
+    pgpool: asyncpg.Pool,
+    N: int,
+) -> None:
+    q = queries.Queries(pgpool)
+    jobs = list[models.Job]()
+
+    for n in range(N):
+        await q.enqueue("placeholer", f"{n}".encode(), priority=n)
+
+    while next_job := await q.dequeue():
+        jobs.append(next_job)
+        await q.log_job(next_job, status="successful")
+
+    assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)

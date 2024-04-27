@@ -142,7 +142,7 @@ class Queries:
                     {self.settings.queue_table} p2
                     WHERE p1.entrypoint = p2.entrypoint AND p2.status = 'picked'
                 )
-                ORDER BY priority, id
+                ORDER BY priority DESC, id ASC
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
             )
