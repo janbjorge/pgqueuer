@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from typing import Awaitable, Callable, TypeAlias, TypeVar
+from typing import TYPE_CHECKING, Awaitable, Callable, TypeAlias, TypeVar
 
 import asyncpg
 from pgcachewatch.listeners import PGEventQueue
@@ -13,8 +13,9 @@ from .models import Job
 from .queries import PgQueuerLogQueries, PgQueuerQueries
 from .tm import TaskManager
 
-EntrypointFn: TypeAlias = Callable[[bytes | None], Awaitable[None]]
-T = TypeVar("T", bound=EntrypointFn)
+if TYPE_CHECKING:
+    EntrypointFn: TypeAlias = Callable[[Job], Awaitable[None]]
+    T = TypeVar("T", bound=EntrypointFn)
 
 
 @dataclasses.dataclass
@@ -62,9 +63,10 @@ class QueueManager:
         handling specific job types.
         """
 
+        if name in self.registry:
+            raise RuntimeError(f"{name} already in registry, name must be unique.")
+
         def register(func: T) -> T:
-            if name in self.registry:
-                raise RuntimeError(f"{name} already in registry, must be unique.")
             self.registry[name] = func
             return func
 
@@ -80,9 +82,8 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while (jobs := await self.q.dequeue()).root:
-                    for job in jobs.root:
-                        self._dispatch(job)
+                while job := await self.q.dequeue():
+                    self._dispatch(job)
                 await listener.get()
 
             await asyncio.gather(*self.tm.tasks)
@@ -100,7 +101,7 @@ class QueueManager:
                 job.id,
             )
             try:
-                await self.registry[job.entrypoint](job.payload)
+                await self.registry[job.entrypoint](job)
             except Exception:
                 logger.exception(
                     "Exception while processing entrypoint/id: %s/%s",

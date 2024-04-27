@@ -61,7 +61,7 @@ import time
 
 import asyncpg
 
-from PgQueuer import qm, queries
+from PgQueuer import qm, queries, models
 
 
 async def main() -> None:
@@ -83,9 +83,9 @@ async def main() -> None:
 
     # Define a processing function for each message.
     @c.entrypoint("fetch")
-    async def process_message(context: bytes) -> None:
+    async def process_message(context: models.Job) -> None:
         # Simulate parsing the message.
-        message = context.decode()
+        message = context.payload.decode()
         # Print the message to simulate processing.
         print(f"Processed message: {message}")
 

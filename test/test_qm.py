@@ -2,6 +2,7 @@ import asyncio
 
 import asyncpg
 import pytest
+from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import PgQueuerQueries
 
@@ -15,12 +16,12 @@ async def test_job_queing(
     seen = list[int]()
 
     @c.entrypoint("fetch")
-    async def fetch(context: bytes | None) -> None:
-        if context is None:
+    async def fetch(context: Job) -> None:
+        if context.payload is None:
             c.alive = False
             return
         assert context
-        seen.append(int(context))
+        seen.append(int(context.payload))
 
     for n in range(N):
         await c.q.enqueue("fetch", f"{n}".encode())
@@ -46,13 +47,13 @@ async def test_job_fetch(
     for qm in qmpool:
 
         @qm.entrypoint("fetch")
-        async def fetch(context: bytes | None) -> None:
-            if context is None:
+        async def fetch(context: Job) -> None:
+            if context.payload is None:
                 for qm in qmpool:
                     qm.alive = False
                 return
             assert context
-            seen.append(int(context))
+            seen.append(int(context.payload))
 
     for n in range(N):
         await q.enqueue("fetch", f"{n}".encode())

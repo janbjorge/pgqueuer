@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, RootModel
+from pydantic import AwareDatetime, BaseModel
 
 STATUS = Literal[
     "queued",
@@ -24,9 +24,3 @@ class Job(BaseModel):
     status: STATUS
     entrypoint: str
     payload: bytes | None
-
-
-class Jobs(RootModel[list[Job]]):
-    """
-    A collection model that encapsulates a list of Job instances.
-    """

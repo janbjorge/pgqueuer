@@ -29,12 +29,11 @@ async def test_queries_next_jobs(
         await q.enqueue("placeholer", f"{n}".encode())
 
     seen = list[int]()
-    while (next_jobs := await q.dequeue()).root:
-        for job in next_jobs.root:
-            payoad = job.payload
-            assert payoad is not None
-            seen.append(int(payoad))
-            await ql.move_job_log(job, "successful")
+    while job := await q.dequeue():
+        payoad = job.payload
+        assert payoad is not None
+        seen.append(int(payoad))
+        await ql.move_job_log(job, "successful")
 
     assert seen == list(range(N))
 
@@ -56,13 +55,11 @@ async def test_queries_next_jobs_concurrent(
     seen = list[int]()
 
     async def consumer() -> None:
-        while len(seen) < N:
-            jobs = (await q.dequeue()).root
-            for job in jobs:
-                payload = job.payload
-                assert payload is not None
-                seen.append(int(payload))
-                await ql.move_job_log(job, "successful")
+        while job := await q.dequeue():
+            payload = job.payload
+            assert payload is not None
+            seen.append(int(payload))
+            await ql.move_job_log(job, "successful")
 
     await asyncio.wait_for(
         asyncio.gather(*[consumer() for _ in range(concurrency)]),
@@ -95,8 +92,7 @@ async def test_move_job_log(
     for n in range(N):
         await q.enqueue("placeholer", f"{n}".encode())
 
-    while (next_jobs := await q.dequeue()).root:
-        for job in next_jobs.root:
-            await ql.move_job_log(job, status="successful")
+    while next_job := await q.dequeue():
+        await ql.move_job_log(next_job, status="successful")
 
     assert await ql.qsize() == {("successful", "placeholer", 0): N}

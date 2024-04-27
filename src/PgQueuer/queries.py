@@ -140,7 +140,7 @@ class PgQueuerQueries:
     pool: asyncpg.Pool
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-    async def dequeue(self) -> models.Jobs:
+    async def dequeue(self) -> models.Job | None:
         """
         Retrieves and updates the next 'queued' job to 'picked'
         status, ensuring no two jobs with the same entrypoint
@@ -154,7 +154,7 @@ class PgQueuerQueries:
                     SELECT FROM
                     {self.settings.queue_table} p2
                     WHERE p1.entrypoint = p2.entrypoint AND p2.status = 'picked')
-                ORDER BY id
+                ORDER BY priority, id
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
             )
@@ -164,7 +164,9 @@ class PgQueuerQueries:
             RETURNING *;
         """
 
-        return models.Jobs.model_validate(map(dict, await self.pool.fetch(query)))
+        if row := await self.pool.fetchrow(query):
+            return models.Job.model_validate(dict(row))
+        return None
 
     async def enqueue(
         self,
