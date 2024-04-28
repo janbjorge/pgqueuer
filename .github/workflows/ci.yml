@@ -7,6 +7,37 @@ on:
     branches: [main]
 
 jobs:
+  benchmark:
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+        os: [ubuntu-latest]
+
+    name: PgQueuer Benchmark
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build custom PostgreSQL Docker image
+        run: |
+          docker-compose up --build -d pgq
+
+      - name: Install PgQueuer
+        run: |
+          pip install pip -U
+          pip install .[dev]
+
+      - name: Benchmark
+        run: PGUSER=testuser PGPASSWORD=testpassword PGDATABASE=testdb python3 tools/benchmark.py
+
   ci:
     strategy:
       fail-fast: false
