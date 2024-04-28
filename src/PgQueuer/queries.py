@@ -158,20 +158,39 @@ class Queries:
 
     async def enqueue(
         self,
-        entrypoint: str,
-        payload: bytes | None,
-        priority: int = 0,
+        entrypoint: str | list[str],
+        payload: bytes | None | list[bytes | None],
+        priority: int | list[int] = 0,
     ) -> None:
         """
         Inserts a new job into the queue with the specified
         entrypoint, payload, and priority, marking it as 'queued'.
+        This method ensures that if any of entrypoint, payload, or priority is a list,
+        all list arguments must be of the same length.
+
+        If two or more arguments are lists, they must be the same length;
+            otherwise, an ValueError is raised.
         """
+
+        # If they are not lists, create single-item lists for uniform processing
+        normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
+        normed_payload = payload if isinstance(payload, list) else [payload]
+        normed_priority = priority if isinstance(priority, list) else [priority]
+
         query = f"""
             INSERT INTO {self.settings.queue_table} (priority, status, entrypoint, payload)
             VALUES ($1, 'queued', $2, $3)
         """  # noqa: E501
 
-        await self.pool.execute(query, priority, entrypoint, payload)
+        await self.pool.executemany(
+            query,
+            zip(
+                normed_priority,
+                normed_entrypoint,
+                normed_payload,
+                strict=True,
+            ),
+        )
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """
