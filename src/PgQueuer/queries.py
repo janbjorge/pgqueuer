@@ -92,16 +92,42 @@ class Queries:
             );
 
             CREATE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
+            DECLARE
+                to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
             BEGIN
-                PERFORM pg_notify(
-                '{self.settings.channel}',
-                json_build_object(
-                    'channel', '{self.settings.channel}',
-                    'operation', lower(TG_OP),
-                    'sent_at', NOW(),
-                    'table', TG_TABLE_NAME
-                )::text);
-                RETURN NEW;
+                -- Check operation type and set the emit flag accordingly
+                IF TG_OP = 'UPDATE' AND OLD IS DISTINCT FROM NEW THEN
+                    to_emit := true;
+                ELSIF TG_OP = 'DELETE' THEN
+                    to_emit := true;
+                ELSIF TG_OP = 'INSERT' THEN
+                    to_emit := true;
+                ELSIF TG_OP = 'TRUNCATE' THEN
+                    to_emit := true;
+                END IF;
+
+                -- Perform notification if the emit flag is set
+                IF to_emit THEN
+                    PERFORM pg_notify(
+                        '{self.settings.channel}',
+                        json_build_object(
+                            'channel', '{self.settings.channel}',
+                            'operation', lower(TG_OP),
+                            'sent_at', NOW(),
+                            'table', TG_TABLE_NAME
+                        )::text
+                    );
+                END IF;
+
+                -- Return appropriate value based on the operation
+                IF TG_OP IN ('INSERT', 'UPDATE') THEN
+                    RETURN NEW;
+                ELSIF TG_OP = 'DELETE' THEN
+                    RETURN OLD;
+                ELSE
+                    RETURN NULL; -- For TRUNCATE and other non-row-specific contexts
+                END IF;
+
             END;
             $$ LANGUAGE plpgsql;
 
