@@ -10,7 +10,7 @@ from pgcachewatch.models import PGChannel
 
 from .logconfig import logger
 from .models import Job
-from .queries import Queries
+from .queries import DBSettings, Queries
 from .tm import TaskManager
 
 if TYPE_CHECKING:
@@ -29,7 +29,7 @@ class QueueManager:
     queries: Queries = dataclasses.field(init=False)
 
     channel: PGChannel = dataclasses.field(
-        default=PGChannel("ch_pgqueuer"),
+        default=PGChannel(DBSettings().channel),
         init=False,
     )
     alive: bool = dataclasses.field(

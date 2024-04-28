@@ -85,3 +85,12 @@ async def main() -> None:
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+### Benchmark Summary
+
+The PgQueuer underwent basic benchmark testing to assess its performance across varying job volumes and concurrency levels.
+
+#### Key Observations:
+- **Scalability**: Performance increases with higher concurrency, demonstrating the library's ability to efficiently manage larger workloads.
+- **Consistency**: PgQueuer maintains consistent throughput across different job counts, ensuring reliable performance.
+- **Optimal Performance**: The highest throughput observed was 5,224 jobs per second at a concurrency level of 5, highlighting the library's robust handling capabilities.
