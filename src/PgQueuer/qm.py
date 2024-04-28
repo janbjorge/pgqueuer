@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from datetime import timedelta
 from typing import TYPE_CHECKING, Awaitable, Callable, TypeAlias, TypeVar
 
 import asyncpg
@@ -70,7 +71,10 @@ class QueueManager:
 
         return register
 
-    async def run(self) -> None:
+    async def run(
+        self,
+        dequeue_recovery_timeout: timedelta = timedelta(seconds=30),
+    ) -> None:
         """
         Starts the event listener and continuously dispatches jobs to
         registered entry points until stopped.
@@ -82,7 +86,17 @@ class QueueManager:
             while self.alive:
                 while job := await self.queries.dequeue():
                     self._dispatch(job)
-                await listener.get()
+
+                try:
+                    await asyncio.wait_for(
+                        listener.get(),
+                        timeout=dequeue_recovery_timeout.total_seconds(),
+                    )
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "Timeout after %r without receiving an event.",
+                        dequeue_recovery_timeout,
+                    )
 
             await asyncio.gather(*self.tm.tasks)
             await conn.reset()
