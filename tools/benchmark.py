@@ -32,7 +32,7 @@ async def jobs_per_second(pool: asyncpg.Pool) -> float:
 
     @qm.entrypoint("fetch")
     async def process_message(job: Job) -> None:
-        nonlocal seen
+        nonlocal qm, seen
         seen += 1
         if job.payload is None:
             qm.alive = False
@@ -40,7 +40,6 @@ async def jobs_per_second(pool: asyncpg.Pool) -> float:
     with timer() as elapsed:
         await qm.run(timedelta(seconds=0))
 
-    print(seen, round(elapsed(), 3), round(seen / elapsed(), 1))
     return seen / elapsed()
 
 
@@ -80,11 +79,10 @@ async def benchmark(
 async def main() -> None:
     async with asyncpg.create_pool(
         min_size=20,
-        max_size=100,
+        max_size=99,
     ) as pool:
-        for concurrecy in (1, 2, 3, 10, 20):
-            for n_jobs in (100, 500, 1_000, 5_000):
-                await benchmark(concurrecy, n_jobs * concurrecy, pool)
+        for concurrecy in (1, 2, 3, 4, 5, 10):
+            await benchmark(concurrecy, 10_000 * concurrecy, pool)
 
 
 if __name__ == "__main__":

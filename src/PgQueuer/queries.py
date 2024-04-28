@@ -79,7 +79,8 @@ class Queries:
                 entrypoint TEXT NOT NULL,
                 payload BYTEA
             );
-            CREATE UNIQUE INDEX ON {self.settings.queue_table} (priority, id) WHERE status != 'picked';
+            CREATE INDEX ON {self.settings.queue_table} (priority ASC, id DESC)
+                INCLUDE (id) WHERE status = 'queued';
 
             CREATE TYPE {self.settings.log_table_status_type} AS ENUM ('exception', 'successful');
             CREATE TABLE {self.settings.log_table} (
@@ -161,13 +162,9 @@ class Queries:
         """
         query = f"""
             WITH next_job AS (
-                SELECT p1.id
-                FROM {self.settings.queue_table} p1
-                WHERE p1.status = 'queued' AND NOT EXISTS (
-                    SELECT FROM
-                    {self.settings.queue_table} p2
-                    WHERE p1.entrypoint = p2.entrypoint AND p2.status = 'picked'
-                )
+                SELECT id
+                FROM {self.settings.queue_table}
+                WHERE status = 'queued'
                 ORDER BY priority DESC, id ASC
                 FOR UPDATE SKIP LOCKED
                 LIMIT 1
