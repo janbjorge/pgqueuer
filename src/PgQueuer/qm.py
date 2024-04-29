@@ -60,10 +60,8 @@ class QueueManager:
 
     pool: asyncpg.Pool
     queries: Queries = dataclasses.field(init=False)
-
     channel: PGChannel = dataclasses.field(
         default=PGChannel(DBSettings().channel),
-        init=False,
     )
     alive: bool = dataclasses.field(
         init=False,
@@ -101,7 +99,7 @@ class QueueManager:
 
     async def run(
         self,
-        dequeue_recovery_timeout: timedelta = timedelta(seconds=30),
+        dequeue_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
         """
         Starts the event listener and continuously dispatches jobs to
@@ -115,18 +113,18 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while job := await self.queries.dequeue():
+                while self.alive and (job := await self.queries.dequeue()):
                     tm.add(asyncio.create_task(self._dispatch(job)))
 
                 try:
                     await asyncio.wait_for(
                         listener.get(),
-                        timeout=dequeue_recovery_timeout.total_seconds(),
+                        timeout=dequeue_timeout.total_seconds(),
                     )
                 except asyncio.TimeoutError:
                     logger.debug(
                         "Timeout after %r without receiving an event.",
-                        dequeue_recovery_timeout,
+                        dequeue_timeout,
                     )
 
             await conn.reset()
