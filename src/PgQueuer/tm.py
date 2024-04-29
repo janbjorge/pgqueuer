@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import dataclasses
 
@@ -21,3 +23,9 @@ class TaskManager:
         """
         self.tasks.add(task)
         task.add_done_callback(self.tasks.remove)
+
+    async def __aenter__(self) -> TaskManager:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        await asyncio.gather(*self.tasks)
