@@ -42,10 +42,6 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
-    tm: TaskManager = dataclasses.field(
-        init=False,
-        default_factory=TaskManager,
-    )
 
     def __post_init__(self) -> None:
         """
@@ -79,13 +75,16 @@ class QueueManager:
         Starts the event listener and continuously dispatches jobs to
         registered entry points until stopped.
         """
-        async with self.pool.acquire() as conn:
+        async with (
+            self.pool.acquire() as conn,
+            TaskManager() as tm,
+        ):
             listener = PGEventQueue()
             await listener.connect(conn, self.channel)
 
             while self.alive:
                 while job := await self.queries.dequeue():
-                    self._dispatch(job)
+                    tm.add(asyncio.create_task(self._dispatch(job)))
 
                 try:
                     await asyncio.wait_for(
@@ -98,36 +97,33 @@ class QueueManager:
                         dequeue_recovery_timeout,
                     )
 
-            await asyncio.gather(*self.tm.tasks)
             await conn.reset()
 
-    def _dispatch(self, job: Job) -> None:
+    async def _dispatch(self, job: Job) -> None:
         """
         Internal method to asynchronously handle job dispatch,
         including exception logging and job status updates.
         """
 
-        async def runit() -> None:
-            logger.debug(
-                "Dispatching entrypoint/id: %s/%s",
+        logger.debug(
+            "Dispatching entrypoint/id: %s/%s",
+            job.entrypoint,
+            job.id,
+        )
+
+        try:
+            await self.registry[job.entrypoint](job)
+        except Exception:
+            logger.exception(
+                "Exception while processing entrypoint/id: %s/%s",
                 job.entrypoint,
                 job.id,
             )
-            try:
-                await self.registry[job.entrypoint](job)
-            except Exception:
-                logger.exception(
-                    "Exception while processing entrypoint/id: %s/%s",
-                    job.entrypoint,
-                    job.id,
-                )
-                await self.queries.log_job(job, "exception")
-            else:
-                logger.debug(
-                    "Dispatching entrypoint/id: %s/%s - successful",
-                    job.entrypoint,
-                    job.id,
-                )
-                await self.queries.log_job(job, "successful")
-
-        self.tm.add(asyncio.create_task(runit()))
+            await self.queries.log_job(job, "exception")
+        else:
+            logger.debug(
+                "Dispatching entrypoint/id: %s/%s - successful",
+                job.entrypoint,
+                job.id,
+            )
+            await self.queries.log_job(job, "successful")
