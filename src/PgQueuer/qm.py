@@ -2,9 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import functools
 from datetime import timedelta
-from typing import TYPE_CHECKING, Awaitable, Callable, TypeAlias, TypeVar
+from typing import (
+    TYPE_CHECKING,
+    Awaitable,
+    Callable,
+    TypeAlias,
+    TypeGuard,
+    TypeVar,
+    overload,
+)
 
+import anyio
+import anyio.to_thread
 import asyncpg
 from pgcachewatch.listeners import PGEventQueue
 from pgcachewatch.models import PGChannel
@@ -15,8 +26,29 @@ from .queries import DBSettings, Queries
 from .tm import TaskManager
 
 if TYPE_CHECKING:
-    EntrypointFn: TypeAlias = Callable[[Job], Awaitable[None]]
-    T = TypeVar("T", bound=EntrypointFn)
+    AsyncEntrypoint: TypeAlias = Callable[[Job], Awaitable[None]]
+    SyncEntrypoint: TypeAlias = Callable[[Job], None]
+    Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
+    T = TypeVar("T", bound=Entrypoint)
+
+
+@overload
+def is_async_callable(obj: AsyncEntrypoint) -> TypeGuard[AsyncEntrypoint]: ...
+
+
+@overload
+def is_async_callable(obj: SyncEntrypoint) -> TypeGuard[SyncEntrypoint]: ...
+
+
+def is_async_callable(obj: object) -> bool:
+    # Inspired by:
+    # https://github.com/encode/starlette/blob/9f16bf5c25e126200701f6e04330864f4a91a898/starlette/_utils.py#L38
+    while isinstance(obj, functools.partial):
+        obj = obj.func
+
+    return asyncio.iscoroutinefunction(obj) or (
+        callable(obj) and asyncio.iscoroutinefunction(obj.__call__)
+    )
 
 
 @dataclasses.dataclass
@@ -38,7 +70,7 @@ class QueueManager:
         default=True,
     )
     # Should registry be a weakref?
-    registry: dict[str, EntrypointFn] = dataclasses.field(
+    registry: dict[str, Entrypoint] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -112,7 +144,11 @@ class QueueManager:
         )
 
         try:
-            await self.registry[job.entrypoint](job)
+            fn = self.registry[job.entrypoint]
+            if is_async_callable(fn):
+                await fn(job)
+            else:
+                await anyio.to_thread.run_sync(fn, job)
         except Exception:
             logger.exception(
                 "Exception while processing entrypoint/id: %s/%s",
