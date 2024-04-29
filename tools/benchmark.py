@@ -30,8 +30,15 @@ async def jobs_per_second(pool: asyncpg.Pool) -> float:
     qm = QueueManager(pool)
     seen = 0
 
-    @qm.entrypoint("fetch")
-    async def process_message(job: Job) -> None:
+    @qm.entrypoint("async")
+    async def asyncfetch(job: Job) -> None:
+        nonlocal qm, seen
+        seen += 1
+        if job.payload is None:
+            qm.alive = False
+
+    @qm.entrypoint("sync")
+    def syncfetch(job: Job) -> None:
         nonlocal qm, seen
         seen += 1
         if job.payload is None:
@@ -44,6 +51,7 @@ async def jobs_per_second(pool: asyncpg.Pool) -> float:
 
 
 async def benchmark(
+    entrypoint: str,
     concurrecy: int,
     N: int,
     pool: asyncpg.Pool,
@@ -54,14 +62,14 @@ async def benchmark(
     await queries.clear_queue()
 
     await queries.enqueue(
-        ["fetch"] * N,
+        [entrypoint] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
     assert sum(x.count for x in await queries.queue_size()) == N
 
     await queries.enqueue(
-        ["fetch"] * concurrecy**2,
+        [entrypoint] * concurrecy**2,
         [None] * concurrecy**2,
         [0] * concurrecy**2,
     )
@@ -70,9 +78,10 @@ async def benchmark(
     results = await asyncio.gather(*jobs)
 
     print(
-        f"Concurrecy: {concurrecy:<3} "
+        f"Entrypoint: {entrypoint:<5} ",
+        f"Concurrecy: {concurrecy:<2} "
         f"Jobs: {N:<5} "
-        f"Jobs per second: {sum(results)/1_000:.1f}k"
+        f"JPS: {sum(results)/1_000:.1f}k",
     )
 
 
@@ -81,8 +90,9 @@ async def main() -> None:
         min_size=20,
         max_size=99,
     ) as pool:
-        for concurrecy in (1, 2, 3, 4, 5, 10):
-            await benchmark(concurrecy, 10_000 * concurrecy, pool)
+        for entrypoint in ("sync", "async"):
+            for concurrecy in range(1, 6):
+                await benchmark(entrypoint, concurrecy, 1_000 * concurrecy, pool)
 
 
 if __name__ == "__main__":
