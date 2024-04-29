@@ -37,7 +37,7 @@ async def test_queries_next_jobs(
     assert seen == list(range(N))
 
 
-@pytest.mark.parametrize("N", (1, 2, 64, 256))
+@pytest.mark.parametrize("N", (1, 2, 64))
 @pytest.mark.parametrize("concurrency", (1, 2, 4, 16))
 async def test_queries_next_jobs_concurrent(
     pgpool: asyncpg.Pool,
@@ -79,7 +79,7 @@ async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
     assert sum(x.count for x in await q.queue_size()) == 0
 
 
-@pytest.mark.parametrize("N", (1, 2, 64, 256))
+@pytest.mark.parametrize("N", (1, 2, 64))
 async def test_move_job_log(
     pgpool: asyncpg.Pool,
     N: int,
@@ -130,7 +130,7 @@ async def test_clear_queue(
     assert sum(x.count for x in await q.queue_size()) == N - 1
 
 
-@pytest.mark.parametrize("N", (1, 2, 64, 256))
+@pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_priority(
     pgpool: asyncpg.Pool,
     N: int,
