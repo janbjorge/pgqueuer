@@ -322,18 +322,23 @@ class Queries:
             query = f"TRUNCATE {self.settings.statistics_table}"
             await self.pool.execute(query)
 
-    async def log_statistics(self) -> list[models.LogStatistics]:
+    async def log_statistics(self, tail: int) -> list[models.LogStatistics]:
         query = f"""
             SELECT
                 count,
+                created,
                 time_in_queue,
                 entrypoint,
                 priority,
                 status
             FROM {self.settings.statistics_table}
-            ORDER BY count, time_in_queue, entrypoint, priority, status
+            ORDER BY (
+                id, created, count, time_in_queue,
+                entrypoint, priority, status
+            ) DESC
+            LIMIT $1
         """
         return [
             models.LogStatistics.model_validate(dict(x))
-            for x in await self.pool.fetch(query)
+            for x in await self.pool.fetch(query, tail)
         ]

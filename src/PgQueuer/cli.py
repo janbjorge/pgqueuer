@@ -15,6 +15,7 @@ async def display_stats(log_stats: list[LogStatistics]) -> None:
         tabulate(
             [
                 (
+                    stat.created,
                     stat.count,
                     stat.entrypoint,
                     stat.time_in_queue,
@@ -24,6 +25,7 @@ async def display_stats(log_stats: list[LogStatistics]) -> None:
                 for stat in log_stats
             ],
             headers=[
+                "Created",
                 "Count",
                 "Entrypoint",
                 "Time in Queue (HH:MM:SS)",
@@ -37,10 +39,16 @@ async def display_stats(log_stats: list[LogStatistics]) -> None:
 
 async def fetch_and_dispay(
     queries: Queries,
-    interval: timedelta = timedelta(seconds=1),
+    interval: timedelta | None,
+    tail: int,
 ) -> None:
+    clear_and_home = "\033[2J\033[H"
     while True:
-        await display_stats(await queries.log_statistics())
+        print(clear_and_home, end="")
+        stats = await queries.log_statistics(tail)  # Fetch stats once and reuse
+        await display_stats(stats)
+        if interval is None:
+            return
         await asyncio.sleep(interval.total_seconds())
 
 
@@ -138,10 +146,24 @@ def cliparser() -> argparse.Namespace:
         parents=[common_arguments],
     )
 
-    subparsers.add_parser(
+    dashboardparser = subparsers.add_parser(
         "dashboard",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+    )
+    dashboardparser.add_argument(
+        "-i",
+        "--interval",
+        help="Set the refresh interval in seconds for updating the dashboard display.",
+        default=None,
+        type=lambda x: timedelta(seconds=float(x)),
+    )
+    dashboardparser.add_argument(
+        "-n",
+        "--tail",
+        help="The number of the most recent log entries to display on the dashboard.",
+        type=int,
+        default=25,
     )
 
     return parser.parse_args()
@@ -172,4 +194,8 @@ async def main() -> None:
             case "uninstall":
                 await queries.uninstall()
             case "dashboard":
-                await fetch_and_dispay(queries)
+                await fetch_and_dispay(
+                    queries,
+                    parsed.interval,
+                    parsed.tail,
+                )
