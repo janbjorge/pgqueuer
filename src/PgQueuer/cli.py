@@ -1,9 +1,47 @@
 import argparse
+import asyncio
 import os
+from datetime import timedelta
 
 import asyncpg
+from tabulate import tabulate
 
-from PgQueuer import queries
+from PgQueuer.models import LogStatistics
+from PgQueuer.queries import Queries
+
+
+async def display_stats(log_stats: list[LogStatistics]) -> None:
+    print(
+        tabulate(
+            [
+                (
+                    stat.count,
+                    stat.entrypoint,
+                    stat.time_in_queue,
+                    stat.status,
+                    stat.priority,
+                )
+                for stat in log_stats
+            ],
+            headers=[
+                "Count",
+                "Entrypoint",
+                "Time in Queue (HH:MM:SS)",
+                "Status",
+                "Priority",
+            ],
+            tablefmt="pretty",
+        )
+    )
+
+
+async def fetch_and_dispay(
+    queries: Queries,
+    interval: timedelta = timedelta(seconds=1),
+) -> None:
+    while True:
+        await display_stats(await queries.log_statistics())
+        await asyncio.sleep(interval.total_seconds())
 
 
 def cliparser() -> argparse.Namespace:
@@ -100,6 +138,12 @@ def cliparser() -> argparse.Namespace:
         parents=[common_arguments],
     )
 
+    subparsers.add_parser(
+        "dashboard",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_arguments],
+    )
+
     return parser.parse_args()
 
 
@@ -121,8 +165,11 @@ async def main() -> None:
         user=parsed.pg_user,
         host=parsed.pg_host,
     ) as pool:
+        queries = Queries(pool)
         match parsed.command:
             case "install":
-                await queries.Queries(pool=pool).install()
+                await queries.install()
             case "uninstall":
-                await queries.Queries(pool=pool).uninstall()
+                await queries.uninstall()
+            case "dashboard":
+                await fetch_and_dispay(queries)

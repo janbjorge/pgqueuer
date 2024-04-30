@@ -31,12 +31,11 @@ class DBSettings:
         default_factory=lambda: add_prefix("fn_pgqueuer_changed"),
         kw_only=True,
     )
-    log_table: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_log"),
-        kw_only=True,
+    statistics_table: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_statistics"),
     )
-    log_table_status_type: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_status_log"),
+    statistics_table_status_type: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_statistics_status"),
         kw_only=True,
     )
     queue_status_type: Final[str] = dataclasses.field(
@@ -74,7 +73,7 @@ class Queries:
             CREATE TABLE {self.settings.queue_table} (
                 id SERIAL PRIMARY KEY,
                 priority INT NOT NULL,
-                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                 status {self.settings.queue_status_type} NOT NULL,
                 entrypoint TEXT NOT NULL,
                 payload BYTEA
@@ -82,14 +81,22 @@ class Queries:
             CREATE INDEX ON {self.settings.queue_table} (priority ASC, id DESC)
                 INCLUDE (id) WHERE status = 'queued';
 
-            CREATE TYPE {self.settings.log_table_status_type} AS ENUM ('exception', 'successful');
-            CREATE TABLE {self.settings.log_table} (
+            CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
+            CREATE TABLE {self.settings.statistics_table} (
                 id SERIAL PRIMARY KEY,
+                created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', CURRENT_TIMESTAMP at time zone 'UTC'),
+                count BIGINT NOT NULL,
                 priority INT NOT NULL,
-                created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                duration INTERVAL NOT NULL,
-                status {self.settings.log_table_status_type} NOT NULL,
+                time_in_queue INTERVAL NOT NULL,
+                status {self.settings.statistics_table_status_type} NOT NULL,
                 entrypoint TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX unique_count ON {self.settings.statistics_table} (
+                priority,
+                DATE_TRUNC('sec', created at time zone 'UTC'),
+                DATE_TRUNC('sec', time_in_queue),
+                status,
+                entrypoint
             );
 
             CREATE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
@@ -148,9 +155,9 @@ class Queries:
             DROP TRIGGER {self.settings.trigger};
             DROP FUNCTION {self.settings.function};
             DROP TABLE {self.settings.queue_table};
-            DROP TABLE {self.settings.log_table};
+            DROP TABLE {self.settings.statistics_table};
             DROP TYPE {self.settings.queue_status_type};
-            DROP TYPE {self.settings.log_table_status_type};
+            DROP TYPE {self.settings.statistics_table_status_type};
         """
         await self.pool.execute(query)
 
@@ -231,7 +238,7 @@ class Queries:
             query = f"TRUNCATE {self.settings.queue_table}"
             await self.pool.execute(query)
 
-    async def queue_size(self) -> list[models.QueueSize]:
+    async def queue_size(self) -> list[models.QueueStatistics]:
         """
         Returns the number of jobs in the queue grouped by entrypoint and priority.
         """
@@ -242,10 +249,11 @@ class Queries:
                 entrypoint
             FROM
                 {self.settings.queue_table}
-            GROUP BY priority, entrypoint
+            GROUP BY entrypoint, priority
+            ORDER BY count, entrypoint, priority
         """
         return [
-            models.QueueSize.model_validate(dict(x))
+            models.QueueStatistics.model_validate(dict(x))
             for x in await self.pool.fetch(query)
         ]
 
@@ -254,19 +262,46 @@ class Queries:
         Moves a completed or failed job from the queue table to the log
         table, recording its final status and duration.
         """
+
         query = f"""
             WITH moved_row AS (
                 DELETE FROM {self.settings.queue_table}
                 WHERE id = $1
-                RETURNING id, priority, created, entrypoint
+                RETURNING priority, entrypoint, created
             )
 
-            INSERT INTO {self.settings.log_table} (
-                id, priority, created, duration, status, entrypoint
+            INSERT INTO {self.settings.statistics_table} (
+                priority,
+                entrypoint,
+                time_in_queue,
+                status,
+                count
             )
-                SELECT id, priority, created, NOW() - created, $2, entrypoint
-                FROM moved_row;
-         """
+            SELECT
+                priority,
+                entrypoint,
+                DATE_TRUNC('sec', NOW() - created) AS time_in_queue,
+                $2 AS status,
+                1 AS count
+            FROM moved_row
+            ON CONFLICT (
+                priority,
+                DATE_TRUNC('sec', created at time zone 'UTC'),
+                DATE_TRUNC('sec', time_in_queue),
+                status,
+                entrypoint
+            )
+            DO UPDATE
+                SET
+                    count = {self.settings.statistics_table}.count + 1
+                WHERE
+                        {self.settings.statistics_table}.priority = EXCLUDED.priority
+                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', EXCLUDED.created at time zone 'UTC')
+                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', EXCLUDED.time_in_queue)
+                    AND {self.settings.statistics_table}.status = EXCLUDED.status
+                    AND {self.settings.statistics_table}.entrypoint = EXCLUDED.entrypoint
+
+         """  # noqa: E501
         await self.pool.execute(query, job.id, status)
 
     async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
@@ -275,29 +310,30 @@ class Queries:
         by entrypoint if specified.
         """
         if entrypoint:
-            query = f"DELETE FROM {self.settings.log_table} WHERE entrypoint = ANY($1)"
+            query = f"""
+                DELETE FROM {self.settings.statistics_table}
+                WHERE entrypoint = ANY($1)
+            """
             await self.pool.execute(
                 query,
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
         else:
-            query = f"TRUNCATE {self.settings.log_table}"
+            query = f"TRUNCATE {self.settings.statistics_table}"
             await self.pool.execute(query)
 
-    async def log_size(self) -> list[models.LogSize]:
-        """
-        Returns the number of log entries grouped by status, entrypoint, and priority.
-        """
+    async def log_statistics(self) -> list[models.LogStatistics]:
         query = f"""
             SELECT
-                count(*) AS count,
-                status,
+                count,
+                time_in_queue,
+                entrypoint,
                 priority,
-                entrypoint
-            FROM
-                {self.settings.log_table}
-            GROUP BY status, priority, entrypoint
+                status
+            FROM {self.settings.statistics_table}
+            ORDER BY count, time_in_queue, entrypoint, priority, status
         """
         return [
-            models.LogSize.model_validate(dict(x)) for x in await self.pool.fetch(query)
+            models.LogStatistics.model_validate(dict(x))
+            for x in await self.pool.fetch(query)
         ]

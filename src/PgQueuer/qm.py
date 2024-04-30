@@ -41,8 +41,19 @@ def is_async_callable(obj: SyncEntrypoint) -> TypeGuard[SyncEntrypoint]: ...
 
 
 def is_async_callable(obj: object) -> bool:
-    # Inspired by:
-    # https://github.com/encode/starlette/blob/9f16bf5c25e126200701f6e04330864f4a91a898/starlette/_utils.py#L38
+    """
+    Determines whether an object is an asynchronous callable.
+    This function identifies objects that are either asynchronous coroutine functions
+    or have a callable __call__ method that is an asynchronous coroutine function.
+
+    The function handles functools.partial objects by evaluating the
+    underlying function. It supports overloads to ensure type-specific behavior
+    with AsyncEntrypoint and SyncEntrypoint types.
+
+    Inspired by:
+    https://github.com/encode/starlette/blob/9f16bf5c25e126200701f6e04330864f4a91a898/starlette/_utils.py#L38
+    """
+
     while isinstance(obj, functools.partial):
         obj = obj.func
 
@@ -60,17 +71,12 @@ class QueueManager:
 
     pool: asyncpg.Pool
     queries: Queries = dataclasses.field(init=False)
-    channel: PGChannel = dataclasses.field(
-        default=PGChannel(DBSettings().channel),
-    )
-    alive: bool = dataclasses.field(
-        init=False,
-        default=True,
-    )
+    channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
+    alive: bool = dataclasses.field(init=False, default=True)
+
     # Should registry be a weakref?
     registry: dict[str, Entrypoint] = dataclasses.field(
-        init=False,
-        default_factory=dict,
+        init=False, default_factory=dict
     )
 
     def __post_init__(self) -> None:
@@ -84,8 +90,8 @@ class QueueManager:
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
         """
-        Decorator to register a function as an entrypoint for
-        handling specific job types.
+        Registers a function as an entrypoint for handling specific
+        job types. Ensures unique naming in the registry.
         """
 
         if name in self.registry:
@@ -102,9 +108,10 @@ class QueueManager:
         dequeue_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
         """
-        Starts the event listener and continuously dispatches jobs to
-        registered entry points until stopped.
+        Continuously listens for events and dispatches jobs. Manages connections and
+        tasks, logs timeouts, and resets connections upon termination.
         """
+
         async with (
             self.pool.acquire() as conn,
             TaskManager() as tm,
@@ -131,8 +138,8 @@ class QueueManager:
 
     async def _dispatch(self, job: Job) -> None:
         """
-        Internal method to asynchronously handle job dispatch,
-        including exception logging and job status updates.
+        Handles asynchronous job dispatch. Logs exceptions, updates job status,
+        and adapts execution method based on whether the job's function is asynchronous.
         """
 
         logger.debug(

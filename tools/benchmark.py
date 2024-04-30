@@ -54,19 +54,13 @@ async def benchmark(
     entrypoint: str,
     concurrecy: int,
     N: int,
-    pool: asyncpg.Pool,
+    queries: Queries,
 ) -> None:
-    queries = Queries(pool)
-
-    await queries.clear_log()
-    await queries.clear_queue()
-
     await queries.enqueue(
         [entrypoint] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
-    assert sum(x.count for x in await queries.queue_size()) == N
 
     await queries.enqueue(
         [entrypoint] * concurrecy**2,
@@ -74,7 +68,7 @@ async def benchmark(
         [0] * concurrecy**2,
     )
 
-    jobs = [jobs_per_second(pool) for _ in range(concurrecy)]
+    jobs = [jobs_per_second(queries.pool) for _ in range(concurrecy)]
     results = await asyncio.gather(*jobs)
 
     print(
@@ -90,9 +84,12 @@ async def main() -> None:
         min_size=20,
         max_size=99,
     ) as pool:
+        queries = Queries(pool)
+        await queries.clear_log()
+        await queries.clear_queue()
         for entrypoint in ("sync", "async"):
             for concurrecy in range(1, 6):
-                await benchmark(entrypoint, concurrecy, 1_000 * concurrecy, pool)
+                await benchmark(entrypoint, concurrecy, 1_000 * concurrecy, queries)
 
 
 if __name__ == "__main__":

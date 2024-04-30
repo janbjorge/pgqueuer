@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel
@@ -26,7 +27,7 @@ class Job(BaseModel):
     payload: bytes | None
 
 
-class QueueSize(BaseModel):
+class QueueStatistics(BaseModel):
     """
     Represents the number of jobs per entrypoint and priority in the queue.
     """
@@ -36,12 +37,13 @@ class QueueSize(BaseModel):
     priority: int
 
 
-class LogSize(BaseModel):
+class LogStatistics(BaseModel):
     """
-    Represents log details for jobs based on status, entrypoint, and priority.
+    Represents log statistics for jobs based on status, entrypoint, and priority.
     """
 
     count: int
+    time_in_queue: timedelta
     entrypoint: str
     priority: int
     status: STATUS_LOG
