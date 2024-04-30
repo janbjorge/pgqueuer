@@ -101,7 +101,7 @@ async def test_move_job_log(
     while job := await q.dequeue():
         await q.log_job(job, status="successful")
 
-    assert sum(x.count for x in await q.log_statistics()) == N
+    assert sum(x.count for x in await q.log_statistics(1_000_000_000)) == N
 
 
 @pytest.mark.parametrize("N", (1, 2, 5))

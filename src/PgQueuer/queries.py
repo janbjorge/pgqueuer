@@ -264,45 +264,54 @@ class Queries:
         """
 
         query = f"""
-            WITH moved_row AS (
+            WITH deleted AS (
                 DELETE FROM {self.settings.queue_table}
                 WHERE id = $1
-                RETURNING priority, entrypoint, created
             )
 
             INSERT INTO {self.settings.statistics_table} (
                 priority,
                 entrypoint,
                 time_in_queue,
+                created,
                 status,
                 count
             )
-            SELECT
-                priority,
-                entrypoint,
-                DATE_TRUNC('sec', NOW() - created) AS time_in_queue,
-                $2 AS status,
-                1 AS count
-            FROM moved_row
+            VALUES (
+                $2,                                         -- priority
+                $3,                                         -- entrypoint
+                DATE_TRUNC('sec', NOW() - $4),              -- time_in_queue
+                DATE_TRUNC('sec', $4 at time zone 'UTC'),   -- created at time zone 'UTC'
+                $5,                                         -- status
+                1                                           -- start count
+            )
             ON CONFLICT (
                 priority,
+                entrypoint,
                 DATE_TRUNC('sec', created at time zone 'UTC'),
                 DATE_TRUNC('sec', time_in_queue),
-                status,
-                entrypoint
+                status
             )
             DO UPDATE
                 SET
                     count = {self.settings.statistics_table}.count + 1
                 WHERE
-                        {self.settings.statistics_table}.priority = EXCLUDED.priority
-                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', EXCLUDED.created at time zone 'UTC')
-                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', EXCLUDED.time_in_queue)
-                    AND {self.settings.statistics_table}.status = EXCLUDED.status
-                    AND {self.settings.statistics_table}.entrypoint = EXCLUDED.entrypoint
+                        {self.settings.statistics_table}.priority = $2
+                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', NOW() - $4)
+                    AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', $4 at time zone 'UTC')
+                    AND {self.settings.statistics_table}.status = $5
+                    AND {self.settings.statistics_table}.entrypoint = $3
 
          """  # noqa: E501
-        await self.pool.execute(query, job.id, status)
+
+        await self.pool.execute(
+            query,
+            job.id,
+            job.priority,
+            job.entrypoint,
+            job.created,
+            status,
+        )
 
     async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
         """

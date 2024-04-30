@@ -43,7 +43,8 @@ class LogStatistics(BaseModel):
     """
 
     count: int
-    time_in_queue: timedelta
+    created: AwareDatetime
     entrypoint: str
     priority: int
     status: STATUS_LOG
+    time_in_queue: timedelta
