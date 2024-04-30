@@ -1,6 +1,8 @@
 import asyncio
+import contextlib
 
 from PgQueuer import cli
 
 if __name__ == "__main__":
-    asyncio.run(cli.main())
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(cli.main())
