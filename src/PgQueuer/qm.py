@@ -120,7 +120,7 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while self.alive and (job := await self.queries.dequeue()):
+                while job := await self.queries.dequeue():
                     tm.add(asyncio.create_task(self._dispatch(job)))
 
                 try:
