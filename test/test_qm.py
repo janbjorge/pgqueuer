@@ -24,8 +24,11 @@ async def test_job_queing(
         assert context
         seen.append(int(context.payload))
 
-    for n in range(N):
-        await c.queries.enqueue("fetch", f"{n}".encode())
+    await c.queries.enqueue(
+        ["fetch"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
     # Stop flag
     await c.queries.enqueue("fetch", None)
@@ -56,8 +59,11 @@ async def test_job_fetch(
             assert context
             seen.append(int(context.payload))
 
-    for n in range(N):
-        await q.enqueue("fetch", f"{n}".encode())
+    await q.enqueue(
+        ["fetch"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
     # Stop flag
     await q.enqueue("fetch", None)
@@ -92,8 +98,11 @@ async def test_sync_entrypoint(
             assert context
             seen.append(int(context.payload))
 
-    for n in range(N):
-        await q.enqueue("fetch", f"{n}".encode())
+    await q.enqueue(
+        ["fetch"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
     # Stop flag
     await q.enqueue("fetch", None)

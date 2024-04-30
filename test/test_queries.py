@@ -24,8 +24,11 @@ async def test_queries_next_jobs(
 ) -> None:
     q = queries.Queries(pgpool)
 
-    for n in range(N):
-        await q.enqueue("placeholer", f"{n}".encode())
+    await q.enqueue(
+        ["placeholder"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
     seen = list[int]()
     while job := await q.dequeue():
@@ -47,8 +50,11 @@ async def test_queries_next_jobs_concurrent(
     assert pgpool.get_max_size() >= concurrency
     q = queries.Queries(pgpool)
 
-    for n in range(N):
-        await q.enqueue("placeholer", f"{n}".encode())
+    await q.enqueue(
+        ["placeholder"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
     seen = list[int]()
 
@@ -86,11 +92,14 @@ async def test_move_job_log(
 ) -> None:
     q = queries.Queries(pgpool)
 
-    for n in range(N):
-        await q.enqueue("placeholer", f"{n}".encode())
+    await q.enqueue(
+        ["placeholer"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
 
-    while next_job := await q.dequeue():
-        await q.log_job(next_job, status="successful")
+    while job := await q.dequeue():
+        await q.log_job(job, status="successful")
 
     assert sum(x.count for x in await q.log_statistics()) == N
 
@@ -103,8 +112,11 @@ async def test_clear_queue(
     q = queries.Queries(pgpool)
 
     # Test delete all by listing all
-    for n in range(N):
-        await q.enqueue(f"placeholer{n}", None)
+    await q.enqueue(
+        [f"placeholer{n}" for n in range(N)],
+        [None] * N,
+        [0] * N,
+    )
 
     assert all(x.count == 1 for x in await q.queue_size())
     assert sum(x.count for x in await q.queue_size()) == N
@@ -112,8 +124,11 @@ async def test_clear_queue(
     assert sum(x.count for x in await q.queue_size()) == 0
 
     # Test delete all by None
-    for n in range(N):
-        await q.enqueue(f"placeholer{n}", None)
+    await q.enqueue(
+        [f"placeholer{n}" for n in range(N)],
+        [None] * N,
+        [0] * N,
+    )
 
     assert all(x.count == 1 for x in await q.queue_size())
     assert sum(x.count for x in await q.queue_size()) == N
@@ -121,8 +136,11 @@ async def test_clear_queue(
     assert sum(x.count for x in await q.queue_size()) == 0
 
     # Test delete one(1).
-    for n in range(N):
-        await q.enqueue(f"placeholer{n}", None)
+    await q.enqueue(
+        [f"placeholer{n}" for n in range(N)],
+        [None] * N,
+        [0] * N,
+    )
 
     assert all(x.count == 1 for x in await q.queue_size())
     assert sum(x.count for x in await q.queue_size()) == N
@@ -138,8 +156,11 @@ async def test_queue_priority(
     q = queries.Queries(pgpool)
     jobs = list[models.Job]()
 
-    for n in range(N):
-        await q.enqueue("placeholer", f"{n}".encode(), priority=n)
+    await q.enqueue(
+        ["placeholder"] * N,
+        [f"{n}".encode() for n in range(N)],
+        list(range(N)),
+    )
 
     while next_job := await q.dequeue():
         jobs.append(next_job)
