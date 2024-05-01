@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import random
 import time
 from datetime import timedelta
 from typing import Callable, Generator
@@ -11,9 +12,9 @@ from PgQueuer.queries import Queries
 
 
 @contextlib.contextmanager
-def timer() -> (
+def execution_timer() -> (
     Generator[
-        Callable[[], float],
+        Callable[[], timedelta],
         None,
         None,
     ]
@@ -21,80 +22,63 @@ def timer() -> (
     enter = time.perf_counter()
     done: float | None = None
     try:
-        yield lambda: done - enter if done else time.perf_counter() - enter
+        yield lambda: timedelta(
+            seconds=(done - enter if done else time.perf_counter() - enter)
+        )
     finally:
         done = time.perf_counter()
 
 
-async def jobs_per_second(pool: asyncpg.Pool) -> float:
+async def run_qm(pool: asyncpg.Pool) -> None:
     qm = QueueManager(pool)
-    seen = 0
 
     @qm.entrypoint("async")
     async def asyncfetch(job: Job) -> None:
-        nonlocal seen
-        seen += 1
         if job.payload is None:
             qm.alive = False
 
     @qm.entrypoint("sync")
     def syncfetch(job: Job) -> None:
-        nonlocal seen
-        seen += 1
         if job.payload is None:
             qm.alive = False
 
-    with timer() as elapsed:
-        await qm.run(timedelta(seconds=0))
-
-    return seen / elapsed()
-
-
-async def benchmark(
-    entrypoint: str,
-    concurrecy: int,
-    N: int,
-    pool: asyncpg.Pool,
-) -> None:
-    queries = Queries(pool)
-    await queries.enqueue(
-        [entrypoint] * N,
-        [f"{n}".encode() for n in range(N)],
-        [0] * N,
-    )
-
-    await queries.enqueue(
-        [entrypoint] * concurrecy**2,
-        [None] * concurrecy**2,
-        [0] * concurrecy**2,
-    )
-
-    jps = sum(
-        await asyncio.gather(
-            *[jobs_per_second(pool) for _ in range(concurrecy)],
-        )
-    )
-
-    print(
-        f"Entrypoint: {entrypoint:<5} ",
-        f"Concurrecy: {concurrecy:<2} ",
-        f"Jobs: {N:<5} ",
-        f"JPS: {jps/1_000:.1f}k",
-    )
+    await qm.run(timedelta(seconds=0))
 
 
 async def main() -> None:
-    async with asyncpg.create_pool(
-        min_size=20,
-        max_size=99,
-    ) as pool:
+    async with asyncpg.create_pool() as pool:
         queries = Queries(pool)
         await queries.clear_log()
-        await queries.clear_queue()
-        for entrypoint in ("sync", "async"):
+        while True:
             for concurrecy in range(1, 6):
-                await benchmark(entrypoint, concurrecy, concurrecy * 1_000, pool)
-                await asyncio.sleep(0)
+                N = concurrecy * 1_000
+
+                await queries.clear_queue()
+
+                entrypoints = ["sync"] * (N // 2) + ["async"] * (N // 2)
+                random.shuffle(entrypoints)
+                payloads = [f"{n}".encode() for n in range(N)]
+                priorities = [0] * N
+                await queries.enqueue(entrypoints, payloads, priorities)
+                await queries.enqueue(
+                    ["async"] * concurrecy**2,
+                    [None] * concurrecy**2,
+                    [0] * concurrecy**2,
+                )
+
+                with execution_timer() as elapsed:
+                    await asyncio.gather(
+                        *[run_qm(pool) for _ in range(concurrecy)],
+                    )
+
+                elapsed_total_seconds = elapsed().total_seconds()
+                jps = (N - len(await queries.queue_size())) / elapsed_total_seconds
+
+                print(
+                    f"Concurrecy: {concurrecy:<2} ",
+                    f"Jobs: {N:<5} ",
+                    f"JPS: {(jps)/1_000:.1f}k",
+                )
 
 
 if __name__ == "__main__":

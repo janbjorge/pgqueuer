@@ -111,7 +111,6 @@ class QueueManager:
         Continuously listens for events and dispatches jobs. Manages connections and
         tasks, logs timeouts, and resets connections upon termination.
         """
-
         async with (
             self.pool.acquire() as conn,
             TaskManager() as tm,
@@ -120,7 +119,7 @@ class QueueManager:
             await listener.connect(conn, self.channel)
 
             while self.alive:
-                while job := await self.queries.dequeue():
+                while self.alive and (job := await self.queries.dequeue()):
                     tm.add(asyncio.create_task(self._dispatch(job)))
 
                 try:

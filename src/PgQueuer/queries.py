@@ -189,7 +189,7 @@ class Queries:
     async def enqueue(
         self,
         entrypoint: str | list[str],
-        payload: bytes | None | list[bytes | None],
+        payload: bytes | None | list[bytes] | list[None] | list[bytes | None],
         priority: int | list[int] = 0,
     ) -> None:
         """
