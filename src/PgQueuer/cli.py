@@ -4,13 +4,16 @@ import os
 from datetime import timedelta
 
 import asyncpg
-from tabulate import tabulate
+from tabulate import tabulate, tabulate_formats
 
 from PgQueuer.models import LogStatistics
 from PgQueuer.queries import Queries
 
 
-async def display_stats(log_stats: list[LogStatistics]) -> None:
+async def display_stats(
+    log_stats: list[LogStatistics],
+    tablefmt: str,
+) -> None:
     print(
         tabulate(
             [
@@ -32,7 +35,7 @@ async def display_stats(log_stats: list[LogStatistics]) -> None:
                 "Status",
                 "Priority",
             ],
-            tablefmt="pretty",
+            tablefmt=tablefmt,
         )
     )
 
@@ -41,12 +44,13 @@ async def fetch_and_dispay(
     queries: Queries,
     interval: timedelta | None,
     tail: int,
+    tablefmt: str,
 ) -> None:
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
         stats = await queries.log_statistics(tail)  # Fetch stats once and reuse
-        await display_stats(stats)
+        await display_stats(stats, tablefmt)
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
@@ -165,6 +169,15 @@ def cliparser() -> argparse.Namespace:
         type=int,
         default=25,
     )
+    dashboardparser.add_argument(
+        "--table-format",
+        default="pretty",
+        help=(
+            "Specify the format of the table used to display statistics. "
+            "Options are provided by the tabulate library."
+        ),
+        choices=tabulate_formats,
+    )
 
     return parser.parse_args()
 
@@ -186,6 +199,8 @@ async def main() -> None:
         port=parsed.pg_port,
         user=parsed.pg_user,
         host=parsed.pg_host,
+        max_size=1,
+        min_size=0,
     ) as pool:
         queries = Queries(pool)
         match parsed.command:
@@ -198,4 +213,5 @@ async def main() -> None:
                     queries,
                     parsed.interval,
                     parsed.tail,
+                    parsed.table_format,
                 )
