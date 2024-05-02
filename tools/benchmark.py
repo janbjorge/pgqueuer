@@ -1,8 +1,9 @@
+import argparse
 import asyncio
 import contextlib
 import random
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Callable, Generator
 
 import asyncpg
@@ -22,9 +23,7 @@ def execution_timer() -> (
     enter = time.perf_counter()
     done: float | None = None
     try:
-        yield lambda: timedelta(
-            seconds=(done - enter if done else time.perf_counter() - enter)
-        )
+        yield lambda: timedelta(seconds=((done or time.perf_counter()) - enter))
     finally:
         done = time.perf_counter()
 
@@ -46,6 +45,19 @@ async def run_qm(pool: asyncpg.Pool) -> None:
 
 
 async def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run the job processing benchmark.",
+    )
+    parser.add_argument(
+        "-t",
+        "--time-limit",
+        type=lambda x: timedelta(seconds=float(x)),
+        default=timedelta(seconds=10),
+        help="Run the benchmark for a limited number of seconds. Default is 10",
+    )
+    args = parser.parse_args()
+    start = datetime.now()
+
     async with asyncpg.create_pool() as pool:
         queries = Queries(pool)
         await queries.clear_log()
@@ -79,6 +91,9 @@ async def main() -> None:
                     f"Jobs: {N:<5} ",
                     f"JPS: {(jps)/1_000:.1f}k",
                 )
+
+            if timedelta(seconds=0) < args.time_limit < datetime.now() - start:
+                return
 
 
 if __name__ == "__main__":
