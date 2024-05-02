@@ -17,7 +17,7 @@ from typing import (
 import anyio
 import anyio.to_thread
 import asyncpg
-from pgcachewatch.listeners import PGEventQueue
+from pgcachewatch.listeners import PGEventQueue, _critical_termination_listener
 from pgcachewatch.models import PGChannel
 
 from .logconfig import logger
@@ -133,6 +133,7 @@ class QueueManager:
                         dequeue_timeout,
                     )
 
+            conn.remove_termination_listener(_critical_termination_listener)
             await conn.reset()
 
     async def _dispatch(self, job: Job) -> None:
