@@ -297,10 +297,10 @@ class Queries:
                     count = {self.settings.statistics_table}.count + 1
                 WHERE
                         {self.settings.statistics_table}.priority = $2
+                    AND {self.settings.statistics_table}.entrypoint = $3
                     AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', NOW() - $4)
                     AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', $4 at time zone 'UTC')
                     AND {self.settings.statistics_table}.status = $5
-                    AND {self.settings.statistics_table}.entrypoint = $3
 
          """  # noqa: E501
 

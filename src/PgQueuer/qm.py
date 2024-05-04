@@ -85,7 +85,10 @@ class QueueManager:
         instance creation.
         """
         if self.pool.get_min_size() < 1:
-            raise ValueError("... min size must be gt 1.")
+            raise ValueError(
+                "The minimum pool size must be at least 1 to maintain a dedicated "
+                "connection for initialization, setup, and Pub/Sub operations."
+            )
         self.queries = Queries(self.pool)
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
