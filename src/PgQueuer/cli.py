@@ -219,14 +219,12 @@ async def main() -> None:
         queries = Queries(pool)
         match parsed.command:
             case "install":
-                if parsed.dry_run:
-                    print(QueryBuilder().create_install_query())
-                else:
+                print(QueryBuilder().create_install_query())
+                if not parsed.dry_run:
                     await queries.install()
             case "uninstall":
-                if parsed.dry_run:
-                    print(QueryBuilder().create_uninstall_query())
-                else:
+                print(QueryBuilder().create_uninstall_query())
+                if not parsed.dry_run:
                     await queries.uninstall()
             case "dashboard":
                 await fetch_and_dispay(
