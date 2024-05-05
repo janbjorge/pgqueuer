@@ -119,7 +119,7 @@ class QueryBuilder:
         status {self.settings.statistics_table_status_type} NOT NULL,
         entrypoint TEXT NOT NULL
     );
-    CREATE UNIQUE INDEX unique_count ON {self.settings.statistics_table} (
+    CREATE UNIQUE INDEX {self.settings.statistics_table}_unique_count ON {self.settings.statistics_table} (
         priority,
         DATE_TRUNC('sec', created at time zone 'UTC'),
         DATE_TRUNC('sec', time_in_queue),
