@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/janbjorge/PgQueuer/"
+Documentation = "https://github.com/janbjorge/PgQueuer/wiki"
 Homepage = "https://github.com/janbjorge/PgQueuer/"
 Issues = "https://github.com/janbjorge/PgQueuer/issues"
 Repository = "https://github.com/janbjorge/PgQueuer/"
