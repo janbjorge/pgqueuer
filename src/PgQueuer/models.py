@@ -35,6 +35,7 @@ class QueueStatistics(BaseModel):
     count: int
     entrypoint: str
     priority: int
+    status: STATUS
 
 
 class LogStatistics(BaseModel):
