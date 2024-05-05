@@ -7,7 +7,7 @@ import asyncpg
 from tabulate import tabulate, tabulate_formats
 
 from PgQueuer.models import LogStatistics
-from PgQueuer.queries import Queries
+from PgQueuer.queries import Queries, QueryBuilder
 
 
 async def display_stats(
@@ -142,12 +142,26 @@ def cliparser() -> argparse.Namespace:
         "install",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+    ).add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Prints the SQL statements that would be executed without actually "
+            " applying any changes to the database."
+        ),
     )
 
     subparsers.add_parser(
         "uninstall",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+    ).add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Prints the SQL statements that would be executed without "
+            "actually applying any changes to the database."
+        ),
     )
 
     dashboardparser = subparsers.add_parser(
@@ -193,7 +207,7 @@ async def main() -> None:
         os.environ["PGQUEUER_PREFIX"] = prefix
 
     async with asyncpg.create_pool(
-        parsed.pg_dsn,
+        dsn=parsed.pg_dsn,
         database=parsed.pg_database,
         password=parsed.pg_password,
         port=parsed.pg_port,
@@ -205,9 +219,15 @@ async def main() -> None:
         queries = Queries(pool)
         match parsed.command:
             case "install":
-                await queries.install()
+                if parsed.dry_run:
+                    print(QueryBuilder().create_install_query())
+                else:
+                    await queries.install()
             case "uninstall":
-                await queries.uninstall()
+                if parsed.dry_run:
+                    print(QueryBuilder().create_uninstall_query())
+                else:
+                    await queries.uninstall()
             case "dashboard":
                 await fetch_and_dispay(
                     queries,
