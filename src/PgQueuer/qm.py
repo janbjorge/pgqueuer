@@ -115,11 +115,11 @@ class QueueManager:
         tasks, logs timeouts, and resets connections upon termination.
         """
         async with (
-            self.pool.acquire() as conn,
+            self.pool.acquire() as connection,
             TaskManager() as tm,
         ):
             listener = PGEventQueue()
-            await listener.connect(conn, self.channel)
+            await listener.connect(connection, self.channel)
 
             while self.alive:
                 while self.alive and (job := await self.queries.dequeue()):
@@ -136,8 +136,8 @@ class QueueManager:
                         dequeue_timeout,
                     )
 
-            conn.remove_termination_listener(_critical_termination_listener)
-            await conn.reset()
+            connection.remove_termination_listener(_critical_termination_listener)
+            await connection.reset()
 
     async def _dispatch(self, job: Job) -> None:
         """
