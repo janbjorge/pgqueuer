@@ -40,7 +40,7 @@ async def display_stats(
     )
 
 
-async def fetch_and_dispay(
+async def fetch_and_display(
     queries: Queries,
     interval: timedelta | None,
     tail: int,
@@ -227,7 +227,7 @@ async def main() -> None:
                 if not parsed.dry_run:
                     await queries.uninstall()
             case "dashboard":
-                await fetch_and_dispay(
+                await fetch_and_display(
                     queries,
                     parsed.interval,
                     parsed.tail,
