@@ -49,8 +49,7 @@ async def fetch_and_display(
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
-        stats = await queries.log_statistics(tail)  # Fetch stats once and reuse
-        await display_stats(stats, tablefmt)
+        await display_stats(await queries.log_statistics(tail), tablefmt)
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
