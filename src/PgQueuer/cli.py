@@ -131,7 +131,7 @@ def cliparser() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        prog="pgcachewatch",
+        prog="pgqueuer",
     )
 
     subparsers = parser.add_subparsers(
