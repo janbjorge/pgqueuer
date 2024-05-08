@@ -27,15 +27,8 @@ async def initialize_event_listener(
     pg_channel: models.PGChannel,
 ) -> PGEventListener:
     """
-    Asynchronously connects the PGEventQueue to a specified
-    PostgreSQL channel and connection.
-
-    This method establishes a listener on a PostgreSQL channel
-    using the provided connection. It is designed to be called
-    once per PGEventQueue instance to ensure a one-to-one relationship
-    between the event queue and a database channel. If an attempt is
-    made to connect a PGEventQueue instance to more than one channel
-    or connection, a RuntimeError is raised to enforce this constraint.
+    This method establishes a listener on a PostgreSQL channel using
+    the provided connection and channel.
     """
 
     def parse_and_queue(
@@ -61,9 +54,9 @@ async def initialize_event_listener(
                 parsed_event,
             )
 
-    queue = PGEventListener()
+    listener = PGEventListener()
     await pg_connection.add_listener(
-        pg_channel, lambda *x: parse_and_queue(x[-1], queue)
+        pg_channel, lambda *x: parse_and_queue(x[-1], listener)
     )
     pg_connection.add_termination_listener(_critical_termination_listener)
-    return queue
+    return listener
