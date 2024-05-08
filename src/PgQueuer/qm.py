@@ -17,11 +17,10 @@ from typing import (
 import anyio
 import anyio.to_thread
 import asyncpg
-from pgcachewatch.listeners import PGEventQueue, _critical_termination_listener
-from pgcachewatch.models import PGChannel
 
+from .listeners import _critical_termination_listener, initialize_event_listener
 from .logconfig import logger
-from .models import Job
+from .models import Job, PGChannel
 from .queries import DBSettings, Queries
 from .tm import TaskManager
 
@@ -118,8 +117,7 @@ class QueueManager:
             self.pool.acquire() as connection,
             TaskManager() as tm,
         ):
-            listener = PGEventQueue()
-            await listener.connect(connection, self.channel)
+            listener = await initialize_event_listener(connection, self.channel)  # type: ignore[arg-type]
 
             while self.alive:
                 while self.alive and (job := await self.queries.dequeue()):

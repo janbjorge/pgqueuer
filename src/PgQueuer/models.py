@@ -1,17 +1,61 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import Literal
+from datetime import datetime, timedelta, timezone
+from typing import Literal, NewType
 
-from pydantic import AwareDatetime, BaseModel
+from pydantic import AwareDatetime, BaseModel, Field
 
+###### Events ######
+
+PGChannel = NewType(
+    "PGChannel",
+    str,
+)
+
+
+OPERATIONS = Literal[
+    "insert",
+    "update",
+    "delete",
+    "truncate",
+]
+
+
+class Event(BaseModel):
+    """
+    A class representing an event in a PostgreSQL channel.
+
+    Attributes:
+        channel: The PostgreSQL channel the event belongs to.
+        operation: The type of operation performed (insert, update or delete).
+        sent_at: The timestamp when the event was sent.
+        table: The table the event is associated with.
+        received_at: The timestamp when the event was received.
+    """
+
+    channel: PGChannel
+    operation: OPERATIONS
+    sent_at: AwareDatetime
+    table: str
+    received_at: AwareDatetime = Field(
+        init=False,
+        default_factory=lambda: datetime.now(
+            tz=timezone.utc,
+        ),
+    )
+
+    @property
+    def latency(self) -> timedelta:
+        """
+        Calculate the latency between when the event was sent and received.
+        """
+        return self.received_at - self.sent_at
+
+
+###### Jobs ######
 STATUS = Literal[
     "queued",
     "picked",
-]
-STATUS_LOG = Literal[
-    "exception",
-    "successful",
 ]
 
 
@@ -27,6 +71,13 @@ class Job(BaseModel):
     status: STATUS
     entrypoint: str
     payload: bytes | None
+
+
+###### Statistics ######
+STATUS_LOG = Literal[
+    "exception",
+    "successful",
+]
 
 
 class QueueStatistics(BaseModel):
