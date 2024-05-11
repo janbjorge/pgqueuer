@@ -79,6 +79,29 @@ Example output from the dashboard:
 +---------------------------+-------+------------+--------------------------+------------+----------+
 ```
 
+#### Listen Command
+
+The `listen` command allows you to monitor PostgreSQL NOTIFY messages in real-time on a specified channel. This feature is particularly useful for debugging and observing the raw event traffic that your application handles.
+
+**Usage**:
+```bash
+python -m PgQueuer listen 
+```
+
+Example output from listen:
+```bash
+Event(channel='ch_pgqueuer', operation='truncate', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 123135, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 129818, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='insert', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 129978, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 155611, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='insert', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 155634, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 156301, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 171691, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 173794, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 171702, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 174455, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 171704, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 174875, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 174537, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 175312, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 173397, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 175468, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 173748, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 175861, tzinfo=datetime.timezone.utc))
+Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 174547, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 176460, tzinfo=datetime.timezone.utc))
+```
+
 ### Example Usage
 
 Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
