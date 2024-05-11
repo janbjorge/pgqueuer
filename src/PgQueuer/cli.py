@@ -8,8 +8,9 @@ from datetime import timedelta
 import asyncpg
 from tabulate import tabulate, tabulate_formats
 
-from PgQueuer.models import LogStatistics
-from PgQueuer.queries import Queries, QueryBuilder
+from PgQueuer.listeners import initialize_event_listener
+from PgQueuer.models import LogStatistics, PGChannel
+from PgQueuer.queries import DBSettings, Queries, QueryBuilder
 
 
 async def display_stats(
@@ -40,6 +41,19 @@ async def display_stats(
             tablefmt=tablefmt,
         )
     )
+
+
+async def display_pg_channel(
+    pool: asyncpg.Pool,
+    channel: PGChannel,
+) -> None:
+    async with pool.acquire() as connection:
+        listener = await initialize_event_listener(
+            connection,  # type: ignore[arg-type]
+            channel,
+        )
+        while True:
+            print(repr(await listener.get()))
 
 
 async def fetch_and_display(
@@ -194,6 +208,17 @@ def cliparser() -> argparse.Namespace:
         choices=tabulate_formats,
     )
 
+    listen_parser = subparsers.add_parser(
+        "listen",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_arguments],
+    )
+    listen_parser.add_argument(
+        "--channel",
+        help="Specifies the PostgreSQL NOTIFY channel to listen on for debug purposes.",
+        default=DBSettings().channel,
+    )
+
     return parser.parse_args()
 
 
@@ -233,4 +258,9 @@ async def main() -> None:
                     parsed.interval,
                     parsed.tail,
                     parsed.table_format,
+                )
+            case "listen":
+                await display_pg_channel(
+                    pool,
+                    PGChannel(parsed.channel),
                 )
