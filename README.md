@@ -30,6 +30,38 @@ To install PgQueuer, simply install with pip the following command:
 pip install PgQueuer
 ```
 
+### Example Usage
+
+Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
+
+```python
+import asyncio
+
+import asyncpg
+from PgQueuer.models import Job
+from PgQueuer.qm import QueueManager
+
+
+async def main() -> None:
+    pool = await asyncpg.create_pool(min_size=2)
+    qm = QueueManager(pool)
+
+    N = 1_000
+    # Enqueue messages.
+    for n in range(N):
+        await qm.queries.enqueue("fetch", f"this is from me: {n}".encode())
+
+    @qm.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
+        print(f"Processed message: {job}")
+
+    await qm.run()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
 ### Database Configuration
 
 PgQueuer provides a command-line interface for easy management of installation and uninstallation. Ensure you have configured your [environment variables](https://magicstack.github.io/asyncpg/current/api/index.html#connection) or use the appropriate flags to specify your database credentials.
@@ -100,38 +132,6 @@ Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024,
 Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 173397, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 175468, tzinfo=datetime.timezone.utc))
 Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 173748, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 175861, tzinfo=datetime.timezone.utc))
 Event(channel='ch_pgqueuer', operation='delete', sent_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 174547, tzinfo=TzInfo(UTC)), table='pgqueuer', received_at=datetime.datetime(2024, 5, 11, 20, 15, 16, 176460, tzinfo=datetime.timezone.utc))
-```
-
-### Example Usage
-
-Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
-
-```python
-import asyncio
-
-import asyncpg
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
-
-
-async def main() -> None:
-    pool = await asyncpg.create_pool(min_size=2)
-    qm = QueueManager(pool)
-
-    N = 1_000
-    # Enqueue messages.
-    for n in range(N):
-        await qm.queries.enqueue("fetch", f"this is from me: {n}".encode())
-
-    @qm.entrypoint("fetch")
-    async def process_message(job: Job) -> None:
-        print(f"Processed message: {job}")
-
-    await qm.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
 ```
 
 ### Benchmark Summary
