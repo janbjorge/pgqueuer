@@ -28,7 +28,7 @@ def execution_timer() -> (
         done = time.perf_counter()
 
 
-async def run_qm(pool: asyncpg.Pool) -> None:
+async def run_qm(pool: asyncpg.Pool, batch_size: int) -> None:
     qm = QueueManager(pool)
 
     @qm.entrypoint("async")
@@ -41,7 +41,7 @@ async def run_qm(pool: asyncpg.Pool) -> None:
         if job.payload is None:
             qm.alive = False
 
-    await qm.run(timedelta(seconds=0))
+    await qm.run(timedelta(seconds=0), batch_size=batch_size)
 
 
 async def main() -> None:
@@ -57,6 +57,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
     start = datetime.now()
+    batch_size = 10
 
     async with asyncpg.create_pool() as pool:
         queries = Queries(pool)
@@ -73,21 +74,21 @@ async def main() -> None:
                 priorities = [0] * N
                 await queries.enqueue(entrypoints, payloads, priorities)
                 await queries.enqueue(
-                    ["async"] * concurrecy**2,
-                    [None] * concurrecy**2,
-                    [0] * concurrecy**2,
+                    ["async"] * concurrecy * batch_size * 2,
+                    [None] * concurrecy * batch_size * 2,
+                    [0] * concurrecy * batch_size * 2,
                 )
 
                 with execution_timer() as elapsed:
                     await asyncio.gather(
-                        *[run_qm(pool) for _ in range(concurrecy)],
+                        *[run_qm(pool, batch_size) for _ in range(concurrecy)],
                     )
 
                 elapsed_total_seconds = elapsed().total_seconds()
                 jps = (N - len(await queries.queue_size())) / elapsed_total_seconds
 
                 print(
-                    f"Concurrecy: {concurrecy:<2} ",
+                    f"Concurrency: {concurrecy:<2} ",
                     f"Jobs: {N:<5} ",
                     f"JPS: {(jps)/1_000:.1f}k",
                 )

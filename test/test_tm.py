@@ -1,14 +1,14 @@
 import asyncio
 
 import pytest
-from PgQueuer import qm
+from PgQueuer.tm import TaskManager
 
 
 @pytest.mark.parametrize("N", (1, 2, 3, 5, 64))
 async def test_task_manager(N: int) -> None:
     future = asyncio.Future[None]()
 
-    tm = qm.TaskManager()
+    tm = TaskManager()
     assert len(tm.tasks) == 0
 
     async def waiter(future: asyncio.Future) -> None:
@@ -31,7 +31,7 @@ async def test_task_manager_ctx_mngr(N: int) -> None:
 
     future = asyncio.Future[None]()
 
-    async with qm.TaskManager() as tm:
+    async with TaskManager() as tm:
         assert len(tm.tasks) == 0
 
         for _ in range(N):

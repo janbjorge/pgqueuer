@@ -202,12 +202,15 @@ class QueryBuilder:
         WHERE status = 'queued'
         ORDER BY priority DESC, id ASC
         FOR UPDATE SKIP LOCKED
-        LIMIT 1
+        LIMIT $1
+    ),
+    updated AS (
+        UPDATE {self.settings.queue_table}
+        SET status = 'picked'
+        WHERE id = ANY(SELECT id FROM next_job)
+        RETURNING *
     )
-    UPDATE {self.settings.queue_table}
-    SET status = 'picked'
-    WHERE id = ANY(SELECT id FROM next_job)
-    RETURNING *;
+    SELECT * FROM updated ORDER BY priority DESC, id ASC
     """
 
     def create_enqueue_query(self) -> str:
@@ -367,16 +370,20 @@ class Queries:
         """
         await self.pool.execute(self.qb.create_uninstall_query())
 
-    async def dequeue(self) -> models.Job | None:
+    async def dequeue(
+        self,
+        batch_size: int = 10,
+    ) -> list[models.Job]:
         """
         Retrieves and updates the next 'queued' job to 'picked'
         status, ensuring no two jobs with the same entrypoint
         are picked simultaneously.
         """
+        if batch_size < 1:
+            raise ValueError("Batch size must be greter then one (1)")
 
-        if row := await self.pool.fetchrow(self.qb.create_dequeue_query()):
-            return models.Job.model_validate(dict(row))
-        return None
+        rows = await self.pool.fetch(self.qb.create_dequeue_query(), batch_size)
+        return [models.Job.model_validate(dict(row)) for row in rows]
 
     async def enqueue(
         self,

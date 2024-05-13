@@ -69,8 +69,9 @@ class QueueManager:
     """
 
     pool: asyncpg.Pool
-    queries: Queries = dataclasses.field(init=False)
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
+
+    queries: Queries = dataclasses.field(init=False)
     alive: bool = dataclasses.field(init=False, default=True)
 
     # Should registry be a weakref?
@@ -108,6 +109,7 @@ class QueueManager:
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
+        batch_size: int = 10,
     ) -> None:
         """
         Continuously listens for events and dispatches jobs. Manages connections and
@@ -120,19 +122,22 @@ class QueueManager:
             listener = await initialize_event_listener(connection, self.channel)  # type: ignore[arg-type]
 
             while self.alive:
-                while self.alive and (job := await self.queries.dequeue()):
-                    tm.add(asyncio.create_task(self._dispatch(job)))
+                while self.alive and (
+                    jobs := await self.queries.dequeue(batch_size=batch_size)
+                ):
+                    for job in jobs:
+                        tm.add(asyncio.create_task(self._dispatch(job)))
 
-                try:
-                    await asyncio.wait_for(
-                        listener.get(),
-                        timeout=dequeue_timeout.total_seconds(),
-                    )
-                except asyncio.TimeoutError:
-                    logger.debug(
-                        "Timeout after %r without receiving an event.",
-                        dequeue_timeout,
-                    )
+                    try:
+                        await asyncio.wait_for(
+                            listener.get(),
+                            timeout=dequeue_timeout.total_seconds(),
+                        )
+                    except asyncio.TimeoutError:
+                        logger.debug(
+                            "Timeout after %r without receiving an event.",
+                            dequeue_timeout,
+                        )
 
             connection.remove_termination_listener(_critical_termination_listener)
             await connection.reset()
