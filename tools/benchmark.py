@@ -3,7 +3,8 @@ import asyncio
 import contextlib
 import random
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
+from itertools import count
 from typing import Callable, Generator
 
 import asyncpg
@@ -28,73 +29,132 @@ def execution_timer() -> (
         done = time.perf_counter()
 
 
-async def run_qm(pool: asyncpg.Pool, batch_size: int) -> None:
-    qm = QueueManager(pool)
+async def consumer(qm: QueueManager, batch_size: int) -> float:
+    cnt = 0
 
-    @qm.entrypoint("async")
+    @qm.entrypoint("asyncfetch")
     async def asyncfetch(job: Job) -> None:
+        nonlocal cnt
+        cnt += 1
         if job.payload is None:
             qm.alive = False
 
-    @qm.entrypoint("sync")
+    @qm.entrypoint("syncfetch")
     def syncfetch(job: Job) -> None:
+        nonlocal cnt
+        cnt += 1
         if job.payload is None:
             qm.alive = False
 
-    await qm.run(timedelta(seconds=0), batch_size=batch_size)
+    with execution_timer() as elapsed:
+        await qm.run(batch_size=batch_size)
+
+    return cnt / elapsed().total_seconds()
+
+
+async def producer(
+    alive: asyncio.Event,
+    queries: Queries,
+    batch_size: int,
+    cnt: count,
+) -> None:
+    entrypoints = ["syncfetch", "asyncfetch"] * batch_size
+    while not alive.is_set():
+        random.shuffle(entrypoints)
+        payloads = [f"{next(cnt)}".encode() for _ in range(batch_size)]
+        await queries.enqueue(entrypoints[:batch_size], payloads, [0] * batch_size)
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Run the job processing benchmark.",
-    )
+    parser = argparse.ArgumentParser(description="PGQueuer benchmark tool.")
+
     parser.add_argument(
         "-t",
-        "--time-limit",
+        "--timer",
         type=lambda x: timedelta(seconds=float(x)),
-        default=timedelta(seconds=10),
-        help="Run the benchmark for a limited number of seconds. Default is 10",
+        default=timedelta(seconds=30),
+        help="Run the benchmark for a specified number of seconds. Default is 30.",
+    )
+
+    parser.add_argument(
+        "-dc",
+        "--dequeue",
+        type=int,
+        default=2,
+        help="Number of concurrent dequeue workers. Default is 2.",
+    )
+    parser.add_argument(
+        "-debs",
+        "--dequeue-batch-size",
+        type=int,
+        default=10,
+        help="Batch size for dequeue workers. Default is 10.",
+    )
+
+    parser.add_argument(
+        "-eq",
+        "--enqueue",
+        type=int,
+        default=1,
+        help="Number of concurrent enqueue workers. Default is 1.",
+    )
+    parser.add_argument(
+        "-ecbs",
+        "--enqueue-batch-size",
+        type=int,
+        default=15,
+        help="Batch size for enqueue workers. Default is 15.",
     )
     args = parser.parse_args()
-    start = datetime.now()
-    batch_size = 10
+
+    print(f"""Settings:
+Timer:                  {args.timer.total_seconds()} seconds
+Dequeue:                {args.dequeue}
+Dequeue Batch Size:     {args.dequeue_batch_size}
+Enqueue:                {args.enqueue}
+Enqueue Batch Size:     {args.enqueue_batch_size}
+""")
 
     async with asyncpg.create_pool() as pool:
         queries = Queries(pool)
         await queries.clear_log()
-        while True:
-            for concurrecy in range(1, 6):
-                N = concurrecy * 1_000
+        await queries.clear_queue()
+        alive = asyncio.Event()
 
-                await queries.clear_queue()
+        async def enqueue() -> None:
+            cnt = count()
+            batch_size = int(args.enqueue_batch_size)
 
-                entrypoints = ["sync"] * (N // 2) + ["async"] * (N // 2)
-                random.shuffle(entrypoints)
-                payloads = [f"{n}".encode() for n in range(N)]
-                priorities = [0] * N
-                await queries.enqueue(entrypoints, payloads, priorities)
-                await queries.enqueue(
-                    ["async"] * concurrecy * batch_size * 2,
-                    [None] * concurrecy * batch_size * 2,
-                    [0] * concurrecy * batch_size * 2,
-                )
+            await asyncio.gather(
+                *[
+                    producer(alive, queries, batch_size, cnt)
+                    for _ in range(int(args.enqueue))
+                ]
+            )
 
-                with execution_timer() as elapsed:
-                    await asyncio.gather(
-                        *[run_qm(pool, batch_size) for _ in range(concurrecy)],
-                    )
+        async def dequeue() -> list[float]:
+            bs = int(args.dequeue_batch_size)
+            qms = [QueueManager(pool) for _ in range(int(args.dequeue))]
 
-                elapsed_total_seconds = elapsed().total_seconds()
-                jps = (N - len(await queries.queue_size())) / elapsed_total_seconds
+            async def alive_waiter() -> None:
+                await alive.wait()
+                for q in qms:
+                    q.alive = False
 
-                print(
-                    f"Concurrency: {concurrecy:<2} ",
-                    f"Jobs: {N:<5} ",
-                    f"JPS: {(jps)/1_000:.1f}k",
-                )
+            dequeue_tasks = [consumer(q, bs) for q in qms] + [alive_waiter()]
+            return [v for v in await asyncio.gather(*dequeue_tasks) if v is not None]
 
-            if timedelta(seconds=0) < args.time_limit < datetime.now() - start:
-                return
+        async def timer() -> None:
+            await asyncio.sleep(args.timer.total_seconds())
+            alive.set()
+
+        async def qsize() -> None:
+            while not alive.is_set():
+                print(f"Queue size: {sum(x.count for x in await queries.queue_size())}")
+                await asyncio.sleep(args.timer.total_seconds() / 10)
+
+        jps_arr, *_ = await asyncio.gather(dequeue(), enqueue(), timer(), qsize())
+        print(f"Jobs per Second: {sum(jps_arr)/1_000:.2f}k")
 
 
 if __name__ == "__main__":
