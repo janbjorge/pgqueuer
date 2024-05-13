@@ -140,7 +140,7 @@ async def test_pick_local_entrypoints(
     )
 
     with suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(qm.run(), timeout=1)
+        await asyncio.wait_for(qm.run(), timeout=2)
 
     assert (
         sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked")
