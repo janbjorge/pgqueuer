@@ -1,5 +1,6 @@
 import asyncio
 import time
+from contextlib import suppress
 
 import asyncpg
 import pytest
@@ -112,3 +113,39 @@ async def test_sync_entrypoint(
         timeout=10,
     )
     assert sorted(seen) == list(range(N))
+
+
+async def test_pick_local_entrypoints(
+    pgpool: asyncpg.Pool,
+) -> None:
+    q = Queries(pgpool)
+    qm = QueueManager(pgpool)
+
+    @qm.entrypoint("to_be_picked")
+    async def to_be_picked(job: Job) -> None:
+        if job.payload is None:
+            qm.alive = False
+
+    N = 100
+    await q.enqueue(
+        ["to_be_picked"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
+
+    await q.enqueue(
+        ["not_picked"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
+
+    with suppress(asyncio.TimeoutError):
+        await asyncio.wait_for(qm.run(), timeout=1)
+
+    assert (
+        sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked")
+        == 0
+    )
+    assert (
+        sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
+    )

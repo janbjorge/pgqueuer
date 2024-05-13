@@ -199,7 +199,7 @@ class QueryBuilder:
     WITH next_job AS (
         SELECT id
         FROM {self.settings.queue_table}
-        WHERE status = 'queued'
+        WHERE status = 'queued' AND entrypoint = ANY($2)
         ORDER BY priority DESC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
@@ -337,10 +337,7 @@ class QueryBuilder:
         priority,
         status
     FROM {self.settings.statistics_table}
-    ORDER BY (
-        id, created, count, time_in_queue,
-        entrypoint, priority, status
-    ) DESC
+    ORDER BY id DESC
     LIMIT $1
     """
 
@@ -372,7 +369,8 @@ class Queries:
 
     async def dequeue(
         self,
-        batch_size: int = 10,
+        batch_size: int,
+        entrypoints: set[str],
     ) -> list[models.Job]:
         """
         Retrieves and updates the next 'queued' job to 'picked'
@@ -382,7 +380,11 @@ class Queries:
         if batch_size < 1:
             raise ValueError("Batch size must be greter then one (1)")
 
-        rows = await self.pool.fetch(self.qb.create_dequeue_query(), batch_size)
+        rows = await self.pool.fetch(
+            self.qb.create_dequeue_query(),
+            batch_size,
+            entrypoints,
+        )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
     async def enqueue(

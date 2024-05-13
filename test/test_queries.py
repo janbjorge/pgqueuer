@@ -12,7 +12,7 @@ async def test_queries_put(pgpool: asyncpg.Pool, N: int) -> None:
     assert sum(x.count for x in await q.queue_size()) == 0
 
     for _ in range(N):
-        await q.enqueue("placeholer", None)
+        await q.enqueue("placeholder", None)
 
     assert sum(x.count for x in await q.queue_size()) == N
 
@@ -31,7 +31,7 @@ async def test_queries_next_jobs(
     )
 
     seen = list[int]()
-    while jobs := await q.dequeue():
+    while jobs := await q.dequeue(entrypoints={"placeholder"}, batch_size=10):
         for job in jobs:
             payoad = job.payload
             assert payoad is not None
@@ -60,7 +60,10 @@ async def test_queries_next_jobs_concurrent(
     seen = list[int]()
 
     async def consumer() -> None:
-        while jobs := await q.dequeue():
+        while jobs := await q.dequeue(
+            entrypoints={"placeholder"},
+            batch_size=10,
+        ):
             for job in jobs:
                 payload = job.payload
                 assert payload is not None
@@ -80,7 +83,7 @@ async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
     await q.clear_queue()
     assert sum(x.count for x in await q.queue_size()) == 0
 
-    await q.enqueue("placeholer", None)
+    await q.enqueue("placeholder", None)
     assert sum(x.count for x in await q.queue_size()) == 1
 
     await q.clear_queue()
@@ -95,12 +98,15 @@ async def test_move_job_log(
     q = queries.Queries(pgpool)
 
     await q.enqueue(
-        ["placeholer"] * N,
+        ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
-    while jobs := await q.dequeue():
+    while jobs := await q.dequeue(
+        entrypoints={"placeholder"},
+        batch_size=10,
+    ):
         for job in jobs:
             await q.log_job(job, status="successful")
 
@@ -116,19 +122,19 @@ async def test_clear_queue(
 
     # Test delete all by listing all
     await q.enqueue(
-        [f"placeholer{n}" for n in range(N)],
+        [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
 
     assert all(x.count == 1 for x in await q.queue_size())
     assert sum(x.count for x in await q.queue_size()) == N
-    await q.clear_queue([f"placeholer{n}" for n in range(N)])
+    await q.clear_queue([f"placeholder{n}" for n in range(N)])
     assert sum(x.count for x in await q.queue_size()) == 0
 
     # Test delete all by None
     await q.enqueue(
-        [f"placeholer{n}" for n in range(N)],
+        [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
@@ -140,14 +146,14 @@ async def test_clear_queue(
 
     # Test delete one(1).
     await q.enqueue(
-        [f"placeholer{n}" for n in range(N)],
+        [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
 
     assert all(x.count == 1 for x in await q.queue_size())
     assert sum(x.count for x in await q.queue_size()) == N
-    await q.clear_queue("placeholer0")
+    await q.clear_queue("placeholder0")
     assert sum(x.count for x in await q.queue_size()) == N - 1
 
 
@@ -165,7 +171,10 @@ async def test_queue_priority(
         list(range(N)),
     )
 
-    while next_jobs := await q.dequeue():
+    while next_jobs := await q.dequeue(
+        entrypoints={"placeholder"},
+        batch_size=10,
+    ):
         for job in next_jobs:
             jobs.append(job)
             await q.log_job(job, status="successful")

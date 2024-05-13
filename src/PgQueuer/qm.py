@@ -123,7 +123,10 @@ class QueueManager:
 
             while self.alive:
                 while self.alive and (
-                    jobs := await self.queries.dequeue(batch_size=batch_size)
+                    jobs := await self.queries.dequeue(
+                        batch_size=batch_size,
+                        entrypoints=set(self.registry.keys()),
+                    )
                 ):
                     for job in jobs:
                         tm.add(asyncio.create_task(self._dispatch(job)))
