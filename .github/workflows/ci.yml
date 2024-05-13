@@ -38,7 +38,7 @@ jobs:
       - name: Benchmark
         run: PGUSER=testuser PGPASSWORD=testpassword PGDATABASE=testdb python3 tools/benchmark.py
 
-  ci:
+  test-pgqueuer:
     strategy:
       fail-fast: false
       matrix:
@@ -67,11 +67,3 @@ jobs:
 
       - name: Full test
         run: pytest -v
-
-  check-all-ci-passed:
-    name: Check test matrix passed.
-    needs: ci
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check status
-        run: echo "All tests passed; ready to merge."
