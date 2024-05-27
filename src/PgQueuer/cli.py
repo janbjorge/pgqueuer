@@ -179,6 +179,19 @@ def cliparser() -> argparse.Namespace:
         ),
     )
 
+    subparsers.add_parser(
+        "upgrade",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_arguments],
+    ).add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Prints the SQL statements that would be executed without "
+            "actually applying any changes to the database."
+        ),
+    )
+
     dashboardparser = subparsers.add_parser(
         "dashboard",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -252,6 +265,10 @@ async def main() -> None:
                 print(QueryBuilder().create_uninstall_query())
                 if not parsed.dry_run:
                     await queries.uninstall()
+            case "upgrade":
+                print("\n".join(QueryBuilder().create_upgrade_queries()))
+                if not parsed.dry_run:
+                    await queries.upgrade()
             case "dashboard":
                 await fetch_and_display(
                     queries,

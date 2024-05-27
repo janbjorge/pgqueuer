@@ -115,6 +115,13 @@ class QueueManager:
         Continuously listens for events and dispatches jobs. Manages connections and
         tasks, logs timeouts, and resets connections upon termination.
         """
+
+        if not (await self.queries.has_updated_column()):
+            logger.warning(
+                f"The {self.queries.qb.settings.queue_table} table is missing the "
+                "updated column, please run 'python3 -m PgQueuer upgrade'"
+            )
+
         async with (
             self.pool.acquire() as connection,
             TaskManager() as tm,
