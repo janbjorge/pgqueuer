@@ -30,26 +30,24 @@ def execution_timer() -> (
 
 
 async def consumer(qm: QueueManager, batch_size: int) -> float:
-    cnt = 0
+    cnt = count()
 
     @qm.entrypoint("asyncfetch")
     async def asyncfetch(job: Job) -> None:
-        nonlocal cnt
-        cnt += 1
+        next(cnt)
         if job.payload is None:
             qm.alive = False
 
     @qm.entrypoint("syncfetch")
     def syncfetch(job: Job) -> None:
-        nonlocal cnt
-        cnt += 1
+        next(cnt)
         if job.payload is None:
             qm.alive = False
 
     with execution_timer() as elapsed:
         await qm.run(batch_size=batch_size)
 
-    return cnt / elapsed().total_seconds()
+    return (next(cnt) - 1) / elapsed().total_seconds()
 
 
 async def producer(
@@ -102,8 +100,8 @@ async def main() -> None:
         "-ecbs",
         "--enqueue-batch-size",
         type=int,
-        default=15,
-        help="Batch size for enqueue workers. Default is 15.",
+        default=30,
+        help="Batch size for enqueue workers. Default is 30.",
     )
     args = parser.parse_args()
 
