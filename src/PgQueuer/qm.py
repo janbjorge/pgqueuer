@@ -111,10 +111,19 @@ class QueueManager:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
+        retry_timer: timedelta | None = None,
     ) -> None:
         """
         Continuously listens for events and dispatches jobs. Manages connections and
         tasks, logs timeouts, and resets connections upon termination.
+
+        Parameters:
+            - dequeue_timeout: The timeout duration for waiting to dequeue jobs.
+            Defaults to 30 seconds.
+            - batch_size : The number of jobs to retrieve in each batch. Defaults to 10.
+            - retry_timer: If specified, selects jobs that have been in 'picked' status
+            for longer than the specified retry timer duration. If `None`, the timeout
+            job checking is skipped.
         """
 
         if not (await self.queries.has_updated_column()):
@@ -134,6 +143,7 @@ class QueueManager:
                     jobs := await self.queries.dequeue(
                         batch_size=batch_size,
                         entrypoints=set(self.registry.keys()),
+                        retry_timer=retry_timer,
                     )
                 ):
                     for job in jobs:

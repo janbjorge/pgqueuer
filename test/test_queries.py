@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 
 import asyncpg
 import pytest
@@ -180,3 +181,53 @@ async def test_queue_priority(
             await q.log_job(job, status="successful")
 
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
+
+
+@pytest.mark.parametrize("N", (1, 2, 64))
+async def test_queue_retry_timer(
+    pgpool: asyncpg.Pool,
+    N: int,
+    retry_timer: timedelta = timedelta(seconds=0.1),
+) -> None:
+    q = queries.Queries(pgpool)
+    jobs = list[models.Job]()
+
+    await q.enqueue(
+        ["placeholder"] * N,
+        [f"{n}".encode() for n in range(N)],
+        list(range(N)),
+    )
+
+    # Pick all jobs, and mark then as "in progress"
+    while _ := await q.dequeue(batch_size=10, entrypoints={"placeholder"}):
+        ...
+    assert len(await q.dequeue(batch_size=10, entrypoints={"placeholder"})) == 0
+
+    # Sim. slow entrypoint function.
+    await asyncio.sleep(retry_timer.total_seconds())
+
+    # Re-fetch, should get the same number of jobs as queued (N).
+    while next_jobs := await q.dequeue(
+        entrypoints={"placeholder"},
+        batch_size=10,
+        retry_timer=retry_timer,
+    ):
+        jobs.extend(next_jobs)
+
+    assert len(jobs) == N
+
+
+async def test_queue_retry_timer_negative_raises(pgpool: asyncpg.Pool) -> None:
+    with pytest.raises(ValueError):
+        await queries.Queries(pgpool).dequeue(
+            entrypoints={"placeholder"},
+            batch_size=10,
+            retry_timer=-timedelta(seconds=0.001),
+        )
+
+    with pytest.raises(ValueError):
+        await queries.Queries(pgpool).dequeue(
+            entrypoints={"placeholder"},
+            batch_size=10,
+            retry_timer=timedelta(seconds=-0.001),
+        )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from datetime import timedelta
 from typing import Final, Generator
 
 import asyncpg
@@ -111,6 +112,8 @@ class QueryBuilder:
     );
     CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
+    CREATE INDEX {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC)
+        INCLUDE (id) WHERE status = 'picked';
 
     CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
     CREATE TABLE {self.settings.statistics_table} (
@@ -197,18 +200,39 @@ class QueryBuilder:
         entrypoint, and payload.
         """
         return f"""
-    WITH next_job AS (
+    WITH next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
-        WHERE status = 'queued' AND entrypoint = ANY($2)
+        WHERE
+                entrypoint = ANY($2)
+            AND status = 'queued'
         ORDER BY priority DESC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
+    next_job_retry AS (
+        SELECT id
+        FROM {self.settings.queue_table}
+        WHERE
+                entrypoint = ANY($2)
+            AND status = 'picked'
+            AND ($3::interval IS NOT NULL AND updated < NOW() - $3::interval)
+        ORDER BY updated DESC, id ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT $1
+    ),
+    combined_jobs AS (
+        SELECT DISTINCT id
+        FROM (
+            SELECT id FROM next_job_queued
+            UNION ALL
+            SELECT id FROM next_job_retry WHERE $3::interval IS NOT NULL
+        ) AS combined
+    ),
     updated AS (
         UPDATE {self.settings.queue_table}
         SET status = 'picked', updated = NOW()
-        WHERE id = ANY(SELECT id FROM next_job)
+        WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     )
     SELECT * FROM updated ORDER BY priority DESC, id ASC
@@ -344,6 +368,7 @@ class QueryBuilder:
 
     def create_upgrade_queries(self) -> Generator[str, None, None]:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
+        yield f"CREATE INDEX {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         return """
@@ -384,19 +409,31 @@ class Queries:
         self,
         batch_size: int,
         entrypoints: set[str],
+        retry_timer: timedelta | None = None,
     ) -> list[models.Job]:
         """
-        Retrieves and updates the next 'queued' job to 'picked'
-        status, ensuring no two jobs with the same entrypoint
-        are picked simultaneously.
+        Retrieves and updates the next 'queued' job to 'picked' status,
+        ensuring no two jobs with the same entrypoint are picked simultaneously.
+
+        Parameters:
+        - batch_size: The number of jobs to retrieve. Must be greater than one (1).
+        - entrypoints: A set of entrypoints to filter the jobs.
+        - retry_timer: If specified, selects jobs that have been in 'picked' status for
+            longer than the specified retry-timer duration. If `None`, the retry-timer
+            checking is skipped.
         """
+
         if batch_size < 1:
-            raise ValueError("Batch size must be greter then one (1)")
+            raise ValueError("Batch size must be greater or equal to one (1)")
+
+        if retry_timer and retry_timer < timedelta(seconds=0):
+            raise ValueError("Retry timer must be a non-negative timedelta")
 
         rows = await self.pool.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
             entrypoints,
+            retry_timer,
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
