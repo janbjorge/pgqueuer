@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import functools
 from datetime import timedelta
@@ -137,17 +138,19 @@ class QueueManager:
                 ):
                     for job in jobs:
                         tm.add(asyncio.create_task(self._dispatch(job)))
+                        with contextlib.suppress(asyncio.QueueEmpty):
+                            listener.get_nowait()
 
-                    try:
-                        await asyncio.wait_for(
-                            listener.get(),
-                            timeout=dequeue_timeout.total_seconds(),
-                        )
-                    except asyncio.TimeoutError:
-                        logger.debug(
-                            "Timeout after %r without receiving an event.",
-                            dequeue_timeout,
-                        )
+                try:
+                    await asyncio.wait_for(
+                        listener.get(),
+                        timeout=dequeue_timeout.total_seconds(),
+                    )
+                except asyncio.TimeoutError:
+                    logger.debug(
+                        "Timeout after %r without receiving an event.",
+                        dequeue_timeout,
+                    )
 
             connection.remove_termination_listener(_critical_termination_listener)
             await connection.reset()
