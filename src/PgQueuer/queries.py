@@ -109,7 +109,7 @@ class QueryBuilder:
         entrypoint TEXT NOT NULL,
         payload BYTEA
     );
-    CREATE INDEX ON {self.settings.queue_table} (priority ASC, id DESC)
+    CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
 
     CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
