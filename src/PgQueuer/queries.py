@@ -103,8 +103,8 @@ class QueryBuilder:
     CREATE TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
-        created TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         payload BYTEA
