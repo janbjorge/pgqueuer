@@ -70,7 +70,7 @@ async def main() -> None:
         "-t",
         "--timer",
         type=lambda x: timedelta(seconds=float(x)),
-        default=timedelta(seconds=30),
+        default=timedelta(seconds=15),
         help="Run the benchmark for a specified number of seconds. Default is 30.",
     )
 
@@ -100,7 +100,7 @@ async def main() -> None:
         "-ecbs",
         "--enqueue-batch-size",
         type=int,
-        default=30,
+        default=20,
         help="Batch size for enqueue workers. Default is 30.",
     )
     args = parser.parse_args()
