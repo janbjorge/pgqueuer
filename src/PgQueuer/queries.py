@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
-from typing import Final
+from typing import Final, Generator
 
 import asyncpg
 
@@ -103,7 +103,8 @@ class QueryBuilder:
     CREATE TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
-        created TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        created TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         payload BYTEA
@@ -114,7 +115,7 @@ class QueryBuilder:
     CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
     CREATE TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
-        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', CURRENT_TIMESTAMP at time zone 'UTC'),
+        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
         count BIGINT NOT NULL,
         priority INT NOT NULL,
         time_in_queue INTERVAL NOT NULL,
@@ -206,7 +207,7 @@ class QueryBuilder:
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked'
+        SET status = 'picked', updated = NOW()
         WHERE id = ANY(SELECT id FROM next_job)
         RETURNING *
     )
@@ -341,6 +342,18 @@ class QueryBuilder:
     LIMIT $1
     """
 
+    def create_upgrade_queries(self) -> Generator[str, None, None]:
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
+
+    def create_has_column_query(self) -> str:
+        return """
+        SELECT EXISTS (
+            SELECT FROM information_schema.columns
+            WHERE table_schema = current_schema()
+                AND table_name = $1
+                AND column_name = $2
+            );"""
+
 
 @dataclasses.dataclass
 class Queries:
@@ -473,3 +486,15 @@ class Queries:
             models.LogStatistics.model_validate(dict(x))
             for x in await self.pool.fetch(self.qb.create_log_statistics_query(), tail)
         ]
+
+    async def upgrade(self) -> None:
+        async with self.pool.acquire() as conn, conn.transaction():
+            for query in self.qb.create_upgrade_queries():
+                await conn.execute(query)
+
+    async def has_updated_column(self) -> bool:
+        return await self.pool.fetchval(
+            self.qb.create_has_column_query(),
+            self.qb.settings.queue_table,
+            "updated",
+        )
