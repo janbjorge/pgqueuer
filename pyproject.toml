@@ -52,6 +52,11 @@ dev = [
     "ruff",
     "types-tabulate",
 ]
+docs = [
+    "myst-parser",
+    "sphinx",
+    "sphinx-rtd-theme",
+]
 
 [tool.setuptools_scm]
 write_to = "src/_version.py"
