@@ -1,6 +1,12 @@
 Welcome to PgQueuer's documentation!
 ====================================
 
+.. figure:: logo.png
+   :alt: Logo
+   :width: 500
+   :align: center
+
+
 Introduction
 ============
 PgQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PgQueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
