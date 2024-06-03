@@ -174,7 +174,7 @@ class QueryBuilder:
     CREATE TRIGGER {self.settings.trigger}
     AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {self.settings.queue_table}
     EXECUTE FUNCTION {self.settings.function}();
-        """  # noqa: E501
+    """  # noqa: E501
 
     def create_uninstall_query(self) -> str:
         """
@@ -198,7 +198,22 @@ class QueryBuilder:
         entrypoint, and payload.
         """
         return f"""
-    WITH next_job_queued AS (
+    WITH rps AS (
+        WITH done AS (
+            SELECT sum(count/(ceil(EXTRACT(epoch from NOW()-created)))) AS rps
+            FROM {self.settings.statistics_table}
+            WHERE now() - created < interval '10 seconds'
+        ),
+        picked AS (
+            SELECT count(*)/(ceil(EXTRACT(epoch from DATE_TRUNC('sec', NOW()-max(updated))))) AS rps
+            FROM {self.settings.queue_table}
+            WHERE status = 'picked'
+        )
+        SELECT coalesce((
+            (SELECT rps FROM done) + (SELECT rps FROM picked)), 0
+        )/2 AS rps
+    ),
+    next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
         WHERE
@@ -230,7 +245,9 @@ class QueryBuilder:
     updated AS (
         UPDATE {self.settings.queue_table}
         SET status = 'picked', updated = NOW()
-        WHERE id = ANY(SELECT id FROM combined_jobs)
+        WHERE
+                id = ANY(SELECT id FROM combined_jobs)
+            AND (SELECT rps from RPS) <= 100
         RETURNING *
     )
     SELECT * FROM updated ORDER BY priority DESC, id ASC
