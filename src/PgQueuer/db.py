@@ -74,5 +74,5 @@ class AsyncPGDriver(Driver):
         async with self.lock:
             await self.connection.add_listener(
                 channal,
-                lambda x: callback(x[-1]),
+                lambda *x: callback(x[-1]),
             )

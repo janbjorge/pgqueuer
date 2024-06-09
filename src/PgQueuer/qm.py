@@ -134,7 +134,7 @@ class QueueManager:
             )
 
         async with TaskManager() as tm:
-            listener = await initialize_event_listener(self.connection, self.channel)  # type: ignore[arg-type]
+            listener = await initialize_event_listener(self.connection, self.channel)
 
             while self.alive:
                 while self.alive and (

@@ -22,8 +22,8 @@ class PGEventListener(asyncio.Queue[models.Event]):
 
 
 async def initialize_event_listener(
-    pg_connection: Driver,
-    pg_channel: models.PGChannel,
+    connection: Driver,
+    channel: models.PGChannel,
 ) -> PGEventListener:
     """
     This method establishes a listener on a PostgreSQL channel using
@@ -54,8 +54,6 @@ async def initialize_event_listener(
             )
 
     listener = PGEventListener()
-    await pg_connection.add_listener(
-        pg_channel, lambda *x: parse_and_queue(x[-1], listener)
-    )
+    await connection.add_listener(channel, lambda *x: parse_and_queue(x[-1], listener))
     # pg_connection.add_termination_listener(_critical_termination_listener)
     return listener

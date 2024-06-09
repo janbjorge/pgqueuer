@@ -11,10 +11,10 @@ from PgQueuer.queries import Queries
 
 @pytest.mark.parametrize("N", (1, 2, 32))
 async def test_job_queing(
-    pgpool: asyncpg.Pool,
+    pgdriver: asyncpg.Pool,
     N: int,
 ) -> None:
-    c = QueueManager(pgpool)
+    c = QueueManager(pgdriver)
     seen = list[int]()
 
     @c.entrypoint("fetch")
@@ -41,12 +41,12 @@ async def test_job_queing(
 @pytest.mark.parametrize("N", (1, 2, 32))
 @pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
 async def test_job_fetch(
-    pgpool: asyncpg.Pool,
+    pgdriver: asyncpg.Pool,
     N: int,
     concurrency: int,
 ) -> None:
-    q = Queries(pgpool)
-    qmpool = [QueueManager(pgpool) for _ in range(concurrency)]
+    q = Queries(pgdriver)
+    qmpool = [QueueManager(pgdriver) for _ in range(concurrency)]
     seen = list[int]()
 
     for qm in qmpool:
@@ -79,12 +79,12 @@ async def test_job_fetch(
 @pytest.mark.parametrize("N", (1, 2, 32))
 @pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
 async def test_sync_entrypoint(
-    pgpool: asyncpg.Pool,
+    pgdriver: asyncpg.Pool,
     N: int,
     concurrency: int,
 ) -> None:
-    q = Queries(pgpool)
-    qmpool = [QueueManager(pgpool) for _ in range(concurrency)]
+    q = Queries(pgdriver)
+    qmpool = [QueueManager(pgdriver) for _ in range(concurrency)]
     seen = list[int]()
 
     for qm in qmpool:
@@ -116,10 +116,10 @@ async def test_sync_entrypoint(
 
 
 async def test_pick_local_entrypoints(
-    pgpool: asyncpg.Pool,
+    pgdriver: asyncpg.Pool,
 ) -> None:
-    q = Queries(pgpool)
-    qm = QueueManager(pgpool)
+    q = Queries(pgdriver)
+    qm = QueueManager(pgdriver)
 
     @qm.entrypoint("to_be_picked")
     async def to_be_picked(job: Job) -> None:
