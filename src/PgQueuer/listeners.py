@@ -48,8 +48,4 @@ async def initialize_event_listener(
 
     listener = PGEventListener()
     await connection.add_listener(channel, lambda *x: parse_and_queue(x[-1], listener))
-<<<<<<< HEAD
-=======
-    # pg_connection.add_termination_listener(_critical_termination_listener)
->>>>>>> fffce14 (test qm pass)
     return listener
