@@ -33,7 +33,7 @@ class Driver(Protocol):
         """Fetch a single value from the database."""
 
 
-class AsyncPGDriver(Driver):
+class AsyncpgDriver(Driver):
     """
     Implements the Driver protocol using AsyncPG for PostgreSQL database operations.
     """

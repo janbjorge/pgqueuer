@@ -8,7 +8,7 @@ from datetime import timedelta
 import asyncpg
 from tabulate import tabulate, tabulate_formats
 
-from PgQueuer.db import AsyncPGDriver, Driver
+from PgQueuer.db import AsyncpgDriver, Driver
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import LogStatistics, PGChannel
 from PgQueuer.queries import DBSettings, Queries, QueryBuilder
@@ -253,7 +253,7 @@ async def main() -> None:
         user=parsed.pg_user,
         host=parsed.pg_host,
     )
-    driver = AsyncPGDriver(connection)
+    driver = AsyncpgDriver(connection)
     queries = Queries(driver)
 
     match parsed.command:

@@ -159,9 +159,6 @@ class QueueManager:
                         dequeue_timeout,
                     )
 
-            ## connection.remove_termination_listener(_critical_termination_listener)
-            ## await connection.reset()
-
     async def _dispatch(self, job: Job) -> None:
         """
         Handles asynchronous job dispatch. Logs exceptions, updates job status,

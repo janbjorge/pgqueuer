@@ -7,13 +7,6 @@ from .db import Driver
 from .logconfig import logger
 
 
-def _critical_termination_listener(*_: object, **__: object) -> None:
-    # Must be defined in the global namespace, as ayncpg keeps
-    # a set of functions to call. This this will now happen once as
-    # all instance will point to the same function.
-    logger.critical("Connection is closed / terminated.")
-
-
 class PGEventListener(asyncio.Queue[models.Event]):
     """
     A PostgreSQL event queue that listens to a specified
@@ -55,5 +48,4 @@ async def initialize_event_listener(
 
     listener = PGEventListener()
     await connection.add_listener(channel, lambda *x: parse_and_queue(x[-1], listener))
-    # pg_connection.add_termination_listener(_critical_termination_listener)
     return listener

@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 
 import asyncpg
 import pytest
-from PgQueuer.db import AsyncPGDriver, Driver
+from PgQueuer.db import AsyncpgDriver, Driver
 
 
 def dsn(
@@ -29,7 +29,7 @@ async def pgdriver() -> AsyncGenerator[Driver, None]:
     conn_a = await asyncpg.connect(dsn=dsn(database="postgres"))
     async with create_test_database(database, conn_a):
         conn_b = await asyncpg.connect(dsn=dsn(database=database))
-        yield AsyncPGDriver(conn_b)
+        yield AsyncpgDriver(conn_b)
     await asyncio.gather(conn_a.close(), conn_b.close())
 
 

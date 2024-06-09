@@ -8,7 +8,7 @@ from itertools import count
 from typing import Callable, Generator
 
 import asyncpg
-from PgQueuer.db import AsyncPGDriver
+from PgQueuer.db import AsyncpgDriver
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
@@ -114,7 +114,7 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    util_driver = AsyncPGDriver(await asyncpg.connect())
+    util_driver = AsyncpgDriver(await asyncpg.connect())
 
     util_queries = Queries(util_driver)
 
@@ -127,20 +127,20 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         cnt = count()
         bs = int(args.enqueue_batch_size)
 
-        queries = list[tuple[AsyncPGDriver, Queries]]()
+        queries = list[tuple[AsyncpgDriver, Queries]]()
 
         for _ in range(bs):
-            driver = AsyncPGDriver(await asyncpg.connect())
+            driver = AsyncpgDriver(await asyncpg.connect())
             queries.append((driver, Queries(driver)))
 
         await asyncio.gather(*[producer(alive, q, bs, cnt) for _, q in queries])
 
     async def dequeue() -> list[float]:
         bs = int(args.dequeue_batch_size)
-        queries = list[tuple[AsyncPGDriver, Queries]]()
+        queries = list[tuple[AsyncpgDriver, Queries]]()
 
         for _ in range(bs):
-            driver = AsyncPGDriver(await asyncpg.connect())
+            driver = AsyncpgDriver(await asyncpg.connect())
             queries.append((driver, Queries(driver)))
 
         qms = [QueueManager(d) for d, _ in queries]
