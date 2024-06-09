@@ -20,7 +20,7 @@ async def test_job_queing(
     @c.entrypoint("fetch")
     async def fetch(context: Job) -> None:
         if context.payload is None:
-            c.alive = False
+            c.alive.set()
             return
         assert context
         seen.append(int(context.payload))
@@ -55,7 +55,7 @@ async def test_job_fetch(
         async def fetch(context: Job) -> None:
             if context.payload is None:
                 for qm in qmpool:
-                    qm.alive = False
+                    qm.alive.set()
                 return
             assert context
             seen.append(int(context.payload))
@@ -94,7 +94,7 @@ async def test_sync_entrypoint(
             time.sleep(2)  # Sim. heavy CPU/IO.
             if context.payload is None:
                 for qm in qmpool:
-                    qm.alive = False
+                    qm.alive.set()
                 return
             assert context
             seen.append(int(context.payload))
@@ -124,7 +124,7 @@ async def test_pick_local_entrypoints(
     @qm.entrypoint("to_be_picked")
     async def to_be_picked(job: Job) -> None:
         if job.payload is None:
-            qm.alive = False
+            qm.alive.set()
 
     N = 100
     await q.enqueue(
