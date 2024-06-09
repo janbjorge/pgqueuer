@@ -37,13 +37,13 @@ async def consumer(qm: QueueManager, batch_size: int) -> float:
     async def asyncfetch(job: Job) -> None:
         next(cnt)
         if job.payload is None:
-            qm.alive = False
+            qm.alive.clear()
 
     @qm.entrypoint("syncfetch")
     def syncfetch(job: Job) -> None:
         next(cnt)
         if job.payload is None:
-            qm.alive = False
+            qm.alive.clear()
 
     with execution_timer() as elapsed:
         await qm.run(batch_size=batch_size)
@@ -148,7 +148,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         async def alive_waiter() -> None:
             await alive.wait()
             for q in qms:
-                q.alive = False
+                q.alive.clear()
 
         dequeue_tasks = [consumer(q, bs) for q in qms] + [alive_waiter()]
         return [v for v in await asyncio.gather(*dequeue_tasks) if v is not None]

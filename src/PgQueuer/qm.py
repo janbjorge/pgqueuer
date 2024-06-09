@@ -73,7 +73,10 @@ class QueueManager:
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
 
     queries: Queries = dataclasses.field(init=False)
-    alive: bool = dataclasses.field(init=False, default=True)
+    alive: asyncio.Event = dataclasses.field(
+        init=False,
+        default_factory=asyncio.Event,
+    )
 
     # Should registry be a weakref?
     registry: dict[str, Entrypoint] = dataclasses.field(
@@ -85,12 +88,8 @@ class QueueManager:
         Initializes database query handlers and validates pool size upon
         instance creation.
         """
-        # if self.pool.get_min_size() < 1:
-        #     raise ValueError(
-        #         "The minimum pool size must be at least 1 to maintain a dedicated "
-        #         "connection for initialization, setup, and Pub/Sub operations."
-        #     )
         self.queries = Queries(self.connection)
+        self.alive.set()
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
         """
@@ -135,8 +134,8 @@ class QueueManager:
         async with TaskManager() as tm:
             listener = await initialize_event_listener(self.connection, self.channel)
 
-            while self.alive:
-                while self.alive and (
+            while self.alive.is_set():
+                while (self.alive.is_set()) and (
                     jobs := await self.queries.dequeue(
                         batch_size=batch_size,
                         entrypoints=set(self.registry.keys()),
