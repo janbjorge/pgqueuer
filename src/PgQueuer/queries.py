@@ -288,43 +288,53 @@ class QueryBuilder:
         entrypoint, time in queue, creation time, and final status.
         """
         return f"""
-    WITH deleted AS (
-        DELETE FROM {self.settings.queue_table}
-        WHERE id = $1
-    )
+        WITH deleted AS (
+            DELETE FROM {self.settings.queue_table}
+            WHERE id = ANY($1)
+            RETURNING id, priority, entrypoint, created
+        ),
+        insert_data AS (
+            SELECT
+                deleted.priority,                                        -- priority
+                deleted.entrypoint,                                      -- entrypoint
+                DATE_TRUNC('sec', NOW() - deleted.created) AS time_in_queue,  -- time_in_queue
+                DATE_TRUNC('sec', deleted.created at time zone 'UTC') AS created,  -- created at time zone 'UTC'
+                (unnest($2::pgqueuer_statistics_status[])) AS status   -- status from input parameter array, cast to ENUM
+            FROM deleted
+            JOIN unnest($1::INT[]) WITH ORDINALITY t(id, ord) USING (id)  -- Join to preserve order for status matching
+        )
 
-    INSERT INTO {self.settings.statistics_table} (
-        priority,
-        entrypoint,
-        time_in_queue,
-        created,
-        status,
-        count
-    )
-    VALUES (
-        $2,                                         -- priority
-        $3,                                         -- entrypoint
-        DATE_TRUNC('sec', NOW() - $4),              -- time_in_queue
-        DATE_TRUNC('sec', $4 at time zone 'UTC'),   -- created at time zone 'UTC'
-        $5,                                         -- status
-        1                                           -- start count
-    )
-    ON CONFLICT (
-        priority,
-        entrypoint,
-        DATE_TRUNC('sec', created at time zone 'UTC'),
-        DATE_TRUNC('sec', time_in_queue),
-        status
-    )
-    DO UPDATE
-        SET
+        INSERT INTO {self.settings.statistics_table} (
+            priority,
+            entrypoint,
+            time_in_queue,
+            created,
+            status,
+            count
+        )
+        SELECT
+            priority,
+            entrypoint,
+            time_in_queue,
+            created,
+            status,
+            1
+        FROM insert_data
+        ON CONFLICT (
+            priority,
+            entrypoint,
+            DATE_TRUNC('sec', created at time zone 'UTC'),
+            DATE_TRUNC('sec', time_in_queue),
+            status
+        )
+        DO UPDATE SET
             count = {self.settings.statistics_table}.count + 1
         WHERE
-                {self.settings.statistics_table}.priority = $2
-            AND {self.settings.statistics_table}.entrypoint = $3
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', NOW() - $4)
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', $4 at time zone 'UTC')
-            AND {self.settings.statistics_table}.status = $5
+            {self.settings.statistics_table}.priority = EXCLUDED.priority
+            AND {self.settings.statistics_table}.entrypoint = EXCLUDED.entrypoint
+            AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = EXCLUDED.time_in_queue
+            AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = EXCLUDED.created
+            AND {self.settings.statistics_table}.status = EXCLUDED.status;
     """  # noqa: E501
 
     def create_truncate_log_query(self) -> str:
@@ -486,18 +496,18 @@ class Queries:
             for x in await self.driver.fetch(self.qb.create_queue_size_query())
         ]
 
-    async def log_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
+    async def log_jobs(
+        self,
+        job_status: list[tuple[models.Job, models.STATUS_LOG]],
+    ) -> None:
         """
         Moves a completed or failed job from the queue table to the log
         table, recording its final status and duration.
         """
         await self.driver.execute(
             self.qb.create_log_job_query(),
-            job.id,
-            job.priority,
-            job.entrypoint,
-            job.created,
-            status,
+            [j.id for j, _ in job_status],
+            [s for _, s in job_status],
         )
 
     async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:

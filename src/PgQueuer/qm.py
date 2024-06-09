@@ -18,6 +18,7 @@ from typing import (
 import anyio
 import anyio.to_thread
 
+from .buffers import JobBuffer
 from .db import Driver
 from .listeners import initialize_event_listener
 from .logconfig import logger
@@ -182,11 +183,11 @@ class QueueManager:
                 job.entrypoint,
                 job.id,
             )
-            await self.queries.log_job(job, "exception")
+            await self.buffer.add_job(job, "exception")
         else:
             logger.debug(
                 "Dispatching entrypoint/id: %s/%s - successful",
                 job.entrypoint,
                 job.id,
             )
-            await self.queries.log_job(job, "successful")
+            await self.buffer.add_job(job, "successful")
