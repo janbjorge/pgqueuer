@@ -5,9 +5,7 @@ import os
 from datetime import timedelta
 from typing import Final, Generator
 
-import asyncpg
-
-from . import models
+from . import db, models
 
 
 def add_prefix(string: str) -> str:
@@ -387,7 +385,7 @@ class Queries:
     enqueueing, dequeueing, and querying the size of the queue.
     """
 
-    pool: asyncpg.Pool
+    driver: db.Driver
     qb: QueryBuilder = dataclasses.field(default_factory=QueryBuilder)
 
     async def install(self) -> None:
@@ -396,14 +394,14 @@ class Queries:
         tables, and triggers for job queuing and logging.
         """
 
-        await self.pool.execute(self.qb.create_install_query())
+        await self.driver.execute(self.qb.create_install_query())
 
     async def uninstall(self) -> None:
         """
         Drops all database structures related to job queuing
         and logging that were created by the install method.
         """
-        await self.pool.execute(self.qb.create_uninstall_query())
+        await self.driver.execute(self.qb.create_uninstall_query())
 
     async def dequeue(
         self,
@@ -429,7 +427,7 @@ class Queries:
         if retry_timer and retry_timer < timedelta(seconds=0):
             raise ValueError("Retry timer must be a non-negative timedelta")
 
-        rows = await self.pool.fetch(
+        rows = await self.driver.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
             entrypoints,
@@ -458,13 +456,15 @@ class Queries:
         normed_payload = payload if isinstance(payload, list) else [payload]
         normed_priority = priority if isinstance(priority, list) else [priority]
 
-        await self.pool.executemany(
+        await self.driver.executemany(
             self.qb.create_enqueue_query(),
-            zip(
-                normed_priority,
-                normed_entrypoint,
-                normed_payload,
-                strict=True,
+            list(
+                zip(
+                    normed_priority,
+                    normed_entrypoint,
+                    normed_payload,
+                    strict=True,
+                )
             ),
         )
 
@@ -473,12 +473,12 @@ class Queries:
         Clears jobs from the queue, optionally filtering by entrypoint if specified.
         """
         await (
-            self.pool.execute(
+            self.driver.execute(
                 self.qb.create_delete_from_queue_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
             if entrypoint
-            else self.pool.execute(self.qb.create_truncate_queue_query())
+            else self.driver.execute(self.qb.create_truncate_queue_query())
         )
 
     async def queue_size(self) -> list[models.QueueStatistics]:
@@ -487,7 +487,7 @@ class Queries:
         """
         return [
             models.QueueStatistics.model_validate(dict(x))
-            for x in await self.pool.fetch(self.qb.create_queue_size_query())
+            for x in await self.driver.fetch(self.qb.create_queue_size_query())
         ]
 
     async def log_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
@@ -495,7 +495,7 @@ class Queries:
         Moves a completed or failed job from the queue table to the log
         table, recording its final status and duration.
         """
-        await self.pool.execute(
+        await self.driver.execute(
             self.qb.create_log_job_query(),
             job.id,
             job.priority,
@@ -510,27 +510,27 @@ class Queries:
         by entrypoint if specified.
         """
         await (
-            self.pool.execute(
+            self.driver.execute(
                 self.qb.create_delete_from_log_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
             if entrypoint
-            else self.pool.execute(self.qb.create_truncate_log_query())
+            else self.driver.execute(self.qb.create_truncate_log_query())
         )
 
     async def log_statistics(self, tail: int) -> list[models.LogStatistics]:
         return [
             models.LogStatistics.model_validate(dict(x))
-            for x in await self.pool.fetch(self.qb.create_log_statistics_query(), tail)
+            for x in await self.driver.fetch(
+                self.qb.create_log_statistics_query(), tail
+            )
         ]
 
     async def upgrade(self) -> None:
-        async with self.pool.acquire() as conn, conn.transaction():
-            for query in self.qb.create_upgrade_queries():
-                await conn.execute(query)
+        await self.driver.execute("\n\n".join(self.qb.create_upgrade_queries()))
 
     async def has_updated_column(self) -> bool:
-        return await self.pool.fetchval(
+        return await self.driver.fetchval(
             self.qb.create_has_column_query(),
             self.qb.settings.queue_table,
             "updated",

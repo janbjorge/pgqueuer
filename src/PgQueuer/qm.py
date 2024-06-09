@@ -17,9 +17,9 @@ from typing import (
 
 import anyio
 import anyio.to_thread
-import asyncpg
 
-from .listeners import _critical_termination_listener, initialize_event_listener
+from .db import Driver
+from .listeners import initialize_event_listener
 from .logconfig import logger
 from .models import Job, PGChannel
 from .queries import DBSettings, Queries
@@ -69,7 +69,7 @@ class QueueManager:
     handling database connections and events.
     """
 
-    pool: asyncpg.Pool
+    connection: Driver
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
 
     queries: Queries = dataclasses.field(init=False)
@@ -85,12 +85,12 @@ class QueueManager:
         Initializes database query handlers and validates pool size upon
         instance creation.
         """
-        if self.pool.get_min_size() < 1:
-            raise ValueError(
-                "The minimum pool size must be at least 1 to maintain a dedicated "
-                "connection for initialization, setup, and Pub/Sub operations."
-            )
-        self.queries = Queries(self.pool)
+        # if self.pool.get_min_size() < 1:
+        #     raise ValueError(
+        #         "The minimum pool size must be at least 1 to maintain a dedicated "
+        #         "connection for initialization, setup, and Pub/Sub operations."
+        #     )
+        self.queries = Queries(self.connection)
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
         """
@@ -132,11 +132,8 @@ class QueueManager:
                 "updated column, please run 'python3 -m PgQueuer upgrade'"
             )
 
-        async with (
-            self.pool.acquire() as connection,
-            TaskManager() as tm,
-        ):
-            listener = await initialize_event_listener(connection, self.channel)  # type: ignore[arg-type]
+        async with TaskManager() as tm:
+            listener = await initialize_event_listener(self.connection, self.channel)
 
             while self.alive:
                 while self.alive and (
@@ -161,9 +158,6 @@ class QueueManager:
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
-
-            connection.remove_termination_listener(_critical_termination_listener)
-            await connection.reset()
 
     async def _dispatch(self, job: Job) -> None:
         """

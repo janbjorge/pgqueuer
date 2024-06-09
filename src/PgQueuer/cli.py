@@ -8,6 +8,7 @@ from datetime import timedelta
 import asyncpg
 from tabulate import tabulate, tabulate_formats
 
+from PgQueuer.db import AsyncpgDriver, Driver
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import LogStatistics, PGChannel
 from PgQueuer.queries import DBSettings, Queries, QueryBuilder
@@ -44,16 +45,15 @@ async def display_stats(
 
 
 async def display_pg_channel(
-    pool: asyncpg.Pool,
+    connection: Driver,
     channel: PGChannel,
 ) -> None:
-    async with pool.acquire() as connection:
-        listener = await initialize_event_listener(
-            connection,  # type: ignore[arg-type]
-            channel,
-        )
-        while True:
-            print(repr(await listener.get()))
+    listener = await initialize_event_listener(
+        connection,
+        channel,
+    )
+    while True:
+        print(repr(await listener.get()))
 
 
 async def fetch_and_display(
@@ -245,39 +245,36 @@ async def main() -> None:
     ):
         os.environ["PGQUEUER_PREFIX"] = prefix
 
-    async with asyncpg.create_pool(
+    connection = await asyncpg.connect(
         dsn=parsed.pg_dsn,
         database=parsed.pg_database,
         password=parsed.pg_password,
         port=parsed.pg_port,
         user=parsed.pg_user,
         host=parsed.pg_host,
-        max_size=1,
-        min_size=0,
-    ) as pool:
-        queries = Queries(pool)
-        match parsed.command:
-            case "install":
-                print(QueryBuilder().create_install_query())
-                if not parsed.dry_run:
-                    await queries.install()
-            case "uninstall":
-                print(QueryBuilder().create_uninstall_query())
-                if not parsed.dry_run:
-                    await queries.uninstall()
-            case "upgrade":
-                print("\n".join(QueryBuilder().create_upgrade_queries()))
-                if not parsed.dry_run:
-                    await queries.upgrade()
-            case "dashboard":
-                await fetch_and_display(
-                    queries,
-                    parsed.interval,
-                    parsed.tail,
-                    parsed.table_format,
-                )
-            case "listen":
-                await display_pg_channel(
-                    pool,
-                    PGChannel(parsed.channel),
-                )
+    )
+    driver = AsyncpgDriver(connection)
+    queries = Queries(driver)
+
+    match parsed.command:
+        case "install":
+            print(QueryBuilder().create_install_query())
+            if not parsed.dry_run:
+                await queries.install()
+        case "uninstall":
+            print(QueryBuilder().create_uninstall_query())
+            if not parsed.dry_run:
+                await queries.uninstall()
+        case "upgrade":
+            print("\n".join(QueryBuilder().create_upgrade_queries()))
+            if not parsed.dry_run:
+                await queries.upgrade()
+        case "dashboard":
+            await fetch_and_display(
+                queries,
+                parsed.interval,
+                parsed.tail,
+                parsed.table_format,
+            )
+        case "listen":
+            await display_pg_channel(driver, PGChannel(parsed.channel))

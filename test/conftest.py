@@ -1,9 +1,11 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import asyncpg
 import pytest
+from PgQueuer.db import AsyncpgDriver, Driver
 
 
 def dsn(
@@ -22,24 +24,23 @@ def dsn(
 
 
 @pytest.fixture(scope="function")
-async def pgpool() -> AsyncGenerator[asyncpg.Pool, None]:
+async def pgdriver() -> AsyncGenerator[Driver, None]:
     database = "tmp_test_db"
-    async with (
-        asyncpg.create_pool(dsn=dsn(database="postgres")) as p1,
-        create_test_database(database, p1),
-        asyncpg.create_pool(dsn(database=database), max_size=50) as p2,
-    ):
-        yield p2
+    conn_a = await asyncpg.connect(dsn=dsn(database="postgres"))
+    async with create_test_database(database, conn_a):
+        conn_b = await asyncpg.connect(dsn=dsn(database=database))
+        yield AsyncpgDriver(conn_b)
+    await asyncio.gather(conn_a.close(), conn_b.close())
 
 
 @asynccontextmanager
 async def create_test_database(
     tmptestdb: str,
-    pool: asyncpg.Pool,
+    connection: asyncpg.Connection,
 ) -> AsyncGenerator[None, None]:
     try:
-        await pool.execute(f"DROP DATABASE IF EXISTS {tmptestdb} WITH (FORCE);")
-        await pool.execute(f"CREATE DATABASE {tmptestdb} TEMPLATE testdb;")
+        await connection.execute(f"DROP DATABASE IF EXISTS {tmptestdb} WITH (FORCE);")
+        await connection.execute(f"CREATE DATABASE {tmptestdb} TEMPLATE testdb;")
         yield
     finally:
-        await pool.execute(f"DROP DATABASE {tmptestdb} WITH (FORCE);")
+        await connection.execute(f"DROP DATABASE {tmptestdb} WITH (FORCE);")

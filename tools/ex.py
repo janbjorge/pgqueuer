@@ -1,17 +1,15 @@
 import asyncio
 
 import asyncpg
+from PgQueuer.db import AsyncpgDriver
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 
 
 async def main() -> None:
-    pool = await asyncpg.create_pool(min_size=2)
-
-    # mypy wtf?
-    assert isinstance(pool, asyncpg.Pool)
-
-    qm = QueueManager(pool)
+    connection = await asyncpg.connect()
+    driver = AsyncpgDriver(connection)
+    qm = QueueManager(driver)
 
     # Setup the 'fetch' entrypoint
     @qm.entrypoint("fetch")

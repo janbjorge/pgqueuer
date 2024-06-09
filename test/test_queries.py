@@ -1,14 +1,13 @@
 import asyncio
 from datetime import timedelta
 
-import asyncpg
 import pytest
-from PgQueuer import models, queries
+from PgQueuer import db, models, queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
-async def test_queries_put(pgpool: asyncpg.Pool, N: int) -> None:
-    q = queries.Queries(pgpool)
+async def test_queries_put(pgdriver: db.Driver, N: int) -> None:
+    q = queries.Queries(pgdriver)
 
     assert sum(x.count for x in await q.queue_size()) == 0
 
@@ -20,10 +19,10 @@ async def test_queries_put(pgpool: asyncpg.Pool, N: int) -> None:
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queries_next_jobs(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -45,12 +44,11 @@ async def test_queries_next_jobs(
 @pytest.mark.parametrize("N", (1, 2, 64))
 @pytest.mark.parametrize("concurrency", (1, 2, 4, 16))
 async def test_queries_next_jobs_concurrent(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
     concurrency: int,
 ) -> None:
-    assert pgpool.get_max_size() >= concurrency
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -79,8 +77,8 @@ async def test_queries_next_jobs_concurrent(
     assert sorted(seen) == list(range(N))
 
 
-async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
-    q = queries.Queries(pgpool)
+async def test_queries_clear(pgdriver: db.Driver) -> None:
+    q = queries.Queries(pgdriver)
     await q.clear_queue()
     assert sum(x.count for x in await q.queue_size()) == 0
 
@@ -93,10 +91,10 @@ async def test_queries_clear(pgpool: asyncpg.Pool) -> None:
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_move_job_log(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -116,10 +114,10 @@ async def test_move_job_log(
 
 @pytest.mark.parametrize("N", (1, 2, 5))
 async def test_clear_queue(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
 
     # Test delete all by listing all
     await q.enqueue(
@@ -160,10 +158,10 @@ async def test_clear_queue(
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_priority(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
     jobs = list[models.Job]()
 
     await q.enqueue(
@@ -185,11 +183,11 @@ async def test_queue_priority(
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
-    pgpool: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
     retry_timer: timedelta = timedelta(seconds=0.1),
 ) -> None:
-    q = queries.Queries(pgpool)
+    q = queries.Queries(pgdriver)
     jobs = list[models.Job]()
 
     await q.enqueue(
@@ -217,16 +215,16 @@ async def test_queue_retry_timer(
     assert len(jobs) == N
 
 
-async def test_queue_retry_timer_negative_raises(pgpool: asyncpg.Pool) -> None:
+async def test_queue_retry_timer_negative_raises(pgdriver: db.Driver) -> None:
     with pytest.raises(ValueError):
-        await queries.Queries(pgpool).dequeue(
+        await queries.Queries(pgdriver).dequeue(
             entrypoints={"placeholder"},
             batch_size=10,
             retry_timer=-timedelta(seconds=0.001),
         )
 
     with pytest.raises(ValueError):
-        await queries.Queries(pgpool).dequeue(
+        await queries.Queries(pgdriver).dequeue(
             entrypoints={"placeholder"},
             batch_size=10,
             retry_timer=timedelta(seconds=-0.001),
