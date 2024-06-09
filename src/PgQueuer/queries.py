@@ -5,8 +5,6 @@ import os
 from datetime import timedelta
 from typing import Final, Generator
 
-import asyncpg
-
 from . import db, models
 
 

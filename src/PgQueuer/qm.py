@@ -17,10 +17,9 @@ from typing import (
 
 import anyio
 import anyio.to_thread
-import asyncpg
 
 from .db import Driver
-from .listeners import _critical_termination_listener, initialize_event_listener
+from .listeners import initialize_event_listener
 from .logconfig import logger
 from .models import Job, PGChannel
 from .queries import DBSettings, Queries
