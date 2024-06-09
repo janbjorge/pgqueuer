@@ -73,13 +73,12 @@ class QueueManager:
     connection: Driver
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
 
-    queries: Queries = dataclasses.field(init=False)
     alive: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
-
-    # Should registry be a weakref?
+    buffer: JobBuffer = dataclasses.field(init=False)
+    queries: Queries = dataclasses.field(init=False)
     registry: dict[str, Entrypoint] = dataclasses.field(
         init=False, default_factory=dict
     )
@@ -90,6 +89,11 @@ class QueueManager:
         instance creation.
         """
         self.queries = Queries(self.connection)
+        self.buffer = JobBuffer(
+            max_size=10,
+            timeout=0.01,
+            flush_callback=self.queries.log_jobs,
+        )
         self.alive.set()
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
@@ -133,6 +137,7 @@ class QueueManager:
             )
 
         async with TaskManager() as tm:
+            tm.add(asyncio.create_task(self.buffer.monitor()))
             listener = await initialize_event_listener(self.connection, self.channel)
 
             while self.alive.is_set():
@@ -158,6 +163,7 @@ class QueueManager:
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
+            self.buffer.alive.clear()
 
     async def _dispatch(self, job: Job) -> None:
         """

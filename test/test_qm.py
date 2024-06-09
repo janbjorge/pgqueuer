@@ -1,6 +1,7 @@
 import asyncio
+import asyncio.selector_events
 import time
-from contextlib import suppress
+from datetime import timedelta
 
 import pytest
 from PgQueuer import db
@@ -117,6 +118,7 @@ async def test_sync_entrypoint(
 
 async def test_pick_local_entrypoints(
     pgdriver: db.Driver,
+    N: int = 100,
 ) -> None:
     q = Queries(pgdriver)
     qm = QueueManager(pgdriver)
@@ -126,7 +128,6 @@ async def test_pick_local_entrypoints(
         if job.payload is None:
             qm.alive.clear()
 
-    N = 100
     await q.enqueue(
         ["to_be_picked"] * N,
         [f"{n}".encode() for n in range(N)],
@@ -139,8 +140,14 @@ async def test_pick_local_entrypoints(
         [0] * N,
     )
 
-    with suppress(asyncio.TimeoutError):
-        await asyncio.wait_for(qm.run(), timeout=2)
+    async def waiter() -> None:
+        await asyncio.sleep(2)
+        qm.alive.clear()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
 
     assert (
         sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked")

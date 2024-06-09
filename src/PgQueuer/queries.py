@@ -288,54 +288,47 @@ class QueryBuilder:
         entrypoint, time in queue, creation time, and final status.
         """
         return f"""
-        WITH deleted AS (
-            DELETE FROM {self.settings.queue_table}
-            WHERE id = ANY($1)
-            RETURNING id, priority, entrypoint, created
-        ),
-        insert_data AS (
-            SELECT
-                deleted.priority,                                        -- priority
-                deleted.entrypoint,                                      -- entrypoint
-                DATE_TRUNC('sec', NOW() - deleted.created) AS time_in_queue,  -- time_in_queue
-                DATE_TRUNC('sec', deleted.created at time zone 'UTC') AS created,  -- created at time zone 'UTC'
-                (unnest($2::pgqueuer_statistics_status[])) AS status   -- status from input parameter array, cast to ENUM
-            FROM deleted
-            JOIN unnest($1::INT[]) WITH ORDINALITY t(id, ord) USING (id)  -- Join to preserve order for status matching
-        )
-
-        INSERT INTO {self.settings.statistics_table} (
-            priority,
-            entrypoint,
-            time_in_queue,
-            created,
-            status,
-            count
-        )
+    WITH deleted_jobs AS (
+        DELETE FROM {self.settings.queue_table}
+        WHERE id = ANY($1::INT[])
+        RETURNING id, priority, entrypoint, created, updated
+    ),
+    insert_data AS (
         SELECT
-            priority,
-            entrypoint,
-            time_in_queue,
-            created,
-            status,
-            1
-        FROM insert_data
-        ON CONFLICT (
-            priority,
-            entrypoint,
-            DATE_TRUNC('sec', created at time zone 'UTC'),
-            DATE_TRUNC('sec', time_in_queue),
-            status
-        )
-        DO UPDATE SET
-            count = {self.settings.statistics_table}.count + 1
-        WHERE
-            {self.settings.statistics_table}.priority = EXCLUDED.priority
-            AND {self.settings.statistics_table}.entrypoint = EXCLUDED.entrypoint
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = EXCLUDED.time_in_queue
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = EXCLUDED.created
-            AND {self.settings.statistics_table}.status = EXCLUDED.status;
-    """  # noqa: E501
+            dj.priority,
+            dj.entrypoint,
+            unnest($2::{self.settings.statistics_table_status_type}[]) AS status,
+            date_trunc('sec', age(dj.updated, dj.created)) AS time_in_queue,
+            1 AS count
+        FROM deleted_jobs dj
+        JOIN unnest($1::INT[]) WITH ORDINALITY t(id, ord) ON dj.id = t.id
+    )
+
+    INSERT INTO {self.settings.statistics_table} (
+        priority,
+        entrypoint,
+        time_in_queue,
+        status,
+        count
+    )
+    SELECT
+        priority,
+        entrypoint,
+        time_in_queue,
+        status,
+        sum(count)
+    FROM insert_data
+    GROUP BY priority, entrypoint, time_in_queue, status
+    ON CONFLICT (
+        priority,
+        entrypoint,
+        DATE_TRUNC('sec', created at time zone 'UTC'),
+        DATE_TRUNC('sec', time_in_queue),
+        status
+    )
+    DO UPDATE SET
+        count = {self.settings.statistics_table}.count + EXCLUDED.count;
+    """
 
     def create_truncate_log_query(self) -> str:
         """

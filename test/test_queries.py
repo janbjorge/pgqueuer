@@ -36,7 +36,7 @@ async def test_queries_next_jobs(
             payoad = job.payload
             assert payoad is not None
             seen.append(int(payoad))
-            await q.log_job(job, "successful")
+            await q.log_jobs([(job, "successful")])
 
     assert seen == list(range(N))
 
@@ -67,7 +67,7 @@ async def test_queries_next_jobs_concurrent(
                 payload = job.payload
                 assert payload is not None
                 seen.append(int(payload))
-                await q.log_job(job, "successful")
+                await q.log_jobs([(job, "successful")])
 
     await asyncio.wait_for(
         asyncio.gather(*[consumer() for _ in range(concurrency)]),
@@ -107,7 +107,7 @@ async def test_move_job_log(
         batch_size=10,
     ):
         for job in jobs:
-            await q.log_job(job, status="successful")
+            await q.log_jobs([(job, "successful")])
 
     assert sum(x.count for x in await q.log_statistics(1_000_000_000)) == N
 
@@ -176,7 +176,7 @@ async def test_queue_priority(
     ):
         for job in next_jobs:
             jobs.append(job)
-            await q.log_job(job, status="successful")
+            await q.log_jobs([(job, "successful")])
 
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
 

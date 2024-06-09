@@ -17,11 +17,13 @@ class JobBuffer:
         self.max_size = max_size
         self.timeout = timeout
         self.flush_callback = flush_callback
+
+        self.alive = asyncio.Event()
+        self.alive.set()
+
         self.events = list[tuple[Job, STATUS_LOG]]()
-        self.lock = asyncio.Lock()
         self.last_event_time = time.perf_counter()
-        self.monitor_task: None | asyncio.Task = None
-        self.alive = True
+        self.lock = asyncio.Lock()
 
     async def add_job(self, job: Job, status: STATUS_LOG) -> None:
         async with self.lock:
@@ -36,7 +38,7 @@ class JobBuffer:
             self.events.clear()
 
     async def monitor(self) -> None:
-        while self.alive:
+        while self.alive.is_set():
             await asyncio.sleep(self.timeout)
             async with self.lock:
                 if time.perf_counter() - self.last_event_time >= self.timeout:
