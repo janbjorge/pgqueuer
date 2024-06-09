@@ -8,6 +8,7 @@ from datetime import timedelta
 import asyncpg
 from tabulate import tabulate, tabulate_formats
 
+from PgQueuer.db import Driver
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import LogStatistics, PGChannel
 from PgQueuer.queries import DBSettings, Queries, QueryBuilder
@@ -44,16 +45,15 @@ async def display_stats(
 
 
 async def display_pg_channel(
-    pool: asyncpg.Pool,
+    connection: Driver,
     channel: PGChannel,
 ) -> None:
-    async with pool.acquire() as connection:
-        listener = await initialize_event_listener(
-            connection,  # type: ignore[arg-type]
-            channel,
-        )
-        while True:
-            print(repr(await listener.get()))
+    listener = await initialize_event_listener(
+        connection,
+        channel,
+    )
+    while True:
+        print(repr(await listener.get()))
 
 
 async def fetch_and_display(

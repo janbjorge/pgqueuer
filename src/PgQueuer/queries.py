@@ -7,7 +7,7 @@ from typing import Final, Generator
 
 import asyncpg
 
-from . import models
+from . import db, models
 
 
 def add_prefix(string: str) -> str:
@@ -387,7 +387,7 @@ class Queries:
     enqueueing, dequeueing, and querying the size of the queue.
     """
 
-    pool: asyncpg.Pool
+    pool: db.Driver
     qb: QueryBuilder = dataclasses.field(default_factory=QueryBuilder)
 
     async def install(self) -> None:

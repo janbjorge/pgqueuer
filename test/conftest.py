@@ -4,6 +4,7 @@ from typing import AsyncGenerator
 
 import asyncpg
 import pytest
+from PgQueuer.db import AsyncPGDriver, Driver
 
 
 def dsn(
@@ -22,14 +23,15 @@ def dsn(
 
 
 @pytest.fixture(scope="function")
-async def pgpool() -> AsyncGenerator[asyncpg.Pool, None]:
+async def pgpool() -> AsyncGenerator[Driver, None]:
     database = "tmp_test_db"
     async with (
-        asyncpg.create_pool(dsn=dsn(database="postgres")) as p1,
-        create_test_database(database, p1),
-        asyncpg.create_pool(dsn(database=database), max_size=50) as p2,
+        asyncpg.create_pool(dsn=dsn(database="postgres")) as pool_a,
+        create_test_database(database, pool_a),
+        asyncpg.create_pool(dsn(database=database)) as pool_b,
+        pool_b.acquire() as conn,
     ):
-        yield p2
+        yield AsyncPGDriver(conn)  # type: ignore
 
 
 @asynccontextmanager

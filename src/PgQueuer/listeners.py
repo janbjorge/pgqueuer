@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-import asyncpg
-
 from . import models
+from .db import Driver
 from .logconfig import logger
 
 
@@ -23,7 +22,7 @@ class PGEventListener(asyncio.Queue[models.Event]):
 
 
 async def initialize_event_listener(
-    pg_connection: asyncpg.Connection,
+    pg_connection: Driver,
     pg_channel: models.PGChannel,
 ) -> PGEventListener:
     """
@@ -58,5 +57,5 @@ async def initialize_event_listener(
     await pg_connection.add_listener(
         pg_channel, lambda *x: parse_and_queue(x[-1], listener)
     )
-    pg_connection.add_termination_listener(_critical_termination_listener)
+    # pg_connection.add_termination_listener(_critical_termination_listener)
     return listener

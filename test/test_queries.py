@@ -49,7 +49,6 @@ async def test_queries_next_jobs_concurrent(
     N: int,
     concurrency: int,
 ) -> None:
-    assert pgpool.get_max_size() >= concurrency
     q = queries.Queries(pgpool)
 
     await q.enqueue(
