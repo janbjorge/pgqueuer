@@ -243,9 +243,10 @@ class QueryBuilder:
         entrypoint, and payload.
         """
         return f"""
-    INSERT INTO {self.settings.queue_table} (priority, status, entrypoint, payload)
-    VALUES ($1, 'queued', $2, $3)
-    """  # noqa: E501
+        INSERT INTO {self.settings.queue_table}
+        (priority, entrypoint, payload, status)
+        VALUES (unnest($1::int[]), unnest($2::text[]), unnest($3::bytea[]), 'queued')
+    """
 
     def create_delete_from_queue_query(self) -> str:
         """
@@ -456,16 +457,11 @@ class Queries:
         normed_payload = payload if isinstance(payload, list) else [payload]
         normed_priority = priority if isinstance(priority, list) else [priority]
 
-        await self.driver.executemany(
+        await self.driver.execute(
             self.qb.create_enqueue_query(),
-            list(
-                zip(
-                    normed_priority,
-                    normed_entrypoint,
-                    normed_payload,
-                    strict=True,
-                )
-            ),
+            normed_priority,
+            normed_entrypoint,
+            normed_payload,
         )
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
