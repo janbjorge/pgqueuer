@@ -460,11 +460,13 @@ class Queries:
 
         await self.pool.executemany(
             self.qb.create_enqueue_query(),
-            zip(
-                normed_priority,
-                normed_entrypoint,
-                normed_payload,
-                strict=True,
+            list(
+                zip(
+                    normed_priority,
+                    normed_entrypoint,
+                    normed_payload,
+                    strict=True,
+                )
             ),
         )
 
@@ -525,9 +527,7 @@ class Queries:
         ]
 
     async def upgrade(self) -> None:
-        async with self.pool.acquire() as conn, conn.transaction():
-            for query in self.qb.create_upgrade_queries():
-                await conn.execute(query)
+        await self.pool.execute("\n\n".join(self.qb.create_upgrade_queries()))
 
     async def has_updated_column(self) -> bool:
         return await self.pool.fetchval(

@@ -2,8 +2,8 @@ import asyncio
 import time
 from contextlib import suppress
 
-import asyncpg
 import pytest
+from PgQueuer import db
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
@@ -11,7 +11,7 @@ from PgQueuer.queries import Queries
 
 @pytest.mark.parametrize("N", (1, 2, 32))
 async def test_job_queing(
-    pgdriver: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
 ) -> None:
     c = QueueManager(pgdriver)
@@ -41,7 +41,7 @@ async def test_job_queing(
 @pytest.mark.parametrize("N", (1, 2, 32))
 @pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
 async def test_job_fetch(
-    pgdriver: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
     concurrency: int,
 ) -> None:
@@ -79,7 +79,7 @@ async def test_job_fetch(
 @pytest.mark.parametrize("N", (1, 2, 32))
 @pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
 async def test_sync_entrypoint(
-    pgdriver: asyncpg.Pool,
+    pgdriver: db.Driver,
     N: int,
     concurrency: int,
 ) -> None:
@@ -116,7 +116,7 @@ async def test_sync_entrypoint(
 
 
 async def test_pick_local_entrypoints(
-    pgdriver: asyncpg.Pool,
+    pgdriver: db.Driver,
 ) -> None:
     q = Queries(pgdriver)
     qm = QueueManager(pgdriver)
