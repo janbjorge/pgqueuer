@@ -91,7 +91,7 @@ class QueueManager:
         self.queries = Queries(self.connection)
         self.buffer = JobBuffer(
             max_size=10,
-            timeout=0.01,
+            timeout=timedelta(seconds=0.01),
             flush_callback=self.queries.log_jobs,
         )
         self.alive.set()
@@ -135,6 +135,8 @@ class QueueManager:
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
                 "updated column, please run 'python3 -m PgQueuer upgrade'"
             )
+
+        self.buffer.max_size = batch_size
 
         async with TaskManager() as tm:
             tm.add(asyncio.create_task(self.buffer.monitor()))
