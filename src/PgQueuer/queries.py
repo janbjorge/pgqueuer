@@ -288,26 +288,24 @@ class QueryBuilder:
         entrypoint, time in queue, creation time, and final status.
         """
         return f"""
-    WITH deleted_jobs AS (
+    WITH deleted AS (
         DELETE FROM {self.settings.queue_table}
-        WHERE id = ANY($1::INT[])
-        RETURNING id, priority, entrypoint, created, updated
-    ),
-    insert_data AS (
+        WHERE id = ANY($1::integer[])
+        RETURNING id
+    ), prepped_data AS (
         SELECT
-            dj.priority,
-            dj.entrypoint,
-            unnest($2::{self.settings.statistics_table_status_type}[]) AS status,
-            date_trunc('sec', age(dj.updated, dj.created)) AS time_in_queue,
-            1 AS count
-        FROM deleted_jobs dj
-        JOIN unnest($1::INT[]) WITH ORDINALITY t(id, ord) ON dj.id = t.id
+            unnest($2::integer[]) AS priority,
+            unnest($3::text[]) AS entrypoint,
+            date_trunc('sec', now() - unnest($4::timestamptz[])) AS time_in_queue,
+            date_trunc('sec', unnest($4::timestamptz[]) at time zone 'UTC') AS created,
+            unnest($5::{self.settings.statistics_table_status_type}[]) AS status
+        FROM deleted
     )
-
     INSERT INTO {self.settings.statistics_table} (
         priority,
         entrypoint,
         time_in_queue,
+        created,
         status,
         count
     )
@@ -315,10 +313,11 @@ class QueryBuilder:
         priority,
         entrypoint,
         time_in_queue,
+        created,
         status,
-        sum(count)
-    FROM insert_data
-    GROUP BY priority, entrypoint, time_in_queue, status
+        count(*)
+    FROM prepped_data
+    GROUP BY priority, entrypoint, time_in_queue, created, status
     ON CONFLICT (
         priority,
         entrypoint,
@@ -326,8 +325,8 @@ class QueryBuilder:
         DATE_TRUNC('sec', time_in_queue),
         status
     )
-    DO UPDATE SET
-        count = {self.settings.statistics_table}.count + EXCLUDED.count;
+    DO UPDATE
+    SET count = {self.settings.statistics_table}.count + EXCLUDED.count
     """
 
     def create_truncate_log_query(self) -> str:
@@ -500,6 +499,9 @@ class Queries:
         await self.driver.execute(
             self.qb.create_log_job_query(),
             [j.id for j, _ in job_status],
+            [j.priority for j, _ in job_status],
+            [j.entrypoint for j, _ in job_status],
+            [j.created for j, _ in job_status],
             [s for _, s in job_status],
         )
 

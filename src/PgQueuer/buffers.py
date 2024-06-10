@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 
 from .models import STATUS_LOG, Job
@@ -16,7 +16,7 @@ def _perf_counter_dt() -> datetime:
     the highest available resolution as a timestamp, which is useful for
     time measurements between events.
     """
-    return datetime.fromtimestamp(time.perf_counter())
+    return datetime.fromtimestamp(time.perf_counter(), tz=timezone.utc)
 
 
 class JobBuffer:
