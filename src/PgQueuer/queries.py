@@ -299,7 +299,16 @@ class QueryBuilder:
             date_trunc('sec', now() - unnest($4::timestamptz[])) AS time_in_queue,
             date_trunc('sec', unnest($4::timestamptz[]) at time zone 'UTC') AS created,
             unnest($5::{self.settings.statistics_table_status_type}[]) AS status
-        FROM deleted
+    ), grouped_data AS (
+        SELECT
+            priority,
+            entrypoint,
+            time_in_queue,
+            created,
+            status,
+            count(*)
+        FROM prepped_data
+        GROUP BY priority, entrypoint, time_in_queue, created, status
     )
     INSERT INTO {self.settings.statistics_table} (
         priority,
@@ -308,16 +317,14 @@ class QueryBuilder:
         created,
         status,
         count
-    )
-    SELECT
+    ) SELECT
         priority,
         entrypoint,
         time_in_queue,
         created,
         status,
-        count(*)
-    FROM prepped_data
-    GROUP BY priority, entrypoint, time_in_queue, created, status
+        count
+    FROM grouped_data
     ON CONFLICT (
         priority,
         entrypoint,
