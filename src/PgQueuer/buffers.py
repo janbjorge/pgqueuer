@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
@@ -19,6 +20,7 @@ def _perf_counter_dt() -> datetime:
     return datetime.fromtimestamp(time.perf_counter(), tz=timezone.utc)
 
 
+@dataclasses.dataclass
 class JobBuffer:
     """
     A buffer class that accumulates jobs and their statuses until a specified
@@ -34,22 +36,32 @@ class JobBuffer:
             Asynchronous callback function to process jobs when the buffer is flushed.
     """
 
-    def __init__(
-        self,
-        max_size: int,
-        timeout: timedelta,
-        flush_callback: Callable[[list[tuple[Job, STATUS_LOG]]], Awaitable[None]],
-    ):
-        self.max_size = max_size
-        self.timeout = timeout
-        self.flush_callback = flush_callback
+    max_size: int
+    timeout: timedelta
+    flush_callback: Callable[
+        [list[tuple[Job, STATUS_LOG]]],
+        Awaitable[None],
+    ]
 
-        self.alive = asyncio.Event()
+    alive: asyncio.Event = dataclasses.field(
+        init=False,
+        default_factory=asyncio.Event,
+    )
+    events: list[tuple[Job, STATUS_LOG]] = dataclasses.field(
+        init=False,
+        default_factory=list,
+    )
+    last_event_time: datetime = dataclasses.field(
+        init=False,
+        default_factory=_perf_counter_dt,
+    )
+    lock: asyncio.Lock = dataclasses.field(
+        init=False,
+        default_factory=asyncio.Lock,
+    )
+
+    def __post_init__(self) -> None:
         self.alive.set()
-
-        self.events = list[tuple[Job, STATUS_LOG]]()
-        self.last_event_time = _perf_counter_dt()
-        self.lock = asyncio.Lock()
 
     async def add_job(self, job: Job, status: STATUS_LOG) -> None:
         """
