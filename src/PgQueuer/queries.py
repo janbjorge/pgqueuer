@@ -291,14 +291,15 @@ class QueryBuilder:
     WITH deleted AS (
         DELETE FROM {self.settings.queue_table}
         WHERE id = ANY($1::integer[])
-        RETURNING id
-    ), prepped_data AS (
+        RETURNING   id,
+                    priority,
+                    entrypoint,
+                    DATE_TRUNC('sec', created at time zone 'UTC') AS created,
+                    DATE_TRUNC('sec', AGE(updated, created)) AS time_in_queue
+    ), job_status AS (
         SELECT
-            unnest($2::integer[]) AS priority,
-            unnest($3::text[]) AS entrypoint,
-            date_trunc('sec', now() - unnest($4::timestamptz[])) AS time_in_queue,
-            date_trunc('sec', unnest($4::timestamptz[]) at time zone 'UTC') AS created,
-            unnest($5::{self.settings.statistics_table_status_type}[]) AS status
+            unnest($1::integer[]) AS id,
+            unnest($2::{self.settings.statistics_table_status_type}[]) AS status
     ), grouped_data AS (
         SELECT
             priority,
@@ -307,7 +308,7 @@ class QueryBuilder:
             created,
             status,
             count(*)
-        FROM prepped_data
+        FROM deleted JOIN job_status ON job_status.id = deleted.id
         GROUP BY priority, entrypoint, time_in_queue, created, status
     )
     INSERT INTO {self.settings.statistics_table} (
@@ -506,9 +507,6 @@ class Queries:
         await self.driver.execute(
             self.qb.create_log_job_query(),
             [j.id for j, _ in job_status],
-            [j.priority for j, _ in job_status],
-            [j.entrypoint for j, _ in job_status],
-            [j.created for j, _ in job_status],
             [s for _, s in job_status],
         )
 
