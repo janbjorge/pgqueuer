@@ -43,9 +43,9 @@ class JobBuffer:
         Awaitable[None],
     ]
 
-    alive: asyncio.Event = dataclasses.field(
+    alive: bool = dataclasses.field(
         init=False,
-        default_factory=asyncio.Event,
+        default=True,
     )
     events: list[tuple[Job, STATUS_LOG]] = dataclasses.field(
         init=False,
@@ -59,9 +59,6 @@ class JobBuffer:
         init=False,
         default_factory=asyncio.Lock,
     )
-
-    def __post_init__(self) -> None:
-        self.alive.set()
 
     async def add_job(self, job: Job, status: STATUS_LOG) -> None:
         """
@@ -88,7 +85,7 @@ class JobBuffer:
         Periodically checks if the buffer needs to be flushed based on the timeout.
         Runs until the `alive` event is cleared.
         """
-        while self.alive.is_set():
+        while self.alive:
             await asyncio.sleep(self.timeout.total_seconds())
             async with self.lock:
                 if _perf_counter_dt() - self.last_event_time >= self.timeout:

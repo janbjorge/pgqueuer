@@ -67,4 +67,4 @@ async def test_job_buffer_timeout(N: int, timeout: timedelta) -> None:
 
         await asyncio.sleep(timeout.total_seconds() * 1.1)
         assert len(helper_buffer) == N
-        buffer.alive.clear()
+        buffer.alive = False
