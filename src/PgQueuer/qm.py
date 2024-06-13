@@ -73,9 +73,9 @@ class QueueManager:
     connection: Driver
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
 
-    alive: asyncio.Event = dataclasses.field(
+    alive: bool = dataclasses.field(
         init=False,
-        default_factory=asyncio.Event,
+        default=True,
     )
     buffer: JobBuffer = dataclasses.field(init=False)
     queries: Queries = dataclasses.field(init=False)
@@ -94,7 +94,6 @@ class QueueManager:
             timeout=timedelta(seconds=0.01),
             flush_callback=self.queries.log_jobs,
         )
-        self.alive.set()
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
         """
@@ -142,8 +141,8 @@ class QueueManager:
             tm.add(asyncio.create_task(self.buffer.monitor()))
             listener = await initialize_event_listener(self.connection, self.channel)
 
-            while self.alive.is_set():
-                while (self.alive.is_set()) and (
+            while self.alive:
+                while self.alive and (
                     jobs := await self.queries.dequeue(
                         batch_size=batch_size,
                         entrypoints=set(self.registry.keys()),
@@ -165,7 +164,7 @@ class QueueManager:
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
-            self.buffer.alive.clear()
+            self.buffer.alive = False
 
     async def _dispatch(self, job: Job) -> None:
         """
