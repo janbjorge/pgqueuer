@@ -1,4 +1,3 @@
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -30,7 +29,8 @@ async def pgdriver() -> AsyncGenerator[Driver, None]:
     async with create_test_database(database, conn_a):
         conn_b = await asyncpg.connect(dsn=dsn(database=database))
         yield AsyncpgDriver(conn_b)
-    await asyncio.gather(conn_a.close(), conn_b.close())
+        await conn_b.close()
+    await conn_a.close()
 
 
 @asynccontextmanager

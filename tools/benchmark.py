@@ -15,7 +15,7 @@ from PgQueuer.queries import Queries
 
 
 @contextlib.contextmanager
-def execution_timer() -> (
+def timer() -> (
     Generator[
         Callable[[], timedelta],
         None,
@@ -45,7 +45,7 @@ async def consumer(qm: QueueManager, batch_size: int) -> float:
         if job.payload is None:
             qm.alive.clear()
 
-    with execution_timer() as elapsed:
+    with timer() as elapsed:
         await qm.run(batch_size=batch_size)
 
     return (next(cnt) - 1) / elapsed().total_seconds()
@@ -76,14 +76,14 @@ async def main() -> None:
     )
 
     parser.add_argument(
-        "-dc",
+        "-dq",
         "--dequeue",
         type=int,
         default=2,
         help="Number of concurrent dequeue workers. Default is 2.",
     )
     parser.add_argument(
-        "-debs",
+        "-dqbs",
         "--dequeue-batch-size",
         type=int,
         default=10,
@@ -98,7 +98,7 @@ async def main() -> None:
         help="Number of concurrent enqueue workers. Default is 1.",
     )
     parser.add_argument(
-        "-ecbs",
+        "-eqbs",
         "--enqueue-batch-size",
         type=int,
         default=20,
@@ -125,21 +125,21 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
     async def enqueue() -> None:
         cnt = count()
-        bs = int(args.enqueue_batch_size)
 
         queries = list[tuple[AsyncpgDriver, Queries]]()
 
-        for _ in range(bs):
+        for _ in range(int(args.enqueue)):
             driver = AsyncpgDriver(await asyncpg.connect())
             queries.append((driver, Queries(driver)))
 
-        await asyncio.gather(*[producer(alive, q, bs, cnt) for _, q in queries])
+        await asyncio.gather(
+            *[producer(alive, q, int(args.enqueue_batch_size), cnt) for _, q in queries]
+        )
 
     async def dequeue() -> list[float]:
-        bs = int(args.dequeue_batch_size)
         queries = list[tuple[AsyncpgDriver, Queries]]()
 
-        for _ in range(bs):
+        for _ in range(int(args.dequeue)):
             driver = AsyncpgDriver(await asyncpg.connect())
             queries.append((driver, Queries(driver)))
 
@@ -150,7 +150,9 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             for q in qms:
                 q.alive.clear()
 
-        dequeue_tasks = [consumer(q, bs) for q in qms] + [alive_waiter()]
+        dequeue_tasks = [consumer(q, int(args.dequeue_batch_size)) for q in qms] + [
+            alive_waiter()
+        ]
         return [v for v in await asyncio.gather(*dequeue_tasks) if v is not None]
 
     async def alive_timer() -> None:

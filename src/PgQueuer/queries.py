@@ -290,9 +290,27 @@ class QueryBuilder:
         return f"""
     WITH deleted AS (
         DELETE FROM {self.settings.queue_table}
-        WHERE id = $1
+        WHERE id = ANY($1::integer[])
+        RETURNING   id,
+                    priority,
+                    entrypoint,
+                    DATE_TRUNC('sec', created at time zone 'UTC') AS created,
+                    DATE_TRUNC('sec', AGE(updated, created)) AS time_in_queue
+    ), job_status AS (
+        SELECT
+            unnest($1::integer[]) AS id,
+            unnest($2::{self.settings.statistics_table_status_type}[]) AS status
+    ), grouped_data AS (
+        SELECT
+            priority,
+            entrypoint,
+            time_in_queue,
+            created,
+            status,
+            count(*)
+        FROM deleted JOIN job_status ON job_status.id = deleted.id
+        GROUP BY priority, entrypoint, time_in_queue, created, status
     )
-
     INSERT INTO {self.settings.statistics_table} (
         priority,
         entrypoint,
@@ -300,15 +318,14 @@ class QueryBuilder:
         created,
         status,
         count
-    )
-    VALUES (
-        $2,                                         -- priority
-        $3,                                         -- entrypoint
-        DATE_TRUNC('sec', NOW() - $4),              -- time_in_queue
-        DATE_TRUNC('sec', $4 at time zone 'UTC'),   -- created at time zone 'UTC'
-        $5,                                         -- status
-        1                                           -- start count
-    )
+    ) SELECT
+        priority,
+        entrypoint,
+        time_in_queue,
+        created,
+        status,
+        count
+    FROM grouped_data
     ON CONFLICT (
         priority,
         entrypoint,
@@ -317,15 +334,8 @@ class QueryBuilder:
         status
     )
     DO UPDATE
-        SET
-            count = {self.settings.statistics_table}.count + 1
-        WHERE
-                {self.settings.statistics_table}.priority = $2
-            AND {self.settings.statistics_table}.entrypoint = $3
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.time_in_queue) = DATE_TRUNC('sec', NOW() - $4)
-            AND DATE_TRUNC('sec', {self.settings.statistics_table}.created) = DATE_TRUNC('sec', $4 at time zone 'UTC')
-            AND {self.settings.statistics_table}.status = $5
-    """  # noqa: E501
+    SET count = {self.settings.statistics_table}.count + EXCLUDED.count
+    """
 
     def create_truncate_log_query(self) -> str:
         """
@@ -486,18 +496,18 @@ class Queries:
             for x in await self.driver.fetch(self.qb.create_queue_size_query())
         ]
 
-    async def log_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
+    async def log_jobs(
+        self,
+        job_status: list[tuple[models.Job, models.STATUS_LOG]],
+    ) -> None:
         """
         Moves a completed or failed job from the queue table to the log
         table, recording its final status and duration.
         """
         await self.driver.execute(
             self.qb.create_log_job_query(),
-            job.id,
-            job.priority,
-            job.entrypoint,
-            job.created,
-            status,
+            [j.id for j, _ in job_status],
+            [s for _, s in job_status],
         )
 
     async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:

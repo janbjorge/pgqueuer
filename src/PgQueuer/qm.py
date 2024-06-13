@@ -18,6 +18,7 @@ from typing import (
 import anyio
 import anyio.to_thread
 
+from .buffers import JobBuffer
 from .db import Driver
 from .listeners import initialize_event_listener
 from .logconfig import logger
@@ -72,13 +73,12 @@ class QueueManager:
     connection: Driver
     channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
 
-    queries: Queries = dataclasses.field(init=False)
     alive: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
-
-    # Should registry be a weakref?
+    buffer: JobBuffer = dataclasses.field(init=False)
+    queries: Queries = dataclasses.field(init=False)
     registry: dict[str, Entrypoint] = dataclasses.field(
         init=False, default_factory=dict
     )
@@ -89,6 +89,11 @@ class QueueManager:
         instance creation.
         """
         self.queries = Queries(self.connection)
+        self.buffer = JobBuffer(
+            max_size=10,
+            timeout=timedelta(seconds=0.01),
+            flush_callback=self.queries.log_jobs,
+        )
         self.alive.set()
 
     def entrypoint(self, name: str) -> Callable[[T], T]:
@@ -131,7 +136,10 @@ class QueueManager:
                 "updated column, please run 'python3 -m PgQueuer upgrade'"
             )
 
+        self.buffer.max_size = batch_size
+
         async with TaskManager() as tm:
+            tm.add(asyncio.create_task(self.buffer.monitor()))
             listener = await initialize_event_listener(self.connection, self.channel)
 
             while self.alive.is_set():
@@ -157,6 +165,7 @@ class QueueManager:
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
+            self.buffer.alive.clear()
 
     async def _dispatch(self, job: Job) -> None:
         """
@@ -182,11 +191,11 @@ class QueueManager:
                 job.entrypoint,
                 job.id,
             )
-            await self.queries.log_job(job, "exception")
+            await self.buffer.add_job(job, "exception")
         else:
             logger.debug(
                 "Dispatching entrypoint/id: %s/%s - successful",
                 job.entrypoint,
                 job.id,
             )
-            await self.queries.log_job(job, "successful")
+            await self.buffer.add_job(job, "successful")
