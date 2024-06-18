@@ -33,7 +33,7 @@ jobs:
       - name: Install PgQueuer
         run: |
           pip install pip -U
-          pip install .[dev]
+          pip install ".[dev]"
 
       - name: Benchmark
         run: PGUSER=testuser PGPASSWORD=testpassword PGDATABASE=testdb python3 tools/benchmark.py
@@ -63,7 +63,7 @@ jobs:
       - name: Install PgQueuer
         run: |
           pip install pip -U
-          pip install .[dev]
+          pip install ".[dev]"
 
       - name: Full test
         run: pytest -v

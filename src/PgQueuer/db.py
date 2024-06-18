@@ -4,10 +4,13 @@ This module provides database driver abstractions and a specific implementation
 for AsyncPG to handle database operations asynchronously.
 """
 
-import asyncio
-from typing import Any, Callable, Protocol
+from __future__ import annotations
 
-import asyncpg
+import asyncio
+from typing import TYPE_CHECKING, Any, Callable, Protocol
+
+if TYPE_CHECKING:
+    import asyncpg
 
 
 class Driver(Protocol):
