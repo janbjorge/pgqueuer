@@ -9,8 +9,12 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
+from PgQueuer.logconfig import logger
+from PgQueuer.tm import TaskManager
+
 if TYPE_CHECKING:
     import asyncpg
+    import psycopg
 
 
 class Driver(Protocol):
@@ -102,3 +106,68 @@ class AsyncpgDriver(Driver):
                 channel,
                 lambda *x: callback(x[-1]),
             )
+
+
+class PsycopgDriver:
+    def __init__(self, connection: psycopg.AsyncConnection) -> None:
+        self.lock = asyncio.Lock()
+        self.connection = connection
+        self.tm = TaskManager()
+
+    async def fetch(
+        self,
+        query: str,
+        *args: Any,
+    ) -> list[Any]:
+        async with self.lock:
+            return await (await self.connection.execute(query, args)).fetchall()
+
+    async def execute(
+        self,
+        query: str,
+        *args: Any,
+    ) -> str:
+        async with self.lock:
+            return (await self.connection.execute(query, args)).statusmessage or ""
+
+    async def fetchval(
+        self,
+        query: str,
+        *args: Any,
+    ) -> Any:
+        async with self.lock:
+            result = await (await self.connection.execute(query, args)).fetchone()
+            return result[0] if result else None
+
+    async def add_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        assert self.connection.autocommit
+
+        async def notify_handler_wrapper(
+            channel: str,
+            callback: Callable[[str | bytes | bytearray], None],
+        ) -> None:
+            await self.execute(f"LISTEN {channel};")
+
+            async for note in self.connection.notifies():
+                if note.channel == channel:
+                    callback(note.payload)
+
+        def log_exception(x: asyncio.Task) -> None:
+            try:
+                print(x.result())
+            except Exception:
+                logger.exception(
+                    "Got an exception on notify on channel: %s",
+                    channel,
+                )
+
+        task = asyncio.create_task(
+            notify_handler_wrapper(channel, callback),
+            name=f"notify_handler_wrapper_{channel}",
+        )
+        task.add_done_callback(log_exception)
+        self.tm.add(task)
