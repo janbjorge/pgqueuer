@@ -7,6 +7,8 @@ for AsyncPG to handle database operations asynchronously.
 from __future__ import annotations
 
 import asyncio
+import functools
+import re
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from PgQueuer.logconfig import logger
@@ -114,11 +116,21 @@ class PsycopgDriver:
         self.connection = connection
         self.tm = TaskManager()
 
+    @staticmethod
+    @functools.cache
+    def replace_dollar_vars(query: str) -> str:
+        """
+        Replaces all instances of $1, $2, etc. with %s in a
+        given SQL query string.
+        """
+        return re.sub(r"\$\d+", "%s", query)
+
     async def fetch(
         self,
         query: str,
         *args: Any,
     ) -> list[Any]:
+        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
             return await (await self.connection.execute(query, args)).fetchall()
 
@@ -127,6 +139,7 @@ class PsycopgDriver:
         query: str,
         *args: Any,
     ) -> str:
+        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
             return (await self.connection.execute(query, args)).statusmessage or ""
 
@@ -135,6 +148,7 @@ class PsycopgDriver:
         query: str,
         *args: Any,
     ) -> Any:
+        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
             result = await (await self.connection.execute(query, args)).fetchone()
             return result[0] if result else None
