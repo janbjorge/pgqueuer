@@ -16,23 +16,23 @@ PgQueuer includes a built-in benchmarking tool to help you assess performance in
 To run a benchmark, use the following command, ensuring you have set the appropriate environment variables for your PostgreSQL credentials.
 
 ```bash
-time python3 tools/benchmark.py
+python3 tools/benchmark.py -dq 5 -eqbs 10
 Settings:
 Timer:                  15.0 seconds
-Dequeue:                2
+Dequeue:                5
 Dequeue Batch Size:     10
 Enqueue:                1
-Enqueue Batch Size:     20
+Enqueue Batch Size:     10
 
-Queue size: 80
-Queue size: 70
-Queue size: 69
-Queue size: 48
-Queue size: 22
-Queue size: 34
-Queue size: 71
+Queue size: 0
 Queue size: 114
-Queue size: 187
-Queue size: 30
-Jobs per Second: 6.44k
+Queue size: 84
+Queue size: 74
+Queue size: 114
+Queue size: 184
+Queue size: 126
+Queue size: 455
+Queue size: 1622
+Queue size: 3843
+Jobs per Second: 18.35k
 ```
