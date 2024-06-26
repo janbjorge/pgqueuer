@@ -1,6 +1,6 @@
 import asyncio
-import asyncio.selector_events
-from contextlib import asynccontextmanager
+import re
+from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
 import asyncpg
@@ -8,6 +8,7 @@ import psycopg
 import pytest
 from conftest import dsn
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
+from PgQueuer.queries import QueryBuilder
 
 
 @asynccontextmanager
@@ -98,3 +99,43 @@ async def test_notify(
             await notify(ad, channel, payload)
 
         assert await asyncio.wait_for(event, timeout=1) == payload
+
+
+@pytest.mark.parametrize("driver", drivers())
+@pytest.mark.parametrize(
+    "query",
+    (
+        QueryBuilder().create_delete_from_log_query,
+        QueryBuilder().create_delete_from_queue_query,
+        QueryBuilder().create_dequeue_query,
+        QueryBuilder().create_enqueue_query,
+        QueryBuilder().create_has_column_query,
+        QueryBuilder().create_log_job_query,
+        QueryBuilder().create_log_statistics_query,
+        QueryBuilder().create_queue_size_query,
+        QueryBuilder().create_truncate_log_query,
+        QueryBuilder().create_truncate_queue_query,
+    ),
+)
+async def test_valid_query_syntax(
+    query: Callable[..., str],
+    driver: Callable[..., AsyncContextManager[Driver]],
+) -> None:
+    async with driver() as d:
+        if isinstance(d, AsyncpgDriver):
+            with suppress(asyncpg.exceptions.UndefinedParameterError):
+                await d.execute(query())
+
+        elif isinstance(d, PsycopgDriver):
+            try:
+                await d.execute(query())
+            except psycopg.errors.ProgrammingError as exc:
+                assert (
+                    re.match(
+                        r"the query has \d+ placeholders but \d+ parameters were passed",  # noqa
+                        str(exc),
+                    )
+                    is not None
+                )
+        else:
+            raise NotADirectoryError(d)
