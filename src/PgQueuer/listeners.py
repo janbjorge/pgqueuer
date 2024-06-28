@@ -24,7 +24,8 @@ async def initialize_event_listener(
     """
 
     def parse_and_queue(
-        payload: str | bytes | bytearray, queue: PGEventListener
+        payload: str | bytes | bytearray,
+        queue: PGEventListener,
     ) -> None:
         """
         Parses a JSON payload and inserts it into the queue as an `models.Event` object.
@@ -47,5 +48,5 @@ async def initialize_event_listener(
             )
 
     listener = PGEventListener()
-    await connection.add_listener(channel, lambda *x: parse_and_queue(x[-1], listener))
+    await connection.add_listener(channel, lambda x: parse_and_queue(x, listener))
     return listener
