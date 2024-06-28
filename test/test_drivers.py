@@ -7,7 +7,10 @@ import asyncpg
 import psycopg
 import pytest
 from conftest import dsn
+from PgQueuer.buffers import _perf_counter_dt
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
+from PgQueuer.listeners import initialize_event_listener
+from PgQueuer.models import Event, PGChannel
 from PgQueuer.queries import QueryBuilder
 
 
@@ -95,7 +98,7 @@ async def test_notify(
         # Seems psycopg does not pick up on
         # notifiys sent from its current connection.
         # Workaround by using asyncpg.
-        async with apgdriver() as ad:
+        async with driver() as ad:
             await notify(ad, channel, payload)
 
         assert await asyncio.wait_for(event, timeout=1) == payload
@@ -139,3 +142,27 @@ async def test_valid_query_syntax(
                 )
         else:
             raise NotADirectoryError(d)
+
+
+@pytest.mark.parametrize("driver", drivers())
+async def test_event_listener(
+    driver: Callable[..., AsyncContextManager[Driver]],
+) -> None:
+    async with driver() as d:
+        name = d.__class__.__name__.lower()
+        channel = PGChannel(f"test_event_listener_{name}")
+        payload = Event(
+            channel=channel,
+            operation="update",
+            sent_at=_perf_counter_dt(),
+            table="foo",
+        )
+        listener = await initialize_event_listener(d, channel)
+
+        # Seems psycopg does not pick up on
+        # notifiys sent from its current connection.
+        # Workaround by using asyncpg.
+        async with driver() as dd:
+            await notify(dd, channel, payload.model_dump_json())
+
+        assert (await asyncio.wait_for(listener.get(), timeout=1)) == payload
