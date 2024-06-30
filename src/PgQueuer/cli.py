@@ -4,11 +4,11 @@ import argparse
 import asyncio
 import os
 from datetime import timedelta
+from typing import Literal
 
-import asyncpg
 from tabulate import tabulate, tabulate_formats
 
-from PgQueuer.db import AsyncpgDriver, Driver
+from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import LogStatistics, PGChannel
 from PgQueuer.queries import DBSettings, Queries, QueryBuilder
@@ -84,6 +84,13 @@ def cliparser() -> argparse.Namespace:
             "All PgQueuer tables/functions/etc... will start with this prefix. "
             "(If set, addinal config is required.)"
         ),
+    )
+
+    common_arguments.add_argument(
+        "--driver",
+        default="apg",
+        help="Postgres driver to be used asyncpg (apg) or psycopg (psy).",
+        choices=["apg", "psy"],
     )
 
     common_arguments.add_argument(
@@ -235,6 +242,28 @@ def cliparser() -> argparse.Namespace:
     return parser.parse_args()
 
 
+async def create_driver(d: Literal["psy", "apg"]) -> Driver:
+    match d:
+        case "apg":
+            import asyncpg
+
+            return AsyncpgDriver(
+                await asyncpg.connect(
+                    dsn=dsn(),
+                ),
+            )
+        case "psy":
+            import psycopg
+
+            return PsycopgDriver(
+                await psycopg.AsyncConnection.connect(
+                    conninfo=dsn(),
+                    autocommit=True,
+                )
+            )
+    raise NotImplementedError(d)
+
+
 async def main() -> None:
     parsed = cliparser()
 
@@ -245,16 +274,7 @@ async def main() -> None:
     ):
         os.environ["PGQUEUER_PREFIX"] = prefix
 
-    connection = await asyncpg.connect(
-        dsn=parsed.pg_dsn,
-        database=parsed.pg_database,
-        password=parsed.pg_password,
-        port=parsed.pg_port,
-        user=parsed.pg_user,
-        host=parsed.pg_host,
-    )
-    driver = AsyncpgDriver(connection)
-    queries = Queries(driver)
+    queries = Queries(await create_driver(parsed.driver))
 
     match parsed.command:
         case "install":
@@ -277,4 +297,4 @@ async def main() -> None:
                 parsed.table_format,
             )
         case "listen":
-            await display_pg_channel(driver, PGChannel(parsed.channel))
+            await display_pg_channel(queries.driver, PGChannel(parsed.channel))
