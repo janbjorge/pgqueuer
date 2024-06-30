@@ -1,3 +1,4 @@
+### Readme
 ## 🚀 PgQueuer - Building Smoother Workflows One Queue at a Time 🚀
 [![CI](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml?query=branch%3Amain)
 [![pypi](https://img.shields.io/pypi/v/PgQueuer.svg)](https://pypi.python.org/pypi/PgQueuer)
@@ -9,6 +10,8 @@
 📚 **Documentation**: [Explore the Docs 📖](https://pgqueuer.readthedocs.io/en/latest/)
 
 🔍 **Source Code**: [View on GitHub 💾](https://github.com/janbjorge/PgQueuer/)
+
+💬 **Join the Discussion**: [Join our Discord Community](https://discord.com/channels/1256927744705564713/1256927744705564716)
 
 ---
 
