@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import os
 import re
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
@@ -17,6 +18,21 @@ from PgQueuer.tm import TaskManager
 if TYPE_CHECKING:
     import asyncpg
     import psycopg
+
+
+def dsn(
+    host: str = "",
+    user: str = "",
+    pawssword: str = "",
+    database: str = "",
+    port: str = "",
+) -> str:
+    host = os.getenv("PGHOST", host or "localhost")
+    user = os.getenv("PGUSER", user or "testuser")
+    password = os.getenv("PGPASSWORD", pawssword or "testpassword")
+    database = os.getenv("PGDATABASE", database or "testdb")
+    port = os.getenv("PGPORT", port or "5432")
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
 class Driver(Protocol):

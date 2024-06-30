@@ -183,7 +183,7 @@ class QueryBuilder:
         """
 
         return f"""
-    DROP TRIGGER {self.settings.trigger};
+    DROP TRIGGER {self.settings.trigger} ON {self.settings.queue_table};
     DROP FUNCTION {self.settings.function};
     DROP TABLE {self.settings.queue_table};
     DROP TABLE {self.settings.statistics_table};
