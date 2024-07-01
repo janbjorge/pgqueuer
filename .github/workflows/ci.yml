@@ -14,9 +14,12 @@ jobs:
       matrix:
         python-version: ["3.11"]
         os: [ubuntu-latest]
+        # pgdriver: ["apg", "psy"]
+        pgdriver: ["apg"]
 
     name: PgQueuer Benchmark
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +39,7 @@ jobs:
           pip install ".[dev]"
 
       - name: Benchmark
-        run: PGUSER=testuser PGPASSWORD=testpassword PGDATABASE=testdb python3 tools/benchmark.py
+        run: PGUSER=testuser PGPASSWORD=testpassword PGDATABASE=testdb python3 tools/benchmark.py --driver ${{ matrix.pgdriver }}
 
   test-pgqueuer:
     strategy:
@@ -47,7 +50,7 @@ jobs:
 
     name: PY ${{ matrix.python-version }} on ${{ matrix.os }} 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
