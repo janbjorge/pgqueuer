@@ -23,13 +23,13 @@ if TYPE_CHECKING:
 def dsn(
     host: str = "",
     user: str = "",
-    pawssword: str = "",
+    password: str = "",
     database: str = "",
     port: str = "",
 ) -> str:
     host = os.getenv("PGHOST", host or "localhost")
     user = os.getenv("PGUSER", user or "testuser")
-    password = os.getenv("PGPASSWORD", pawssword or "testpassword")
+    password = os.getenv("PGPASSWORD", password or "testpassword")
     database = os.getenv("PGDATABASE", database or "testdb")
     port = os.getenv("PGPORT", port or "5432")
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"

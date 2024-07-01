@@ -2,10 +2,9 @@
 set -e
 
 # Create the testdb database
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+PGUSER="$POSTGRES_USER" psql -v ON_ERROR_STOP=1 <<-EOSQL
     CREATE DATABASE testdb;
 EOSQL
 
-# Install PgQueuer
 export PATH="/opt/venv/bin:$PATH"
-PGUSER=$POSTGRES_USER PGDATABASE=testdb python3 -m PgQueuer install
+python3 -m PgQueuer install --dry-run | PGUSER="$POSTGRES_USER"  PGDATABASE=testdb psql -v ON_ERROR_STOP=1

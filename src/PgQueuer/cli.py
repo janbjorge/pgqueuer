@@ -242,26 +242,32 @@ def cliparser() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def create_driver(d: Literal["psy", "apg"]) -> Driver:
-    match d:
+async def querier(
+    driver: Literal["psy", "apg"],
+    conninfo: str,
+) -> Queries:
+    match driver:
         case "apg":
             import asyncpg
 
-            return AsyncpgDriver(
-                await asyncpg.connect(
-                    dsn=dsn(),
-                ),
+            return Queries(
+                AsyncpgDriver(
+                    await asyncpg.connect(dsn=conninfo),
+                )
             )
         case "psy":
             import psycopg
 
-            return PsycopgDriver(
-                await psycopg.AsyncConnection.connect(
-                    conninfo=dsn(),
-                    autocommit=True,
+            return Queries(
+                PsycopgDriver(
+                    await psycopg.AsyncConnection.connect(
+                        conninfo=conninfo,
+                        autocommit=True,
+                    )
                 )
             )
-    raise NotImplementedError(d)
+
+    raise NotImplementedError(driver)
 
 
 async def main() -> None:
@@ -274,27 +280,36 @@ async def main() -> None:
     ):
         os.environ["PGQUEUER_PREFIX"] = prefix
 
-    queries = Queries(await create_driver(parsed.driver))
+    connection_str = parsed.pg_dsn or dsn(
+        database=parsed.pg_database,
+        password=parsed.pg_password,
+        port=parsed.pg_port,
+        user=parsed.pg_user,
+        host=parsed.pg_host,
+    )
 
     match parsed.command:
         case "install":
             print(QueryBuilder().create_install_query())
             if not parsed.dry_run:
-                await queries.install()
+                await (await querier(parsed.driver, connection_str)).install()
         case "uninstall":
             print(QueryBuilder().create_uninstall_query())
             if not parsed.dry_run:
-                await queries.uninstall()
+                await (await querier(parsed.driver, connection_str)).uninstall()
         case "upgrade":
             print("\n".join(QueryBuilder().create_upgrade_queries()))
             if not parsed.dry_run:
-                await queries.upgrade()
+                await (await querier(parsed.driver, connection_str)).upgrade()
         case "dashboard":
             await fetch_and_display(
-                queries,
+                await querier(parsed.driver, connection_str),
                 parsed.interval,
                 parsed.tail,
                 parsed.table_format,
             )
         case "listen":
-            await display_pg_channel(queries.driver, PGChannel(parsed.channel))
+            await display_pg_channel(
+                (await querier(parsed.driver, connection_str)).driver,
+                PGChannel(parsed.channel),
+            )
