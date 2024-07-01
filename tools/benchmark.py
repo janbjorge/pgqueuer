@@ -1,73 +1,31 @@
 import argparse
 import asyncio
-import contextlib
 import random
-import time
 from datetime import timedelta
 from itertools import count
-from typing import Callable, Generator, Literal
 
-import asyncpg
-import psycopg
-from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
+from PgQueuer.cli import querier
+from PgQueuer.db import dsn
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
+from tqdm import tqdm
 
 
-async def create_driver(d: Literal["psy", "apg"]) -> Driver:
-    match d:
-        case "apg":
-            return AsyncpgDriver(
-                await asyncpg.connect(
-                    dsn=dsn(),
-                ),
-            )
-        case "psy":
-            return PsycopgDriver(
-                await psycopg.AsyncConnection.connect(
-                    conninfo=dsn(),
-                    autocommit=True,
-                )
-            )
-    raise NotImplementedError(d)
-
-
-@contextlib.contextmanager
-def timer() -> (
-    Generator[
-        Callable[[], timedelta],
-        None,
-        None,
-    ]
-):
-    enter = time.perf_counter()
-    done: float | None = None
-    try:
-        yield lambda: timedelta(seconds=((done or time.perf_counter()) - enter))
-    finally:
-        done = time.perf_counter()
-
-
-async def consumer(qm: QueueManager, batch_size: int) -> float:
-    cnt = count()
-
+async def consumer(qm: QueueManager, batch_size: int, bar: tqdm) -> None:
     @qm.entrypoint("asyncfetch")
     async def asyncfetch(job: Job) -> None:
-        next(cnt)
+        bar.update()
         if job.payload is None:
             qm.alive = False
 
     @qm.entrypoint("syncfetch")
     def syncfetch(job: Job) -> None:
-        next(cnt)
+        bar.update()
         if job.payload is None:
             qm.alive = False
 
-    with timer() as elapsed:
-        await qm.run(batch_size=batch_size)
-
-    return (next(cnt) - 1) / elapsed().total_seconds()
+    await qm.run(batch_size=batch_size)
 
 
 async def producer(
@@ -76,6 +34,7 @@ async def producer(
     batch_size: int,
     cnt: count,
 ) -> None:
+    assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
     while not alive.is_set():
         random.shuffle(entrypoints)
@@ -90,7 +49,7 @@ async def main() -> None:
         "-d",
         "--driver",
         default="apg",
-        help="Postgres driver to be used AsyncPG (apg) or psycopg (psy).",
+        help="Postgres driver to be used asyncpg (apg) or psycopg (psy).",
         choices=["apg", "psy"],
     )
 
@@ -141,7 +100,7 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    util_queries = Queries(await create_driver(args.driver))
+    util_queries = await querier(args.driver, dsn())
 
     await util_queries.clear_log()
     await util_queries.clear_queue()
@@ -151,53 +110,34 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     async def enqueue() -> None:
         cnt = count()
 
-        queries = list[tuple[Driver, Queries]]()
-
-        for _ in range(int(args.enqueue)):
-            driver = await create_driver(args.driver)
-            queries.append((driver, Queries(driver)))
+        queries = [await querier(args.driver, dsn()) for _ in range(args.enqueue)]
 
         await asyncio.gather(
-            *[producer(alive, q, int(args.enqueue_batch_size), cnt) for _, q in queries]
+            *[producer(alive, q, int(args.enqueue_batch_size), cnt) for q in queries]
         )
 
-    async def dequeue() -> list[float]:
-        queries = list[tuple[Driver, Queries]]()
-
-        for _ in range(int(args.dequeue)):
-            driver = await create_driver(args.driver)
-            queries.append((driver, Queries(driver)))
-
-        qms = [QueueManager(d) for d, _ in queries]
+    async def dequeue() -> None:
+        queries = [await querier(args.driver, dsn()) for _ in range(args.dequeue)]
+        qms = [QueueManager(q.driver) for q in queries]
 
         async def alive_waiter() -> None:
             await alive.wait()
             for q in qms:
                 q.alive = False
 
-        dequeue_tasks = [consumer(q, int(args.dequeue_batch_size)) for q in qms] + [
-            alive_waiter()
-        ]
-        return [v for v in await asyncio.gather(*dequeue_tasks) if v is not None]
+        with tqdm(ascii=True, unit=" job", unit_scale=True) as bar:
+            dequeue_tasks = [
+                consumer(q, int(args.dequeue_batch_size), bar) for q in qms
+            ] + [alive_waiter()]
+
+            await asyncio.gather(*dequeue_tasks)
 
     async def alive_timer() -> None:
         await asyncio.sleep(args.timer.total_seconds())
         alive.set()
 
-    async def qsize() -> None:
-        while not alive.is_set():
-            print(
-                f"Queue size: {sum(x.count for x in await util_queries.queue_size())}"
-            )
-            await asyncio.sleep(args.timer.total_seconds() / 10)
-
-    jps_array, *_ = await asyncio.gather(
-        dequeue(),
-        enqueue(),
-        alive_timer(),
-        qsize(),
-    )
-    print(f"Jobs per Second: {sum(jps_array)/1_000:.2f}k")
+    await asyncio.gather(dequeue(), enqueue(), alive_timer())
+    print(f"Queue size: {sum(x.count for x in await util_queries.queue_size())}")
 
 
 if __name__ == "__main__":

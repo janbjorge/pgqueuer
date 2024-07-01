@@ -51,6 +51,7 @@ dev = [
     "pytest-asyncio",
     "pytest",
     "ruff",
+    "tqdm",
     "types-tabulate",
 ]
 docs = [
