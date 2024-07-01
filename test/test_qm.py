@@ -92,7 +92,7 @@ async def test_sync_entrypoint(
 
         @qm.entrypoint("fetch")
         def fetch(context: Job) -> None:
-            time.sleep(2)  # Sim. heavy CPU/IO.
+            time.sleep(1)  # Sim. heavy CPU/IO.
             if context.payload is None:
                 for qm in qmpool:
                     qm.alive = False
