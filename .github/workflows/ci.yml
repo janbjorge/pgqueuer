@@ -14,8 +14,7 @@ jobs:
       matrix:
         python-version: ["3.11"]
         os: [ubuntu-latest]
-        # pgdriver: ["apg", "psy"]
-        pgdriver: ["apg"]
+        pgdriver: ["apg", "psy"]
 
     name: PgQueuer Benchmark
     runs-on: ${{ matrix.os }}
