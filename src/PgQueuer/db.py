@@ -208,6 +208,8 @@ class PsycopgDriver:
         def log_exception(x: asyncio.Task) -> None:
             try:
                 x.result()
+            except asyncio.exceptions.CancelledError:
+                ...
             except Exception:
                 logger.exception(
                     "Got an exception on notify on channel: %s",
