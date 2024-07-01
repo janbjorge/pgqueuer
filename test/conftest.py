@@ -1,31 +1,15 @@
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 import asyncpg
 import pytest
-from PgQueuer.db import AsyncpgDriver, Driver
-
-
-def dsn(
-    host: str = "",
-    user: str = "",
-    pawssword: str = "",
-    database: str = "",
-    port: str = "",
-) -> str:
-    host = os.getenv("PGHOST", host or "localhost")
-    user = os.getenv("PGUSER", user or "testuser")
-    password = os.getenv("PGPASSWORD", pawssword or "testpassword")
-    database = os.getenv("PGDATABASE", database or "testdb")
-    port = os.getenv("PGPORT", port or "5432")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+from PgQueuer.db import AsyncpgDriver, Driver, dsn
 
 
 @pytest.fixture(scope="function")
 async def pgdriver() -> AsyncGenerator[Driver, None]:
     database = "tmp_test_db"
-    conn_a = await asyncpg.connect(dsn=dsn(database="postgres"))
+    conn_a = await asyncpg.connect(dsn=dsn())
     async with create_test_database(database, conn_a):
         conn_b = await asyncpg.connect(dsn=dsn(database=database))
         yield AsyncpgDriver(conn_b)
