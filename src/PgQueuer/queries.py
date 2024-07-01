@@ -441,7 +441,7 @@ class Queries:
         rows = await self.driver.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
-            entrypoints,
+            list(entrypoints),
             retry_timer,
         )
         return [models.Job.model_validate(dict(row)) for row in rows]

@@ -5,13 +5,32 @@ import random
 import time
 from datetime import timedelta
 from itertools import count
-from typing import Callable, Generator
+from typing import Callable, Generator, Literal
 
 import asyncpg
-from PgQueuer.db import AsyncpgDriver
+import psycopg
+from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
+
+
+async def create_driver(d: Literal["psy", "apg"]) -> Driver:
+    match d:
+        case "apg":
+            return AsyncpgDriver(
+                await asyncpg.connect(
+                    dsn=dsn(),
+                ),
+            )
+        case "psy":
+            return PsycopgDriver(
+                await psycopg.AsyncConnection.connect(
+                    conninfo=dsn(),
+                    autocommit=True,
+                )
+            )
+    raise NotImplementedError(d)
 
 
 @contextlib.contextmanager
@@ -68,19 +87,27 @@ async def main() -> None:
     parser = argparse.ArgumentParser(description="PGQueuer benchmark tool.")
 
     parser.add_argument(
+        "-d",
+        "--driver",
+        default="apg",
+        help="Postgres driver to be used AsyncPG (apg) or psycopg (psy).",
+        choices=["apg", "psy"],
+    )
+
+    parser.add_argument(
         "-t",
         "--timer",
         type=lambda x: timedelta(seconds=float(x)),
-        default=timedelta(seconds=15),
-        help="Run the benchmark for a specified number of seconds. Default is 15.",
+        default=timedelta(seconds=10),
+        help="Run the benchmark for a specified number of seconds. Default is 10.",
     )
 
     parser.add_argument(
         "-dq",
         "--dequeue",
         type=int,
-        default=2,
-        help="Number of concurrent dequeue workers. Default is 2.",
+        default=5,
+        help="Number of concurrent dequeue workers. Default is 5.",
     )
     parser.add_argument(
         "-dqbs",
@@ -101,8 +128,8 @@ async def main() -> None:
         "-eqbs",
         "--enqueue-batch-size",
         type=int,
-        default=20,
-        help="Batch size for enqueue workers. Default is 20.",
+        default=10,
+        help="Batch size for enqueue workers. Default is 10.",
     )
     args = parser.parse_args()
 
@@ -114,9 +141,7 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    util_driver = AsyncpgDriver(await asyncpg.connect())
-
-    util_queries = Queries(util_driver)
+    util_queries = Queries(await create_driver(args.driver))
 
     await util_queries.clear_log()
     await util_queries.clear_queue()
@@ -126,10 +151,10 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     async def enqueue() -> None:
         cnt = count()
 
-        queries = list[tuple[AsyncpgDriver, Queries]]()
+        queries = list[tuple[Driver, Queries]]()
 
         for _ in range(int(args.enqueue)):
-            driver = AsyncpgDriver(await asyncpg.connect())
+            driver = await create_driver(args.driver)
             queries.append((driver, Queries(driver)))
 
         await asyncio.gather(
@@ -137,10 +162,10 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         )
 
     async def dequeue() -> list[float]:
-        queries = list[tuple[AsyncpgDriver, Queries]]()
+        queries = list[tuple[Driver, Queries]]()
 
         for _ in range(int(args.dequeue)):
-            driver = AsyncpgDriver(await asyncpg.connect())
+            driver = await create_driver(args.driver)
             queries.append((driver, Queries(driver)))
 
         qms = [QueueManager(d) for d, _ in queries]

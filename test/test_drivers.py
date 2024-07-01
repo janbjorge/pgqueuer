@@ -1,5 +1,4 @@
 import asyncio
-import re
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Final, Generator
 
@@ -53,13 +52,7 @@ async def notify(
     channel: str,
     payload: str,
 ) -> None:
-    if isinstance(driver, AsyncpgDriver):
-        query = "SELECT pg_notify($1, $2);"
-    elif isinstance(driver, PsycopgDriver):
-        query = "SELECT pg_notify(%s, %s);"
-    else:
-        raise NotImplementedError(driver)
-
+    query = "SELECT pg_notify($1, $2);"
     await driver.execute(query, channel, payload)
 
 
@@ -76,7 +69,9 @@ async def test_fetch(
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
     async with driver() as d:
-        assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [(1, 2)]
+        assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [
+            {"one": 1, "two": 2}
+        ]
 
 
 @pytest.mark.parametrize("driver", drivers())
@@ -138,13 +133,7 @@ async def test_valid_query_syntax(
             try:
                 await d.execute(query())
             except psycopg.errors.ProgrammingError as exc:
-                assert (
-                    re.match(
-                        r"the query has \d+ placeholders but \d+ parameters were passed",  # noqa
-                        str(exc),
-                    )
-                    is not None
-                )
+                assert "query parameter missing" in str(exc)
         else:
             raise NotADirectoryError(d)
 

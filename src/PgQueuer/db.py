@@ -93,7 +93,7 @@ class AsyncpgDriver(Driver):
     ) -> list:
         """Fetch records with query locking to ensure thread safety."""
         async with self.lock:
-            return await self.connection.fetch(query, *args)
+            return [dict(x) for x in await self.connection.fetch(query, *args)]
 
     async def execute(
         self,
@@ -126,47 +126,66 @@ class AsyncpgDriver(Driver):
             )
 
 
+@functools.cache
+def _replace_dollar_named_parameter(query: str) -> str:
+    """
+    Replaces all instances of $1, $2, etc. with %(parameter_1)s in a
+    given SQL query string.
+    """
+    return re.sub(r"\$(\d+)", r"%(parameter_\1)s", query)
+
+
+def _named_parameter(args: tuple) -> dict[str, Any]:
+    return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
+
+
 class PsycopgDriver:
     def __init__(self, connection: psycopg.AsyncConnection) -> None:
         self.lock = asyncio.Lock()
         self.connection = connection
         self.tm = TaskManager()
 
-    @staticmethod
-    @functools.cache
-    def replace_dollar_vars(query: str) -> str:
-        """
-        Replaces all instances of $1, $2, etc. with %s in a
-        given SQL query string.
-        """
-        return re.sub(r"\$\d+", "%s", query)
-
     async def fetch(
         self,
         query: str,
         *args: Any,
     ) -> list[Any]:
-        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
-            return await (await self.connection.execute(query, args)).fetchall()
+            cursor = await self.connection.execute(
+                _replace_dollar_named_parameter(query),
+                _named_parameter(args),
+            )
+            cols = (
+                [col.name for col in description]
+                if (description := cursor.description)
+                else []
+            )
+            return [dict(zip(cols, val)) for val in await cursor.fetchall()]
 
     async def execute(
         self,
         query: str,
         *args: Any,
     ) -> str:
-        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
-            return (await self.connection.execute(query, args)).statusmessage or ""
+            return (
+                await self.connection.execute(
+                    _replace_dollar_named_parameter(query),
+                    _named_parameter(args),
+                )
+            ).statusmessage or ""
 
     async def fetchval(
         self,
         query: str,
         *args: Any,
     ) -> Any:
-        query = PsycopgDriver.replace_dollar_vars(query)
         async with self.lock:
-            result = await (await self.connection.execute(query, args)).fetchone()
+            cursor = await self.connection.execute(
+                _replace_dollar_named_parameter(query),
+                _named_parameter(args),
+            )
+            result = await cursor.fetchone()
             return result[0] if result else None
 
     async def add_listener(
