@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
 
+from .logconfig import logger
 from .models import STATUS_LOG, Job
 
 
@@ -76,9 +77,17 @@ class JobBuffer:
         Flushes the buffer by calling the flush callback with all accumulated jobs
         and statuses. Clears the buffer after flushing.
         """
-        if self.events:
-            await self.flush_callback(self.events)
-            self.events.clear()
+        while self.events:
+            try:
+                await self.flush_callback(self.events)
+            except Exception:
+                logger.exception(
+                    "Exception during buffer flush, waiting: %s seconds before retry.",
+                    self.timeout.total_seconds(),
+                )
+                await asyncio.sleep(self.timeout.total_seconds())
+            else:
+                self.events.clear()
 
     async def monitor(self) -> None:
         """
