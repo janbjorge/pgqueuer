@@ -109,9 +109,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
     async def enqueue() -> None:
         cnt = count()
-
         queries = [await querier(args.driver, dsn()) for _ in range(args.enqueue)]
-
         await asyncio.gather(
             *[producer(alive, q, int(args.enqueue_batch_size), cnt) for q in queries]
         )
@@ -126,11 +124,12 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
                 q.alive = False
 
         with tqdm(ascii=True, unit=" job", unit_scale=True) as bar:
-            dequeue_tasks = [
-                consumer(q, int(args.dequeue_batch_size), bar) for q in qms
-            ] + [alive_waiter()]
-
-            await asyncio.gather(*dequeue_tasks)
+            await asyncio.gather(
+                *(
+                    [consumer(q, int(args.dequeue_batch_size), bar) for q in qms]
+                    + [alive_waiter()]
+                )
+            )
 
     async def alive_timer() -> None:
         await asyncio.sleep(args.timer.total_seconds())

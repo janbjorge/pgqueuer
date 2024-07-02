@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
-from typing import AsyncContextManager, AsyncGenerator, Callable, Final, Generator
+from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
 import asyncpg
 import psycopg
@@ -12,12 +12,10 @@ from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import Event, PGChannel
 from PgQueuer.queries import QueryBuilder
 
-DSN: Final = dsn(database="testdb")
-
 
 @asynccontextmanager
 async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
-    conn = await asyncpg.connect(dsn=DSN, timeout=5)
+    conn = await asyncpg.connect(dsn=dsn(), timeout=5)
     try:
         yield AsyncpgDriver(conn)
     finally:
@@ -27,7 +25,7 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
 @asynccontextmanager
 async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
     conn = await psycopg.AsyncConnection.connect(
-        conninfo=DSN,
+        conninfo=dsn(),
         autocommit=True,
     )
     try:
