@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import argparse
 import asyncio
 import random
+import sys
 from datetime import timedelta
 from itertools import count
 
@@ -9,21 +12,21 @@ from PgQueuer.db import dsn
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
-from tqdm import tqdm
+from tqdm.asyncio import tqdm
 
 
-async def consumer(qm: QueueManager, batch_size: int, bar: tqdm) -> None:
+async def consumer(
+    qm: QueueManager,
+    batch_size: int,
+    bar: tqdm,
+) -> None:
     @qm.entrypoint("asyncfetch")
-    async def asyncfetch(job: Job) -> None:
+    async def asyncfetch(_: Job) -> None:
         bar.update()
-        if job.payload is None:
-            qm.alive = False
 
     @qm.entrypoint("syncfetch")
-    def syncfetch(job: Job) -> None:
+    def syncfetch(_: Job) -> None:
         bar.update()
-        if job.payload is None:
-            qm.alive = False
 
     await qm.run(batch_size=batch_size)
 
@@ -37,9 +40,12 @@ async def producer(
     assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
     while not alive.is_set():
-        random.shuffle(entrypoints)
         payloads = [f"{next(cnt)}".encode() for _ in range(batch_size)]
-        await queries.enqueue(entrypoints[:batch_size], payloads, [0] * batch_size)
+        await queries.enqueue(
+            random.sample(entrypoints, k=batch_size),
+            payloads,
+            [0] * batch_size,
+        )
 
 
 async def main() -> None:
@@ -66,14 +72,14 @@ async def main() -> None:
         "--dequeue",
         type=int,
         default=5,
-        help="Number of concurrent dequeue workers. Default is 5.",
+        help="Number of concurrent dequeue tasks. Default is 5.",
     )
     parser.add_argument(
         "-dqbs",
         "--dequeue-batch-size",
         type=int,
         default=10,
-        help="Batch size for dequeue workers. Default is 10.",
+        help="Batch size for dequeue tasks. Default is 10.",
     )
 
     parser.add_argument(
@@ -81,14 +87,14 @@ async def main() -> None:
         "--enqueue",
         type=int,
         default=1,
-        help="Number of concurrent enqueue workers. Default is 1.",
+        help="Number of concurrent enqueue tasks. Default is 1.",
     )
     parser.add_argument(
         "-eqbs",
         "--enqueue-batch-size",
         type=int,
         default=10,
-        help="Batch size for enqueue workers. Default is 10.",
+        help="Batch size for enqueue tasks. Default is 10.",
     )
     args = parser.parse_args()
 
@@ -100,43 +106,58 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    util_queries = await querier(args.driver, dsn())
-
-    await util_queries.clear_log()
-    await util_queries.clear_queue()
+    await (await querier(args.driver, dsn())).clear_log()
+    await (await querier(args.driver, dsn())).clear_queue()
 
     alive = asyncio.Event()
+    qms = list[QueueManager]()
 
-    async def enqueue() -> None:
+    async def enqueue(alive: asyncio.Event) -> None:
         cnt = count()
-        queries = [await querier(args.driver, dsn()) for _ in range(args.enqueue)]
-        await asyncio.gather(
-            *[producer(alive, q, int(args.enqueue_batch_size), cnt) for q in queries]
-        )
-
-    async def dequeue() -> None:
-        queries = [await querier(args.driver, dsn()) for _ in range(args.dequeue)]
-        qms = [QueueManager(q.driver) for q in queries]
-
-        async def alive_waiter() -> None:
-            await alive.wait()
-            for q in qms:
-                q.alive = False
-
-        with tqdm(ascii=True, unit=" job", unit_scale=True) as bar:
-            await asyncio.gather(
-                *(
-                    [consumer(q, int(args.dequeue_batch_size), bar) for q in qms]
-                    + [alive_waiter()]
-                )
+        producers = [
+            producer(
+                alive,
+                await querier(args.driver, dsn()),
+                int(args.enqueue_batch_size),
+                cnt,
             )
+            for _ in range(args.enqueue)
+        ]
+        await asyncio.gather(*producers)
 
-    async def alive_timer() -> None:
+    async def dequeue(qms: list[QueueManager]) -> None:
+        queries = [await querier(args.driver, dsn()) for _ in range(args.dequeue)]
+        for q in queries:
+            qms.append(QueueManager(q.driver))
+
+        with tqdm(
+            ascii=True,
+            unit=" job",
+            unit_scale=True,
+            file=sys.stdout,
+        ) as bar:
+            consumers = [consumer(q, int(args.dequeue_batch_size), bar) for q in qms]
+            await asyncio.gather(*consumers)
+
+    async def dequeue_alive_timer(
+        qms: list[QueueManager],
+        alive: asyncio.Event,
+    ) -> None:
         await asyncio.sleep(args.timer.total_seconds())
+        # Stop producer
         alive.set()
+        # Stop consumer
+        for q in qms:
+            q.alive = False
 
-    await asyncio.gather(dequeue(), enqueue(), alive_timer())
-    print(f"Queue size: {sum(x.count for x in await util_queries.queue_size())}")
+    await asyncio.gather(
+        dequeue(qms),
+        enqueue(alive),
+        dequeue_alive_timer(qms, alive),
+    )
+
+    qsize = sum(x.count for x in await (await querier(args.driver, dsn())).queue_size())
+    print(f"Queue size: {qsize}")
 
 
 if __name__ == "__main__":
