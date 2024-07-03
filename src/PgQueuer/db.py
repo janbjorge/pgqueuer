@@ -44,7 +44,7 @@ class Driver(Protocol):
         self,
         query: str,
         *args: Any,
-    ) -> list[Any]:
+    ) -> list[dict]:
         """Fetch multiple records from the database."""
         raise NotImplementedError
 
@@ -90,7 +90,7 @@ class AsyncpgDriver(Driver):
         self,
         query: str,
         *args: Any,
-    ) -> list:
+    ) -> list[dict]:
         """Fetch records with query locking to ensure thread safety."""
         async with self.lock:
             return [dict(x) for x in await self.connection.fetch(query, *args)]
@@ -149,7 +149,7 @@ class PsycopgDriver:
         self,
         query: str,
         *args: Any,
-    ) -> list[Any]:
+    ) -> list[dict]:
         async with self.lock:
             cursor = await self.connection.execute(
                 _replace_dollar_named_parameter(query),
