@@ -10,7 +10,7 @@ from PgQueuer.tm import TaskManager
 
 def job_faker() -> Job:
     return Job(
-        id=random.sample(range(1_000_000_000), k=1)[0],
+        id=random.choice(range(1_000_000_000)),
         priority=0,
         created=_perf_counter_dt(),
         status="picked",
