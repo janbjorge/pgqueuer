@@ -55,14 +55,6 @@ async def notify(
 
 
 @pytest.mark.parametrize("driver", drivers())
-async def test_fetchval(
-    driver: Callable[..., AsyncContextManager[Driver]],
-) -> None:
-    async with driver() as d:
-        assert (await d.fetchval("SELECT 1 as one, 2 as two")) == 1
-
-
-@pytest.mark.parametrize("driver", drivers())
 async def test_fetch(
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:

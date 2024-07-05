@@ -64,14 +64,6 @@ class Driver(Protocol):
         """Add a listener for a specific PostgreSQL NOTIFY channel."""
         raise NotImplementedError
 
-    async def fetchval(
-        self,
-        query: str,
-        *args: Any,
-    ) -> Any:
-        """Fetch a single value from the database."""
-        raise NotImplementedError
-
 
 class AsyncpgDriver(Driver):
     """
@@ -103,15 +95,6 @@ class AsyncpgDriver(Driver):
         """Execute a query with locking to avoid concurrent access issues."""
         async with self.lock:
             return await self.connection.execute(query, *args)
-
-    async def fetchval(
-        self,
-        query: str,
-        *args: Any,
-    ) -> Any:
-        """Fetch a single value with concurrency protection."""
-        async with self.lock:
-            return await self.connection.fetchval(query, *args)
 
     async def add_listener(
         self,
@@ -174,19 +157,6 @@ class PsycopgDriver:
                     _named_parameter(args),
                 )
             ).statusmessage or ""
-
-    async def fetchval(
-        self,
-        query: str,
-        *args: Any,
-    ) -> Any:
-        async with self.lock:
-            cursor = await self.connection.execute(
-                _replace_dollar_named_parameter(query),
-                _named_parameter(args),
-            )
-            result = await cursor.fetchone()
-            return result[0] if result else None
 
     async def add_listener(
         self,

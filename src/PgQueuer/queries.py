@@ -536,8 +536,11 @@ class Queries:
         await self.driver.execute("\n\n".join(self.qb.create_upgrade_queries()))
 
     async def has_updated_column(self) -> bool:
-        return await self.driver.fetchval(
+        rows = await self.driver.fetch(
             self.qb.create_has_column_query(),
             self.qb.settings.queue_table,
             "updated",
         )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
