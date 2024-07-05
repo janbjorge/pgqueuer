@@ -21,11 +21,11 @@ async def consumer(
     bar: tqdm,
 ) -> None:
     @qm.entrypoint("asyncfetch")
-    async def asyncfetch(_: Job) -> None:
+    async def asyncfetch(job: Job) -> None:
         bar.update()
 
     @qm.entrypoint("syncfetch")
-    def syncfetch(_: Job) -> None:
+    def syncfetch(job: Job) -> None:
         bar.update()
 
     await qm.run(batch_size=batch_size)
@@ -40,10 +40,9 @@ async def producer(
     assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
     while not alive.is_set():
-        payloads = [f"{next(cnt)}".encode() for _ in range(batch_size)]
         await queries.enqueue(
             random.sample(entrypoints, k=batch_size),
-            payloads,
+            [f"{next(cnt)}".encode() for _ in range(batch_size)],
             [0] * batch_size,
         )
 
@@ -144,9 +143,9 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         alive: asyncio.Event,
     ) -> None:
         await asyncio.sleep(args.timer.total_seconds())
-        # Stop producer
+        # Stop producers
         alive.set()
-        # Stop consumer
+        # Stop consumers
         for q in qms:
             q.alive = False
 
