@@ -11,7 +11,7 @@
 
 🔍 **Source Code**: [View on GitHub 💾](https://github.com/janbjorge/PgQueuer/)
 
-💬 **Join the Discussion**: [Join our Discord Community](https://discord.com/channels/1256927744705564713/1256927744705564716)
+💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
 
 ---
 
