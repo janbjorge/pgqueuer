@@ -164,7 +164,9 @@ class QueueManager:
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
+
             self.buffer.alive = False
+            self.connection.alive = False
 
     async def _dispatch(self, job: Job) -> None:
         """

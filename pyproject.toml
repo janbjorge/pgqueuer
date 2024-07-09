@@ -47,7 +47,7 @@ dev = [
     "asyncpg-stubs",
     "mypy-extensions",
     "mypy",
-    "psycopg",
+    "psycopg>=3.2.0",
     "pytest-asyncio",
     "pytest",
     "ruff",
