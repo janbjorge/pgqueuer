@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import os
 from datetime import timedelta
-from typing import Final, Generator
+from typing import Final, Generator, overload
 
 from . import db, models
 
@@ -447,10 +447,26 @@ class Queries:
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: str,
+        payload: bytes | None,
+        priority: int = 0,
+    ) -> list[models.JobId]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: list[str],
+        payload: list[bytes | None],
+        priority: list[int],
+    ) -> list[models.JobId]: ...
+
     async def enqueue(
         self,
         entrypoint: str | list[str],
-        payload: bytes | None | list[bytes] | list[None] | list[bytes | None],
+        payload: bytes | None | list[bytes | None],
         priority: int | list[int] = 0,
     ) -> list[models.JobId]:
         """
