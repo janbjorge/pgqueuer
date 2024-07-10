@@ -34,44 +34,23 @@ Features
 Example Usage
 =============
 
-The following example demonstrates how to set up a PostgreSQL event queue in PGCacheWatch, connect to a PostgreSQL channel, and listen for events:
+Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
 
-.. code-block:: python
-   import asyncio
+#### Start a consumer
+Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process.
+.. code-block:: bash
+    python3 -m PgQueuer run tools.consumer.main
 
-   import asyncpg
-   from PgQueuer.db import AsyncpgDriver
-   from PgQueuer.models import Job
-   from PgQueuer.qm import QueueManager
-
-
-   async def main() -> None:
-      connection = await asyncpg.connect()
-      driver = AsyncpgDriver(connection)
-      qm = QueueManager(driver)
-
-      # Setup the 'fetch' entrypoint
-      @qm.entrypoint("fetch")
-      async def process_message(job: Job) -> None:
-         print(f"Processed message: {job}")
-
-      N = 1_000
-      # Enqueue jobs.
-      await qm.queries.enqueue(
-         ["fetch"] * N,
-         [f"this is from me: {n}".encode() for n in range(N)],
-         [0] * N,
-      )
-
-      await qm.run()
-
-
-   if __name__ == "__main__":
-      asyncio.run(main())
+#### Start a producer
+Start a short-lived producer that will enqueue 10,000 jobs.
+```bash
+python3 tools/producer.py 10000
+```
 
 .. toctree::
    :maxdepth: 2
 
+   cli
    database_initialization
    queuemanager
    dashboard
