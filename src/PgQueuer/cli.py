@@ -8,6 +8,7 @@ from typing import Literal
 
 from tabulate import tabulate, tabulate_formats
 
+from PgQueuer import supervisor
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import LogStatistics, PGChannel
@@ -239,6 +240,19 @@ def cliparser() -> argparse.Namespace:
         default=DBSettings().channel,
     )
 
+    wm_parser = subparsers.add_parser(
+        "run",
+        description="Run a QueueManager from a factory function.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_arguments],
+    )
+    wm_parser.add_argument(
+        "qm_factory",
+        help=(
+            "Path to the QueueManager factory function, e.g., "
+            '"myapp.create_queue_manager"'
+        ),
+    )
     return parser.parse_args()
 
 
@@ -270,7 +284,7 @@ async def querier(
     raise NotImplementedError(driver)
 
 
-async def main() -> None:
+async def main() -> None:  # noqa: C901
     parsed = cliparser()
 
     if (
@@ -313,3 +327,5 @@ async def main() -> None:
                 (await querier(parsed.driver, connection_str)).driver,
                 PGChannel(parsed.channel),
             )
+        case "run":
+            await supervisor.runit(parsed.qm_factory)

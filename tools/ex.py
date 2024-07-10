@@ -1,13 +1,11 @@
-import asyncio
-
 import asyncpg
-from PgQueuer.db import AsyncpgDriver
+from PgQueuer.db import AsyncpgDriver, dsn
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 
 
-async def main() -> None:
-    connection = await asyncpg.connect()
+async def main() -> QueueManager:
+    connection = await asyncpg.connect(dsn())
     driver = AsyncpgDriver(connection)
     qm = QueueManager(driver)
 
@@ -23,9 +21,4 @@ async def main() -> None:
         [f"this is from me: {n}".encode() for n in range(N)],
         [0] * N,
     )
-
-    await qm.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    return qm
