@@ -27,11 +27,11 @@ def dsn(
     database: str = "",
     port: str = "",
 ) -> str:
-    host = os.getenv("PGHOST", host or "localhost")
-    user = os.getenv("PGUSER", user or "testuser")
-    password = os.getenv("PGPASSWORD", password or "testpassword")
-    database = os.getenv("PGDATABASE", database or "testdb")
-    port = os.getenv("PGPORT", port or "5432")
+    host = host or os.getenv("PGHOST", "")
+    user = user or os.getenv("PGUSER", "")
+    password = password or os.getenv("PGPASSWORD", "")
+    database = database or os.getenv("PGDATABASE", "")
+    port = port or os.getenv("PGPORT", "")
     return f"postgresql://{user}:{password}@{host}:{port}/{database}"
 
 
