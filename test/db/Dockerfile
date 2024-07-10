@@ -2,6 +2,12 @@ FROM postgres:16
 ENV POSTGRES_USER=testuser
 ENV POSTGRES_PASSWORD=testpassword
 
+# asyncpg envs.
+ENV PGHOST=/var/run/postgresql
+ENV PGUSER=testuser
+ENV PGPASSWORD=testpassword
+ENV PGPORT=5432
+
 # Install Python and Pip
 ENV VIRTUAL_ENV=/opt/venv
 RUN apt-get update && \
