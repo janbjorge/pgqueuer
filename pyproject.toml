@@ -45,6 +45,8 @@ Repository = "https://github.com/janbjorge/PgQueuer/"
 dev = [
     "asyncpg",
     "asyncpg-stubs",
+    "fastapi",
+    "flask",
     "mypy-extensions",
     "mypy",
     "psycopg>=3.2.0",
