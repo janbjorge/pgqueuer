@@ -41,23 +41,26 @@ Here's how you can use PgQueuer in a typical scenario processing incoming data m
 import asyncio
 
 import asyncpg
-from PgQueuer.db import AsyncPGDriver
+from PgQueuer.db import AsyncpgDriver
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 
 
 async def main() -> None:
+    # Establish a database connection; asyncpg and psycopg are supported.
     connection = await asyncpg.connect()
-    driver = AsyncPGDriver(connection)
+    # Initialize a database driver
+    driver = AsyncpgDriver(connection)
+    # Create a queue manager which orchestrates entrypoints based on registered names.
     qm = QueueManager(driver)
 
-    # Setup the 'fetch' entrypoint
+    # Register an entrypoint with the Queue Manager.
     @qm.entrypoint("fetch")
     async def process_message(job: Job) -> None:
         print(f"Processed message: {job}")
 
+    # Enqueue jobs; typically managed by a separate process. Handled sequentially here for simplicity.
     N = 1_000
-    # Enqueue jobs.
     await qm.queries.enqueue(
         ["fetch"] * N,
         [f"this is from me: {n}".encode() for n in range(N)],
