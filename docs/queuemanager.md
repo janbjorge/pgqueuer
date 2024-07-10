@@ -4,7 +4,7 @@ The `QueueManager` in PgQueuer facilitate the management and processing of jobs 
 
 ## Setting Up the QueueManager
 
-1. **Create a Connection**: First, you need to establish a connection with PostgreSQL using asyncpg. This connection will be used by the QueueManager to interact with the database.
+1. **Create a Connection**: First, you need to establish a connection with PostgreSQL using asyncpg or psycopg(v3.2+). This connection will be used by the QueueManager to interact with the database.
 
 2. **Instantiate the QueueManager**: Wrap the connection in a `Driver` and pass to `QueueManager` upon instantiation.
 
@@ -16,6 +16,7 @@ Here's a simple example to demonstrate the setup and basic usage of `QueueManage
 
 ```python
 import asyncio
+import signal
 
 import asyncpg
 from PgQueuer.db import AsyncpgDriver
@@ -24,17 +25,26 @@ from PgQueuer.qm import QueueManager
 
 
 async def main() -> None:
+    # Establish a database connection; asyncpg and psycopg are supported.
     connection = await asyncpg.connect()
+    # Initialize a database driver
     driver = AsyncpgDriver(connection)
+    # Create a queue manager which orchestrates entrypoints based on registered names.
     qm = QueueManager(driver)
 
-    # Setup the 'fetch' entrypoint
+    # Ensures a clean and graceful shutdown of the job processing system.
+    def handle_signal(signum: object, frame: object) -> None:
+        qm.alive = False
+
+    signal.signal(signal.SIGINT, handle_signal)
+
+    # Register an entrypoint with the Queue Manager.
     @qm.entrypoint("fetch")
     async def process_message(job: Job) -> None:
         print(f"Processed message: {job}")
 
+    # Enqueue jobs; typically managed by a separate process. Handled sequentially here for simplicity.
     N = 1_000
-    # Enqueue jobs.
     await qm.queries.enqueue(
         ["fetch"] * N,
         [f"this is from me: {n}".encode() for n in range(N)],
@@ -62,49 +72,5 @@ To improve the efficiency of job handling, the `QueueManager` uses a job buffer.
 ### Why Add a Signal Handler?
 
 Adding a signal handler that sets a flag (such as `alive` to `False`) is crucial for ensuring graceful shutdown of the `QueueManager`. When the application receives a termination signal (e.g., SIGINT or SIGTERM), the signal handler can set the `alive` flag to `False`, which informs the `QueueManager` to stop processing new jobs and focus on completing the jobs currently in the buffer. This helps in ensuring that no jobs are left unprocessed or partially processed, maintaining the integrity and consistency of the job queue.
-
-### Implementing the Signal Handler
-
-Here's how you can implement a signal handler in the `QueueManager` setup:
-
-```python
-import asyncio
-import signal
-
-import asyncpg
-from PgQueuer.db import AsyncpgDriver
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
-
-
-async def main() -> None:
-    connection = await asyncpg.connect()
-    driver = AsyncpgDriver(connection)
-    qm = QueueManager(driver)
-
-    def handle_signal(signum: object, frame: object) -> None:
-        qm.alive = False
-
-    signal.signal(signal.SIGINT, handle_signal)
-
-    # Setup the 'fetch' entrypoint
-    @qm.entrypoint("fetch")
-    async def process_message(job: Job) -> None:
-        print(f"Processed message: {job}")
-
-    N = 1_000
-    # Enqueue jobs.
-    await qm.queries.enqueue(
-        ["fetch"] * N,
-        [f"this is from me: {n}".encode() for n in range(N)],
-        [0] * N,
-    )
-
-    await qm.run()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
 
 In this setup, the signal handler `handle_signal` sets `alive` to `False` when a termination signal is received. The main loop checks the `alive` flag, and if it is `False`, it stops running the `QueueManager`. This approach ensures a clean and graceful shutdown of the job processing system.
