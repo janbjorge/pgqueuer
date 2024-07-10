@@ -246,6 +246,7 @@ class QueryBuilder:
         INSERT INTO {self.settings.queue_table}
         (priority, entrypoint, payload, status)
         VALUES (unnest($1::int[]), unnest($2::text[]), unnest($3::bytea[]), 'queued')
+        RETURNING id
     """
 
     def create_delete_from_queue_query(self) -> str:
@@ -451,7 +452,7 @@ class Queries:
         entrypoint: str | list[str],
         payload: bytes | None | list[bytes] | list[None] | list[bytes | None],
         priority: int | list[int] = 0,
-    ) -> None:
+    ) -> list[models.JobId]:
         """
         Inserts a new job into the queue with the specified
         entrypoint, payload, and priority, marking it as 'queued'.
@@ -467,12 +468,15 @@ class Queries:
         normed_payload = payload if isinstance(payload, list) else [payload]
         normed_priority = priority if isinstance(priority, list) else [priority]
 
-        await self.driver.execute(
-            self.qb.create_enqueue_query(),
-            normed_priority,
-            normed_entrypoint,
-            normed_payload,
-        )
+        return [
+            models.JobId(row["id"])
+            for row in await self.driver.fetch(
+                self.qb.create_enqueue_query(),
+                normed_priority,
+                normed_entrypoint,
+                normed_payload,
+            )
+        ]
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """

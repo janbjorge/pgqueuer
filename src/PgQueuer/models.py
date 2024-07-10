@@ -53,6 +53,11 @@ class Event(BaseModel):
 
 
 ###### Jobs ######
+JobId = NewType(
+    "JobId",
+    int,
+)
+
 STATUS = Literal[
     "queued",
     "picked",
