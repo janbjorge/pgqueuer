@@ -7,6 +7,55 @@ on:
     branches: [main]
 
 jobs:
+  example:
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+        os: [ubuntu-latest]
+
+    env:
+      PGHOST: localhost
+      PGUSER: testuser
+      PGPASSWORD: testpassword
+      PGDATABASE: testdb
+      PGPORT: 5432
+
+    name: PgQueuer example
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build custom PostgreSQL Docker image
+        run: docker-compose up --build -d pgq
+
+      - name: Install PgQueuer
+        run: |
+          pip install pip -U
+          pip install ".[dev]"
+
+      - name: Run example and send SIGINT
+        run: |
+          # Start the Python program in the background
+          PYTHONUNBUFFERED=1 python3 -m PgQueuer run tools.consumer.main &
+          pid=$!
+
+          # Wait for 10 seconds
+          sleep 10
+
+          # Send SIGINT to the process
+          kill -SIGINT $pid
+
+          # Wait for the process to exit
+          wait $pid
+
   benchmark:
     strategy:
       fail-fast: false
@@ -27,7 +76,6 @@ jobs:
     timeout-minutes: 5
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Set up Python
