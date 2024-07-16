@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncpg
 from PgQueuer.db import AsyncpgDriver, dsn
 from PgQueuer.models import Job
@@ -14,11 +16,4 @@ async def main() -> QueueManager:
     async def process_message(job: Job) -> None:
         print(f"Processed message: {job}")
 
-    N = 1_000
-    # Enqueue jobs.
-    await qm.queries.enqueue(
-        ["fetch"] * N,
-        [f"this is from me: {n}".encode() for n in range(N)],
-        [0] * N,
-    )
     return qm

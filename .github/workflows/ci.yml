@@ -26,7 +26,6 @@ jobs:
     timeout-minutes: 5
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Set up Python
@@ -45,7 +44,7 @@ jobs:
       - name: Run example and send SIGINT
         run: |
           # Start the Python program in the background
-          PYTHONUNBUFFERED=1 python3 -m PgQueuer run tools.ex.main &
+          PYTHONUNBUFFERED=1 python3 -m PgQueuer run tools.consumer.main &
           pid=$!
 
           # Wait for 10 seconds
@@ -77,7 +76,6 @@ jobs:
     timeout-minutes: 5
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Set up Python
