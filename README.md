@@ -37,14 +37,66 @@ pip install PgQueuer
 
 Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
 
-#### Start a consumer
-Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process.
+#### Write and run a consumer
+Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process. In this case we want to be a bit more carefull as we want gracefull shutdowns, `PgQueuer run` will setup signals to
+ensure this.
+
+```python
+from __future__ import annotations
+
+import asyncpg
+from PgQueuer.db import AsyncpgDriver, dsn
+from PgQueuer.models import Job
+from PgQueuer.qm import QueueManager
+
+
+async def main() -> QueueManager:
+    connection = await asyncpg.connect(dsn())
+    driver = AsyncpgDriver(connection)
+    qm = QueueManager(driver)
+
+    # Setup the 'fetch' entrypoint
+    @qm.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
+        print(f"Processed message: {job}")
+
+    return qm
+```
+
 ```bash
 python3 -m PgQueuer run tools.consumer.main
 ```
 
-#### Start a producer
+#### Write and run a producer
 Start a short-lived producer that will enqueue 10,000 jobs.
+```python
+from __future__ import annotations
+
+import asyncio
+import sys
+
+import asyncpg
+from PgQueuer.db import AsyncpgDriver
+from PgQueuer.queries import Queries
+
+
+async def main(N: int) -> None:
+    connection = await asyncpg.connect()
+    driver = AsyncpgDriver(connection)
+    queries = Queries(driver)
+    await queries.enqueue(
+        ["fetch"] * N,
+        [f"this is from me: {n}".encode() for n in range(1, N+1)],
+        [0] * N,
+    )
+
+
+if __name__ == "__main__":
+    print(sys.argv)
+    N = 1_000 if len(sys.argv) == 1 else int(sys.argv[1])
+    asyncio.run(main(N))
+```
+
 ```bash
 python3 tools/producer.py 10000
 ```
