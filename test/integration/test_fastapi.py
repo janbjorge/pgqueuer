@@ -4,12 +4,12 @@ import asyncpg
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
-from PgQueuer.db import AsyncpgDriver, Driver, dsn
+from PgQueuer.db import AsyncpgDriver, Driver
 from PgQueuer.queries import Queries
 
 
 async def get_driver() -> AsyncGenerator[Driver, None]:
-    conn = await asyncpg.connect(dsn())
+    conn = await asyncpg.connect()
     try:
         yield AsyncpgDriver(conn)
     finally:
