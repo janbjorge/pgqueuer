@@ -36,3 +36,61 @@ Queue size: 1622
 Queue size: 3843
 Jobs per Second: 18.35k
 ```
+
+## Performance Comparison: asyncpg vs psycopg
+
+In our benchmarking tests, we compared the performance of two PostgreSQL drivers: `asyncpg` and `psycopg`. These tests were conducted to understand the differences in throughput and efficiency when using each driver with PgQueuer under the same conditions.
+
+### Test Setup
+
+Both tests were run with the following settings to ensure a fair comparison:
+- **Timer**: 10.0 seconds
+- **Dequeue**: 5
+- **Dequeue Batch Size**: 10
+- **Enqueue**: 1
+- **Enqueue Batch Size**: 10
+
+### Results
+
+#### asyncpg
+
+The first test used `asyncpg`, an asynchronous PostgreSQL driver, and produced the following results:
+
+```bash
+python3 tools/benchmark.py -d apg
+Settings:
+Timer:                  10.0 seconds
+Dequeue:                5
+Dequeue Batch Size:     10
+Enqueue:                1
+Enqueue Batch Size:     10
+
+140k job [00:09, 14.1k job/s]
+```
+
+- **Total Jobs Processed**: 140k
+- **Throughput**: 14.1k jobs per second
+
+#### psycopg
+
+The second test used `psycopg`, a popular PostgreSQL driver for Python, yielding the following results:
+
+```bash
+python3 tools/benchmark.py -d psy
+Settings:
+Timer:                  10.0 seconds
+Dequeue:                5
+Dequeue Batch Size:     10
+Enqueue:                1
+Enqueue Batch Size:     10
+
+85.1k job [00:10, 8.35k job/s]
+```
+
+- **Total Jobs Processed**: 85.1k
+- **Throughput**: 8.35k jobs per second
+
+### Key Observations
+
+- **Throughput**: `asyncpg` demonstrated significantly higher throughput compared to `psycopg`, processing jobs at nearly double the rate.
+- **Efficiency**: The asynchronous nature of `asyncpg` allows for better utilization of system resources, leading to more efficient job processing.
