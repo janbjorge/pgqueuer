@@ -1,4 +1,3 @@
-version: '3.10'
 services:
   pgq:
     build:

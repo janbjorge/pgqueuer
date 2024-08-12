@@ -4,7 +4,8 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
-from datetime import timedelta
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
 from typing import (
     TYPE_CHECKING,
     Awaitable,
@@ -20,7 +21,7 @@ import anyio.to_thread
 
 from .buffers import JobBuffer
 from .db import Driver
-from .listeners import initialize_event_listener
+from .listeners import initialize_notice_event_listener
 from .logconfig import logger
 from .models import Job, PGChannel
 from .queries import DBSettings, Queries
@@ -82,6 +83,11 @@ class QueueManager:
     registry: dict[str, Entrypoint] = dataclasses.field(
         init=False, default_factory=dict
     )
+    # dict[entrypoint, [count, timestamp]]
+    statistics: defaultdict[str, deque[tuple[int, datetime]]] = dataclasses.field(
+        init=False,
+        default_factory=lambda: defaultdict(lambda: deque(maxlen=1_000)),
+    )
 
     def __post_init__(self) -> None:
         """
@@ -109,6 +115,19 @@ class QueueManager:
             return func
 
         return register
+
+    def observed_rps(
+        self,
+        entrypoint: str,
+        epsilon: timedelta = timedelta(milliseconds=0.001),
+    ) -> float:
+        samples = self.statistics[entrypoint]
+        if not samples:
+            return 0.0
+        timespan = max(t for _, t in samples) - min(t for _, t in samples) + epsilon
+        requests = sum(c for c, _ in samples)
+        print(timespan, requests, requests / timespan.total_seconds())
+        return requests / timespan.total_seconds()
 
     async def run(
         self,
@@ -139,7 +158,11 @@ class QueueManager:
 
         async with TaskManager() as tm:
             tm.add(asyncio.create_task(self.buffer.monitor()))
-            listener = await initialize_event_listener(self.connection, self.channel)
+            notice_event_listener = await initialize_notice_event_listener(
+                self.connection,
+                self.channel,
+                self.statistics,
+            )
 
             while self.alive:
                 while self.alive and (
@@ -149,14 +172,27 @@ class QueueManager:
                         retry_timer=retry_timer,
                     )
                 ):
+                    entrypoint_count = defaultdict[str, int](lambda: 0)
+
                     for job in jobs:
+                        print(self.observed_rps(job.entrypoint))
                         tm.add(asyncio.create_task(self._dispatch(job)))
+                        entrypoint_count[job.entrypoint] += 1
                         with contextlib.suppress(asyncio.QueueEmpty):
-                            listener.get_nowait()
+                            notice_event_listener.get_nowait()
+
+                    for entrypoint, count in entrypoint_count.items():
+                        tm.add(
+                            asyncio.create_task(
+                                self.queries.emit_debounce_event(entrypoint, count)
+                            )
+                        )
+
+                    entrypoint_count.clear()
 
                 try:
                     await asyncio.wait_for(
-                        listener.get(),
+                        notice_event_listener.get(),
                         timeout=dequeue_timeout.total_seconds(),
                     )
                 except asyncio.TimeoutError:
