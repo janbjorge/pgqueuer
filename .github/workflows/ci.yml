@@ -34,7 +34,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Build custom PostgreSQL Docker image
-        run: docker-compose up --build -d pgq
+        run: docker compose up --build -d pgq
 
       - name: Install PgQueuer
         run: |
@@ -84,7 +84,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Build custom PostgreSQL Docker image
-        run: docker-compose up --build -d pgq
+        run: docker compose up --build -d pgq
 
       - name: Install PgQueuer
         run: |
@@ -122,7 +122,7 @@ jobs:
 
       - name: Build custom PostgreSQL Docker image
         run: |
-          docker-compose up --build -d pgq
+          docker compose up --build -d pgq
 
       - name: Install PgQueuer
         run: |

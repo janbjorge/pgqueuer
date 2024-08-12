@@ -47,6 +47,7 @@ dev = [
     "asyncpg-stubs",
     "fastapi",
     "flask",
+    "httpx",
     "mypy-extensions",
     "mypy",
     "psycopg>=3.2.0",
