@@ -9,7 +9,7 @@ from conftest import dsn
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
 from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.listeners import initialize_event_listener
-from PgQueuer.models import Event, PGChannel
+from PgQueuer.models import NoticeEvent, PGChannel
 from PgQueuer.queries import QueryBuilder
 
 
@@ -135,11 +135,12 @@ async def test_event_listener(
     async with driver() as d:
         name = d.__class__.__name__.lower()
         channel = PGChannel(f"test_event_listener_{name}")
-        payload = Event(
+        payload = NoticeEvent(
             channel=channel,
             operation="update",
             sent_at=perf_counter_dt(),
             table="foo",
+            type="notice_event",
         )
         listener = await initialize_event_listener(d, channel)
 

@@ -7,7 +7,7 @@ from .db import Driver
 from .logconfig import logger
 
 
-class PGEventListener(asyncio.Queue[models.Event]):
+class PGEventListener(asyncio.Queue[models.NoticeEvent]):
     """
     A PostgreSQL event queue that listens to a specified
     channel and stores incoming events.
@@ -31,7 +31,7 @@ async def initialize_event_listener(
         Parses a JSON payload and inserts it into the queue as an `models.Event` object.
         """
         try:
-            parsed_event = models.Event.model_validate_json(payload)
+            parsed = models.AnyEvnet.model_validate_json(payload)
         except Exception:
             logger.critical(
                 "Failed to parse payload: `%s`.",
@@ -39,13 +39,14 @@ async def initialize_event_listener(
             )
             return
 
-        try:
-            queue.put_nowait(parsed_event)
-        except Exception:
-            logger.critical(
-                "Unexpected error inserting event into queue: `%s`.",
-                parsed_event,
-            )
+        if parsed.type == "notice_event":
+            try:
+                queue.put_nowait(parsed)
+            except Exception:
+                logger.critical(
+                    "Unexpected error inserting event into queue: `%s`.",
+                    parsed,
+                )
 
     listener = PGEventListener()
     await connection.add_listener(channel, lambda x: parse_and_queue(x, listener))

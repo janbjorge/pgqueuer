@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Literal, NewType
+from typing import Annotated, Literal, NewType
 
 from pydantic import AwareDatetime, BaseModel, Field
 
@@ -27,16 +27,14 @@ class Event(BaseModel):
 
     Attributes:
         channel: The PostgreSQL channel the event belongs to.
-        operation: The type of operation performed (insert, update or delete).
         sent_at: The timestamp when the event was sent.
-        table: The table the event is associated with.
+        type: "notice_event" or "debounce_event"
         received_at: The timestamp when the event was received.
     """
 
     channel: PGChannel
-    operation: OPERATIONS
     sent_at: AwareDatetime
-    table: str
+    type: Literal["notice_event", "debounce_event"]
     received_at: AwareDatetime = Field(
         init=False,
         default_factory=lambda: datetime.now(
@@ -51,6 +49,37 @@ class Event(BaseModel):
         """
         return self.received_at - self.sent_at
 
+
+class NoticeEvent(Event):
+    """
+    A class representing an event in a PostgreSQL channel.
+
+    Attributes:
+        operation: The type of operation performed (insert, update or delete).
+        table: The table the event is associated with.
+    """
+
+    type: Literal["notice_event"]
+    operation: OPERATIONS
+    table: str
+
+
+class DebounceEvent(Event):
+    """
+    A class representing an event in a PostgreSQL channel.
+
+    Attributes:
+        entrypoint: The entrypoint to debounce
+    """
+
+    type: Literal["debounce_event"]
+    entrypoint: str
+
+
+AnyEvnet: Annotated[
+    NoticeEvent | DebounceEvent,
+    Field(discriminator="type"),
+]
 
 ###### Jobs ######
 JobId = NewType(
