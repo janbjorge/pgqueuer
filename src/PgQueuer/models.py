@@ -28,13 +28,13 @@ class Event(BaseModel):
     Attributes:
         channel: The PostgreSQL channel the event belongs to.
         sent_at: The timestamp when the event was sent.
-        type: "notice_event" or "debounce_event"
+        type: "table_changed_event" or "requests_per_second_event"
         received_at: The timestamp when the event was received.
     """
 
     channel: PGChannel
     sent_at: AwareDatetime
-    type: Literal["notice_event", "debounce_event"]
+    type: Literal["table_changed_event", "requests_per_second_event"]
     received_at: AwareDatetime = Field(
         init=False,
         default_factory=lambda: datetime.now(
@@ -50,7 +50,7 @@ class Event(BaseModel):
         return self.received_at - self.sent_at
 
 
-class NoticeEvent(Event):
+class TableChangedEvent(Event):
     """
     A class representing an event in a PostgreSQL channel.
 
@@ -59,12 +59,12 @@ class NoticeEvent(Event):
         table: The table the event is associated with.
     """
 
-    type: Literal["notice_event"]
+    type: Literal["table_changed_event"]
     operation: OPERATIONS
     table: str
 
 
-class DebounceEvent(Event):
+class RequestsPerSecondEvent(Event):
     """
     A class representing an event in a PostgreSQL channel.
 
@@ -72,7 +72,7 @@ class DebounceEvent(Event):
         entrypoint: The entrypoint to debounce
     """
 
-    type: Literal["debounce_event"]
+    type: Literal["requests_per_second_event"]
     entrypoint: str
     quantity: int
 
@@ -80,7 +80,7 @@ class DebounceEvent(Event):
 class AnyEvent(
     RootModel[
         Annotated[
-            NoticeEvent | DebounceEvent,
+            TableChangedEvent | RequestsPerSecondEvent,
             Field(discriminator="type"),
         ]
     ]

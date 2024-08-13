@@ -9,7 +9,7 @@ from .db import Driver
 from .logconfig import logger
 
 
-class PGNoticeEventListener(asyncio.Queue[models.NoticeEvent]):
+class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """
     A PostgreSQL event queue that listens to a specified
     channel and stores incoming events.
@@ -40,9 +40,9 @@ async def initialize_notice_event_listener(
             logger.critical("Failed to parse payload: `%s`, `%s`", payload, e)
             return
 
-        if parsed.root.type == "notice_event":
+        if parsed.root.type == "table_changed_event":
             notice_event_queue.put_nowait(parsed.root)
-        elif parsed.root.type == "debounce_event":
+        elif parsed.root.type == "requests_per_second_event":
             statistics[parsed.root.entrypoint].append(
                 (parsed.root.quantity, parsed.root.sent_at)
             )

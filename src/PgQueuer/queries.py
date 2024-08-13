@@ -155,7 +155,7 @@ class QueryBuilder:
                     'operation', lower(TG_OP),
                     'sent_at', NOW(),
                     'table', TG_TABLE_NAME,
-                    'type', 'notice_event'
+                    'type', 'table_changed_event'
                 )::text
             );
         END IF;
@@ -405,7 +405,7 @@ class QueryBuilder:
                     'operation', lower(TG_OP),
                     'sent_at', NOW(),
                     'table', TG_TABLE_NAME,
-                    'type', 'notice_event'
+                    'type', 'table_changed_event'
                 )::text
             );
         END IF;
@@ -617,11 +617,11 @@ class Queries:
     ) -> None:
         await self.driver.execute(
             self.qb.create_notify_query(),
-            models.DebounceEvent(
+            models.RequestsPerSecondEvent(
                 channel=self.qb.settings.channel,
                 entrypoint=entrypoing,
                 quantity=quantity,
                 sent_at=buffers.perf_counter_dt(),
-                type="debounce_event",
+                type="requests_per_second_event",
             ).model_dump_json(),
         )

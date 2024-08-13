@@ -1,4 +1,5 @@
 import asyncio
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
@@ -9,7 +10,7 @@ from conftest import dsn
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
 from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.listeners import initialize_notice_event_listener
-from PgQueuer.models import NoticeEvent, PGChannel
+from PgQueuer.models import PGChannel, TableChangedEvent
 from PgQueuer.queries import QueryBuilder
 
 
@@ -135,14 +136,13 @@ async def test_event_listener(
     async with driver() as d:
         name = d.__class__.__name__.lower()
         channel = PGChannel(f"test_event_listener_{name}")
-        payload = NoticeEvent(
+        payload = TableChangedEvent(
             channel=channel,
             operation="update",
             sent_at=perf_counter_dt(),
             table="foo",
-            type="notice_event",
+            type="table_changed_event",
         )
-        from collections import defaultdict, deque
 
         listener = await initialize_notice_event_listener(
             d,
