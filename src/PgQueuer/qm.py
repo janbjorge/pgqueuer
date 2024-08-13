@@ -6,6 +6,7 @@ import dataclasses
 import functools
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
+from math import isfinite
 from typing import (
     TYPE_CHECKING,
     Awaitable,
@@ -21,6 +22,7 @@ import anyio.to_thread
 
 from .buffers import JobBuffer
 from .db import Driver
+from .helpers import perf_counter_dt
 from .listeners import initialize_notice_event_listener
 from .logconfig import logger
 from .models import Job, PGChannel
@@ -104,7 +106,7 @@ class QueueManager:
     def entrypoint(
         self,
         name: str,
-        rate: float = float("inf"),
+        requests_per_second: float = float("inf"),
     ) -> Callable[[T], T]:
         """
         Registers a function as an entrypoint for handling specific
@@ -114,24 +116,24 @@ class QueueManager:
         if name in self.registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
-        if rate < 0:
+        if requests_per_second < 0:
             raise ValueError("Rate must be greater or eq. to zero.")
 
         def register(func: T) -> T:
-            self.registry[name] = (func, rate)
+            self.registry[name] = (func, requests_per_second)
             return func
 
         return register
 
-    def requests_per_second(
+    def observed_requests_per_second(
         self,
         entrypoint: str,
-        epsilon: timedelta = timedelta(milliseconds=0.001),
+        epsilon: timedelta = timedelta(milliseconds=0.01),
     ) -> float:
         samples = self.statistics[entrypoint]
         if not samples:
             return 0.0
-        timespan = max(t for _, t in samples) - min(t for _, t in samples) + epsilon
+        timespan = perf_counter_dt() - min(t for _, t in samples) + epsilon
         requests = sum(c for c, _ in samples)
         return requests / timespan.total_seconds()
 
@@ -139,7 +141,7 @@ class QueueManager:
         return {
             entrypoint
             for entrypoint, (_, rate) in self.registry.items()
-            if self.requests_per_second(entrypoint) < rate
+            if self.observed_requests_per_second(entrypoint) < rate
         }
 
     async def run(
@@ -178,27 +180,23 @@ class QueueManager:
             )
 
             while self.alive:
-                while self.alive and (
-                    jobs := await self.queries.dequeue(
-                        batch_size=batch_size,
-                        entrypoints=self.entrypoints_below_requests_per_second(),
-                        retry_timer=retry_timer,
-                    )
-                ):
-                    entrypoint_count = defaultdict[str, int](lambda: 0)
+                jobs = await self.queries.dequeue(
+                    batch_size=batch_size,
+                    entrypoints=self.entrypoints_below_requests_per_second(),
+                    retry_timer=retry_timer,
+                )
+                entrypoint_count = defaultdict[str, int](lambda: 0)
 
-                    for job in jobs:
-                        print(self.requests_per_second(job.entrypoint))
-                        tm.add(asyncio.create_task(self._dispatch(job)))
-                        entrypoint_count[job.entrypoint] += 1
-                        with contextlib.suppress(asyncio.QueueEmpty):
-                            notice_event_listener.get_nowait()
+                for job in jobs:
+                    tm.add(asyncio.create_task(self._dispatch(job)))
+                    entrypoint_count[job.entrypoint] += 1
+                    with contextlib.suppress(asyncio.QueueEmpty):
+                        notice_event_listener.get_nowait()
 
-                    for entrypoint, count in entrypoint_count.items():
-                        # skip if rate is inf.
-                        _, rate = self.registry[entrypoint]
-                        if rate == float("inf"):
-                            continue
+                for entrypoint, count in entrypoint_count.items():
+                    # skip if rate is inf.
+                    _, rate = self.registry[entrypoint]
+                    if isfinite(rate):
                         tm.add(
                             asyncio.create_task(
                                 self.queries.emit_debounce_event(entrypoint, count)
