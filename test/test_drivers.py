@@ -8,7 +8,7 @@ import pytest
 from conftest import dsn
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
 from PgQueuer.helpers import perf_counter_dt
-from PgQueuer.listeners import initialize_event_listener
+from PgQueuer.listeners import initialize_notice_event_listener
 from PgQueuer.models import NoticeEvent, PGChannel
 from PgQueuer.queries import QueryBuilder
 
@@ -142,7 +142,13 @@ async def test_event_listener(
             table="foo",
             type="notice_event",
         )
-        listener = await initialize_event_listener(d, channel)
+        from collections import defaultdict, deque
+
+        listener = await initialize_notice_event_listener(
+            d,
+            channel,
+            defaultdict(deque),
+        )
 
         # Seems psycopg does not pick up on
         # notifiys sent from its current connection.

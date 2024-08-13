@@ -5,7 +5,7 @@ import os
 from datetime import timedelta
 from typing import Final, Generator, overload
 
-from . import db, models
+from . import buffers, db, models
 
 
 def add_prefix(string: str) -> str:
@@ -431,6 +431,9 @@ class QueryBuilder:
                 AND column_name = $2
             );"""
 
+    def create_notify_query(self) -> str:
+        return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
+
 
 @dataclasses.dataclass
 class Queries:
@@ -606,3 +609,19 @@ class Queries:
         assert len(rows) == 1
         (row,) = rows
         return row["exists"]
+
+    async def emit_debounce_event(
+        self,
+        entrypoing: str,
+        quantity: int,
+    ) -> None:
+        await self.driver.execute(
+            self.qb.create_notify_query(),
+            models.DebounceEvent(
+                channel=self.qb.settings.channel,
+                entrypoint=entrypoing,
+                quantity=quantity,
+                sent_at=buffers.perf_counter_dt(),
+                type="debounce_event",
+            ).model_dump_json(),
+        )

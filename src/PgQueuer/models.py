@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
 
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, RootModel
 
 ###### Events ######
 
@@ -74,12 +74,18 @@ class DebounceEvent(Event):
 
     type: Literal["debounce_event"]
     entrypoint: str
+    quantity: int
 
 
-AnyEvnet: Annotated[
-    NoticeEvent | DebounceEvent,
-    Field(discriminator="type"),
-]
+class AnyEvent(
+    RootModel[
+        Annotated[
+            NoticeEvent | DebounceEvent,
+            Field(discriminator="type"),
+        ]
+    ]
+): ...
+
 
 ###### Jobs ######
 JobId = NewType(
