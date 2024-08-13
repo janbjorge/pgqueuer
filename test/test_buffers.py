@@ -3,7 +3,8 @@ import random
 from datetime import datetime, timedelta
 
 import pytest
-from PgQueuer.buffers import JobBuffer, _perf_counter_dt
+from PgQueuer.buffers import JobBuffer
+from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.models import Job
 from PgQueuer.tm import TaskManager
 
@@ -12,7 +13,7 @@ def job_faker() -> Job:
     return Job(
         id=random.choice(range(1_000_000_000)),
         priority=0,
-        created=_perf_counter_dt(),
+        created=perf_counter_dt(),
         status="picked",
         entrypoint="foo",
         payload=None,
@@ -20,8 +21,8 @@ def job_faker() -> Job:
 
 
 async def test_perf_counter_dt() -> None:
-    assert isinstance(_perf_counter_dt(), datetime)
-    assert _perf_counter_dt().tzinfo is not None
+    assert isinstance(perf_counter_dt(), datetime)
+    assert perf_counter_dt().tzinfo is not None
 
 
 @pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))

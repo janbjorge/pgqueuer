@@ -2,23 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Awaitable, Callable
 
+from .helpers import perf_counter_dt
 from .logconfig import logger
 from .models import STATUS_LOG, Job
-
-
-def _perf_counter_dt() -> datetime:
-    """
-    Returns the current high-resolution time as a datetime object.
-
-    This function uses the performance counter (`time.perf_counter()`) for
-    the highest available resolution as a timestamp, which is useful for
-    time measurements between events.
-    """
-    return datetime.fromtimestamp(time.perf_counter(), tz=timezone.utc)
 
 
 @dataclasses.dataclass
@@ -54,7 +43,7 @@ class JobBuffer:
     )
     last_event_time: datetime = dataclasses.field(
         init=False,
-        default_factory=_perf_counter_dt,
+        default_factory=perf_counter_dt,
     )
     lock: asyncio.Lock = dataclasses.field(
         init=False,
@@ -68,7 +57,7 @@ class JobBuffer:
         """
         async with self.lock:
             self.events.append((job, status))
-            self.last_event_time = _perf_counter_dt()
+            self.last_event_time = perf_counter_dt()
             if len(self.events) >= self.max_size:
                 await self.flush_jobs()
 
@@ -97,5 +86,5 @@ class JobBuffer:
         while self.alive:
             await asyncio.sleep(self.timeout.total_seconds())
             async with self.lock:
-                if _perf_counter_dt() - self.last_event_time >= self.timeout:
+                if perf_counter_dt() - self.last_event_time >= self.timeout:
                     await self.flush_jobs()

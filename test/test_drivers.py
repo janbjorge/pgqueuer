@@ -6,8 +6,8 @@ import asyncpg
 import psycopg
 import pytest
 from conftest import dsn
-from PgQueuer.buffers import _perf_counter_dt
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
+from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.listeners import initialize_event_listener
 from PgQueuer.models import Event, PGChannel
 from PgQueuer.queries import QueryBuilder
@@ -138,7 +138,7 @@ async def test_event_listener(
         payload = Event(
             channel=channel,
             operation="update",
-            sent_at=_perf_counter_dt(),
+            sent_at=perf_counter_dt(),
             table="foo",
         )
         listener = await initialize_event_listener(d, channel)
