@@ -20,11 +20,11 @@ async def consumer(
     batch_size: int,
     bar: tqdm,
 ) -> None:
-    @qm.entrypoint("asyncfetch", requests_per_second=200)
+    @qm.entrypoint("asyncfetch")
     async def asyncfetch(job: Job) -> None:
         bar.update()
 
-    @qm.entrypoint("syncfetch", requests_per_second=20)
+    @qm.entrypoint("syncfetch")
     def syncfetch(job: Job) -> None:
         bar.update()
 
