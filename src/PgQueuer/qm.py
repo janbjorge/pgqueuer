@@ -4,7 +4,9 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
-from datetime import timedelta
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
+from math import isfinite
 from typing import (
     TYPE_CHECKING,
     Awaitable,
@@ -20,7 +22,8 @@ import anyio.to_thread
 
 from .buffers import JobBuffer
 from .db import Driver
-from .listeners import initialize_event_listener
+from .helpers import perf_counter_dt
+from .listeners import initialize_notice_event_listener
 from .logconfig import logger
 from .models import Job, PGChannel
 from .queries import DBSettings, Queries
@@ -79,8 +82,13 @@ class QueueManager:
     )
     buffer: JobBuffer = dataclasses.field(init=False)
     queries: Queries = dataclasses.field(init=False)
-    registry: dict[str, Entrypoint] = dataclasses.field(
+    registry: dict[str, tuple[Entrypoint, float]] = dataclasses.field(
         init=False, default_factory=dict
+    )
+    # dict[entrypoint, [count, timestamp]]
+    statistics: defaultdict[str, deque[tuple[int, datetime]]] = dataclasses.field(
+        init=False,
+        default_factory=lambda: defaultdict(lambda: deque(maxlen=1_000)),
     )
 
     def __post_init__(self) -> None:
@@ -95,7 +103,11 @@ class QueueManager:
             flush_callback=self.queries.log_jobs,
         )
 
-    def entrypoint(self, name: str) -> Callable[[T], T]:
+    def entrypoint(
+        self,
+        name: str,
+        requests_per_second: float = float("inf"),
+    ) -> Callable[[T], T]:
         """
         Registers a function as an entrypoint for handling specific
         job types. Ensures unique naming in the registry.
@@ -104,11 +116,33 @@ class QueueManager:
         if name in self.registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
+        if requests_per_second < 0:
+            raise ValueError("Rate must be greater or eq. to zero.")
+
         def register(func: T) -> T:
-            self.registry[name] = func
+            self.registry[name] = (func, requests_per_second)
             return func
 
         return register
+
+    def observed_requests_per_second(
+        self,
+        entrypoint: str,
+        epsilon: timedelta = timedelta(milliseconds=0.01),
+    ) -> float:
+        samples = self.statistics[entrypoint]
+        if not samples:
+            return 0.0
+        timespan = perf_counter_dt() - min(t for _, t in samples) + epsilon
+        requests = sum(c for c, _ in samples)
+        return requests / timespan.total_seconds()
+
+    def entrypoints_below_requests_per_second(self) -> set[str]:
+        return {
+            entrypoint
+            for entrypoint, (_, rate) in self.registry.items()
+            if self.observed_requests_per_second(entrypoint) < rate
+        }
 
     async def run(
         self,
@@ -139,24 +173,39 @@ class QueueManager:
 
         async with TaskManager() as tm:
             tm.add(asyncio.create_task(self.buffer.monitor()))
-            listener = await initialize_event_listener(self.connection, self.channel)
+            notice_event_listener = await initialize_notice_event_listener(
+                self.connection,
+                self.channel,
+                self.statistics,
+            )
 
             while self.alive:
-                while self.alive and (
-                    jobs := await self.queries.dequeue(
-                        batch_size=batch_size,
-                        entrypoints=set(self.registry.keys()),
-                        retry_timer=retry_timer,
-                    )
-                ):
-                    for job in jobs:
-                        tm.add(asyncio.create_task(self._dispatch(job)))
-                        with contextlib.suppress(asyncio.QueueEmpty):
-                            listener.get_nowait()
+                jobs = await self.queries.dequeue(
+                    batch_size=batch_size,
+                    entrypoints=self.entrypoints_below_requests_per_second(),
+                    retry_timer=retry_timer,
+                )
+                entrypoint_count = defaultdict[str, int](lambda: 0)
+
+                for job in jobs:
+                    tm.add(asyncio.create_task(self._dispatch(job)))
+                    entrypoint_count[job.entrypoint] += 1
+                    with contextlib.suppress(asyncio.QueueEmpty):
+                        notice_event_listener.get_nowait()
+
+                for entrypoint, count in entrypoint_count.items():
+                    # skip if rate is inf.
+                    _, rate = self.registry[entrypoint]
+                    if isfinite(rate):
+                        tm.add(
+                            asyncio.create_task(
+                                self.queries.emit_debounce_event(entrypoint, count)
+                            )
+                        )
 
                 try:
                     await asyncio.wait_for(
-                        listener.get(),
+                        notice_event_listener.get(),
                         timeout=dequeue_timeout.total_seconds(),
                     )
                 except asyncio.TimeoutError:
@@ -181,7 +230,8 @@ class QueueManager:
         )
 
         try:
-            fn = self.registry[job.entrypoint]
+            fn, _ = self.registry[job.entrypoint]
+
             if is_async_callable(fn):
                 await fn(job)
             else:

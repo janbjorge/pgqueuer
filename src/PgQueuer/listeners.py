@@ -1,23 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict, deque
+from datetime import datetime
 
 from . import models
 from .db import Driver
 from .logconfig import logger
 
 
-class PGEventListener(asyncio.Queue[models.Event]):
+class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """
     A PostgreSQL event queue that listens to a specified
     channel and stores incoming events.
     """
 
 
-async def initialize_event_listener(
+async def initialize_notice_event_listener(
     connection: Driver,
     channel: models.PGChannel,
-) -> PGEventListener:
+    statistics: defaultdict[str, deque[tuple[int, datetime]]],
+) -> PGNoticeEventListener:
     """
     This method establishes a listener on a PostgreSQL channel using
     the provided connection and channel.
@@ -25,28 +28,32 @@ async def initialize_event_listener(
 
     def parse_and_queue(
         payload: str | bytes | bytearray,
-        queue: PGEventListener,
+        notice_event_queue: PGNoticeEventListener,
+        statistics: defaultdict[str, deque[tuple[int, datetime]]],
     ) -> None:
         """
         Parses a JSON payload and inserts it into the queue as an `models.Event` object.
         """
         try:
-            parsed_event = models.Event.model_validate_json(payload)
-        except Exception:
-            logger.critical(
-                "Failed to parse payload: `%s`.",
-                payload,
-            )
+            parsed = models.AnyEvent.model_validate_json(payload)
+        except Exception as e:
+            logger.critical("Failed to parse payload: `%s`, `%s`", payload, e)
             return
 
-        try:
-            queue.put_nowait(parsed_event)
-        except Exception:
-            logger.critical(
-                "Unexpected error inserting event into queue: `%s`.",
-                parsed_event,
+        if parsed.root.type == "table_changed_event":
+            notice_event_queue.put_nowait(parsed.root)
+        elif parsed.root.type == "requests_per_second_event":
+            statistics[parsed.root.entrypoint].append(
+                (parsed.root.count, parsed.root.sent_at)
             )
+        else:
+            raise NotImplementedError(parsed, payload)
 
-    listener = PGEventListener()
-    await connection.add_listener(channel, lambda x: parse_and_queue(x, listener))
-    return listener
+    notice_event_listener = PGNoticeEventListener()
+
+    await connection.add_listener(
+        channel,
+        lambda x: parse_and_queue(x, notice_event_listener, statistics),
+    )
+
+    return notice_event_listener

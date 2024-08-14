@@ -18,13 +18,17 @@ from tqdm.asyncio import tqdm
 async def consumer(
     qm: QueueManager,
     batch_size: int,
+    entrypoint_rps: list[float],
     bar: tqdm,
 ) -> None:
-    @qm.entrypoint("asyncfetch")
+    assert len(entrypoint_rps) == 2
+    asyncfetch_rps, syncfetch_rps = entrypoint_rps
+
+    @qm.entrypoint("asyncfetch", requests_per_second=asyncfetch_rps)
     async def asyncfetch(job: Job) -> None:
         bar.update()
 
-    @qm.entrypoint("syncfetch")
+    @qm.entrypoint("syncfetch", requests_per_second=syncfetch_rps)
     def syncfetch(job: Job) -> None:
         bar.update()
 
@@ -95,6 +99,13 @@ async def main() -> None:
         default=10,
         help="Batch size for enqueue tasks. Default is 10.",
     )
+    parser.add_argument(
+        "-rps",
+        "--requests-per-second",
+        nargs="+",
+        default=[float("inf"), float("inf")],
+        help="RPS for endporints given as a list, defautl is 'inf'.",
+    )
     args = parser.parse_args()
 
     print(f"""Settings:
@@ -135,7 +146,15 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             unit_scale=True,
             file=sys.stdout,
         ) as bar:
-            consumers = [consumer(q, int(args.dequeue_batch_size), bar) for q in qms]
+            consumers = [
+                consumer(
+                    qm=q,
+                    batch_size=int(args.dequeue_batch_size),
+                    entrypoint_rps=[float(x) for x in args.requests_per_second],
+                    bar=bar,
+                )
+                for q in qms
+            ]
             await asyncio.gather(*consumers)
 
     async def dequeue_alive_timer(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from collections import defaultdict, deque
 from datetime import timedelta
 from typing import Literal
 
@@ -10,7 +11,7 @@ from tabulate import tabulate, tabulate_formats
 
 from . import supervisor
 from .db import AsyncpgDriver, Driver, PsycopgDriver, dsn
-from .listeners import initialize_event_listener
+from .listeners import initialize_notice_event_listener
 from .models import LogStatistics, PGChannel
 from .queries import DBSettings, Queries, QueryBuilder
 
@@ -49,9 +50,10 @@ async def display_pg_channel(
     connection: Driver,
     channel: PGChannel,
 ) -> None:
-    listener = await initialize_event_listener(
+    listener = await initialize_notice_event_listener(
         connection,
         channel,
+        defaultdict(lambda: deque(maxlen=1)),
     )
     while True:
         print(repr(await listener.get()))

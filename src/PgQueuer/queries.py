@@ -5,7 +5,7 @@ import os
 from datetime import timedelta
 from typing import Final, Generator, overload
 
-from . import db, models
+from . import buffers, db, models
 
 
 def add_prefix(string: str) -> str:
@@ -154,7 +154,8 @@ class QueryBuilder:
                     'channel', '{self.settings.channel}',
                     'operation', lower(TG_OP),
                     'sent_at', NOW(),
-                    'table', TG_TABLE_NAME
+                    'table', TG_TABLE_NAME,
+                    'type', 'table_changed_event'
                 )::text
             );
         END IF;
@@ -379,6 +380,47 @@ class QueryBuilder:
     def create_upgrade_queries(self) -> Generator[str, None, None]:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
+        yield f"""
+    CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
+    DECLARE
+        to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
+    BEGIN
+        -- Check operation type and set the emit flag accordingly
+        IF TG_OP = 'UPDATE' AND OLD IS DISTINCT FROM NEW THEN
+            to_emit := true;
+        ELSIF TG_OP = 'DELETE' THEN
+            to_emit := true;
+        ELSIF TG_OP = 'INSERT' THEN
+            to_emit := true;
+        ELSIF TG_OP = 'TRUNCATE' THEN
+            to_emit := true;
+        END IF;
+
+        -- Perform notification if the emit flag is set
+        IF to_emit THEN
+            PERFORM pg_notify(
+                '{self.settings.channel}',
+                json_build_object(
+                    'channel', '{self.settings.channel}',
+                    'operation', lower(TG_OP),
+                    'sent_at', NOW(),
+                    'table', TG_TABLE_NAME,
+                    'type', 'table_changed_event'
+                )::text
+            );
+        END IF;
+
+        -- Return appropriate value based on the operation
+        IF TG_OP IN ('INSERT', 'UPDATE') THEN
+            RETURN NEW;
+        ELSIF TG_OP = 'DELETE' THEN
+            RETURN OLD;
+        ELSE
+            RETURN NULL; -- For TRUNCATE and other non-row-specific contexts
+        END IF;
+
+    END;
+    $$ LANGUAGE plpgsql;"""
 
     def create_has_column_query(self) -> str:
         return """
@@ -388,6 +430,9 @@ class QueryBuilder:
                 AND table_name = $1
                 AND column_name = $2
             );"""
+
+    def create_notify_query(self) -> str:
+        return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
 
 @dataclasses.dataclass
@@ -564,3 +609,19 @@ class Queries:
         assert len(rows) == 1
         (row,) = rows
         return row["exists"]
+
+    async def emit_debounce_event(
+        self,
+        entrypoing: str,
+        quantity: int,
+    ) -> None:
+        await self.driver.execute(
+            self.qb.create_notify_query(),
+            models.RequestsPerSecondEvent(
+                channel=self.qb.settings.channel,
+                entrypoint=entrypoing,
+                count=quantity,
+                sent_at=buffers.perf_counter_dt(),
+                type="requests_per_second_event",
+            ).model_dump_json(),
+        )

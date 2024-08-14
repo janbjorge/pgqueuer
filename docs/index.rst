@@ -53,5 +53,6 @@ python3 tools/producer.py 10000
    cli
    database_initialization
    queuemanager
+   rps
    dashboard
    benchmark
