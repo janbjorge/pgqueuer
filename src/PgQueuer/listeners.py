@@ -44,7 +44,7 @@ async def initialize_notice_event_listener(
             notice_event_queue.put_nowait(parsed.root)
         elif parsed.root.type == "requests_per_second_event":
             statistics[parsed.root.entrypoint].append(
-                (parsed.root.quantity, parsed.root.sent_at)
+                (parsed.root.count, parsed.root.sent_at)
             )
         else:
             raise NotImplementedError(parsed, payload)

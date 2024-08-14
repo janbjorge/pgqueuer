@@ -620,7 +620,7 @@ class Queries:
             models.RequestsPerSecondEvent(
                 channel=self.qb.settings.channel,
                 entrypoint=entrypoing,
-                quantity=quantity,
+                count=quantity,
                 sent_at=buffers.perf_counter_dt(),
                 type="requests_per_second_event",
             ).model_dump_json(),

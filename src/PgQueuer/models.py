@@ -74,7 +74,7 @@ class RequestsPerSecondEvent(Event):
 
     type: Literal["requests_per_second_event"]
     entrypoint: str
-    quantity: int
+    count: int
 
 
 class AnyEvent(
