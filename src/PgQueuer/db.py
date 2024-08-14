@@ -13,7 +13,7 @@ import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
-from PgQueuer.logconfig import logger
+from .logconfig import logger
 
 if TYPE_CHECKING:
     import asyncpg
