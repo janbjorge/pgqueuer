@@ -8,11 +8,11 @@ from typing import Literal
 
 from tabulate import tabulate, tabulate_formats
 
-from PgQueuer import supervisor
-from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
-from PgQueuer.listeners import initialize_event_listener
-from PgQueuer.models import LogStatistics, PGChannel
-from PgQueuer.queries import DBSettings, Queries, QueryBuilder
+from . import supervisor
+from .db import AsyncpgDriver, Driver, PsycopgDriver, dsn
+from .listeners import initialize_event_listener
+from .models import LogStatistics, PGChannel
+from .queries import DBSettings, Queries, QueryBuilder
 
 
 async def display_stats(

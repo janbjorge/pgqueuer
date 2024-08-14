@@ -4,7 +4,7 @@ import importlib
 import signal
 from typing import Awaitable, Callable, TypeAlias
 
-from PgQueuer.qm import QueueManager
+from .qm import QueueManager
 
 QM_FACTORY: TypeAlias = Callable[[], Awaitable[QueueManager]]
 
