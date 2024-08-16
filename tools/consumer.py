@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncpg
+
 from PgQueuer.db import AsyncpgDriver
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager

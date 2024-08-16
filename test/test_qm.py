@@ -4,6 +4,7 @@ import time
 from datetime import timedelta
 
 import pytest
+
 from PgQueuer import db
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager

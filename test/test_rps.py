@@ -7,6 +7,7 @@ from datetime import timedelta
 from itertools import count
 
 import pytest
+
 from PgQueuer.db import Driver
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager

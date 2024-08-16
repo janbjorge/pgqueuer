@@ -3,6 +3,7 @@ from typing import AsyncGenerator
 
 import asyncpg
 import pytest
+
 from PgQueuer.db import AsyncpgDriver, Driver, dsn
 
 

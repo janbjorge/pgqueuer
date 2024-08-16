@@ -4,6 +4,7 @@ import asyncio
 import sys
 
 import asyncpg
+
 from PgQueuer.db import AsyncpgDriver
 from PgQueuer.queries import Queries
 

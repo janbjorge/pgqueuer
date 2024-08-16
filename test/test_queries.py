@@ -2,6 +2,7 @@ import asyncio
 from datetime import timedelta
 
 import pytest
+
 from PgQueuer import db, models, queries
 
 

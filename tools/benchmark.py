@@ -7,12 +7,13 @@ import sys
 from datetime import timedelta
 from itertools import count
 
+from tqdm.asyncio import tqdm
+
 from PgQueuer.cli import querier
 from PgQueuer.db import dsn
 from PgQueuer.models import Job
 from PgQueuer.qm import QueueManager
 from PgQueuer.queries import Queries
-from tqdm.asyncio import tqdm
 
 
 async def consumer(

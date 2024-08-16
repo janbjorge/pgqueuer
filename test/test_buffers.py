@@ -3,6 +3,7 @@ import random
 from datetime import datetime, timedelta
 
 import pytest
+
 from PgQueuer.buffers import JobBuffer
 from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.models import Job

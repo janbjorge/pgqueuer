@@ -7,6 +7,7 @@ import asyncpg
 import psycopg
 import pytest
 from conftest import dsn
+
 from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
 from PgQueuer.helpers import perf_counter_dt
 from PgQueuer.listeners import initialize_notice_event_listener
