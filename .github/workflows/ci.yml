@@ -131,3 +131,33 @@ jobs:
 
       - name: Full test
         run: pytest -vs
+
+  ruff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up python
+        uses: actions/setup-python@v4
+      - name: Install dev-env.
+        run: |
+          pip install -U pip
+          pip install ".[dev]"
+      - name: Ruff check
+        if: ${{ always() }}
+        run: ruff check .
+      - name: Ruff format
+        if: ${{ always() }}
+        run: ruff format . --check
+
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up python
+        uses: actions/setup-python@v4
+      - name: Install dev-env.
+        run: |
+          pip install -U pip
+          pip install ".[dev]"
+      - name: Mypy
+        run: mypy .

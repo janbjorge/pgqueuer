@@ -2,8 +2,7 @@ name: Release messages to discord announcement channel
 
 on:
   release:
-    types: [created]
-
+    types: [released]
 
 jobs:
   run_main:
