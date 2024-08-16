@@ -99,6 +99,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+        postgres-version: ["13", "14", "15", "16"]
         os: [ubuntu-latest]
 
     env:
@@ -108,7 +109,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }}
+    name: Python ${{ matrix.python-version }} on ${{ matrix.os }} using PG ${{ matrix.postgres-version }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -122,8 +123,7 @@ jobs:
 
       - name: Build custom PostgreSQL Docker image
         run: |
-          docker compose up --build -d pgq
-
+          POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
       - name: Install PgQueuer
         run: |
           pip install pip -U
@@ -161,3 +161,10 @@ jobs:
           pip install ".[dev]"
       - name: Mypy
         run: mypy .
+
+  all-tests-completed:
+    needs: [benchmark, test-pgqueuer, ruff, mypy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check all jobs success
+        run: echo "All tests completed successfully."
