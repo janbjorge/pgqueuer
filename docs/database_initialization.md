@@ -53,3 +53,10 @@ python -m PgQueuer uninstall
 ```
 
 The CLI supports several flags to customize the connection settings. Use `--help` to see all available options.
+
+### Manual installation of database components
+
+You can find the commands needed for setting up your database for you version of PgQueuer by running:
+```bash
+python -m PgQueuer install --dry-run
+```
