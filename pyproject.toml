@@ -67,7 +67,8 @@ docs = [
 write_to = "src/_version.py"
 
 [tool.ruff]
-line-length = 88
+line-length = 100
+
 [tool.ruff.lint]
 select = [
     "C",

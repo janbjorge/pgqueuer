@@ -61,9 +61,7 @@ async def test_fetch(
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
     async with driver() as d:
-        assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [
-            {"one": 1, "two": 2}
-        ]
+        assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [{"one": 1, "two": 2}]
 
 
 @pytest.mark.parametrize("driver", drivers())
