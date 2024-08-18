@@ -150,10 +150,5 @@ async def test_pick_local_entrypoints(
         waiter(),
     )
 
-    assert (
-        sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked")
-        == 0
-    )
-    assert (
-        sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
-    )
+    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
+    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N

@@ -129,8 +129,7 @@ def cliparser() -> argparse.Namespace:
     common_arguments.add_argument(
         "--pg-user",
         help=(
-            "Database role for authentication. Defaults to PGUSER environment "
-            "variable if set."
+            "Database role for authentication. Defaults to PGUSER environment " "variable if set."
         ),
         default=os.environ.get("PGUSER"),
     )
@@ -146,10 +145,7 @@ def cliparser() -> argparse.Namespace:
 
     common_arguments.add_argument(
         "--pg-password",
-        help=(
-            "Password for authentication. Defaults to PGPASSWORD "
-            "environment variable if set"
-        ),
+        help=("Password for authentication. Defaults to PGPASSWORD " "environment variable if set"),
         default=os.environ.get("PGPASSWORD"),
     )
 
@@ -250,10 +246,7 @@ def cliparser() -> argparse.Namespace:
     )
     wm_parser.add_argument(
         "qm_factory",
-        help=(
-            "Path to the QueueManager factory function, e.g., "
-            '"myapp.create_queue_manager"'
-        ),
+        help=("Path to the QueueManager factory function, e.g., " '"myapp.create_queue_manager"'),
     )
     return parser.parse_args()
 
@@ -289,11 +282,7 @@ async def querier(
 async def main() -> None:  # noqa: C901
     parsed = cliparser()
 
-    if (
-        "PGQUEUER_PREFIX" not in os.environ
-        and isinstance(prefix := parsed.prefix, str)
-        and prefix
-    ):
+    if "PGQUEUER_PREFIX" not in os.environ and isinstance(prefix := parsed.prefix, str) and prefix:
         os.environ["PGQUEUER_PREFIX"] = prefix
 
     connection_str = parsed.pg_dsn or dsn(

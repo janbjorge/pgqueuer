@@ -198,9 +198,7 @@ class QueueManager:
                     _, rate = self.registry[entrypoint]
                     if isfinite(rate):
                         tm.add(
-                            asyncio.create_task(
-                                self.queries.emit_debounce_event(entrypoint, count)
-                            )
+                            asyncio.create_task(self.queries.emit_debounce_event(entrypoint, count))
                         )
 
                 try:

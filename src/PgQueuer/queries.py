@@ -592,9 +592,7 @@ class Queries:
     async def log_statistics(self, tail: int) -> list[models.LogStatistics]:
         return [
             models.LogStatistics.model_validate(dict(x))
-            for x in await self.driver.fetch(
-                self.qb.create_log_statistics_query(), tail
-            )
+            for x in await self.driver.fetch(self.qb.create_log_statistics_query(), tail)
         ]
 
     async def upgrade(self) -> None:
