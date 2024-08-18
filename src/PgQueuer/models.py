@@ -105,7 +105,7 @@ class Job(BaseModel):
     creation time, status, entrypoint, and optional payload.
     """
 
-    id: int
+    id: JobId
     priority: int
     created: AwareDatetime
     status: STATUS
