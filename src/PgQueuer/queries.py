@@ -471,7 +471,7 @@ class Queries:
         ensuring no two jobs with the same entrypoint are picked simultaneously.
 
         Parameters:
-        - batch_size: The number of jobs to retrieve. Must be greater than one (1).
+        - batch_size: The number of jobs to retrieve. Must be greater than or equal to one (1).
         - entrypoints: A set of entrypoints to filter the jobs.
         - retry_timer: If specified, selects jobs that have been in 'picked' status for
             longer than the specified retry-timer duration. If `None`, the retry-timer
@@ -479,7 +479,7 @@ class Queries:
         """
 
         if batch_size < 1:
-            raise ValueError("Batch size must be greater or equal to one (1)")
+            raise ValueError("Batch size must be greater than or equal to one (1)")
 
         if retry_timer and retry_timer < timedelta(seconds=0):
             raise ValueError("Retry timer must be a non-negative timedelta")
