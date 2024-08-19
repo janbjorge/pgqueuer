@@ -1,8 +1,8 @@
-## Introduction to Rate Limiting
+## Rate Limiting
 
 PgQueuer now includes a rate limiting feature, which allows users to control the frequency of job processing by specifying a maximum number of requests per second for each job type. 
 
-## Rate Limit Implementation
+### Implementation
 
 The rate limiting in PgQueuer is implemented by track the number of jobs processed for each registered entrypoint within a specific timeframe. This is achieved using the `entrypoint` decorator, which now accepts an optional parameter `requests_per_second`. When set, this parameter specifies the maximum number of jobs that can be processed per second for that particular entry point.
 
@@ -12,7 +12,7 @@ Rate limiting in PgQueuer is enhanced by several key components.
 
 **Usage of PostgreSQL NOTIFY**: Essential for broadcasting job count updates and controlling rates. This feature is particularly important for syncing rate limits across multiple workers in a distributed environment, ensuring consistent enforcement across all instances.
 
-## Setting Up Rate Limits
+### Setting Up Rate Limits
 
 When defining job processing functions, you can specify rate limits directly in the `entrypoint` decorator. Below is an example of how to set up rate limits for different job types.
 
