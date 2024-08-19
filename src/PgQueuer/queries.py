@@ -194,9 +194,11 @@ class QueryBuilder:
 
     def create_dequeue_query(self) -> str:
         """
-        Generates the SQL query string to insert a new job into the queue.
-        This query sets the job status to 'queued' and includes parameters for priority,
-        entrypoint, and payload.
+        Constructs an SQL query to for job retrieval from the queue. The SQL prioritizes
+        jobs based on their status: 'queued' or 'picked'. It selects 'queued' jobs first based
+        on highest priority and ascending ID order, and then 'picked' jobs that have exceeded
+        a retry interval, ensuring they are locked and retrieved without conflict using
+        FOR UPDATE SKIP LOCKED.
         """
         return f"""
     WITH next_job_queued AS (
@@ -239,9 +241,9 @@ class QueryBuilder:
 
     def create_enqueue_query(self) -> str:
         """
-        Generates the SQL query string to insert a new job into the queue.
-        This query sets the job status to 'queued' and includes parameters for priority,
-        entrypoint, and payload.
+        Constructs an SQL query to add new jobs to the queue. The query inserts jobs with
+        specific attributes: priority, entrypoint, and payload. Each job is initially set
+        to 'queued' status.
         """
         return f"""
         INSERT INTO {self.settings.queue_table}
