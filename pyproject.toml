@@ -42,6 +42,8 @@ Issues = "https://github.com/janbjorge/PgQueuer/issues"
 Repository = "https://github.com/janbjorge/PgQueuer/"
 
 [project.optional-dependencies]
+asyncpg = ["asyncpg"]
+psycopg = ["psycopg>=3.2.0"]
 dev = [
     "asyncpg",
     "asyncpg-stubs",
