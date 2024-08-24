@@ -1,15 +1,20 @@
 [build-system]
 build-backend = "setuptools.build_meta"
-requires = ["pip>=22.0.0", "setuptools", "setuptools_scm", "wheel"]
+requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
+
+[tool.setuptools]
+packages = ["pgqueuer"]
+
+[tool.setuptools_scm]
 
 [project]
 authors = [{ name = "janbjorge"}]
 description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
+dynamic = ["version"]
 license = { text = "MIT License" }
 name = "pgqueuer"
 readme = "README.md"
 requires-python = ">=3.10"
-version = "v0.7.0"
 
 classifiers = [
     "Development Status :: 4 - Beta",
