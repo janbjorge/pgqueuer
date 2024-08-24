@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pytest
 
-from PgQueuer import db, models, queries
+from pgqueuer import db, models, queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))

@@ -13,7 +13,7 @@ from datetime import datetime
 import asyncpg
 import psycopg
 
-from PgQueuer.db import AsyncpgDriver, PsycopgDriver
+from pgqueuer.db import AsyncpgDriver, PsycopgDriver
 
 
 async def main() -> None:

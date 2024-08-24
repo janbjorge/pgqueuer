@@ -1,23 +1,23 @@
 ### Readme
-## 🚀 PgQueuer - Building Smoother Workflows One Queue at a Time 🚀
-[![CI](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/PgQueuer/actions/workflows/ci.yml?query=branch%3Amain)
-[![pypi](https://img.shields.io/pypi/v/PgQueuer.svg)](https://pypi.python.org/pypi/PgQueuer)
-[![downloads](https://static.pepy.tech/badge/PgQueuer/month)](https://pepy.tech/project/PgQueuer)
-[![versions](https://img.shields.io/pypi/pyversions/PgQueuer.svg)](https://github.com/janbjorge/PgQueuer)
+## 🚀 pgqueuer - Building Smoother Workflows One Queue at a Time 🚀
+[![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain)
+[![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer)
+[![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer)
+[![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
 ---
 
 📚 **Documentation**: [Explore the Docs 📖](https://pgqueuer.readthedocs.io/en/latest/)
 
-🔍 **Source Code**: [View on GitHub 💾](https://github.com/janbjorge/PgQueuer/)
+🔍 **Source Code**: [View on GitHub 💾](https://github.com/janbjorge/pgqueuer/)
 
 💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
 
 ---
 
-## PgQueuer
+## pgqueuer
 
-PgQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PgQueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
+pgqueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, pgqueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
 
 ### Features
 
@@ -27,27 +27,27 @@ PgQueuer is a minimalist, high-performance job queue library for Python, leverag
 
 ### Installation
 
-To install PgQueuer, simply install with pip the following command:
+To install pgqueuer, simply install with pip the following command:
 
 ```bash
-pip install PgQueuer
+pip install pgqueuer
 ```
 
 ### Example Usage
 
-Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
+Here's how you can use pgqueuer in a typical scenario processing incoming data messages:
 
 #### Write and run a consumer
-Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process. In this case we want to be a bit more carefull as we want gracefull shutdowns, `PgQueuer run` will setup signals to
+Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process. In this case we want to be a bit more carefull as we want gracefull shutdowns, `pgqueuer run` will setup signals to
 ensure this.
 
 ```python
 from __future__ import annotations
 
 import asyncpg
-from PgQueuer.db import AsyncpgDriver, dsn
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
+from pgqueuer.db import AsyncpgDriver, dsn
+from pgqueuer.models import Job
+from pgqueuer.qm import QueueManager
 
 
 async def main() -> QueueManager:
@@ -64,7 +64,7 @@ async def main() -> QueueManager:
 ```
 
 ```bash
-python3 -m PgQueuer run tools.consumer.main
+python3 -m pgqueuer run tools.consumer.main
 ```
 
 #### Write and run a producer
@@ -76,8 +76,8 @@ import asyncio
 import sys
 
 import asyncpg
-from PgQueuer.db import AsyncpgDriver
-from PgQueuer.queries import Queries
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.queries import Queries
 
 
 async def main(N: int) -> None:

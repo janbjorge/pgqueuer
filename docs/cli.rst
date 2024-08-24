@@ -1,7 +1,7 @@
-CLI Module for PgQueuer
+CLI Module for pgqueuer
 =======================
 
-The pgq cli provides a command-line interface for managing various aspects of the PgQueuer system.
+The pgq cli provides a command-line interface for managing various aspects of the pgqueuer system.
 
 Functionality
 -------------
@@ -11,9 +11,9 @@ The CLI offers several commands to install, uninstall, upgrade, and manage the j
 Key Commands
 ------------
 
-- ``install``: Set up the necessary database schema for PgQueuer.
-- ``uninstall``: Remove the PgQueuer schema from the database.
-- ``upgrade``: Apply database schema upgrades to PgQueuer.
+- ``install``: Set up the necessary database schema for pgqueuer.
+- ``uninstall``: Remove the pgqueuer schema from the database.
+- ``upgrade``: Apply database schema upgrades to pgqueuer.
 - ``dashboard``: Display a live dashboard showing job statistics.
 - ``listen``: Listen to PostgreSQL NOTIFY channels for debugging.
 - ``run``: Start a QueueManager that manages job queues and processes.
@@ -32,7 +32,7 @@ To use the CLI, invoke it with the desired command and options. For example, to 
 
 .. code-block:: bash
 
-    python3 -m PgQueuer run <moduele+factory-function>
+    python3 -m pgqueuer run <moduele+factory-function>
 
 
 This command initializes the QueueManager using the factory function provided, setting up signal handling automatically to manage job processing interruptions gracefully.

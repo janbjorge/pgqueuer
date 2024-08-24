@@ -1,4 +1,4 @@
-"""Database Abstraction Layer for PgQueuer.
+"""Database Abstraction Layer for pgqueuer.
 
 This module provides database driver abstractions and a specific implementation
 for AsyncPG to handle database operations asynchronously.

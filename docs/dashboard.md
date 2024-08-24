@@ -8,7 +8,7 @@ The dashboard command provides a real-time view of job processing statistics, wh
 
 Example command to launch the dashboard:
 ```bash
-python -m PgQueuer dashboard --interval 10 --tail 25 --table-format grid
+python -m pgqueuer dashboard --interval 10 --tail 25 --table-format grid
 ```
 
 Example output from the dashboard:

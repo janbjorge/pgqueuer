@@ -1,6 +1,6 @@
 # QueueManager
 
-The `QueueManager` in PgQueuer facilitates the management and processing of jobs within the job queue.
+The `QueueManager` in pgqueuer facilitates the management and processing of jobs within the job queue.
 
 ## Setting Up the QueueManager
 
@@ -20,8 +20,8 @@ import signal
 
 import asyncpg
 
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
+from pgqueuer.models import Job
+from pgqueuer.qm import QueueManager
 
 
 async def main() -> None:

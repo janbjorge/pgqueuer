@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from PgQueuer.tm import TaskManager
+from pgqueuer.tm import TaskManager
 
 
 @pytest.mark.parametrize("N", (1, 2, 3, 5, 64))

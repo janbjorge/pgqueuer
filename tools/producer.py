@@ -5,8 +5,8 @@ import sys
 
 import asyncpg
 
-from PgQueuer.db import AsyncpgDriver
-from PgQueuer.queries import Queries
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.queries import Queries
 
 
 async def main(N: int) -> None:

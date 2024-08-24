@@ -1,4 +1,4 @@
-Welcome to PgQueuer's documentation!
+Welcome to pgqueuer's documentation!
 ====================================
 
 .. figure:: logo.png
@@ -9,18 +9,18 @@ Welcome to PgQueuer's documentation!
 
 Introduction
 ============
-PgQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PgQueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
+pgqueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, pgqueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
 
-The repository is hosted on `github <https://github.com/janbjorge/PgQueuer>`_
+The repository is hosted on `github <https://github.com/janbjorge/pgqueuer>`_
 
 Installation
 ------------
 
-Install PgQueuer using pip:
+Install pgqueuer using pip:
 
 .. code-block:: bash
 
-    pip install PgQueuer
+    pip install pgqueuer
 
 
 Features
@@ -34,7 +34,7 @@ Features
 Example Usage
 -------------
 
-Here's how you can use PgQueuer in a typical scenario processing incoming data messages:
+Here's how you can use pgqueuer in a typical scenario processing incoming data messages:
 
 Start a consumer
 ~~~~~~~~~~~~~~~~
@@ -43,7 +43,7 @@ Start a long-lived consumer that will begin processing jobs as soon as they are 
 
 .. code-block:: bash
 
-    python3 -m PgQueuer run tools.consumer.main
+    python3 -m pgqueuer run tools.consumer.main
 
 Start a producer
 ~~~~~~~~~~~~~~~~

@@ -5,10 +5,10 @@ from datetime import timedelta
 
 import pytest
 
-from PgQueuer import db
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
-from PgQueuer.queries import Queries
+from pgqueuer import db
+from pgqueuer.models import Job
+from pgqueuer.qm import QueueManager
+from pgqueuer.queries import Queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))

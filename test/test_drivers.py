@@ -8,11 +8,11 @@ import psycopg
 import pytest
 from conftest import dsn
 
-from PgQueuer.db import AsyncpgDriver, Driver, PsycopgDriver
-from PgQueuer.helpers import perf_counter_dt
-from PgQueuer.listeners import initialize_notice_event_listener
-from PgQueuer.models import PGChannel, TableChangedEvent
-from PgQueuer.queries import QueryBuilder
+from pgqueuer.db import AsyncpgDriver, Driver, PsycopgDriver
+from pgqueuer.helpers import perf_counter_dt
+from pgqueuer.listeners import initialize_notice_event_listener
+from pgqueuer.models import PGChannel, TableChangedEvent
+from pgqueuer.queries import QueryBuilder
 
 
 @asynccontextmanager

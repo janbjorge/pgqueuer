@@ -1,10 +1,10 @@
-# Contributing to PgQueuer
+# Contributing to pgqueuer
 
-First off, thank you for considering contributing to PgQueuer.
+First off, thank you for considering contributing to pgqueuer.
 
 ## How to Contribute
 
-There are many ways you can contribute to PgQueuer, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests, or writing code which can be incorporated into PgQueuer itself.
+There are many ways you can contribute to pgqueuer, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests, or writing code which can be incorporated into pgqueuer itself.
 
 Below you will find a set of guidelines to follow when contributing. These are mostly guidelines, not rules, so use your best judgment and feel free to propose changes to this document.
 
@@ -46,4 +46,4 @@ Adhere to the [PEP 8](https://pep8.org/) style guide, using `ruff` for automatic
 
 ## Community
 
-Discussions about PgQueuer take place on this repository's [Issues](https://github.com/janbjorge/PgQueuer/issues) and [Pull Requests](https://github.com/janbjorge/PgQueuer/pulls) sections. Anybody is welcome to join these conversations.
+Discussions about pgqueuer take place on this repository's [Issues](https://github.com/janbjorge/pgqueuer/issues) and [Pull Requests](https://github.com/janbjorge/pgqueuer/pulls) sections. Anybody is welcome to join these conversations.
