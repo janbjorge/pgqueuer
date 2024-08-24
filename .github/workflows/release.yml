@@ -11,7 +11,7 @@ jobs:
 
     environment:
       name: release
-      url: https://pypi.org/project/PgQueuer/
+      url: https://pypi.org/project/pgqueuer/
 
     permissions:
       id-token: write

@@ -4,10 +4,10 @@ requires = ["pip>=22.0.0", "setuptools", "setuptools_scm", "wheel"]
 
 [project]
 authors = [{ name = "janbjorge"}]
-description = "PgQueuer is a Python library leveraging PostgreSQL for efficient job queuing."
+description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
 dynamic = ["version"]
 license = { text = "MIT License" }
-name = "PgQueuer"
+name = "pgqueuer"
 readme = "README.md"
 requires-python = ">=3.10"
 
@@ -36,10 +36,10 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/janbjorge/PgQueuer/wiki"
-Homepage = "https://github.com/janbjorge/PgQueuer/"
-Issues = "https://github.com/janbjorge/PgQueuer/issues"
-Repository = "https://github.com/janbjorge/PgQueuer/"
+Documentation = "https://github.com/janbjorge/pgqueuer/wiki"
+Homepage = "https://github.com/janbjorge/pgqueuer/"
+Issues = "https://github.com/janbjorge/pgqueuer/issues"
+Repository = "https://github.com/janbjorge/pgqueuer/"
 
 [project.optional-dependencies]
 asyncpg = ["asyncpg"]
