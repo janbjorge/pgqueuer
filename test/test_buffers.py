@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from PgQueuer.buffers import JobBuffer
-from PgQueuer.helpers import perf_counter_dt
-from PgQueuer.models import Job
-from PgQueuer.tm import TaskManager
+from pgqueuer.buffers import JobBuffer
+from pgqueuer.helpers import perf_counter_dt
+from pgqueuer.models import Job
+from pgqueuer.tm import TaskManager
 
 
 def job_faker() -> Job:

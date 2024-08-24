@@ -1,4 +1,4 @@
-name: Test PgQueuer
+name: Test pgqueuer
 
 on:
   pull_request:
@@ -21,7 +21,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: PgQueuer example
+    name: pgqueuer example
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -36,7 +36,7 @@ jobs:
       - name: Build custom PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
-      - name: Install PgQueuer
+      - name: Install pgqueuer
         run: |
           pip install pip -U
           pip install ".[dev]"
@@ -44,7 +44,7 @@ jobs:
       - name: Run example and send SIGINT
         run: |
           # Start the Python program in the background
-          PYTHONUNBUFFERED=1 python3 -m PgQueuer run tools.consumer.main &
+          PYTHONUNBUFFERED=1 python3 -m pgqueuer run tools.consumer.main &
           pid=$!
 
           # Wait for 10 seconds
@@ -71,7 +71,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: PgQueuer Benchmark
+    name: pgqueuer Benchmark
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -86,7 +86,7 @@ jobs:
       - name: Build custom PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
-      - name: Install PgQueuer
+      - name: Install pgqueuer
         run: |
           pip install pip -U
           pip install ".[dev]"
@@ -124,7 +124,7 @@ jobs:
       - name: Build custom PostgreSQL Docker image
         run: |
           POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
-      - name: Install PgQueuer
+      - name: Install pgqueuer
         run: |
           pip install pip -U
           pip install ".[dev]"

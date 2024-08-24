@@ -9,11 +9,11 @@ from itertools import count
 
 from tqdm.asyncio import tqdm
 
-from PgQueuer.cli import querier
-from PgQueuer.db import dsn
-from PgQueuer.models import Job
-from PgQueuer.qm import QueueManager
-from PgQueuer.queries import Queries
+from pgqueuer.cli import querier
+from pgqueuer.db import dsn
+from pgqueuer.models import Job
+from pgqueuer.qm import QueueManager
+from pgqueuer.queries import Queries
 
 
 async def consumer(

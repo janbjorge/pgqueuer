@@ -77,14 +77,14 @@ async def fetch_and_display(
 def cliparser() -> argparse.Namespace:
     common_arguments = argparse.ArgumentParser(
         add_help=False,
-        prog="PgQueuer",
+        prog="pgqueuer",
     )
 
     common_arguments.add_argument(
         "--prefix",
         default="",
         help=(
-            "All PgQueuer tables/functions/etc... will start with this prefix. "
+            "All pgqueuer tables/functions/etc... will start with this prefix. "
             "(If set, addinal config is required.)"
         ),
     )

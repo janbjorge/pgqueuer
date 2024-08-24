@@ -166,7 +166,7 @@ class QueueManager:
         if not (await self.queries.has_updated_column()):
             raise RuntimeError(
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
-                "updated column, please run 'python3 -m PgQueuer upgrade'"
+                "updated column, please run 'python3 -m pgqueuer upgrade'"
             )
 
         self.buffer.max_size = batch_size

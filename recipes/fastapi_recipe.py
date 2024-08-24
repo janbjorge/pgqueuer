@@ -5,8 +5,8 @@ from typing import AsyncGenerator
 import asyncpg
 from fastapi import Depends, FastAPI, Request, Response
 
-from PgQueuer.db import AsyncpgDriver
-from PgQueuer.queries import Queries
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.queries import Queries
 
 
 def get_pgq_queries(request: Request) -> Queries:
