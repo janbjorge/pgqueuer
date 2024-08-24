@@ -1,4 +1,4 @@
-project = "PgQueuer"
+project = "pgqueuer"
 copyright = "2024, JeeyBee"
 author = "JeeyBee"
 extensions = ["myst_parser"]
