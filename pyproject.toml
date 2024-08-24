@@ -5,11 +5,11 @@ requires = ["pip>=22.0.0", "setuptools", "setuptools_scm", "wheel"]
 [project]
 authors = [{ name = "janbjorge"}]
 description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
-dynamic = ["version"]
 license = { text = "MIT License" }
 name = "pgqueuer"
 readme = "README.md"
 requires-python = ">=3.10"
+version = "v0.7.0"
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -64,9 +64,6 @@ docs = [
     "sphinx",
     "sphinx-rtd-theme",
 ]
-
-[tool.setuptools_scm]
-write_to = "pgqueuer/_version.py"
 
 [tool.ruff]
 line-length = 100
