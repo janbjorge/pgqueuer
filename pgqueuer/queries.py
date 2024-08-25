@@ -97,8 +97,7 @@ class QueryBuilder:
             PostgreSQL's LISTEN/NOTIFY system.
         """
 
-        return f"""
-    CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked');
+        return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked');
     CREATE TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
@@ -183,8 +182,7 @@ class QueryBuilder:
         related to the job queue system.
         """
 
-        return f"""
-    DROP TRIGGER {self.settings.trigger} ON {self.settings.queue_table};
+        return f"""DROP TRIGGER {self.settings.trigger} ON {self.settings.queue_table};
     DROP FUNCTION {self.settings.function};
     DROP TABLE {self.settings.queue_table};
     DROP TABLE {self.settings.statistics_table};
@@ -200,8 +198,7 @@ class QueryBuilder:
         a retry interval, ensuring they are locked and retrieved without conflict using
         FOR UPDATE SKIP LOCKED.
         """
-        return f"""
-    WITH next_job_queued AS (
+        return f"""WITH next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
         WHERE
@@ -245,8 +242,7 @@ class QueryBuilder:
         specific attributes: priority, entrypoint, and payload. Each job is initially set
         to 'queued' status.
         """
-        return f"""
-        INSERT INTO {self.settings.queue_table}
+        return f"""INSERT INTO {self.settings.queue_table}
         (priority, entrypoint, payload, status)
         VALUES (unnest($1::int[]), unnest($2::text[]), unnest($3::bytea[]), 'queued')
         RETURNING id
@@ -273,8 +269,7 @@ class QueryBuilder:
         grouped by entrypoint and priority. This helps in understanding the distribution
         of jobs across different priorities and entrypoints.
         """
-        return f"""
-    SELECT
+        return f"""SELECT
         count(*) AS count,
         priority,
         entrypoint,
@@ -291,8 +286,7 @@ class QueryBuilder:
         queue table to the log table, capturing details like job priority,
         entrypoint, time in queue, creation time, and final status.
         """
-        return f"""
-    WITH deleted AS (
+        return f"""WITH deleted AS (
         DELETE FROM {self.settings.queue_table}
         WHERE id = ANY($1::integer[])
         RETURNING   id,
@@ -354,10 +348,7 @@ class QueryBuilder:
         optionally filtered by a list of entrypoints. This allows selective clearing
         of log entries based on their source entrypoints.
         """
-        return f"""
-    DELETE FROM {self.settings.statistics_table}
-    WHERE entrypoint = ANY($1)
-    """
+        return f"""DELETE FROM {self.settings.statistics_table} WHERE entrypoint = ANY($1)"""
 
     def create_log_statistics_query(self) -> str:
         """
@@ -366,8 +357,7 @@ class QueryBuilder:
         entrypoint, priority, and status, limited to a specified number of most
         recent records defined by 'tail'.
         """
-        return f"""
-    SELECT
+        return f"""SELECT
         count,
         created,
         time_in_queue,
@@ -382,8 +372,7 @@ class QueryBuilder:
     def create_upgrade_queries(self) -> Generator[str, None, None]:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
-        yield f"""
-    CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
+        yield f"""CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
     DECLARE
         to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
     BEGIN
