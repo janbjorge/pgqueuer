@@ -544,13 +544,12 @@ class Queries:
             else self.driver.execute(self.qb.create_truncate_queue_query())
         )
 
-    async def cancel_job(self, jobid_or_jobids: models.JobId | list[models.JobId]) -> None:
+    async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
         Clears jobs from the queue, optionally filtering by entrypoint if specified.
         """
-        jobs = [jobid_or_jobids] if isinstance(jobid_or_jobids, int) else jobid_or_jobids
-        await self.driver.execute(self.qb.create_log_job_query(), jobs, ["canceled"] * len(jobs))
-        await self.emit_cancellation_event(jobs)
+        await self.driver.execute(self.qb.create_log_job_query(), ids, ["canceled"] * len(ids))
+        await self.notify_job_cancellation(ids)
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         """
@@ -608,7 +607,7 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
-    async def emit_debounce_event(
+    async def notify_debounce_event(
         self,
         entrypoing: str,
         quantity: int,
@@ -624,7 +623,11 @@ class Queries:
             ).model_dump_json(),
         )
 
-    async def emit_cancellation_event(self, ids: list[models.JobId]) -> None:
+    async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
+        """
+        Emits a cancellation event for the specified job IDs, notifying the
+        system that these jobs have been cancelled.
+        """
         await self.driver.execute(
             self.qb.create_notify_query(),
             models.CancellationEvent(

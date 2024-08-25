@@ -166,7 +166,7 @@ async def test_cancellation(
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
-        scope = qm.cancel_scope_for_job(job.id)
+        scope = qm.get_cancel_scope(job.id)
         await event.wait()
         cancel_called_not_cancel_called.append(
             "cancel_called" if scope.cancel_called else "not_cancel_called"
@@ -182,7 +182,7 @@ async def test_cancellation(
         while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
             await asyncio.sleep(0)
 
-        await q.cancel_job(job_ids)
+        await q.mark_job_as_cancelled(job_ids)
         event.set()
 
         qm.alive = False
@@ -210,7 +210,7 @@ async def test_cancellation_ctx_mngr(
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
-        with qm.cancel_scope_for_job(job.id) as scope:
+        with qm.get_cancel_scope(job.id) as scope:
             await event.wait()
             cancel_called_not_cancel_called.append(
                 "cancel_called" if scope.cancel_called else "not_cancel_called"
@@ -226,7 +226,7 @@ async def test_cancellation_ctx_mngr(
         while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
             await asyncio.sleep(0)
 
-        await q.cancel_job(job_ids)
+        await q.mark_job_as_cancelled(job_ids)
         event.set()
 
         qm.alive = False

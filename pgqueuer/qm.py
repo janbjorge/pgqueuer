@@ -126,7 +126,11 @@ class QueueManager:
             flush_callback=self.queries.log_jobs,
         )
 
-    def cancel_scope_for_job(self, job_id: JobId) -> anyio.CancelScope:
+    def get_cancel_scope(self, job_id: JobId) -> anyio.CancelScope:
+        """
+        Retrieves the cancellation scope for a specific job, allowing the job to be checked
+        and managed for cancellation.
+        """
         return self.jobs_canceled[job_id]
 
     def entrypoint(
@@ -231,7 +235,7 @@ class QueueManager:
                     if isfinite(rps):
                         tm.add(
                             asyncio.create_task(
-                                self.queries.emit_debounce_event(
+                                self.queries.notify_debounce_event(
                                     entrypoint,
                                     count,
                                 )
@@ -280,3 +284,5 @@ class QueueManager:
                 job.id,
             )
             await self.buffer.add_job(job, "successful")
+        finally:
+            self.jobs_canceled.pop(job.id, None)

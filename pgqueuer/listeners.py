@@ -23,8 +23,8 @@ async def initialize_notice_event_listener(
     canceled: dict[models.JobId, anyio.CancelScope],
 ) -> PGNoticeEventListener:
     """
-    This method establishes a listener on a PostgreSQL channel using
-    the provided connection and channel.
+    Initializes a listener on a PostgreSQL channel, handling different types
+    of events such as table changes, requests per second, and job cancellations.
     """
 
     def parse_and_queue(
