@@ -43,3 +43,28 @@ async def test_task_manager_ctx_mngr(N: int) -> None:
         future.set_result(None)
 
     assert len(tm.tasks) == 0
+
+
+@pytest.mark.parametrize("N", (1, 2, 3, 5, 64))
+async def test_task_manager_ctx_mngr_exception(
+    N: int,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def waiter(event: asyncio.Event) -> None:
+        await event.wait()
+        raise RuntimeError
+
+    event = asyncio.Event()
+
+    async with TaskManager() as tm:
+        assert len(tm.tasks) == 0
+
+        for _ in range(N):
+            tm.add(asyncio.create_task(waiter(event)))
+
+        assert len(tm.tasks) == N
+
+        event.set()
+
+    assert len(tm.tasks) == 0
+    assert len(caplog.messages)
