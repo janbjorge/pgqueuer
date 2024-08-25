@@ -20,6 +20,12 @@ OPERATIONS = Literal[
     "truncate",
 ]
 
+EVNET_TYPES = Literal[
+    "table_changed_event",
+    "requests_per_second_event",
+    "cancellation_event",
+]
+
 
 class Event(BaseModel):
     """
@@ -34,7 +40,7 @@ class Event(BaseModel):
 
     channel: PGChannel
     sent_at: AwareDatetime
-    type: Literal["table_changed_event", "requests_per_second_event"]
+    type: EVNET_TYPES
     received_at: AwareDatetime = Field(
         init=False,
         default_factory=lambda: datetime.now(
@@ -77,10 +83,23 @@ class RequestsPerSecondEvent(Event):
     count: int
 
 
+class CancellationEvent(Event):
+    """
+    A class representing an event in a PostgreSQL channel.
+
+    Attributes:
+        operation: The type of operation performed (insert, update or delete).
+        table: The table the event is associated with.
+    """
+
+    type: Literal["cancellation_event"]
+    ids: list[JobId]
+
+
 class AnyEvent(
     RootModel[
         Annotated[
-            TableChangedEvent | RequestsPerSecondEvent,
+            TableChangedEvent | RequestsPerSecondEvent | CancellationEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -115,6 +134,7 @@ class Job(BaseModel):
 
 ###### Statistics ######
 STATUS_LOG = Literal[
+    "canceled",
     "exception",
     "successful",
 ]

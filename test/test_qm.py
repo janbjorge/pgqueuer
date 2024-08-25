@@ -152,3 +152,91 @@ async def test_pick_local_entrypoints(
 
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
+
+
+@pytest.mark.parametrize("N", (0, 1, 4, 32, 100))
+async def test_cancellation(
+    pgdriver: db.Driver,
+    N: int,
+) -> None:
+    event = asyncio.Event()
+    cancel_called_not_cancel_called = list[str]()
+    q = Queries(pgdriver)
+    qm = QueueManager(pgdriver)
+
+    @qm.entrypoint("to_be_canceled")
+    async def to_be_canceled(job: Job) -> None:
+        scope = qm.cancel_scope_for_job(job.id)
+        await event.wait()
+        cancel_called_not_cancel_called.append(
+            "cancel_called" if scope.cancel_called else "not_cancel_called"
+        )
+
+    job_ids = await q.enqueue(
+        ["to_be_canceled"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
+
+    async def waiter() -> None:
+        while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
+            await asyncio.sleep(0)
+
+        await q.cancel_job(job_ids)
+        event.set()
+
+        qm.alive = False
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
+
+    assert cancel_called_not_cancel_called == ["cancel_called"] * N
+
+    # Logged as canceled
+    assert sum(x.count for x in await q.log_statistics(tail=1_000) if x.status == "canceled") == N
+
+
+@pytest.mark.parametrize("N", (0, 1, 4, 32, 100))
+async def test_cancellation_ctx_mngr(
+    pgdriver: db.Driver,
+    N: int,
+) -> None:
+    event = asyncio.Event()
+    cancel_called_not_cancel_called = list[str]()
+    q = Queries(pgdriver)
+    qm = QueueManager(pgdriver)
+
+    @qm.entrypoint("to_be_canceled")
+    async def to_be_canceled(job: Job) -> None:
+        with qm.cancel_scope_for_job(job.id) as scope:
+            await event.wait()
+            cancel_called_not_cancel_called.append(
+                "cancel_called" if scope.cancel_called else "not_cancel_called"
+            )
+
+    job_ids = await q.enqueue(
+        ["to_be_canceled"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
+
+    async def waiter() -> None:
+        while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
+            await asyncio.sleep(0)
+
+        await q.cancel_job(job_ids)
+        event.set()
+
+        qm.alive = False
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
+
+    assert cancel_called_not_cancel_called == []
+
+    # Logged as canceled
+    assert sum(x.count for x in await q.log_statistics(tail=1_000) if x.status == "canceled") == N

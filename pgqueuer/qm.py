@@ -25,7 +25,7 @@ from .db import Driver
 from .helpers import perf_counter_dt
 from .listeners import initialize_notice_event_listener
 from .logconfig import logger
-from .models import Job, PGChannel
+from .models import Job, JobId, PGChannel
 from .queries import DBSettings, Queries
 from .tm import TaskManager
 
@@ -109,6 +109,10 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
+    jobs_canceled: defaultdict[JobId, anyio.CancelScope] = dataclasses.field(
+        init=False,
+        default_factory=lambda: defaultdict(anyio.CancelScope),
+    )
 
     def __post_init__(self) -> None:
         """
@@ -121,6 +125,9 @@ class QueueManager:
             timeout=timedelta(seconds=0.01),
             flush_callback=self.queries.log_jobs,
         )
+
+    def cancel_scope_for_job(self, job_id: JobId) -> anyio.CancelScope:
+        return self.jobs_canceled[job_id]
 
     def entrypoint(
         self,
@@ -200,6 +207,7 @@ class QueueManager:
                 self.connection,
                 self.channel,
                 self.statistics,
+                self.jobs_canceled,
             )
 
             while self.alive:

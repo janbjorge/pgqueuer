@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
+import anyio
 import asyncpg
 import psycopg
 import pytest
@@ -145,6 +146,7 @@ async def test_event_listener(
         listener = await initialize_notice_event_listener(
             d,
             channel,
+            {},
             {},
         )
 

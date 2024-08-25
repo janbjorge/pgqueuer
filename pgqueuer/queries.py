@@ -112,7 +112,7 @@ class QueryBuilder:
     CREATE INDEX {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC)
         INCLUDE (id) WHERE status = 'picked';
 
-    CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
+    CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful', 'canceled');
     CREATE TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
@@ -412,6 +412,7 @@ class QueryBuilder:
 
     END;
     $$ LANGUAGE plpgsql;"""
+        yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         return """
@@ -543,6 +544,14 @@ class Queries:
             else self.driver.execute(self.qb.create_truncate_queue_query())
         )
 
+    async def cancel_job(self, jobid_or_jobids: models.JobId | list[models.JobId]) -> None:
+        """
+        Clears jobs from the queue, optionally filtering by entrypoint if specified.
+        """
+        jobs = [jobid_or_jobids] if isinstance(jobid_or_jobids, int) else jobid_or_jobids
+        await self.driver.execute(self.qb.create_log_job_query(), jobs, ["canceled"] * len(jobs))
+        await self.emit_cancellation_event(jobs)
+
     async def queue_size(self) -> list[models.QueueStatistics]:
         """
         Returns the number of jobs in the queue grouped by entrypoint and priority.
@@ -612,5 +621,16 @@ class Queries:
                 count=quantity,
                 sent_at=buffers.perf_counter_dt(),
                 type="requests_per_second_event",
+            ).model_dump_json(),
+        )
+
+    async def emit_cancellation_event(self, ids: list[models.JobId]) -> None:
+        await self.driver.execute(
+            self.qb.create_notify_query(),
+            models.CancellationEvent(
+                channel=self.qb.settings.channel,
+                ids=ids,
+                sent_at=buffers.perf_counter_dt(),
+                type="cancellation_event",
             ).model_dump_json(),
         )

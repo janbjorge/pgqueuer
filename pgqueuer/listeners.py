@@ -20,6 +20,7 @@ async def initialize_notice_event_listener(
     connection: Driver,
     channel: PGChannel,
     statistics: dict[str, deque[tuple[int, datetime]]],
+    canceled: dict[models.JobId, anyio.CancelScope],
 ) -> PGNoticeEventListener:
     """
     This method establishes a listener on a PostgreSQL channel using
@@ -44,6 +45,9 @@ async def initialize_notice_event_listener(
             notice_event_queue.put_nowait(parsed.root)
         elif parsed.root.type == "requests_per_second_event":
             statistics[parsed.root.entrypoint].append((parsed.root.count, parsed.root.sent_at))
+        elif parsed.root.type == "cancellation_event":
+            for jid in parsed.root.ids:
+                canceled[jid].cancel()
         else:
             raise NotImplementedError(parsed, payload)
 
