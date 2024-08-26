@@ -20,7 +20,7 @@ RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 COPY . /src/
-RUN cd src && pip install -e ".[dev]"
+RUN cd src && pip install -e ".[asyncpg]"
 
 # # Copy the combined database setup script into the container
 COPY --chmod=0755 test/db/init_db.sh /docker-entrypoint-initdb.d/init_db.sh
