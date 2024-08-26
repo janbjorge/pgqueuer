@@ -202,6 +202,16 @@ class QueueManager:
                 "updated column, please run 'python3 -m pgqueuer upgrade'"
             )
 
+        if not (
+            await self.queries.has_user_type(
+                "canceled", self.queries.qb.settings.statistics_table_status_type
+            )
+        ):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.statistics_table_status_type} is missing the "
+                "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
+            )
+
         self.buffer.max_size = batch_size
 
         async with TaskManager() as tm:

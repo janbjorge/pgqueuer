@@ -424,6 +424,11 @@ class QueryBuilder:
                 AND column_name = $2
             );"""
 
+    def create_user_types_query(self) -> str:
+        return """SELECT enumlabel, typname
+    FROM pg_enum
+    JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
+
     def create_notify_query(self) -> str:
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
@@ -609,6 +614,14 @@ class Queries:
         assert len(rows) == 1
         (row,) = rows
         return row["exists"]
+
+    async def has_user_type(
+        self,
+        key: str,
+        user_type: str,
+    ) -> bool:
+        rows = await self.driver.fetch(self.qb.create_user_types_query())
+        return (key, user_type) in ((row["enumlabel"], row["typname"]) for row in rows)
 
     async def notify_debounce_event(
         self,
