@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-from collections import defaultdict, deque
 from datetime import timedelta
 from typing import Literal
 
@@ -53,7 +52,7 @@ async def display_pg_channel(
     listener = await initialize_notice_event_listener(
         connection,
         channel,
-        defaultdict(lambda: deque(maxlen=1)),
+        {},
     )
     while True:
         print(repr(await listener.get()))

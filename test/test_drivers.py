@@ -1,5 +1,4 @@
 import asyncio
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
@@ -146,7 +145,7 @@ async def test_event_listener(
         listener = await initialize_notice_event_listener(
             d,
             channel,
-            defaultdict(deque),
+            {},
         )
 
         # Seems psycopg does not pick up on
