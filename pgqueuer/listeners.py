@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from contextlib import suppress
 from datetime import datetime
 
+import anyio
+
+from . import models
 from .db import Driver
 from .logconfig import logger
 from .models import AnyEvent, PGChannel, TableChangedEvent
@@ -47,7 +51,8 @@ async def initialize_notice_event_listener(
             statistics[parsed.root.entrypoint].append((parsed.root.count, parsed.root.sent_at))
         elif parsed.root.type == "cancellation_event":
             for jid in parsed.root.ids:
-                canceled[jid].cancel()
+                with suppress(KeyError):
+                    canceled[jid].cancellation.set()
         else:
             raise NotImplementedError(parsed, payload)
 

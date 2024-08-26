@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import dataclasses
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
 
@@ -161,3 +164,8 @@ class LogStatistics(BaseModel):
     priority: int
     status: STATUS_LOG
     time_in_queue: timedelta
+
+
+@dataclasses.dataclass
+class Context:
+    cancellation: asyncio.Event | threading.Event

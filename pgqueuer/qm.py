@@ -224,7 +224,6 @@ class QueueManager:
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
-                    self.jobs_canceled[job.id] = anyio.CancelScope()
                     tm.add(asyncio.create_task(self._dispatch(job)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
