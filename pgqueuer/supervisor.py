@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import timedelta
 import importlib
 import signal
+from datetime import timedelta
 from typing import Awaitable, Callable, TypeAlias
 
 from .qm import QueueManager
