@@ -68,7 +68,7 @@ Job cancellations are managed through PostgreSQL's NOTIFY system. The `QueueMana
 
 #### Enqueue Jobs
 
-When enqueueing jobs, a unique identifiers is assined to each job, which will be used later to reference and potentially cancel the job:
+When enqueueing jobs, a unique identifiers is assigned to each job, which will be used later to reference and potentially cancel the job:
 
 ```python
 from pgqueuer.queries import Queries
@@ -82,22 +82,42 @@ job_ids = await queries.enqueue("task_entrypoint", b"Job data", priority=5)
 
 To cancel jobs, use the IDs obtained during the enqueueing:
 
+This function sends a cancellation event that the QueueManager processes. Where a cancellation is attempted immediately, it means that the affected jobs are removed from the queue table and promptly added to the log table with a status of "canceled". However, due to the asynchronous nature of the operations and potential database delays, this process is inherently racy.
+
 ```python
 await queries.mark_job_as_cancelled(job_ids)
 ```
 
-This function sends a cancellation event that the `QueueManager` processes. The cancellation is attempted immediately, but due to the asynchronous nature of the operations and potential database delays, this process is inherently racy.
-
 ### Handling Cancellations in Job Logic
 
-Jobs should include logic to handle potential cancellations gracefully:
+Jobs should include logic to handle potential cancellations gracefully. Below are examples of how to integrate cancellation checks into both asynchronous and synchronous job processing logic.
+
+#### Asynchronous Job Logic
+In asynchronous job logic, the `cancellation` context manager is used to automatically manage the scope of cancellation. This ensures that any cancellation request interrupts the ongoing task as soon as possible.
 
 ```python
 @qm.entrypoint("task_entrypoint")
 async def process_job(job: Job):
+    # The context manager handles entry and exit, applying cancellation checks around the awaited calls
     with qm.get_context(job.id).cancellation:
         # Insert job logic here
         await perform_task(job.data)
+```
+The context manager in asynchronous code is advantageous because it can suspend the coroutine at `await` points and check for cancellation in a non-blocking manner, ensuring that resources are freed appropriately and cancellation is handled efficiently.
+
+#### Synchronous Job Logic
+In synchronous job logic, cancellation is checked manually within the logic flow. A context manager is not used here because synchronous functions do not support the automatic suspension and resumption of execution that asynchronous context managers provide.
+
+```python
+@qm.entrypoint("sync_entrypoint")
+def process_job(job: Job):
+    # Manually access the cancellation scope to check if a cancellation has been requested
+    cancel_scope = qm.get_context(job.id).cancellation
+    for item in job_steps:
+        # Manually check if cancellation has been called at each significant step
+        if cancel_scope.cancel_called:
+            return  # Exit the function if the job has been canceled
+        perform_task(item)
 ```
 
 ### Understanding the Cancellation Object
