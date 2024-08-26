@@ -8,12 +8,12 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import (
-    TYPE_CHECKING,
     Awaitable,
     Callable,
     TypeAlias,
     TypeGuard,
     TypeVar,
+    cast,
     overload,
 )
 
@@ -29,11 +29,10 @@ from .models import Job, PGChannel
 from .queries import DBSettings, Queries
 from .tm import TaskManager
 
-if TYPE_CHECKING:
-    AsyncEntrypoint: TypeAlias = Callable[[Job], Awaitable[None]]
-    SyncEntrypoint: TypeAlias = Callable[[Job], None]
-    Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
-    T = TypeVar("T", bound=Entrypoint)
+AsyncEntrypoint: TypeAlias = Callable[[Job], Awaitable[None]]
+SyncEntrypoint: TypeAlias = Callable[[Job], None]
+Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
+T = TypeVar("T", bound=Entrypoint)
 
 
 @overload
@@ -66,6 +65,23 @@ def is_async_callable(obj: object) -> bool:
     )
 
 
+class JobExecutor:
+    def __init__(
+        self,
+        func: Entrypoint,
+        requests_per_second: float,
+    ) -> None:
+        self.func = func
+        self.requests_per_second = requests_per_second
+        self.is_async = is_async_callable(func)
+
+    async def __call__(self, job: Job) -> None:
+        if self.is_async:
+            await cast(AsyncEntrypoint, self.func)(job)
+        else:
+            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.func), job)
+
+
 @dataclasses.dataclass
 class QueueManager:
     """
@@ -82,8 +98,9 @@ class QueueManager:
     )
     buffer: JobBuffer = dataclasses.field(init=False)
     queries: Queries = dataclasses.field(init=False)
-    registry: dict[str, tuple[Entrypoint, float]] = dataclasses.field(
-        init=False, default_factory=dict
+    registry: dict[str, JobExecutor] = dataclasses.field(
+        init=False,
+        default_factory=dict,
     )
     # dict[entrypoint, [count, timestamp]]
     statistics: defaultdict[str, deque[tuple[int, datetime]]] = dataclasses.field(
@@ -120,7 +137,10 @@ class QueueManager:
             raise ValueError("Rate must be greater or eq. to zero.")
 
         def register(func: T) -> T:
-            self.registry[name] = (func, requests_per_second)
+            self.registry[name] = JobExecutor(
+                func=func,
+                requests_per_second=requests_per_second,
+            )
             return func
 
         return register
@@ -140,8 +160,8 @@ class QueueManager:
     def entrypoints_below_requests_per_second(self) -> set[str]:
         return {
             entrypoint
-            for entrypoint, (_, rate) in self.registry.items()
-            if self.observed_requests_per_second(entrypoint) < rate
+            for entrypoint, fn in self.registry.items()
+            if self.observed_requests_per_second(entrypoint) < fn.requests_per_second
         }
 
     async def run(
@@ -195,10 +215,15 @@ class QueueManager:
 
                 for entrypoint, count in entrypoint_count.items():
                     # skip if rate is inf.
-                    _, rate = self.registry[entrypoint]
-                    if isfinite(rate):
+                    rps = self.registry[entrypoint].requests_per_second
+                    if isfinite(rps):
                         tm.add(
-                            asyncio.create_task(self.queries.emit_debounce_event(entrypoint, count))
+                            asyncio.create_task(
+                                self.queries.emit_debounce_event(
+                                    entrypoint,
+                                    count,
+                                )
+                            )
                         )
 
                 try:
@@ -228,12 +253,7 @@ class QueueManager:
         )
 
         try:
-            fn, _ = self.registry[job.entrypoint]
-
-            if is_async_callable(fn):
-                await fn(job)
-            else:
-                await anyio.to_thread.run_sync(fn, job)
+            await self.registry[job.entrypoint](job)
         except Exception:
             logger.exception(
                 "Exception while processing entrypoint/id: %s/%s",
