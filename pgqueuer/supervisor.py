@@ -18,9 +18,13 @@ def load_queue_manager_factory(factory_path: str) -> QM_FACTORY:
     return getattr(module, factory_name)
 
 
-async def runit(factory_fn: str) -> None:
+async def runit(factory_fn: str, **kwargs) -> None:
     """
     Main function to instantiate and manage the lifecycle of a QueueManager.
+
+    Parameters:
+        - factory_fn: module and function path to a function returning a QueueManager
+        - **kwargs: keyword arguments passed through to QueueManager.run
     """
     qm_factory = load_queue_manager_factory(factory_fn)
     qm = await qm_factory()  # Create the QueueManager instance
@@ -36,4 +40,4 @@ async def runit(factory_fn: str) -> None:
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
     signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
 
-    await qm.run()  # Start the QueueManager's operation
+    await qm.run(**kwargs)  # Start the QueueManager's operation
