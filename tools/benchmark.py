@@ -26,11 +26,11 @@ async def consumer(
     asyncfetch_rps, syncfetch_rps = entrypoint_rps
 
     @qm.entrypoint("asyncfetch", requests_per_second=asyncfetch_rps)
-    async def asyncfetch(job: Job, _) -> None:
+    async def asyncfetch(job: Job) -> None:
         bar.update()
 
     @qm.entrypoint("syncfetch", requests_per_second=syncfetch_rps)
-    def syncfetch(job: Job, _) -> None:
+    def syncfetch(job: Job) -> None:
         bar.update()
 
     await qm.run(batch_size=batch_size)

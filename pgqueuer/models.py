@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import dataclasses
-import threading
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
 
+import anyio
 from pydantic import AwareDatetime, BaseModel, Field, RootModel
 
 ###### Events ######
@@ -168,4 +167,4 @@ class LogStatistics(BaseModel):
 
 @dataclasses.dataclass
 class Context:
-    cancellation: asyncio.Event | threading.Event
+    cancellation: anyio.CancelScope

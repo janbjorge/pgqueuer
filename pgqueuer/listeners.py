@@ -52,7 +52,7 @@ async def initialize_notice_event_listener(
         elif parsed.root.type == "cancellation_event":
             for jid in parsed.root.ids:
                 with suppress(KeyError):
-                    canceled[jid].cancellation.set()
+                    canceled[jid].cancellation.cancel()
         else:
             raise NotImplementedError(parsed, payload)
 

@@ -25,7 +25,7 @@ from .db import Driver
 from .helpers import perf_counter_dt
 from .listeners import initialize_notice_event_listener
 from .logconfig import logger
-from .models import Job, JobId, PGChannel
+from .models import Context, Job, JobId, PGChannel
 from .queries import DBSettings, Queries
 from .tm import TaskManager
 
@@ -109,9 +109,9 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
-    jobs_canceled: defaultdict[JobId, anyio.CancelScope] = dataclasses.field(
+    job_context: dict[JobId, Context] = dataclasses.field(
         init=False,
-        default_factory=lambda: defaultdict(anyio.CancelScope),
+        default_factory=dict,
     )
 
     def __post_init__(self) -> None:
@@ -126,12 +126,12 @@ class QueueManager:
             flush_callback=self.queries.log_jobs,
         )
 
-    def get_cancel_scope(self, job_id: JobId) -> anyio.CancelScope:
+    def get_context(self, job_id: JobId) -> Context:
         """
         Retrieves the cancellation scope for a specific job, allowing the job to be checked
         and managed for cancellation.
         """
-        return self.jobs_canceled[job_id]
+        return self.job_context[job_id]
 
     def entrypoint(
         self,
@@ -196,7 +196,6 @@ class QueueManager:
             for longer than the specified retry timer duration. If `None`, the timeout
             job checking is skipped.
         """
-
         if not (await self.queries.has_updated_column()):
             raise RuntimeError(
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
@@ -211,7 +210,7 @@ class QueueManager:
                 self.connection,
                 self.channel,
                 self.statistics,
-                self.jobs_canceled,
+                self.job_context,
             )
 
             while self.alive:
@@ -224,6 +223,9 @@ class QueueManager:
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
+                    self.job_context[job.id] = Context(
+                        cancellation=anyio.CancelScope(),
+                    )
                     tm.add(asyncio.create_task(self._dispatch(job)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
@@ -285,4 +287,4 @@ class QueueManager:
             )
             await self.buffer.add_job(job, "successful")
         finally:
-            self.jobs_canceled.pop(job.id, None)
+            self.job_context.pop(job.id, None)

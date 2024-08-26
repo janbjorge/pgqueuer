@@ -2,7 +2,6 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
-import anyio
 import asyncpg
 import psycopg
 import pytest
