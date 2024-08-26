@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 import importlib
 import signal
 from typing import Awaitable, Callable, TypeAlias
@@ -18,7 +19,9 @@ def load_queue_manager_factory(factory_path: str) -> QM_FACTORY:
     return getattr(module, factory_name)
 
 
-async def runit(factory_fn: str, **kwargs) -> None:
+async def runit(
+    factory_fn: str, dequeue_timeout: timedelta, batch_size: int, retry_timer: timedelta | None
+) -> None:
     """
     Main function to instantiate and manage the lifecycle of a QueueManager.
 
@@ -40,4 +43,5 @@ async def runit(factory_fn: str, **kwargs) -> None:
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
     signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
 
-    await qm.run(**kwargs)  # Start the QueueManager's operation
+    # Start the QueueManager's operation
+    await qm.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size, retry_timer=retry_timer)
