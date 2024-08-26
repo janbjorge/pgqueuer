@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from contextlib import suppress
 from datetime import datetime
-
-import anyio
 
 from . import models
 from .db import Driver
 from .logconfig import logger
-from .models import AnyEvent, PGChannel, TableChangedEvent
+from .models import AnyEvent, Context, PGChannel, TableChangedEvent
 
 
 class PGNoticeEventListener(asyncio.Queue[TableChangedEvent]):
@@ -24,7 +21,7 @@ async def initialize_notice_event_listener(
     connection: Driver,
     channel: PGChannel,
     statistics: dict[str, deque[tuple[int, datetime]]],
-    canceled: dict[models.JobId, anyio.CancelScope],
+    canceled: dict[models.JobId, Context],
 ) -> PGNoticeEventListener:
     """
     Initializes a listener on a PostgreSQL channel, handling different types
@@ -42,7 +39,7 @@ async def initialize_notice_event_listener(
         try:
             parsed = AnyEvent.model_validate_json(payload)
         except Exception as e:
-            logger.critical("Failed to parse payload: `%s`, `%s`", payload, e)
+            logger.critical("Failed to parse payload: `%s`", payload, exc_info=e)
             return
 
         if parsed.root.type == "table_changed_event":
@@ -51,8 +48,8 @@ async def initialize_notice_event_listener(
             statistics[parsed.root.entrypoint].append((parsed.root.count, parsed.root.sent_at))
         elif parsed.root.type == "cancellation_event":
             for jid in parsed.root.ids:
-                with suppress(KeyError):
-                    canceled[jid].cancellation.cancel()
+                if ctx := canceled.get(jid):
+                    ctx.cancellation.cancel()
         else:
             raise NotImplementedError(parsed, payload)
 
