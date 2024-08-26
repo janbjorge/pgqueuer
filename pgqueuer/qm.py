@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
-from collections import defaultdict, deque
+from collections import Counter, deque
 from datetime import datetime, timedelta
 from math import isfinite
 from typing import (
@@ -90,7 +90,9 @@ class QueueManager:
     """
 
     connection: Driver
-    channel: PGChannel = dataclasses.field(default=PGChannel(DBSettings().channel))
+    channel: PGChannel = dataclasses.field(
+        default=PGChannel(DBSettings().channel),
+    )
 
     alive: bool = dataclasses.field(
         init=False,
@@ -103,9 +105,9 @@ class QueueManager:
         default_factory=dict,
     )
     # dict[entrypoint, [count, timestamp]]
-    statistics: defaultdict[str, deque[tuple[int, datetime]]] = dataclasses.field(
+    statistics: dict[str, deque[tuple[int, datetime]]] = dataclasses.field(
         init=False,
-        default_factory=lambda: defaultdict(lambda: deque(maxlen=1_000)),
+        default_factory=dict,
     )
 
     def __post_init__(self) -> None:
@@ -141,6 +143,7 @@ class QueueManager:
                 func=func,
                 requests_per_second=requests_per_second,
             )
+            self.statistics[name] = deque(maxlen=1_000)
             return func
 
         return register
@@ -205,15 +208,16 @@ class QueueManager:
                     entrypoints=self.entrypoints_below_requests_per_second(),
                     retry_timer=retry_timer,
                 )
-                entrypoint_count = defaultdict[str, int](lambda: 0)
+
+                entrypoint_tally = Counter[str]()
 
                 for job in jobs:
                     tm.add(asyncio.create_task(self._dispatch(job)))
-                    entrypoint_count[job.entrypoint] += 1
+                    entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
-                for entrypoint, count in entrypoint_count.items():
+                for entrypoint, count in entrypoint_tally.items():
                     # skip if rate is inf.
                     rps = self.registry[entrypoint].requests_per_second
                     if isfinite(rps):
