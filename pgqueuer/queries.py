@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import os
 from datetime import timedelta
@@ -546,10 +547,12 @@ class Queries:
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
-        Clears jobs from the queue, optionally filtering by entrypoint if specified.
+        Mark a job(s) for cancellation.
         """
-        await self.driver.execute(self.qb.create_log_job_query(), ids, ["canceled"] * len(ids))
-        await self.notify_job_cancellation(ids)
+        await asyncio.gather(
+            self.driver.execute(self.qb.create_log_job_query(), ids, ["canceled"] * len(ids)),
+            self.notify_job_cancellation(ids),
+        )
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         """
