@@ -1,5 +1,4 @@
 import asyncio
-import asyncio.selector_events
 import time
 from datetime import timedelta
 

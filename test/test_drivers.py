@@ -146,6 +146,7 @@ async def test_event_listener(
             d,
             channel,
             {},
+            {},
         )
 
         # Seems psycopg does not pick up on

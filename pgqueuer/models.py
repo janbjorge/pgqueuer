@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
 
+import anyio
 from pydantic import AwareDatetime, BaseModel, Field, RootModel
 
 ###### Events ######
@@ -20,6 +22,12 @@ OPERATIONS = Literal[
     "truncate",
 ]
 
+EVENT_TYPES = Literal[
+    "table_changed_event",
+    "requests_per_second_event",
+    "cancellation_event",
+]
+
 
 class Event(BaseModel):
     """
@@ -34,7 +42,7 @@ class Event(BaseModel):
 
     channel: PGChannel
     sent_at: AwareDatetime
-    type: Literal["table_changed_event", "requests_per_second_event"]
+    type: EVENT_TYPES
     received_at: AwareDatetime = Field(
         init=False,
         default_factory=lambda: datetime.now(
@@ -77,10 +85,22 @@ class RequestsPerSecondEvent(Event):
     count: int
 
 
+class CancellationEvent(Event):
+    """
+    A class representing an cancellation event in a PostgreSQL channel.
+
+    Attributes:
+        ids: The job-ids to mark for cancellation
+    """
+
+    type: Literal["cancellation_event"]
+    ids: list[JobId]
+
+
 class AnyEvent(
     RootModel[
         Annotated[
-            TableChangedEvent | RequestsPerSecondEvent,
+            TableChangedEvent | RequestsPerSecondEvent | CancellationEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -115,6 +135,7 @@ class Job(BaseModel):
 
 ###### Statistics ######
 STATUS_LOG = Literal[
+    "canceled",
     "exception",
     "successful",
 ]
@@ -142,3 +163,8 @@ class LogStatistics(BaseModel):
     priority: int
     status: STATUS_LOG
     time_in_queue: timedelta
+
+
+@dataclasses.dataclass
+class Context:
+    cancellation: anyio.CancelScope

@@ -4,9 +4,10 @@ import asyncio
 from collections import deque
 from datetime import datetime
 
+from . import models
 from .db import Driver
 from .logconfig import logger
-from .models import AnyEvent, PGChannel, TableChangedEvent
+from .models import AnyEvent, Context, PGChannel, TableChangedEvent
 
 
 class PGNoticeEventListener(asyncio.Queue[TableChangedEvent]):
@@ -20,10 +21,11 @@ async def initialize_notice_event_listener(
     connection: Driver,
     channel: PGChannel,
     statistics: dict[str, deque[tuple[int, datetime]]],
+    canceled: dict[models.JobId, Context],
 ) -> PGNoticeEventListener:
     """
-    This method establishes a listener on a PostgreSQL channel using
-    the provided connection and channel.
+    Initializes a listener on a PostgreSQL channel, handling different types
+    of events such as table changes, requests per second, and job cancellations.
     """
 
     def parse_and_queue(
@@ -37,13 +39,17 @@ async def initialize_notice_event_listener(
         try:
             parsed = AnyEvent.model_validate_json(payload)
         except Exception as e:
-            logger.critical("Failed to parse payload: `%s`, `%s`", payload, e)
+            logger.critical("Failed to parse payload: `%s`", payload, exc_info=e)
             return
 
         if parsed.root.type == "table_changed_event":
             notice_event_queue.put_nowait(parsed.root)
         elif parsed.root.type == "requests_per_second_event":
             statistics[parsed.root.entrypoint].append((parsed.root.count, parsed.root.sent_at))
+        elif parsed.root.type == "cancellation_event":
+            for jid in parsed.root.ids:
+                if ctx := canceled.get(jid):
+                    ctx.cancellation.cancel()
         else:
             raise NotImplementedError(parsed, payload)
 

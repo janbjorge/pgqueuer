@@ -25,7 +25,7 @@ from .db import Driver
 from .helpers import perf_counter_dt
 from .listeners import initialize_notice_event_listener
 from .logconfig import logger
-from .models import Job, PGChannel
+from .models import Context, Job, JobId, PGChannel
 from .queries import DBSettings, Queries
 from .tm import TaskManager
 
@@ -109,6 +109,10 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
+    job_context: dict[JobId, Context] = dataclasses.field(
+        init=False,
+        default_factory=dict,
+    )
 
     def __post_init__(self) -> None:
         """
@@ -121,6 +125,13 @@ class QueueManager:
             timeout=timedelta(seconds=0.01),
             flush_callback=self.queries.log_jobs,
         )
+
+    def get_context(self, job_id: JobId) -> Context:
+        """
+        Retrieves the cancellation scope for a specific job, allowing the job to be checked
+        and managed for cancellation.
+        """
+        return self.job_context[job_id]
 
     def entrypoint(
         self,
@@ -185,11 +196,20 @@ class QueueManager:
             for longer than the specified retry timer duration. If `None`, the timeout
             job checking is skipped.
         """
-
         if not (await self.queries.has_updated_column()):
             raise RuntimeError(
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
                 "updated column, please run 'python3 -m pgqueuer upgrade'"
+            )
+
+        if not (
+            await self.queries.has_user_type(
+                "canceled", self.queries.qb.settings.statistics_table_status_type
+            )
+        ):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.statistics_table_status_type} is missing the "
+                "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
             )
 
         self.buffer.max_size = batch_size
@@ -200,6 +220,7 @@ class QueueManager:
                 self.connection,
                 self.channel,
                 self.statistics,
+                self.job_context,
             )
 
             while self.alive:
@@ -212,6 +233,9 @@ class QueueManager:
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
+                    self.job_context[job.id] = Context(
+                        cancellation=anyio.CancelScope(),
+                    )
                     tm.add(asyncio.create_task(self._dispatch(job)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
@@ -223,7 +247,7 @@ class QueueManager:
                     if isfinite(rps):
                         tm.add(
                             asyncio.create_task(
-                                self.queries.emit_debounce_event(
+                                self.queries.notify_debounce_event(
                                     entrypoint,
                                     count,
                                 )
@@ -272,3 +296,5 @@ class QueueManager:
                 job.id,
             )
             await self.buffer.add_job(job, "successful")
+        finally:
+            self.job_context.pop(job.id, None)

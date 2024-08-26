@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import os
 from datetime import timedelta
@@ -112,7 +113,7 @@ class QueryBuilder:
     CREATE INDEX {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC)
         INCLUDE (id) WHERE status = 'picked';
 
-    CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful');
+    CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful', 'canceled');
     CREATE TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
@@ -412,6 +413,7 @@ class QueryBuilder:
 
     END;
     $$ LANGUAGE plpgsql;"""
+        yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         return """
@@ -421,6 +423,11 @@ class QueryBuilder:
                 AND table_name = $1
                 AND column_name = $2
             );"""
+
+    def create_user_types_query(self) -> str:
+        return """SELECT enumlabel, typname
+    FROM pg_enum
+    JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
 
     def create_notify_query(self) -> str:
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
@@ -543,6 +550,15 @@ class Queries:
             else self.driver.execute(self.qb.create_truncate_queue_query())
         )
 
+    async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
+        """
+        Mark a job(s) for cancellation.
+        """
+        await asyncio.gather(
+            self.driver.execute(self.qb.create_log_job_query(), ids, ["canceled"] * len(ids)),
+            self.notify_job_cancellation(ids),
+        )
+
     async def queue_size(self) -> list[models.QueueStatistics]:
         """
         Returns the number of jobs in the queue grouped by entrypoint and priority.
@@ -599,7 +615,15 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
-    async def emit_debounce_event(
+    async def has_user_type(
+        self,
+        key: str,
+        user_type: str,
+    ) -> bool:
+        rows = await self.driver.fetch(self.qb.create_user_types_query())
+        return (key, user_type) in ((row["enumlabel"], row["typname"]) for row in rows)
+
+    async def notify_debounce_event(
         self,
         entrypoing: str,
         quantity: int,
@@ -612,5 +636,20 @@ class Queries:
                 count=quantity,
                 sent_at=buffers.perf_counter_dt(),
                 type="requests_per_second_event",
+            ).model_dump_json(),
+        )
+
+    async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
+        """
+        Emits a cancellation event for the specified job IDs, notifying the
+        system that these jobs have been cancelled.
+        """
+        await self.driver.execute(
+            self.qb.create_notify_query(),
+            models.CancellationEvent(
+                channel=self.qb.settings.channel,
+                ids=ids,
+                sent_at=buffers.perf_counter_dt(),
+                type="cancellation_event",
             ).model_dump_json(),
         )

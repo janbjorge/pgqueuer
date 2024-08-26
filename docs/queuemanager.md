@@ -58,6 +58,80 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## Job Cancellation
+
+The job cancellation feature in `pgqueuer` allows for the programmatic termination of jobs that are queued or currently under processing. This feature is designed to be used in scenarios where it is necessary to halt specific operations due to changing conditions, errors, or other operational controls.
+
+### Overview
+
+Job cancellations are managed through PostgreSQL's NOTIFY system. The `QueueManager` listens for cancellation events and attempts to halt the execution of targeted jobs accordingly. It’s crucial to note that this cancellation process is "best effort," meaning that there are scenarios where a job may not be cancelled immediately or may even complete despite a cancellation request due to race conditions.
+
+#### Enqueue Jobs
+
+When enqueueing jobs, a unique identifiers is assigned to each job, which will be used later to reference and potentially cancel the job:
+
+```python
+from pgqueuer.queries import Queries
+
+# Setup your QueueManager and database driver
+queries = Queries(db_driver)
+job_ids = await queries.enqueue("task_entrypoint", b"Job data", priority=5)
+```
+
+#### Cancel Jobs
+
+To cancel jobs, use the IDs obtained during the enqueueing:
+
+This function sends a cancellation event that the QueueManager processes. Where a cancellation is attempted immediately, it means that the affected jobs are removed from the queue table and promptly added to the log table with a status of "canceled". However, due to the asynchronous nature of the operations and potential database delays, this process is inherently racy.
+
+```python
+await queries.mark_job_as_cancelled(job_ids)
+```
+
+### Handling Cancellations in Job Logic
+
+Jobs should include logic to handle potential cancellations gracefully. Below are examples of how to integrate cancellation checks into both asynchronous and synchronous job processing logic.
+
+#### Asynchronous Job Logic
+In asynchronous job logic, the `cancellation` context manager is used to automatically manage the scope of cancellation. This ensures that any cancellation request interrupts the ongoing task as soon as possible.
+
+```python
+@qm.entrypoint("task_entrypoint")
+async def process_job(job: Job):
+    # The context manager handles entry and exit, applying cancellation checks around the awaited calls
+    with qm.get_context(job.id).cancellation:
+        # Insert job logic here
+        await perform_task(job.data)
+```
+The context manager in asynchronous code is advantageous because it can suspend the coroutine at `await` points and check for cancellation in a non-blocking manner, ensuring that resources are freed appropriately and cancellation is handled efficiently.
+
+#### Synchronous Job Logic
+In synchronous job logic, cancellation is checked manually within the logic flow. A context manager is not used here because synchronous functions do not support the automatic suspension and resumption of execution that asynchronous context managers provide.
+
+```python
+@qm.entrypoint("sync_entrypoint")
+def process_job(job: Job):
+    # Manually access the cancellation scope to check if a cancellation has been requested
+    cancel_scope = qm.get_context(job.id).cancellation
+    for item in job_steps:
+        # Manually check if cancellation has been called at each significant step
+        if cancel_scope.cancel_called:
+            return  # Exit the function if the job has been canceled
+        perform_task(item)
+```
+
+### Understanding the Cancellation Object
+
+The cancellation feature in `pgqueuer` utilizes a `cancellation` object, which is central to managing the stoppage of specific tasks. This object is part of the `Context` class, encapsulating the cancellation state and mechanisms used to control job execution.
+
+#### The Cancellation Object
+
+The `cancellation` object within each job's context is an instance of `anyio.CancelScope`. This is a powerful tool from the `anyio` library that allows asynchronous tasks to be cancelled cooperatively. The `CancelScope` is used to initiate a cancellation request and check if a cancellation has been requested, providing a flexible and thread-safe way to manage job interruptions.
+
+For a deeper understanding of how cancellation works and how to implement it in your asynchronous operations, you should refer to the official `anyio` documentation. The `anyio` documentation provides comprehensive details on using `CancelScope` effectively, including examples and best practices for integrating it into your projects.
+
+You can find the `anyio` documentation here: [AnyIO cancellation](https://anyio.readthedocs.io/en/stable/cancellation.html)
+
 ## Configuring QueueManager
 
 The QueueManager offers several configurable parameters to optimize job processing:

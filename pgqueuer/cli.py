@@ -53,6 +53,7 @@ async def display_pg_channel(
         connection,
         channel,
         {},
+        {},
     )
     while True:
         print(repr(await listener.get()))
@@ -302,7 +303,7 @@ async def main() -> None:  # noqa: C901
             if not parsed.dry_run:
                 await (await querier(parsed.driver, connection_str)).uninstall()
         case "upgrade":
-            print("\n".join(QueryBuilder().create_upgrade_queries()))
+            print(f"\n{'-'*50}\n".join(QueryBuilder().create_upgrade_queries()))
             if not parsed.dry_run:
                 await (await querier(parsed.driver, connection_str)).upgrade()
         case "dashboard":
