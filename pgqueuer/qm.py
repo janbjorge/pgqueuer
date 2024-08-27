@@ -121,9 +121,9 @@ class QueueManager:
         """
         self.queries = Queries(self.connection)
         self.buffer = JobBuffer(
+            queries=self.queries,
             max_size=10,
             timeout=timedelta(seconds=0.01),
-            flush_callback=self.queries.log_jobs,
         )
 
     def get_context(self, job_id: JobId) -> Context:
@@ -267,6 +267,8 @@ class QueueManager:
 
             self.buffer.alive = False
             self.connection.alive = False
+
+        await self.buffer.flush_jobs()
 
     async def _dispatch(self, job: Job) -> None:
         """
