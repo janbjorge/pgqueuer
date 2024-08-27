@@ -245,6 +245,32 @@ def cliparser() -> argparse.Namespace:
         parents=[common_arguments],
     )
     wm_parser.add_argument(
+        "--dequeue-timeout",
+        help=(
+            "Specifies timeout (in seconds) to wait to dequeue jobs "
+            "(see the 'dequeue_timeout' argument of 'QueueManager.run')"
+        ),
+        type=lambda s: timedelta(seconds=float(s)),
+        default=timedelta(seconds=30.0),
+    )
+    wm_parser.add_argument(
+        "--batch-size",
+        help=(
+            "Specifies the number of jobs to dequeue in each batch "
+            "(see the 'batch_size' argument of 'QueueManager.run')"
+        ),
+        type=int,
+        default=10,
+    )
+    wm_parser.add_argument(
+        "--retry-timer",
+        help=(
+            "Specifies time to wait (in seconds) before retrying jobs "
+            "(see the 'retry_timer' argument of 'QueueManager.run')"
+        ),
+        type=lambda s: timedelta(seconds=float(s)),
+    )
+    wm_parser.add_argument(
         "qm_factory",
         help=("Path to the QueueManager factory function, e.g., " '"myapp.create_queue_manager"'),
     )
@@ -319,4 +345,9 @@ async def main() -> None:  # noqa: C901
                 PGChannel(parsed.channel),
             )
         case "run":
-            await supervisor.runit(parsed.qm_factory)
+            await supervisor.runit(
+                parsed.qm_factory,
+                dequeue_timeout=parsed.dequeue_timeout,
+                batch_size=parsed.batch_size,
+                retry_timer=parsed.retry_timer,
+            )
