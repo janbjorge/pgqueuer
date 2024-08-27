@@ -66,7 +66,7 @@ class JobBuffer:
                     "Exception during buffer flush, waiting: %s seconds before retry.",
                     self.timeout.total_seconds(),
                 )
-                await asyncio.sleep(self.timeout.total_seconds())
+                await asyncio.sleep(0)
             else:
                 self.events.clear()
 
