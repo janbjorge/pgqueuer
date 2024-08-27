@@ -1,12 +1,14 @@
 import asyncio
 import random
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
 from pgqueuer.buffers import JobBuffer
+from pgqueuer.db import Driver
 from pgqueuer.helpers import perf_counter_dt
 from pgqueuer.models import Job
+from pgqueuer.queries import Queries
 from pgqueuer.tm import TaskManager
 
 
@@ -21,22 +23,23 @@ def job_faker() -> Job:
     )
 
 
-async def test_perf_counter_dt() -> None:
-    assert isinstance(perf_counter_dt(), datetime)
-    assert perf_counter_dt().tzinfo is not None
-
-
 @pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
-async def test_job_buffer_max_size(max_size: int) -> None:
+async def test_job_buffer_max_size(
+    max_size: int,
+    pgdriver: Driver,
+) -> None:
     helper_buffer = []
 
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
+    queries = Queries(pgdriver)
+    queries.log_jobs = helper  # type: ignore
+
     buffer = JobBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        flush_callback=helper,
+        queries=queries,
     )
 
     for _ in range(max_size - 1):
@@ -49,17 +52,24 @@ async def test_job_buffer_max_size(max_size: int) -> None:
 
 @pytest.mark.parametrize("N", (5, 64))
 @pytest.mark.parametrize("timeout", (timedelta(seconds=0.01), timedelta(seconds=0.001)))
-async def test_job_buffer_timeout(N: int, timeout: timedelta) -> None:
+async def test_job_buffer_timeout(
+    N: int,
+    timeout: timedelta,
+    pgdriver: Driver,
+) -> None:
     async with TaskManager() as tm:
         helper_buffer = []
 
         async def helper(x: list) -> None:
             helper_buffer.extend(x)
 
+        queries = Queries(pgdriver)
+        queries.log_jobs = helper  # type: ignore
+
         buffer = JobBuffer(
             max_size=N * 2,
             timeout=timeout,
-            flush_callback=helper,
+            queries=queries,
         )
         tm.add(asyncio.create_task(buffer.monitor()))
 

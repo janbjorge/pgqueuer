@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from datetime import datetime, timedelta
-from typing import Awaitable, Callable
 
+from . import queries
 from .helpers import perf_counter_dt
 from .logconfig import logger
 from .models import STATUS_LOG, Job
@@ -14,24 +14,18 @@ from .models import STATUS_LOG, Job
 class JobBuffer:
     """
     A buffer class that accumulates jobs and their statuses until a specified
-    capacity or timeout is reached, at which point it flushes them using a
-    provided callback function.
+    capacity or timeout is reached, at which point it flushes them.
 
     Attributes:
         max_size (int): Maximum number of jobs the buffer can hold before
             triggering a flush.
         timeout (timedelta): Maximum time to wait before flushing the buffer,
             regardless of the buffer size.
-        flush_callback (Callable[[list[tuple[Job, STATUS_LOG]]], Awaitable[None]]):
-            Asynchronous callback function to process jobs when the buffer is flushed.
     """
 
     max_size: int
     timeout: timedelta
-    flush_callback: Callable[
-        [list[tuple[Job, STATUS_LOG]]],
-        Awaitable[None],
-    ]
+    queries: queries.Queries
 
     alive: bool = dataclasses.field(
         init=False,
@@ -55,11 +49,12 @@ class JobBuffer:
         Adds a job and its status to the buffer and flushes the buffer
         if it reaches maximum size.
         """
-        async with self.lock:
-            self.events.append((job, status))
-            self.last_event_time = perf_counter_dt()
-            if len(self.events) >= self.max_size:
-                await self.flush_jobs()
+        self.events.append((job, status))
+        self.last_event_time = perf_counter_dt()
+        if len(self.events) >= self.max_size:
+            async with self.lock:
+                if len(self.events) >= self.max_size:
+                    await self.flush_jobs()
 
     async def flush_jobs(self) -> None:
         """
@@ -68,7 +63,7 @@ class JobBuffer:
         """
         while self.events:
             try:
-                await self.flush_callback(self.events)
+                await self.queries.log_jobs(self.events)
             except Exception:
                 logger.exception(
                     "Exception during buffer flush, waiting: %s seconds before retry.",
@@ -85,6 +80,7 @@ class JobBuffer:
         """
         while self.alive:
             await asyncio.sleep(self.timeout.total_seconds())
-            async with self.lock:
-                if perf_counter_dt() - self.last_event_time >= self.timeout:
-                    await self.flush_jobs()
+            if perf_counter_dt() - self.last_event_time >= self.timeout:
+                async with self.lock:
+                    if perf_counter_dt() - self.last_event_time >= self.timeout:
+                        await self.flush_jobs()
