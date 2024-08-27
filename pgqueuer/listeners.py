@@ -4,13 +4,10 @@ import asyncio
 from collections import deque
 from datetime import datetime
 
-from . import models
-from .db import Driver
-from .logconfig import logger
-from .models import AnyEvent, Context, PGChannel, TableChangedEvent
+from . import db, logconfig, models
 
 
-class PGNoticeEventListener(asyncio.Queue[TableChangedEvent]):
+class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """
     A PostgreSQL event queue that listens to a specified
     channel and stores incoming events.
@@ -18,10 +15,10 @@ class PGNoticeEventListener(asyncio.Queue[TableChangedEvent]):
 
 
 async def initialize_notice_event_listener(
-    connection: Driver,
-    channel: PGChannel,
+    connection: db.Driver,
+    channel: models.PGChannel,
     statistics: dict[str, deque[tuple[int, datetime]]],
-    canceled: dict[models.JobId, Context],
+    canceled: dict[models.JobId, models.Context],
 ) -> PGNoticeEventListener:
     """
     Initializes a listener on a PostgreSQL channel, handling different types
@@ -37,9 +34,9 @@ async def initialize_notice_event_listener(
         Parses a JSON payload and inserts it into the queue as an `models.Event` object.
         """
         try:
-            parsed = AnyEvent.model_validate_json(payload)
+            parsed = models.AnyEvent.model_validate_json(payload)
         except Exception as e:
-            logger.critical("Failed to parse payload: `%s`", payload, exc_info=e)
+            logconfig.logger.critical("Failed to parse payload: `%s`", payload, exc_info=e)
             return
 
         if parsed.root.type == "table_changed_event":

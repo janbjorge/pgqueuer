@@ -20,17 +20,10 @@ from typing import (
 import anyio
 import anyio.to_thread
 
-from .buffers import JobBuffer
-from .db import Driver
-from .helpers import perf_counter_dt
-from .listeners import initialize_notice_event_listener
-from .logconfig import logger
-from .models import Context, Job, JobId, PGChannel
-from .queries import DBSettings, Queries
-from .tm import TaskManager
+from . import buffers, db, helpers, listeners, logconfig, models, queries, tm
 
-AsyncEntrypoint: TypeAlias = Callable[[Job], Awaitable[None]]
-SyncEntrypoint: TypeAlias = Callable[[Job], None]
+AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
+SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
 Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
 T = TypeVar("T", bound=Entrypoint)
 
@@ -75,7 +68,7 @@ class JobExecutor:
         self.requests_per_second = requests_per_second
         self.is_async = is_async_callable(func)
 
-    async def __call__(self, job: Job) -> None:
+    async def __call__(self, job: models.Job) -> None:
         if self.is_async:
             await cast(AsyncEntrypoint, self.func)(job)
         else:
@@ -89,17 +82,17 @@ class QueueManager:
     handling database connections and events.
     """
 
-    connection: Driver
-    channel: PGChannel = dataclasses.field(
-        default=PGChannel(DBSettings().channel),
+    connection: db.Driver
+    channel: models.PGChannel = dataclasses.field(
+        default=models.PGChannel(queries.DBSettings().channel),
     )
 
     alive: bool = dataclasses.field(
         init=False,
         default=True,
     )
-    buffer: JobBuffer = dataclasses.field(init=False)
-    queries: Queries = dataclasses.field(init=False)
+    buffer: buffers.JobBuffer = dataclasses.field(init=False)
+    queries: queries.Queries = dataclasses.field(init=False)
     registry: dict[str, JobExecutor] = dataclasses.field(
         init=False,
         default_factory=dict,
@@ -109,7 +102,7 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
-    job_context: dict[JobId, Context] = dataclasses.field(
+    job_context: dict[models.JobId, models.Context] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -119,14 +112,14 @@ class QueueManager:
         Initializes database query handlers and validates pool size upon
         instance creation.
         """
-        self.queries = Queries(self.connection)
-        self.buffer = JobBuffer(
+        self.queries = queries.Queries(self.connection)
+        self.buffer = buffers.JobBuffer(
             queries=self.queries,
             max_size=10,
             timeout=timedelta(seconds=0.01),
         )
 
-    def get_context(self, job_id: JobId) -> Context:
+    def get_context(self, job_id: models.JobId) -> models.Context:
         """
         Retrieves the cancellation scope for a specific job, allowing the job to be checked
         and managed for cancellation.
@@ -167,7 +160,7 @@ class QueueManager:
         samples = self.statistics[entrypoint]
         if not samples:
             return 0.0
-        timespan = perf_counter_dt() - min(t for _, t in samples) + epsilon
+        timespan = helpers.perf_counter_dt() - min(t for _, t in samples) + epsilon
         requests = sum(c for c, _ in samples)
         return requests / timespan.total_seconds()
 
@@ -214,9 +207,9 @@ class QueueManager:
 
         self.buffer.max_size = batch_size
 
-        async with TaskManager() as tm:
-            tm.add(asyncio.create_task(self.buffer.monitor()))
-            notice_event_listener = await initialize_notice_event_listener(
+        async with tm.TaskManager() as task_manger:
+            task_manger.add(asyncio.create_task(self.buffer.monitor()))
+            notice_event_listener = await listeners.initialize_notice_event_listener(
                 self.connection,
                 self.channel,
                 self.statistics,
@@ -233,10 +226,10 @@ class QueueManager:
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
-                    self.job_context[job.id] = Context(
+                    self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                     )
-                    tm.add(asyncio.create_task(self._dispatch(job)))
+                    task_manger.add(asyncio.create_task(self._dispatch(job)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
@@ -245,7 +238,7 @@ class QueueManager:
                     # skip if rate is inf.
                     rps = self.registry[entrypoint].requests_per_second
                     if isfinite(rps):
-                        tm.add(
+                        task_manger.add(
                             asyncio.create_task(
                                 self.queries.notify_debounce_event(
                                     entrypoint,
@@ -260,7 +253,7 @@ class QueueManager:
                         timeout=dequeue_timeout.total_seconds(),
                     )
                 except asyncio.TimeoutError:
-                    logger.debug(
+                    logconfig.logger.debug(
                         "Timeout after %r without receiving an event.",
                         dequeue_timeout,
                     )
@@ -270,13 +263,13 @@ class QueueManager:
 
         await self.buffer.flush_jobs()
 
-    async def _dispatch(self, job: Job) -> None:
+    async def _dispatch(self, job: models.Job) -> None:
         """
         Handles asynchronous job dispatch. Logs exceptions, updates job status,
         and adapts execution method based on whether the job's function is asynchronous.
         """
 
-        logger.debug(
+        logconfig.logger.debug(
             "Dispatching entrypoint/id: %s/%s",
             job.entrypoint,
             job.id,
@@ -285,14 +278,14 @@ class QueueManager:
         try:
             await self.registry[job.entrypoint](job)
         except Exception:
-            logger.exception(
+            logconfig.logger.exception(
                 "Exception while processing entrypoint/id: %s/%s",
                 job.entrypoint,
                 job.id,
             )
             await self.buffer.add_job(job, "exception")
         else:
-            logger.debug(
+            logconfig.logger.debug(
                 "Dispatching entrypoint/id: %s/%s - successful",
                 job.entrypoint,
                 job.id,
