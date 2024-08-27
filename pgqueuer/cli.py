@@ -8,15 +8,11 @@ from typing import Literal
 
 from tabulate import tabulate, tabulate_formats
 
-from . import supervisor
-from .db import AsyncpgDriver, Driver, PsycopgDriver, dsn
-from .listeners import initialize_notice_event_listener
-from .models import LogStatistics, PGChannel
-from .queries import DBSettings, Queries, QueryBuilder
+from . import db, listeners, models, queries, supervisor
 
 
 async def display_stats(
-    log_stats: list[LogStatistics],
+    log_stats: list[models.LogStatistics],
     tablefmt: str,
 ) -> None:
     print(
@@ -46,10 +42,10 @@ async def display_stats(
 
 
 async def display_pg_channel(
-    connection: Driver,
-    channel: PGChannel,
+    connection: db.Driver,
+    channel: models.PGChannel,
 ) -> None:
-    listener = await initialize_notice_event_listener(
+    listener = await listeners.initialize_notice_event_listener(
         connection,
         channel,
         {},
@@ -60,7 +56,7 @@ async def display_pg_channel(
 
 
 async def fetch_and_display(
-    queries: Queries,
+    queries: queries.Queries,
     interval: timedelta | None,
     tail: int,
     tablefmt: str,
@@ -235,7 +231,7 @@ def cliparser() -> argparse.Namespace:
     listen_parser.add_argument(
         "--channel",
         help="Specifies the PostgreSQL NOTIFY channel to listen on for debug purposes.",
-        default=DBSettings().channel,
+        default=queries.DBSettings().channel,
     )
 
     wm_parser = subparsers.add_parser(
@@ -280,21 +276,21 @@ def cliparser() -> argparse.Namespace:
 async def querier(
     driver: Literal["psy", "apg"],
     conninfo: str,
-) -> Queries:
+) -> queries.Queries:
     match driver:
         case "apg":
             import asyncpg
 
-            return Queries(
-                AsyncpgDriver(
+            return queries.Queries(
+                db.AsyncpgDriver(
                     await asyncpg.connect(dsn=conninfo),
                 )
             )
         case "psy":
             import psycopg
 
-            return Queries(
-                PsycopgDriver(
+            return queries.Queries(
+                db.PsycopgDriver(
                     await psycopg.AsyncConnection.connect(
                         conninfo=conninfo,
                         autocommit=True,
@@ -311,7 +307,7 @@ async def main() -> None:  # noqa: C901
     if "PGQUEUER_PREFIX" not in os.environ and isinstance(prefix := parsed.prefix, str) and prefix:
         os.environ["PGQUEUER_PREFIX"] = prefix
 
-    connection_str = parsed.pg_dsn or dsn(
+    dsn = parsed.pg_dsn or db.dsn(
         database=parsed.pg_database,
         password=parsed.pg_password,
         port=parsed.pg_port,
@@ -321,28 +317,28 @@ async def main() -> None:  # noqa: C901
 
     match parsed.command:
         case "install":
-            print(QueryBuilder().create_install_query())
+            print(queries.QueryBuilder().create_install_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, connection_str)).install()
+                await (await querier(parsed.driver, dsn)).install()
         case "uninstall":
-            print(QueryBuilder().create_uninstall_query())
+            print(queries.QueryBuilder().create_uninstall_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, connection_str)).uninstall()
+                await (await querier(parsed.driver, dsn)).uninstall()
         case "upgrade":
-            print(f"\n{'-'*50}\n".join(QueryBuilder().create_upgrade_queries()))
+            print(f"\n{'-'*50}\n".join(queries.QueryBuilder().create_upgrade_queries()))
             if not parsed.dry_run:
-                await (await querier(parsed.driver, connection_str)).upgrade()
+                await (await querier(parsed.driver, dsn)).upgrade()
         case "dashboard":
             await fetch_and_display(
-                await querier(parsed.driver, connection_str),
+                await querier(parsed.driver, dsn),
                 parsed.interval,
                 parsed.tail,
                 parsed.table_format,
             )
         case "listen":
             await display_pg_channel(
-                (await querier(parsed.driver, connection_str)).driver,
-                PGChannel(parsed.channel),
+                (await querier(parsed.driver, dsn)).driver,
+                models.PGChannel(parsed.channel),
             )
         case "run":
             await supervisor.runit(

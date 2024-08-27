@@ -13,7 +13,7 @@ import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
-from .logconfig import logger
+from . import logconfig
 
 if TYPE_CHECKING:
     import asyncpg
@@ -218,7 +218,7 @@ class PsycopgDriver:
                 except asyncio.exceptions.CancelledError:
                     ...
                 except Exception:
-                    logger.exception(
+                    logconfig.logger.exception(
                         "Got an exception on notify on channel: %s",
                         channel,
                     )

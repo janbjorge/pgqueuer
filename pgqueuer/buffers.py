@@ -4,10 +4,7 @@ import asyncio
 import dataclasses
 from datetime import datetime, timedelta
 
-from . import queries
-from .helpers import perf_counter_dt
-from .logconfig import logger
-from .models import STATUS_LOG, Job
+from . import helpers, logconfig, models, queries
 
 
 @dataclasses.dataclass
@@ -31,26 +28,26 @@ class JobBuffer:
         init=False,
         default=True,
     )
-    events: list[tuple[Job, STATUS_LOG]] = dataclasses.field(
+    events: list[tuple[models.Job, models.STATUS_LOG]] = dataclasses.field(
         init=False,
         default_factory=list,
     )
     last_event_time: datetime = dataclasses.field(
         init=False,
-        default_factory=perf_counter_dt,
+        default_factory=helpers.perf_counter_dt,
     )
     lock: asyncio.Lock = dataclasses.field(
         init=False,
         default_factory=asyncio.Lock,
     )
 
-    async def add_job(self, job: Job, status: STATUS_LOG) -> None:
+    async def add_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
         """
         Adds a job and its status to the buffer and flushes the buffer
         if it reaches maximum size.
         """
         self.events.append((job, status))
-        self.last_event_time = perf_counter_dt()
+        self.last_event_time = helpers.perf_counter_dt()
         if len(self.events) >= self.max_size:
             async with self.lock:
                 if len(self.events) >= self.max_size:
@@ -65,7 +62,7 @@ class JobBuffer:
             try:
                 await self.queries.log_jobs(self.events)
             except Exception:
-                logger.exception(
+                logconfig.logger.exception(
                     "Exception during buffer flush, waiting: %s seconds before retry.",
                     self.timeout.total_seconds(),
                 )
@@ -80,7 +77,7 @@ class JobBuffer:
         """
         while self.alive:
             await asyncio.sleep(self.timeout.total_seconds())
-            if perf_counter_dt() - self.last_event_time >= self.timeout:
+            if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
                 async with self.lock:
-                    if perf_counter_dt() - self.last_event_time >= self.timeout:
+                    if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
                         await self.flush_jobs()

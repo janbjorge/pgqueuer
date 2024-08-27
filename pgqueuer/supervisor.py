@@ -5,9 +5,9 @@ import signal
 from datetime import timedelta
 from typing import Awaitable, Callable, TypeAlias
 
-from .qm import QueueManager
+from . import qm
 
-QM_FACTORY: TypeAlias = Callable[[], Awaitable[QueueManager]]
+QM_FACTORY: TypeAlias = Callable[[], Awaitable[qm.QueueManager]]
 
 
 def load_queue_manager_factory(factory_path: str) -> QM_FACTORY:

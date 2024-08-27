@@ -6,7 +6,7 @@ import os
 from datetime import timedelta
 from typing import Final, Generator, overload
 
-from . import buffers, db, models
+from . import db, helpers, models
 
 
 def add_prefix(string: str) -> str:
@@ -634,7 +634,7 @@ class Queries:
                 channel=self.qb.settings.channel,
                 entrypoint=entrypoing,
                 count=quantity,
-                sent_at=buffers.perf_counter_dt(),
+                sent_at=helpers.perf_counter_dt(),
                 type="requests_per_second_event",
             ).model_dump_json(),
         )
@@ -649,7 +649,7 @@ class Queries:
             models.CancellationEvent(
                 channel=self.qb.settings.channel,
                 ids=ids,
-                sent_at=buffers.perf_counter_dt(),
+                sent_at=helpers.perf_counter_dt(),
                 type="cancellation_event",
             ).model_dump_json(),
         )

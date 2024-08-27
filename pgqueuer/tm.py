@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 
-from .logconfig import logger
+from . import logconfig
 
 
 @dataclasses.dataclass
@@ -20,7 +20,7 @@ class TaskManager:
 
     def log_unhandled_exception(self, task: asyncio.Task) -> None:
         if exception := task.exception():
-            logger.error("Unhandled exception in: %s", task, exc_info=exception)
+            logconfig.logger.error("Unhandled exception in: %s", task, exc_info=exception)
 
     def add(self, task: asyncio.Task) -> None:
         """
