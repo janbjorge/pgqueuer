@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
 
@@ -168,3 +170,9 @@ class LogStatistics(BaseModel):
 @dataclasses.dataclass
 class Context:
     cancellation: anyio.CancelScope
+
+
+@dataclasses.dataclass
+class EntrypointStatistics:
+    samples: deque[tuple[int, datetime]]
+    concurrency_limiter: asyncio.Semaphore

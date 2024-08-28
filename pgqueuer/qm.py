@@ -4,8 +4,9 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
+import sys
 from collections import Counter, deque
-from datetime import datetime, timedelta
+from datetime import timedelta
 from math import isfinite
 from typing import (
     Awaitable,
@@ -93,15 +94,18 @@ class QueueManager:
     )
     buffer: buffers.JobBuffer = dataclasses.field(init=False)
     queries: queries.Queries = dataclasses.field(init=False)
-    registry: dict[str, JobExecutor] = dataclasses.field(
+
+    # Per entrypoint
+    entrypoint_registry: dict[str, JobExecutor] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
-    # dict[entrypoint, [count, timestamp]]
-    statistics: dict[str, deque[tuple[int, datetime]]] = dataclasses.field(
+    entrypoint_statistics: dict[str, models.EntrypointStatistics] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
+
+    # Per job.
     job_context: dict[models.JobId, models.Context] = dataclasses.field(
         init=False,
         default_factory=dict,
@@ -130,24 +134,31 @@ class QueueManager:
         self,
         name: str,
         requests_per_second: float = float("inf"),
+        concurrency_limit: int = 0,
     ) -> Callable[[T], T]:
         """
         Registers a function as an entrypoint for handling specific
         job types. Ensures unique naming in the registry.
         """
 
-        if name in self.registry:
+        if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
         if requests_per_second < 0:
             raise ValueError("Rate must be greater or eq. to zero.")
 
+        if concurrency_limit < 0:
+            raise ValueError("Concurrency limit must be greater or eq. to zero.")
+
         def register(func: T) -> T:
-            self.registry[name] = JobExecutor(
+            self.entrypoint_registry[name] = JobExecutor(
                 func=func,
                 requests_per_second=requests_per_second,
             )
-            self.statistics[name] = deque(maxlen=1_000)
+            self.entrypoint_statistics[name] = models.EntrypointStatistics(
+                samples=deque(maxlen=1_000),
+                concurrency_limiter=asyncio.Semaphore(concurrency_limit or sys.maxsize),
+            )
             return func
 
         return register
@@ -157,18 +168,19 @@ class QueueManager:
         entrypoint: str,
         epsilon: timedelta = timedelta(milliseconds=0.01),
     ) -> float:
-        samples = self.statistics[entrypoint]
+        samples = self.entrypoint_statistics[entrypoint].samples
         if not samples:
             return 0.0
         timespan = helpers.perf_counter_dt() - min(t for _, t in samples) + epsilon
         requests = sum(c for c, _ in samples)
         return requests / timespan.total_seconds()
 
-    def entrypoints_below_requests_per_second(self) -> set[str]:
+    def entrypoints_below_capacity_limits(self) -> set[str]:
         return {
             entrypoint
-            for entrypoint, fn in self.registry.items()
+            for entrypoint, fn in self.entrypoint_registry.items()
             if self.observed_requests_per_second(entrypoint) < fn.requests_per_second
+            and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
     async def run(
@@ -212,14 +224,14 @@ class QueueManager:
             notice_event_listener = await listeners.initialize_notice_event_listener(
                 self.connection,
                 self.channel,
-                self.statistics,
+                self.entrypoint_statistics,
                 self.job_context,
             )
 
             while self.alive:
                 jobs = await self.queries.dequeue(
                     batch_size=batch_size,
-                    entrypoints=self.entrypoints_below_requests_per_second(),
+                    entrypoints=self.entrypoints_below_capacity_limits(),
                     retry_timer=retry_timer,
                 )
 
@@ -236,7 +248,7 @@ class QueueManager:
 
                 for entrypoint, count in entrypoint_tally.items():
                     # skip if rate is inf.
-                    rps = self.registry[entrypoint].requests_per_second
+                    rps = self.entrypoint_registry[entrypoint].requests_per_second
                     if isfinite(rps):
                         task_manger.add(
                             asyncio.create_task(
@@ -275,21 +287,22 @@ class QueueManager:
             job.id,
         )
 
-        try:
-            await self.registry[job.entrypoint](job)
-        except Exception:
-            logconfig.logger.exception(
-                "Exception while processing entrypoint/id: %s/%s",
-                job.entrypoint,
-                job.id,
-            )
-            await self.buffer.add_job(job, "exception")
-        else:
-            logconfig.logger.debug(
-                "Dispatching entrypoint/id: %s/%s - successful",
-                job.entrypoint,
-                job.id,
-            )
-            await self.buffer.add_job(job, "successful")
-        finally:
-            self.job_context.pop(job.id, None)
+        async with self.entrypoint_statistics[job.entrypoint].concurrency_limiter:
+            try:
+                await self.entrypoint_registry[job.entrypoint](job)
+            except Exception:
+                logconfig.logger.exception(
+                    "Exception while processing entrypoint/id: %s/%s",
+                    job.entrypoint,
+                    job.id,
+                )
+                await self.buffer.add_job(job, "exception")
+            else:
+                logconfig.logger.debug(
+                    "Dispatching entrypoint/id: %s/%s - successful",
+                    job.entrypoint,
+                    job.id,
+                )
+                await self.buffer.add_job(job, "successful")
+            finally:
+                self.job_context.pop(job.id, None)
