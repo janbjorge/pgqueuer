@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
-from datetime import datetime
 
 from . import db, logconfig, models
 
@@ -17,7 +15,7 @@ class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
 async def initialize_notice_event_listener(
     connection: db.Driver,
     channel: models.PGChannel,
-    statistics: dict[str, deque[tuple[int, datetime]]],
+    statistics: dict[str, models.EntrypointStatistics],
     canceled: dict[models.JobId, models.Context],
 ) -> PGNoticeEventListener:
     """
@@ -28,7 +26,7 @@ async def initialize_notice_event_listener(
     def parse_and_queue(
         payload: str | bytes | bytearray,
         notice_event_queue: PGNoticeEventListener,
-        statistics: dict[str, deque[tuple[int, datetime]]],
+        statistics: dict[str, models.EntrypointStatistics],
     ) -> None:
         """
         Parses a JSON payload and inserts it into the queue as an `models.Event` object.
@@ -42,7 +40,9 @@ async def initialize_notice_event_listener(
         if parsed.root.type == "table_changed_event":
             notice_event_queue.put_nowait(parsed.root)
         elif parsed.root.type == "requests_per_second_event":
-            statistics[parsed.root.entrypoint].append((parsed.root.count, parsed.root.sent_at))
+            statistics[parsed.root.entrypoint].samples.append(
+                (parsed.root.count, parsed.root.sent_at)
+            )
         elif parsed.root.type == "cancellation_event":
             for jid in parsed.root.ids:
                 if ctx := canceled.get(jid):
