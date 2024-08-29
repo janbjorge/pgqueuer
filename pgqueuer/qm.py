@@ -296,7 +296,11 @@ class QueueManager:
 
         async with self.entrypoint_statistics[job.entrypoint].concurrency_limiter:
             try:
-                await self.entrypoint_registry[job.entrypoint](job)
+                # Run the job unless it has already been cancelled. Check this here because jobs
+                # can be cancelled between when they are dequeued and when the acquire the
+                # concurrency limit semaphore.
+                if not self.get_context(job.id).cancellation.cancel_called:
+                    await self.entrypoint_registry[job.entrypoint](job)
             except Exception:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/id: %s/%s",
