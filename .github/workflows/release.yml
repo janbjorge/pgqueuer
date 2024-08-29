@@ -34,7 +34,7 @@ jobs:
 
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-  build-and-package:
+  publish-docker-image:
         name: Publish docker image
         runs-on: ubuntu-latest
 
@@ -54,4 +54,4 @@ jobs:
             run: docker build -t ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }} -f tools/prometheus/Dockerfile .
 
           - name: Push docker image
-            run: docker push docker push ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }}
+            run: docker push ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }}
