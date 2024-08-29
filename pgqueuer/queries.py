@@ -366,6 +366,7 @@ class QueryBuilder:
         priority,
         status
     FROM {self.settings.statistics_table}
+    WHERE ($2::float IS NULL OR created > NOW() - make_interval(secs=>$2))
     ORDER BY id DESC
     LIMIT $1
     """
@@ -596,10 +597,18 @@ class Queries:
             else self.driver.execute(self.qb.create_truncate_log_query())
         )
 
-    async def log_statistics(self, tail: int) -> list[models.LogStatistics]:
+    async def log_statistics(
+        self,
+        tail: int | None,
+        last: timedelta | None = None,
+    ) -> list[models.LogStatistics]:
         return [
             models.LogStatistics.model_validate(dict(x))
-            for x in await self.driver.fetch(self.qb.create_log_statistics_query(), tail)
+            for x in await self.driver.fetch(
+                self.qb.create_log_statistics_query(),
+                tail,
+                None if last is None else last.total_seconds(),
+            )
         ]
 
     async def upgrade(self) -> None:
