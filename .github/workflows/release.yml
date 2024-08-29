@@ -33,3 +33,25 @@ jobs:
         run: python3 -m build . --sdist --wheel --outdir dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  build-and-package:
+        name: Publish docker image
+        runs-on: ubuntu-latest
+
+        steps:
+          - uses: actions/checkout@v4
+            with:
+              fetch-depth: 0  # Ensures tags are also fetched
+
+          - name: Log in to the Container registry
+            uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+            with:
+              registry: https://ghcr.io
+              username: ${{ github.actor }}
+              password: ${{ secrets.GHCR_PAT }}
+
+          - name: Build docker image ${{ github.ref_name }}
+            run: docker build -t ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }} -f tools/prometheus/Dockerfile .
+
+          - name: Push docker image
+            run: docker push docker push ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }}
