@@ -5,7 +5,7 @@ import asyncio
 import random
 import sys
 from datetime import timedelta
-from itertools import count
+from itertools import count, groupby
 
 from tqdm.asyncio import tqdm
 
@@ -175,8 +175,10 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         dequeue_alive_timer(qms, alive),
     )
 
-    qsize = sum(x.count for x in await (await querier(args.driver, dsn())).queue_size())
-    print(f"Queue size: {qsize}")
+    qsize = await (await querier(args.driver, dsn())).queue_size()
+    print("Queue size:")
+    for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
+        print(f"  {status} {sum(x.count for x in items)}")
 
 
 if __name__ == "__main__":

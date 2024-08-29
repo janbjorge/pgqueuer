@@ -1,0 +1,15 @@
+services:
+  pgq-prometheus:
+    working_dir: /src
+    command: uvicorn --factory tools.prometheus.prometheus:create_app --host 0.0.0.0 --port 8000
+    build:
+      context: ../../
+      dockerfile: tools/prometheus/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      PGHOST: ${PGHOST}
+      PGDATABASE: ${PGDATABASE}
+      PGPASSWORD: ${PGPASSWORD}
+      PGUSER: ${PGUSER}
+      PGPORT: ${PGPORT}
