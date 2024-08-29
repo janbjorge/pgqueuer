@@ -18,11 +18,13 @@ ReduceFn: TypeAlias = Callable[[Iterable[float]], float]
 
 
 def get_queries(request: Request) -> Queries:
+    """Retrieve the Queries object from the FastAPI application state."""
     return request.app.extra["pgq_queries"]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Context manager for initializing and tearing down resources on app startup and shutdown."""
     connection = await asyncpg.connect()
     app.extra["pgq_queries"] = Queries(AsyncpgDriver(connection))
     try:
@@ -36,6 +38,7 @@ def prometheus_format(
     labels: dict[str, str],
     value: float | int,
 ) -> str:
+    """Format metric data into a Prometheus-compatible string."""
     label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
     return f"{add_prefix(metric_name)}{{{label_parts}}} {value}"
 
@@ -43,6 +46,7 @@ def prometheus_format(
 def aggregated_queue_statistics(
     queue_statistics: list[QueueStatistics],
 ) -> Generator[str, None, None]:
+    """Generate Prometheus-formatted strings for aggregated queue statistics."""
     aggregated = [
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(
@@ -61,6 +65,8 @@ def aggregated_queue_statistics(
 def aggregated_log_statistics(
     log_statistics: list[LogStatistics],
 ) -> Generator[str, None, None]:
+    """Generate Prometheus-formatted strings for aggregated log
+    statistics, including time in queue metrics."""
     aggregated_log_statistics = [
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(
@@ -72,7 +78,7 @@ def aggregated_log_statistics(
     for entrypoint, status, items in aggregated_log_statistics:
         yield prometheus_format(
             metric_name="pgqueuer_logs_count",
-            labels={"aggregation": "sum", "entrypoin": entrypoint, "status": status},
+            labels={"aggregation": "sum", "entrypoini": entrypoint, "status": status},
             value=sum(x.count for x in items),
         )
 
@@ -95,11 +101,13 @@ def aggregated_statistics(
     queue_statistics: list[QueueStatistics],
     log_statistics: list[LogStatistics],
 ) -> Generator[str, None, None]:
+    """Combine and generate Prometheus metrics for both queue and log statistics."""
     yield from aggregated_queue_statistics(queue_statistics)
     yield from aggregated_log_statistics(log_statistics)
 
 
 def create_metrics_router() -> APIRouter:
+    """Create an API router that includes the metrics endpoint."""
     router = APIRouter()
 
     @router.get("/metrics", response_class=Response)
@@ -118,6 +126,7 @@ def create_metrics_router() -> APIRouter:
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI application with all routes and lifecycle events."""
     app = FastAPI(lifespan=lifespan)
     metrics_router = create_metrics_router()
     app.include_router(metrics_router)
