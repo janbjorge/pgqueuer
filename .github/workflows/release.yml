@@ -5,7 +5,7 @@ on:
     types: [released]
 
 jobs:
-  build-and-publish:
+  publish-pypi-package:
     name: Publish Python distribution to PyPI.
     runs-on: ubuntu-latest
 
@@ -34,7 +34,16 @@ jobs:
 
       - uses: pypa/gh-action-pypi-publish@release/v1
 
-      # Must run after pypi publish, else docker will tail by one release.
+  publish-docker-image:
+    needs: [publish-pypi-package]
+    name: Publish docker image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Ensures tags are also fetched
+
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
