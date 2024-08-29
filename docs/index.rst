@@ -63,3 +63,4 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    limits
    dashboard
    benchmark
+   prometheus-metrics-service
