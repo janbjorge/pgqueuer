@@ -139,6 +139,13 @@ class QueueManager:
         """
         Registers a function as an entrypoint for handling specific
         job types. Ensures unique naming in the registry.
+
+        Parameters:
+            - name: The name used to identify the entrypoint in the database.
+            - requests_per_second: The upper limit on the number of jobs that will
+                be processed for this entrypoint accross all consumers.
+            - concurrency_limit: The upper limit on the number of concurrent jobs
+                that can be executed for this entrypoint in any one consumer.
         """
 
         if name in self.entrypoint_registry:

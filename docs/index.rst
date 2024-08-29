@@ -60,6 +60,6 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    cli
    database_initialization
    queuemanager
-   rps
+   limits
    dashboard
    benchmark
