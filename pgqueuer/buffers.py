@@ -3,8 +3,11 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from datetime import datetime, timedelta
+from typing import AsyncGenerator, TypeAlias
 
 from . import helpers, logconfig, models, queries
+
+JobSatusTup: TypeAlias = tuple[models.Job, models.STATUS_LOG]
 
 
 @dataclasses.dataclass
@@ -28,9 +31,9 @@ class JobBuffer:
         init=False,
         default=True,
     )
-    events: list[tuple[models.Job, models.STATUS_LOG]] = dataclasses.field(
+    events: asyncio.Queue[JobSatusTup] = dataclasses.field(
         init=False,
-        default_factory=list,
+        default_factory=asyncio.Queue,
     )
     last_event_time: datetime = dataclasses.field(
         init=False,
@@ -46,29 +49,38 @@ class JobBuffer:
         Adds a job and its status to the buffer and flushes the buffer
         if it reaches maximum size.
         """
-        self.events.append((job, status))
+        await self.events.put((job, status))
         self.last_event_time = helpers.perf_counter_dt()
-        if len(self.events) >= self.max_size:
+        if self.events.qsize() >= self.max_size:
             async with self.lock:
-                if len(self.events) >= self.max_size:
+                if self.events.qsize() >= self.max_size:
                     await self.flush_jobs()
+
+    async def pop_until(self) -> AsyncGenerator[JobSatusTup, None]:
+        enter = helpers.perf_counter_dt()
+        for _ in range(2 * self.max_size):
+            if not self.events.empty() and helpers.perf_counter_dt() - enter < self.timeout * 2:
+                yield await self.events.get()
 
     async def flush_jobs(self) -> None:
         """
         Flushes the buffer by calling the flush callback with all accumulated jobs
         and statuses. Clears the buffer after flushing.
         """
-        while self.events:
-            try:
-                await self.queries.log_jobs(self.events)
-            except Exception:
-                logconfig.logger.exception(
-                    "Exception during buffer flush, waiting: %s seconds before retry.",
-                    self.timeout.total_seconds(),
-                )
-                await asyncio.sleep(self.timeout.total_seconds())
-            else:
-                self.events.clear()
+
+        events = [x async for x in self.pop_until()]
+
+        if not events:
+            return
+
+        try:
+            await self.queries.log_jobs(events)
+        except Exception:
+            logconfig.logger.exception(
+                "Exception during buffer flush, waiting: %s seconds before retry.",
+                self.timeout.total_seconds(),
+            )
+            await asyncio.sleep(self.timeout.total_seconds())
 
     async def monitor(self) -> None:
         """
