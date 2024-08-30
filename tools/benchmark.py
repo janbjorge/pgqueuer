@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import random
 import sys
+from contextlib import suppress
 from datetime import timedelta
 from itertools import count, groupby
 
@@ -20,16 +21,26 @@ async def consumer(
     qm: QueueManager,
     batch_size: int,
     entrypoint_rps: list[float],
+    concurrency_limits: list[int],
     bar: tqdm,
 ) -> None:
     assert len(entrypoint_rps) == 2
-    asyncfetch_rps, syncfetch_rps = entrypoint_rps
+    async_rps, sync_rps = entrypoint_rps
+    async_cl, sync_cl = concurrency_limits
 
-    @qm.entrypoint("asyncfetch", requests_per_second=asyncfetch_rps)
+    @qm.entrypoint(
+        "asyncfetch",
+        requests_per_second=async_rps,
+        concurrency_limit=async_cl,
+    )
     async def asyncfetch(job: Job) -> None:
         bar.update()
 
-    @qm.entrypoint("syncfetch", requests_per_second=syncfetch_rps)
+    @qm.entrypoint(
+        "syncfetch",
+        requests_per_second=sync_rps,
+        concurrency_limit=sync_cl,
+    )
     def syncfetch(job: Job) -> None:
         bar.update()
 
@@ -107,6 +118,13 @@ async def main() -> None:
         default=[float("inf"), float("inf")],
         help="RPS for endporints given as a list, defautl is 'inf'.",
     )
+    parser.add_argument(
+        "-ci",
+        "--concurrency-limit",
+        nargs="+",
+        default=[sys.maxsize, sys.maxsize],
+        help=f"Concurrency limit for endporints given as a list, defautl is '{sys.maxsize}'.",
+    )
     args = parser.parse_args()
 
     print(f"""Settings:
@@ -152,6 +170,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
                     qm=q,
                     batch_size=int(args.dequeue_batch_size),
                     entrypoint_rps=[float(x) for x in args.requests_per_second],
+                    concurrency_limits=[int(x) for x in args.concurrency_limit],
                     bar=bar,
                 )
                 for q in qms
@@ -182,4 +201,5 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    with suppress(KeyboardInterrupt):
+        asyncio.run(main())
