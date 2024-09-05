@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import random
+import signal
 import sys
 from contextlib import suppress
 from datetime import timedelta
@@ -44,7 +45,10 @@ async def consumer(
     def syncfetch(job: Job) -> None:
         bar.update()
 
-    await qm.run(batch_size=batch_size)
+    await qm.run(
+        batch_size=batch_size,
+        dequeue_timeout=timedelta(seconds=0),
+    )
 
 
 async def producer(
@@ -63,7 +67,7 @@ async def producer(
         )
 
 
-async def main() -> None:
+def cli_parser() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="PGQueuer benchmark tool.")
 
     parser.add_argument(
@@ -125,8 +129,10 @@ async def main() -> None:
         default=[sys.maxsize, sys.maxsize],
         help=f"Concurrency limit for endporints given as a list, defautl is '{sys.maxsize}'.",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
 
+
+async def main(args: argparse.Namespace) -> None:
     print(f"""Settings:
 Timer:                  {args.timer.total_seconds()} seconds
 Dequeue:                {args.dequeue}
@@ -181,12 +187,29 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         qms: list[QueueManager],
         alive: asyncio.Event,
     ) -> None:
-        await asyncio.sleep(args.timer.total_seconds())
+        _, pending = await asyncio.wait(
+            (
+                asyncio.create_task(asyncio.sleep(args.timer.total_seconds())),
+                asyncio.create_task(alive.wait()),
+            ),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
         # Stop producers
         alive.set()
         # Stop consumers
         for q in qms:
             q.alive = False
+
+        for p in pending:
+            p.cancel()
+
+    def graceful_shutdown(signum: int, frame: object) -> None:
+        alive.set()
+        for qm in qms:
+            qm.alive = False
+
+    signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
+    signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
 
     await asyncio.gather(
         dequeue(qms),
@@ -202,4 +225,4 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
 if __name__ == "__main__":
     with suppress(KeyboardInterrupt):
-        asyncio.run(main())
+        asyncio.run(main(cli_parser()))
