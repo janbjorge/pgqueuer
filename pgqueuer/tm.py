@@ -20,7 +20,11 @@ class TaskManager:
 
     def log_unhandled_exception(self, task: asyncio.Task) -> None:
         if exception := task.exception():
-            logconfig.logger.error("Unhandled exception in: %s", task, exc_info=exception)
+            logconfig.logger.error(
+                "Unhandled exception in task: %s",
+                task,
+                exc_info=exception,
+            )
 
     def add(self, task: asyncio.Task) -> None:
         """
@@ -31,8 +35,11 @@ class TaskManager:
         task.add_done_callback(self.log_unhandled_exception)
         task.add_done_callback(self.tasks.remove)
 
+    async def gather_tasks(self) -> list[BaseException | None]:
+        return await asyncio.gather(*self.tasks, return_exceptions=True)
+
     async def __aenter__(self) -> TaskManager:
         return self
 
     async def __aexit__(self, *_: object) -> None:
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await self.gather_tasks()

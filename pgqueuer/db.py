@@ -10,10 +10,11 @@ import asyncio
 import functools
 import os
 import re
+from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
-from . import logconfig
+from . import tm
 
 if TYPE_CHECKING:
     import asyncpg
@@ -68,6 +69,10 @@ class Driver(Protocol):
     def alive(self) -> asyncio.Event:
         raise NotImplementedError
 
+    @property
+    def tm(self) -> tm.TaskManager:
+        raise NotImplementedError
+
 
 class AsyncpgDriver(Driver):
     """
@@ -117,6 +122,10 @@ class AsyncpgDriver(Driver):
     def alive(self) -> asyncio.Event:
         return self._alive
 
+    @property
+    def tm(self) -> tm.TaskManager:
+        return tm.TaskManager()
+
 
 @functools.cache
 def _replace_dollar_named_parameter(query: str) -> str:
@@ -139,16 +148,20 @@ class PsycopgDriver:
         notify_stop_after: int = 10,
     ) -> None:
         self._alive = asyncio.Event()
-        self._callbacks: dict[str, Callable[[str | bytes | bytearray], None]] = {}
+        self._callbacks = defaultdict[str, list[Callable[[str | bytes | bytearray], None]]](list)
         self._connection = connection
         self._lock = asyncio.Lock()
-        self._notify_handler_task: None | asyncio.Task = None
+        self._tm = tm.TaskManager()
         self._notify_stop_after = notify_stop_after
         self._notify_timeout = notify_timeout
 
     @property
     def alive(self) -> asyncio.Event:
         return self._alive
+
+    @property
+    def tm(self) -> tm.TaskManager:
+        return self._tm
 
     async def fetch(
         self,
@@ -184,10 +197,7 @@ class PsycopgDriver:
         assert self._connection.autocommit
         async with self._lock:
             await self._connection.execute(f"LISTEN {channel};")
-            self._callbacks[channel] = callback
-
-            if self._notify_handler_task is not None:
-                return
+            self._callbacks[channel].append(callback)
 
             async def notify_handler() -> None:
                 while not self.alive.is_set():
@@ -196,25 +206,15 @@ class PsycopgDriver:
                         stop_after=self._notify_stop_after,
                     )
                     async for note in gen:
-                        if cb := self._callbacks.get(note.channel):
+                        for cb in self._callbacks.get(note.channel, []):
                             cb(note.payload)
+                        if self.alive.is_set():
+                            return
                     await asyncio.sleep(self._notify_timeout.total_seconds())
 
-            def log_exception(x: asyncio.Task) -> None:
-                try:
-                    x.result()
-                except asyncio.exceptions.CancelledError:
-                    ...
-                except Exception:
-                    logconfig.logger.exception(
-                        "Got an exception on notify on channel: %s",
-                        channel,
-                    )
-
-            self._notify_handler_task = asyncio.create_task(
-                notify_handler(),
-                name="notify_handler",
-            )
-            self._notify_handler_task.add_done_callback(
-                log_exception,
+            self._tm.add(
+                asyncio.create_task(
+                    notify_handler(),
+                    name=f"notify_psycopg_handler_{channel}",
+                )
             )

@@ -286,7 +286,9 @@ class QueueManager:
                     )
 
             self.buffer.alive.set()
+
             self.connection.alive.set()
+            await self.connection.tm.gather_tasks()
 
         await self.buffer.flush_jobs()
 
