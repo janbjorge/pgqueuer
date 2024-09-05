@@ -88,9 +88,9 @@ class QueueManager:
         default=models.PGChannel(queries.DBSettings().channel),
     )
 
-    alive: bool = dataclasses.field(
+    alive: asyncio.Event = dataclasses.field(
         init=False,
-        default=True,
+        default_factory=asyncio.Event,
     )
     buffer: buffers.JobBuffer = dataclasses.field(init=False)
     queries: queries.Queries = dataclasses.field(init=False)
@@ -235,7 +235,9 @@ class QueueManager:
                 self.job_context,
             )
 
-            while self.alive:
+            alive_task = asyncio.create_task(self.alive.wait())
+
+            while not self.alive.is_set():
                 jobs = await self.queries.dequeue(
                     batch_size=batch_size,
                     entrypoints=self.entrypoints_below_capacity_limits(),
@@ -267,9 +269,15 @@ class QueueManager:
                         )
 
                 try:
-                    await asyncio.wait_for(
-                        notice_event_listener.get(),
-                        timeout=dequeue_timeout.total_seconds(),
+                    event_task = asyncio.create_task(
+                        asyncio.wait_for(
+                            notice_event_listener.get(),
+                            timeout=dequeue_timeout.total_seconds(),
+                        )
+                    )
+                    await asyncio.wait(
+                        (alive_task, event_task),
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
                 except asyncio.TimeoutError:
                     logconfig.logger.debug(
@@ -277,8 +285,8 @@ class QueueManager:
                         dequeue_timeout,
                     )
 
-            self.buffer.alive = False
-            self.connection.alive = False
+            self.buffer.alive.set()
+            self.connection.alive.set()
 
         await self.buffer.flush_jobs()
 

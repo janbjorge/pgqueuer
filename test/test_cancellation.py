@@ -41,7 +41,7 @@ async def test_cancellation_async(
         await q.mark_job_as_cancelled(job_ids)
         event.set()
 
-        qm.alive = False
+        qm.alive.set()
 
     await asyncio.gather(
         qm.run(dequeue_timeout=timedelta(seconds=0.0)),
@@ -86,7 +86,7 @@ async def test_cancellation_sync(
         await q.mark_job_as_cancelled(job_ids)
         event.set()
 
-        qm.alive = False
+        qm.alive.set()
 
     await asyncio.gather(
         qm.run(dequeue_timeout=timedelta(seconds=0.01)),
@@ -130,7 +130,7 @@ async def test_cancellation_async_context_manager(
         await q.mark_job_as_cancelled(job_ids)
         event.set()
 
-        qm.alive = False
+        qm.alive.set()
 
     await asyncio.gather(
         qm.run(dequeue_timeout=timedelta(seconds=0.01)),

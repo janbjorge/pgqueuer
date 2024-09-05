@@ -45,10 +45,7 @@ async def consumer(
     def syncfetch(job: Job) -> None:
         bar.update()
 
-    await qm.run(
-        batch_size=batch_size,
-        dequeue_timeout=timedelta(seconds=0),
-    )
+    await qm.run(batch_size=batch_size)
 
 
 async def producer(
@@ -198,7 +195,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         alive.set()
         # Stop consumers
         for q in qms:
-            q.alive = False
+            q.alive.set()
 
         for p in pending:
             p.cancel()
@@ -206,7 +203,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     def graceful_shutdown(signum: int, frame: object) -> None:
         alive.set()
         for qm in qms:
-            qm.alive = False
+            qm.alive.set()
 
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
     signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request

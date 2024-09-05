@@ -20,7 +20,10 @@ def load_queue_manager_factory(factory_path: str) -> QM_FACTORY:
 
 
 async def runit(
-    factory_fn: str, dequeue_timeout: timedelta, batch_size: int, retry_timer: timedelta | None
+    factory_fn: str,
+    dequeue_timeout: timedelta,
+    batch_size: int,
+    retry_timer: timedelta | None,
 ) -> None:
     """
     Main function to instantiate and manage the lifecycle of a QueueManager.
@@ -37,11 +40,15 @@ async def runit(
         Handle incoming signals that require a graceful shutdown of the application.
         """
         print(f"Received signal {signum}, shutting down...")
-        qm.alive = False
+        qm.alive.set()
 
     # Setup signal handlers for graceful shutdown of the QueueManager.
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
     signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
 
     # Start the QueueManager's operation
-    await qm.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size, retry_timer=retry_timer)
+    await qm.run(
+        dequeue_timeout=dequeue_timeout,
+        batch_size=batch_size,
+        retry_timer=retry_timer,
+    )
