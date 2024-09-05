@@ -73,7 +73,7 @@ async def test_max_concurrency(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive = False
+            q.alive.set()
 
     await asyncio.gather(timer(), dequeue())
 
