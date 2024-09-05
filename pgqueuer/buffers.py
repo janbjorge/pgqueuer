@@ -27,9 +27,9 @@ class JobBuffer:
     timeout: timedelta
     queries: queries.Queries
 
-    alive: bool = dataclasses.field(
+    alive: asyncio.Event = dataclasses.field(
         init=False,
-        default=True,
+        default_factory=asyncio.Event,
     )
     events: asyncio.Queue[JobSatusTup] = dataclasses.field(
         init=False,
@@ -87,7 +87,7 @@ class JobBuffer:
         Periodically checks if the buffer needs to be flushed based on the timeout.
         Runs until the `alive` event is cleared.
         """
-        while self.alive:
+        while not self.alive.is_set():
             await asyncio.sleep(self.timeout.total_seconds())
             if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
                 async with self.lock:

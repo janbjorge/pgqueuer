@@ -65,11 +65,7 @@ class Driver(Protocol):
         raise NotImplementedError
 
     @property
-    def alive(self) -> bool:
-        raise NotImplementedError
-
-    @alive.setter
-    def alive(self, value: bool) -> None:
+    def alive(self) -> asyncio.Event:
         raise NotImplementedError
 
 
@@ -83,7 +79,7 @@ class AsyncpgDriver(Driver):
         connection: asyncpg.Connection,
     ) -> None:
         """Initialize the driver with an AsyncPG connection."""
-        self._alive = True
+        self._alive = asyncio.Event()
         self._connection = connection
         self._lock = asyncio.Lock()
 
@@ -118,12 +114,8 @@ class AsyncpgDriver(Driver):
             )
 
     @property
-    def alive(self) -> bool:
+    def alive(self) -> asyncio.Event:
         return self._alive
-
-    @alive.setter
-    def alive(self, value: bool) -> None:
-        self._alive = value
 
 
 @functools.cache
@@ -146,7 +138,7 @@ class PsycopgDriver:
         notify_timeout: timedelta = timedelta(seconds=0.25),
         notify_stop_after: int = 10,
     ) -> None:
-        self._alive = True
+        self._alive = asyncio.Event()
         self._callbacks: dict[str, Callable[[str | bytes | bytearray], None]] = {}
         self._connection = connection
         self._lock = asyncio.Lock()
@@ -155,12 +147,8 @@ class PsycopgDriver:
         self._notify_timeout = notify_timeout
 
     @property
-    def alive(self) -> bool:
+    def alive(self) -> asyncio.Event:
         return self._alive
-
-    @alive.setter
-    def alive(self, value: bool) -> None:
-        self._alive = value
 
     async def fetch(
         self,
@@ -202,7 +190,7 @@ class PsycopgDriver:
                 return
 
             async def notify_handler() -> None:
-                while self._alive:
+                while not self.alive.is_set():
                     gen = self._connection.notifies(
                         timeout=self._notify_timeout.total_seconds(),
                         stop_after=self._notify_stop_after,

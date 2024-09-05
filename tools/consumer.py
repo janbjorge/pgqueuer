@@ -15,9 +15,6 @@ async def main() -> QueueManager:
     # Setup the 'fetch' entrypoint
     @qm.entrypoint("fetch")
     async def process_message(job: Job) -> None:
-        import asyncio
-
-        print(f"Num tasks {len(asyncio.all_tasks())}")
-        # print(f"Processed message: {job}")
+        print(f"Processed message: {job}")
 
     return qm
