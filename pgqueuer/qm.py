@@ -324,6 +324,7 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                await self.buffer.add_job(job, "successful")
+                canceled = self.get_context(job.id).cancellation.cancel_called
+                await self.buffer.add_job(job, "canceled" if canceled else "successful")
             finally:
                 self.job_context.pop(job.id, None)
