@@ -52,7 +52,13 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
 
       - name: Build docker image ${{ github.ref_name }}
-        run: docker build -t ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }} -f tools/prometheus/Dockerfile .
+        run: docker build \
+          -t ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }} \
+          -t ghcr.io/janbjorge/pgq-prometheus-service:latest \
+          -f tools/prometheus/Dockerfile .
 
       - name: Push docker image
         run: docker push ghcr.io/janbjorge/pgq-prometheus-service:${{ github.ref_name }}
+
+      - name: Push docker image
+        run: docker push ghcr.io/janbjorge/pgq-prometheus-service:latest
