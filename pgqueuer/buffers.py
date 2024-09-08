@@ -5,7 +5,7 @@ import dataclasses
 from datetime import datetime, timedelta
 from typing import AsyncGenerator, TypeAlias
 
-from . import helpers, logconfig, models, queries
+from . import helpers, logconfig, models, queries, tm
 
 JobSatusTup: TypeAlias = tuple[models.Job, models.STATUS_LOG]
 
@@ -42,6 +42,10 @@ class JobBuffer:
     lock: asyncio.Lock = dataclasses.field(
         init=False,
         default_factory=asyncio.Lock,
+    )
+    tm: tm.TaskManager = dataclasses.field(
+        init=False,
+        default_factory=tm.TaskManager,
     )
 
     async def add_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
@@ -93,3 +97,13 @@ class JobBuffer:
                 async with self.lock:
                     if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
                         await self.flush_jobs()
+
+    async def __aenter__(self) -> JobBuffer:
+        self.tm.add(asyncio.create_task(self.monitor()))
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        self.alive.set()
+        while not self.events.empty():
+            await self.flush_jobs()
+        await self.tm.gather_tasks()

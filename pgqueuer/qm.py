@@ -92,7 +92,6 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    buffer: buffers.JobBuffer = dataclasses.field(init=False)
     queries: queries.Queries = dataclasses.field(init=False)
 
     # Per entrypoint
@@ -117,11 +116,6 @@ class QueueManager:
         instance creation.
         """
         self.queries = queries.Queries(self.connection)
-        self.buffer = buffers.JobBuffer(
-            queries=self.queries,
-            max_size=10,
-            timeout=timedelta(seconds=0.01),
-        )
 
     def get_context(self, job_id: models.JobId) -> models.Context:
         """
@@ -224,10 +218,15 @@ class QueueManager:
                 "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
             )
 
-        self.buffer.max_size = batch_size
-
-        async with tm.TaskManager() as task_manger:
-            task_manger.add(asyncio.create_task(self.buffer.monitor()))
+        async with (
+            buffers.JobBuffer(
+                queries=self.queries,
+                max_size=batch_size,
+                timeout=timedelta(seconds=0.01),
+            ) as buffer,
+            tm.TaskManager() as task_manger,
+            self.connection,
+        ):
             notice_event_listener = await listeners.initialize_notice_event_listener(
                 self.connection,
                 self.channel,
@@ -250,7 +249,7 @@ class QueueManager:
                     self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                     )
-                    task_manger.add(asyncio.create_task(self._dispatch(job)))
+                    task_manger.add(asyncio.create_task(self._dispatch(job, buffer)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
@@ -285,14 +284,11 @@ class QueueManager:
                         dequeue_timeout,
                     )
 
-            self.buffer.alive.set()
-
-            self.connection.alive.set()
-            await self.connection.tm.gather_tasks()
-
-        await self.buffer.flush_jobs()
-
-    async def _dispatch(self, job: models.Job) -> None:
+    async def _dispatch(
+        self,
+        job: models.Job,
+        buffer: buffers.JobBuffer,
+    ) -> None:
         """
         Handles asynchronous job dispatch. Logs exceptions, updates job status,
         and adapts execution method based on whether the job's function is asynchronous.
@@ -317,7 +313,7 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                await self.buffer.add_job(job, "exception")
+                await buffer.add_job(job, "exception")
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
@@ -325,6 +321,6 @@ class QueueManager:
                     job.id,
                 )
                 canceled = self.get_context(job.id).cancellation.cancel_called
-                await self.buffer.add_job(job, "canceled" if canceled else "successful")
+                await buffer.add_job(job, "canceled" if canceled else "successful")
             finally:
                 self.job_context.pop(job.id, None)
