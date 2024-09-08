@@ -73,6 +73,12 @@ class Driver(Protocol):
     def tm(self) -> tm.TaskManager:
         raise NotImplementedError
 
+    async def __aenter__(self) -> Driver:
+        raise NotImplementedError
+
+    async def __aexit__(self, *_: object) -> None:
+        raise NotImplementedError
+
 
 class AsyncpgDriver(Driver):
     """
@@ -125,6 +131,11 @@ class AsyncpgDriver(Driver):
     @property
     def tm(self) -> tm.TaskManager:
         return tm.TaskManager()
+
+    async def __aenter__(self) -> AsyncpgDriver:
+        return self
+
+    async def __aexit__(self, *_: object) -> None: ...
 
 
 @functools.cache
@@ -218,3 +229,10 @@ class PsycopgDriver:
                     name=f"notify_psycopg_handler_{channel}",
                 )
             )
+
+    async def __aenter__(self) -> PsycopgDriver:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        self.alive.set()
+        await self.tm.gather_tasks()
