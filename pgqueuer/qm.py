@@ -313,7 +313,7 @@ class QueueManager:
                     await self.entrypoint_registry[job.entrypoint](job)
             except Exception:
                 logconfig.logger.exception(
-                    "Exception while processing entrypoint/id: %s/%s",
+                    "Exception while processing entrypoint/job-id: %s/%s",
                     job.entrypoint,
                     job.id,
                 )
