@@ -8,13 +8,13 @@ packages = ["pgqueuer"]
 [tool.setuptools_scm]
 
 [project]
-authors = [{ name = "janbjorge"}]
-description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
-dynamic = ["version"]
-license = { text = "MIT License" }
 name = "pgqueuer"
-readme = "README.md"
+description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
+authors = [{name = "janbjorge"}]
+license = {text = "MIT License"}
+dynamic = ["version"]
 requires-python = ">=3.10"
+readme = "README.md"
 
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -37,7 +37,7 @@ classifiers = [
 dependencies = [
     "anyio>=4.0",
     "pydantic>=2.0.0",
-    "tabulate>=0.9.0",
+    "tabulate>=0.9.0"
 ]
 
 [project.urls]
@@ -62,12 +62,12 @@ dev = [
     "ruff",
     "tqdm",
     "types-tabulate",
-    "uvicorn",
+    "uvicorn"
 ]
 docs = [
     "myst-parser",
     "sphinx",
-    "sphinx-rtd-theme",
+    "sphinx-rtd-theme"
 ]
 
 [tool.ruff]
@@ -85,8 +85,9 @@ select = [
     "RSE",
     "SIM",
     "W",
-    "C90",
+    "C90"
 ]
+
 [tool.ruff.lint.isort]
 combine-as-imports = true
 
