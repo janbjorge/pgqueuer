@@ -17,7 +17,7 @@ requires-python = ">=3.10"
 readme = "README.md"
 
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
     "Framework :: AsyncIO",
     "Intended Audience :: Developers",
