@@ -1,6 +1,6 @@
 ## Throttling Job Processing
 
-By default, there is no limitation on how frequently jobs can be dequeued from the database or the number of concurrent jobs that can be processed by each consumer. `pgqueuer` provides features that allow limitations to be applied to individual endpoints as needed by the user.
+By default, there is no limitation on how frequently jobs can be dequeued from the database or the number of concurrent jobs that can be processed by each consumer. `PGQueuer` provides features that allow limitations to be applied to individual endpoints as needed by the user.
 
 ### Rate Limiting
 
@@ -29,9 +29,9 @@ def process_image(job: Job):
 
 #### Implementation
 
-The rate limiting in `pgqueuer` is implemented by track the number of jobs processed for each registered entrypoint within a specific timeframe. This is achieved using the `entrypoint` decorator, which now accepts an optional parameter `requests_per_second`. When set, this parameter specifies the maximum number of jobs that can be processed per second for that particular entry point.
+The rate limiting in `PGQueuer` is implemented by track the number of jobs processed for each registered entrypoint within a specific timeframe. This is achieved using the `entrypoint` decorator, which now accepts an optional parameter `requests_per_second`. When set, this parameter specifies the maximum number of jobs that can be processed per second for that particular entry point.
 
-Rate limiting in pgqueuer is enhanced by several key components.
+Rate limiting in PGQueuer is enhanced by several key components.
 
 **Internal Tracking with `statistics`**: Uses a sliding window mechanism to monitor and adjust job processing rates in real-time.
 

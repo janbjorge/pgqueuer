@@ -122,7 +122,7 @@ def process_job(job: Job):
 
 ### Understanding the Cancellation Object
 
-The cancellation feature in `pgqueuer` utilizes a `cancellation` object, which is central to managing the stoppage of specific tasks. This object is part of the `Context` class, encapsulating the cancellation state and mechanisms used to control job execution.
+The cancellation feature in `PGQueuer` utilizes a `cancellation` object, which is central to managing the stoppage of specific tasks. This object is part of the `Context` class, encapsulating the cancellation state and mechanisms used to control job execution.
 
 #### The Cancellation Object
 

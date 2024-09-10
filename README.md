@@ -1,5 +1,5 @@
 ### Readme
-## 🚀 pgqueuer - Building Smoother Workflows One Queue at a Time 🚀
+## 🚀 PGQueuer - Building Smoother Workflows One Queue at a Time 🚀
 [![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain)
 [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer)
 [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer)
@@ -15,9 +15,9 @@
 
 ---
 
-## pgqueuer
+## PGQueuer
 
-pgqueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, pgqueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
+PGQueuer is a minimalist, high-performance job queue library for Python, leveraging the robustness of PostgreSQL. Designed for simplicity and efficiency, PGQueuer uses PostgreSQL's LISTEN/NOTIFY to manage job queues effortlessly.
 
 ### Features
 
@@ -27,7 +27,7 @@ pgqueuer is a minimalist, high-performance job queue library for Python, leverag
 
 ### Installation
 
-To install pgqueuer, simply install with pip the following command:
+To install PGQueuer, simply install with pip the following command:
 
 ```bash
 pip install pgqueuer
@@ -35,7 +35,7 @@ pip install pgqueuer
 
 ### Example Usage
 
-Here's how you can use pgqueuer in a typical scenario processing incoming data messages:
+Here's how you can use PGQueuer in a typical scenario processing incoming data messages:
 
 #### Write and run a consumer
 Start a long-lived consumer that will begin processing jobs as soon as they are enqueued by another process. In this case we want to be a bit more carefull as we want gracefull shutdowns, `pgqueuer run` will setup signals to
