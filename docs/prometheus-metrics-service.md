@@ -1,6 +1,6 @@
 Prometheus Metrics Integration
 ==============================
-pgqueuer now includes an integration with Prometheus, enabling robust monitoring and metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
+PGQueuer now includes an integration with Prometheus, enabling robust monitoring and metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
 
 Example of Running the Service
 ------------------------------

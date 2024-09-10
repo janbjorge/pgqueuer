@@ -1,10 +1,10 @@
 # Database Initialization
 
-pgqueuer requires some initial setup in your PostgreSQL database. This includes creating tables and associated database objects necessary for job queuing and processing.
+PGQueuer requires some initial setup in your PostgreSQL database. This includes creating tables and associated database objects necessary for job queuing and processing.
 
 ## Table Structure
 
-pgqueuer uses two primary tables: one for job queues and another for logging job statistics. Below is the structure of these tables along with explanations for each column.
+PGQueuer uses two primary tables: one for job queues and another for logging job statistics. Below is the structure of these tables along with explanations for each column.
 
 ### Queue Table
 
@@ -40,14 +40,14 @@ CREATE TABLE pgqueuer_statistics (
 
 ## Database installation/uninstallation
 
-pgqueuer provides a command-line interface for easy management of installation and uninstallation. Ensure you have configured your [environment variables](https://magicstack.github.io/asyncpg/current/api/index.html#connection) or use the appropriate flags to specify your database credentials.
+PGQueuer provides a command-line interface for easy management of installation and uninstallation. Ensure you have configured your [environment variables](https://magicstack.github.io/asyncpg/current/api/index.html#connection) or use the appropriate flags to specify your database credentials.
 
-### Installing pgqueuer database components:
+### Installing PGQueuer database components:
 ```bash
 python -m pgqueuer install 
 ```
 
-### Uninstalling pgqueuer database components:
+### Uninstalling PGQueuer database components:
 ```bash
 python -m pgqueuer uninstall 
 ```
@@ -56,7 +56,7 @@ The CLI supports several flags to customize the connection settings. Use `--help
 
 ### Manual installation of database components
 
-You can find the commands needed for setting up your database for you version of pgqueuer by running:
+You can find the commands needed for setting up your database for you version of PGQueuer by running:
 ```bash
 python -m pgqueuer install --dry-run
 ```

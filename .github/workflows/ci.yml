@@ -1,4 +1,4 @@
-name: Test pgqueuer
+name: Test PGQueuer
 
 on:
   pull_request:
@@ -21,7 +21,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: pgqueuer example
+    name: PGQueuer example
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -36,7 +36,7 @@ jobs:
       - name: Build custom PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
-      - name: Install pgqueuer
+      - name: Install PGQueuer
         run: |
           pip install pip -U
           pip install ".[dev]"
@@ -124,7 +124,7 @@ jobs:
       - name: Build custom PostgreSQL Docker image
         run: |
           POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
-      - name: Install pgqueuer
+      - name: Install PGQueuer
         run: |
           pip install pip -U
           pip install ".[dev]"

@@ -1,15 +1,15 @@
 # Benchmark
 
-pgqueuer underwent benchmark testing to evaluate its performance across varying job volumes and concurrency levels.
+PGQueuer underwent benchmark testing to evaluate its performance across varying job volumes and concurrency levels.
 
 ## Key Observations:
-- **Consistency**: pgqueuer maintains consistent throughput across different job counts.
+- **Consistency**: PGQueuer maintains consistent throughput across different job counts.
 - **Performance**: The highest throughput observed was at ~6,4k jobs per second.
 - **Scalability**: Performance increases with concurrency.
 
 ## Benchmarking Tool
 
-pgqueuer includes a built-in benchmarking tool to help you assess performance in your environment. You can customize various parameters such as timer duration, number of workers, and batch sizes for enqueueing and dequeueing.
+PGQueuer includes a built-in benchmarking tool to help you assess performance in your environment. You can customize various parameters such as timer duration, number of workers, and batch sizes for enqueueing and dequeueing.
 
 ## Running the Benchmark
 
@@ -39,7 +39,7 @@ Jobs per Second: 18.35k
 
 ## Performance Comparison: asyncpg vs psycopg
 
-In our benchmarking tests, we compared the performance of two PostgreSQL drivers: `asyncpg` and `psycopg`. These tests were conducted to understand the differences in throughput and efficiency when using each driver with pgqueuer under the same conditions.
+In our benchmarking tests, we compared the performance of two PostgreSQL drivers: `asyncpg` and `psycopg`. These tests were conducted to understand the differences in throughput and efficiency when using each driver with PGQueuer under the same conditions.
 
 ### Test Setup
 
