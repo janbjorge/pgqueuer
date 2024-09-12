@@ -128,7 +128,7 @@ class Driver(Protocol):
         """
         raise NotImplementedError
 
-    async def __aenter__(self) -> Driver:
+    async def __aenter__(self) -> Self:
         """
         Enter the runtime context related to this object.
 
@@ -273,6 +273,7 @@ class AsyncpgPoolDriver(Driver):
 
     async def __aexit__(self, *_: object) -> None:
         if self._listener_connection is not None:
+            await self._listener_connection.reset()
             await self._pool.release(self._listener_connection)
 
 
