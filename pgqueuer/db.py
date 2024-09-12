@@ -12,9 +12,10 @@ import asyncio
 import functools
 import os
 import re
-from collections import defaultdict
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
+
+from typing_extensions import Self
 
 from . import tm
 
@@ -199,10 +200,80 @@ class AsyncpgDriver(Driver):
     def tm(self) -> tm.TaskManager:
         return tm.TaskManager()
 
-    async def __aenter__(self) -> AsyncpgDriver:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *_: object) -> None: ...
+
+
+class AsyncpgPoolDriver(Driver):
+    """
+    Implements the Driver protocol using AsyncPGPool for PostgreSQL database operations.
+
+    This class manages asynchronous database operations using a connection pool.
+    It ensures thread safety through query locking and supports PostgreSQL LISTEN/NOTIFY
+    functionality with dedicated listeners.
+    """
+
+    def __init__(
+        self,
+        pool: asyncpg.Pool,
+    ) -> None:
+        """
+        Initialize the AsyncpgPoolDriver with a connection pool.
+        """
+        self._alive = asyncio.Event()
+        self._pool = pool
+        self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
+        self._lock = asyncio.Lock()
+        if self._pool.get_max_size() < 2:
+            raise RuntimeError(
+                "Pool max size must be greater than 2 to ensure connections are available."
+            )
+
+    async def fetch(
+        self,
+        query: str,
+        *args: Any,
+    ) -> list[dict]:
+        return [dict(x) for x in await self._pool.fetch(query, *args)]
+
+    async def execute(
+        self,
+        query: str,
+        *args: Any,
+    ) -> str:
+        return await self._pool.execute(query, *args)
+
+    async def add_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        """Add a database listener with locking to manage concurrency."""
+        async with self._lock:
+            if self._listener_connection is None:
+                self._listener_connection = await self._pool.acquire()
+
+            await self._listener_connection.add_listener(
+                channel,
+                lambda *x: callback(x[-1]),
+            )
+
+    @property
+    def alive(self) -> asyncio.Event:
+        return self._alive
+
+    @property
+    def tm(self) -> tm.TaskManager:
+        return tm.TaskManager()
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        if self._listener_connection is not None:
+            await self._pool.release(self._listener_connection)
 
 
 @functools.cache
@@ -247,7 +318,6 @@ class PsycopgDriver:
         notify_stop_after: int = 10,
     ) -> None:
         self._alive = asyncio.Event()
-        self._callbacks = defaultdict[str, list[Callable[[str | bytes | bytearray], None]]](list)
         self._connection = connection
         self._lock = asyncio.Lock()
         self._tm = tm.TaskManager()
@@ -296,19 +366,16 @@ class PsycopgDriver:
         assert self._connection.autocommit
         async with self._lock:
             await self._connection.execute(f"LISTEN {channel};")
-            self._callbacks[channel].append(callback)
 
             async def notify_handler() -> None:
-                while not self.alive.is_set():
+                while not self.alive.is_set() and not self._connection.closed:
                     gen = self._connection.notifies(
                         timeout=self._notify_timeout.total_seconds(),
                         stop_after=self._notify_stop_after,
                     )
                     async for note in gen:
-                        for cb in self._callbacks.get(note.channel, []):
-                            cb(note.payload)
-                        if self.alive.is_set():
-                            return
+                        if not self.alive.is_set() and not self._connection.closed:
+                            callback(note.payload)
                     await asyncio.sleep(self._notify_timeout.total_seconds())
 
             self._tm.add(
@@ -318,7 +385,7 @@ class PsycopgDriver:
                 )
             )
 
-    async def __aenter__(self) -> PsycopgDriver:
+    async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *_: object) -> None:

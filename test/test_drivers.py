@@ -8,7 +8,7 @@ import psycopg
 import pytest
 from conftest import dsn
 
-from pgqueuer.db import AsyncpgDriver, Driver, PsycopgDriver
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
 from pgqueuer.helpers import perf_counter_dt
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import PGChannel, TableChangedEvent
@@ -22,6 +22,12 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
         yield AsyncpgDriver(conn)
     finally:
         await conn.close()
+
+
+@asynccontextmanager
+async def apgpooldriver() -> AsyncGenerator[AsyncpgPoolDriver, None]:
+    async with asyncpg.create_pool() as pool:
+        yield AsyncpgPoolDriver(pool)
 
 
 @asynccontextmanager
@@ -41,6 +47,7 @@ def drivers() -> (
     ]
 ):
     yield apgdriver
+    yield apgpooldriver
     yield psydriver
 
 
@@ -112,7 +119,7 @@ async def test_valid_query_syntax(
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
     async with driver() as d:
-        if isinstance(d, AsyncpgDriver):
+        if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
             with suppress(asyncpg.exceptions.UndefinedParameterError):
                 await d.execute(query())
 
