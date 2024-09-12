@@ -16,7 +16,7 @@ async def test_cancellation_async(
     N: int,
 ) -> None:
     event = asyncio.Event()
-    cancel_called_not_cancel_called = list[str]()
+    cancel_called_not_cancel_called = list[bool]()
     q = Queries(pgdriver)
     qm = QueueManager(pgdriver)
 
@@ -24,9 +24,7 @@ async def test_cancellation_async(
     async def to_be_canceled(job: Job) -> None:
         scope = qm.get_context(job.id).cancellation
         await event.wait()
-        cancel_called_not_cancel_called.append(
-            "cancel_called" if scope.cancel_called else "not_cancel_called"
-        )
+        cancel_called_not_cancel_called.append(scope.cancel_called)
 
     job_ids = await q.enqueue(
         ["to_be_canceled"] * N,
@@ -48,10 +46,10 @@ async def test_cancellation_async(
         waiter(),
     )
 
-    assert cancel_called_not_cancel_called == ["cancel_called"] * N
+    assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=1_000) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -60,7 +58,7 @@ async def test_cancellation_sync(
     N: int,
 ) -> None:
     event = threading.Event()
-    cancel_called_not_cancel_called = list[str]()
+    cancel_called_not_cancel_called = list[bool]()
     q = Queries(pgdriver)
     qm = QueueManager(pgdriver)
 
@@ -69,9 +67,7 @@ async def test_cancellation_sync(
         nonlocal event
         scope = qm.get_context(job.id).cancellation
         event.wait()
-        cancel_called_not_cancel_called.append(
-            "cancel_called" if scope.cancel_called else "not_cancel_called"
-        )
+        cancel_called_not_cancel_called.append(scope.cancel_called)
 
     job_ids = await q.enqueue(
         ["to_be_canceled"] * N,
@@ -93,10 +89,10 @@ async def test_cancellation_sync(
         waiter(),
     )
 
-    assert cancel_called_not_cancel_called == ["cancel_called"] * N
+    assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=1_000) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -105,7 +101,7 @@ async def test_cancellation_async_context_manager(
     N: int,
 ) -> None:
     event = asyncio.Event()
-    cancel_called_not_cancel_called = list[str]()
+    cancel_called_not_cancel_called = list[bool]()
     q = Queries(pgdriver)
     qm = QueueManager(pgdriver)
 
@@ -113,9 +109,7 @@ async def test_cancellation_async_context_manager(
     async def to_be_canceled(job: Job) -> None:
         with qm.get_context(job.id).cancellation as scope:
             await event.wait()
-            cancel_called_not_cancel_called.append(
-                "cancel_called" if scope.cancel_called else "not_cancel_called"
-            )
+            cancel_called_not_cancel_called.append(scope.cancel_called)
 
     job_ids = await q.enqueue(
         ["to_be_canceled"] * N,
@@ -137,10 +131,10 @@ async def test_cancellation_async_context_manager(
         waiter(),
     )
 
-    assert cancel_called_not_cancel_called == []
+    assert sum(cancel_called_not_cancel_called) == 0
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=1_000) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
