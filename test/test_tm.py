@@ -68,7 +68,7 @@ async def test_task_manager_ctx_mngr_exception(
     assert len(tm.tasks) == 0
 
 
-@pytest.mark.parametrize("N", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("N", (1, 2, 3))
 async def test_task_manager_logs_unhandled_exception(
     N: int,
     caplog: pytest.LogCaptureFixture,

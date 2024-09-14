@@ -10,6 +10,17 @@ from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
 
+async def wait_until_empty_queue(
+    q: Queries,
+    qms: list[QueueManager],
+) -> None:
+    while sum(x.count for x in await q.queue_size()) > 0:
+        await asyncio.sleep(0.01)
+
+    for qm in qms:
+        qm.alive.set()
+
+
 @pytest.mark.parametrize("N", (1, 2, 32))
 async def test_job_queing(
     apgdriver: db.Driver,
@@ -20,10 +31,7 @@ async def test_job_queing(
 
     @c.entrypoint("fetch")
     async def fetch(context: Job) -> None:
-        if context.payload is None:
-            c.alive.set()
-            return
-        assert context
+        assert context.payload is not None
         seen.append(int(context.payload))
 
     await c.queries.enqueue(
@@ -32,10 +40,11 @@ async def test_job_queing(
         [0] * N,
     )
 
-    # Stop flag
-    await c.queries.enqueue("fetch", None)
+    await asyncio.gather(
+        c.run(),
+        wait_until_empty_queue(c.queries, [c]),
+    )
 
-    await asyncio.wait_for(c.run(), timeout=1)
     assert seen == list(range(N))
 
 
@@ -54,11 +63,7 @@ async def test_job_fetch(
 
         @qm.entrypoint("fetch")
         async def fetch(context: Job) -> None:
-            if context.payload is None:
-                for qm in qmpool:
-                    qm.alive.set()
-                return
-            assert context
+            assert context.payload is not None
             seen.append(int(context.payload))
 
     await q.enqueue(
@@ -67,13 +72,11 @@ async def test_job_fetch(
         [0] * N,
     )
 
-    # Stop flag
-    await q.enqueue("fetch", None)
-
-    await asyncio.wait_for(
+    await asyncio.gather(
         asyncio.gather(*[qm.run() for qm in qmpool]),
-        timeout=10,
+        wait_until_empty_queue(q, qmpool),
     )
+
     assert sorted(seen) == list(range(N))
 
 
@@ -93,11 +96,7 @@ async def test_sync_entrypoint(
         @qm.entrypoint("fetch")
         def fetch(context: Job) -> None:
             time.sleep(1)  # Sim. heavy CPU/IO.
-            if context.payload is None:
-                for qm in qmpool:
-                    qm.alive.set()
-                return
-            assert context
+            assert context.payload is not None
             seen.append(int(context.payload))
 
     await q.enqueue(
@@ -106,12 +105,9 @@ async def test_sync_entrypoint(
         [0] * N,
     )
 
-    # Stop flag
-    await q.enqueue("fetch", None)
-
-    await asyncio.wait_for(
+    await asyncio.gather(
         asyncio.gather(*[qm.run() for qm in qmpool]),
-        timeout=10,
+        wait_until_empty_queue(q, qmpool),
     )
     assert sorted(seen) == list(range(N))
 
@@ -122,26 +118,18 @@ async def test_pick_local_entrypoints(
 ) -> None:
     q = Queries(apgdriver)
     qm = QueueManager(apgdriver)
+    pikced_by = list[str]()
 
     @qm.entrypoint("to_be_picked")
     async def to_be_picked(job: Job) -> None:
-        if job.payload is None:
-            qm.alive.set()
+        pikced_by.append(job.entrypoint)
 
-    await q.enqueue(
-        ["to_be_picked"] * N,
-        [f"{n}".encode() for n in range(N)],
-        [0] * N,
-    )
-
-    await q.enqueue(
-        ["not_picked"] * N,
-        [f"{n}".encode() for n in range(N)],
-        [0] * N,
-    )
+    await q.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
+    await q.enqueue(["not_picked"] * N, [None] * N, [0] * N)
 
     async def waiter() -> None:
-        await asyncio.sleep(2)
+        while sum(x.count for x in await q.queue_size() if x.entrypoint == "to_be_picked"):
+            await asyncio.sleep(0.01)
         qm.alive.set()
 
     await asyncio.gather(
@@ -149,5 +137,6 @@ async def test_pick_local_entrypoints(
         waiter(),
     )
 
+    assert pikced_by == ["to_be_picked"] * N
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
