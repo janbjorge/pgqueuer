@@ -25,14 +25,14 @@ def job_faker() -> Job:
 @pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
 async def test_job_buffer_max_size(
     max_size: int,
-    pgdriver: Driver,
+    apgdriver: Driver,
 ) -> None:
     helper_buffer = []
 
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    queries = Queries(pgdriver)
+    queries = Queries(apgdriver)
     queries.log_jobs = helper  # type: ignore
 
     async with JobBuffer(
@@ -53,14 +53,14 @@ async def test_job_buffer_max_size(
 async def test_job_buffer_timeout(
     N: int,
     timeout: timedelta,
-    pgdriver: Driver,
+    apgdriver: Driver,
 ) -> None:
     helper_buffer = []
 
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    queries = Queries(pgdriver)
+    queries = Queries(apgdriver)
     queries.log_jobs = helper  # type: ignore
 
     async with JobBuffer(

@@ -1,28 +1,35 @@
-from contextlib import asynccontextmanager
+import asyncio
 from typing import AsyncGenerator
 
 import asyncpg
+import psycopg
 import pytest
 
-from pgqueuer.db import AsyncpgDriver, Driver, dsn
+from pgqueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
+from pgqueuer.queries import Queries
 
 
 @pytest.fixture(scope="function")
-async def pgdriver() -> AsyncGenerator[Driver, None]:
-    database_name = "tmp_test_db"
-    async with create_test_database(database_name):
-        conn_b = await asyncpg.connect(dsn=dsn(database=database_name))
-        yield AsyncpgDriver(conn_b)
-        await conn_b.close()
-
-
-@asynccontextmanager
-async def create_test_database(name: str) -> AsyncGenerator[None, None]:
-    connection = await asyncpg.connect(dsn=dsn())
+async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
+    conn = await asyncpg.connect(dsn=dsn())
     try:
-        await connection.execute(f"DROP DATABASE IF EXISTS {name} WITH (FORCE);")
-        await connection.execute(f"CREATE DATABASE {name} TEMPLATE testdb;")
-        yield
+        yield AsyncpgDriver(conn)
     finally:
-        await connection.execute(f"DROP DATABASE {name} WITH (FORCE);")
-        await connection.close()
+        await conn.close()
+
+
+@pytest.fixture(scope="function")
+async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
+    async with await psycopg.AsyncConnection.connect(
+        conninfo=dsn(),
+        autocommit=True,
+    ) as conn:
+        yield PsycopgDriver(conn)
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def trucate_tables(apgdriver: Driver) -> None:
+    await asyncio.gather(
+        Queries(apgdriver).clear_log(),
+        Queries(apgdriver).clear_queue(),
+    )
