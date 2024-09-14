@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import timedelta
 
 import pytest
 
@@ -143,7 +144,10 @@ async def test_pick_local_entrypoints(
         await asyncio.sleep(2)
         qm.alive.set()
 
-    await asyncio.gather(qm.run(), waiter())
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
 
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N

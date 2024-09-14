@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from datetime import timedelta
 
 import pytest
 
@@ -40,7 +41,10 @@ async def test_cancellation_async(
 
         qm.alive.set()
 
-    await asyncio.gather(qm.run(), waiter())
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.0)),
+        waiter(),
+    )
 
     assert sum(cancel_called_not_cancel_called) == N
 
@@ -80,7 +84,10 @@ async def test_cancellation_sync(
 
         qm.alive.set()
 
-    await asyncio.gather(qm.run(), waiter())
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
 
     assert sum(cancel_called_not_cancel_called) == N
 
@@ -119,7 +126,10 @@ async def test_cancellation_async_context_manager(
 
         qm.alive.set()
 
-    await asyncio.gather(qm.run(), waiter())
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
 
     assert sum(cancel_called_not_cancel_called) == 0
 

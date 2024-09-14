@@ -87,7 +87,7 @@ async def test_notify(
         async with driver() as ad:
             await notify(ad, channel, payload)
 
-        assert (await event) == payload
+        assert await asyncio.wait_for(event, timeout=1) == payload
 
 
 @pytest.mark.parametrize("driver", drivers())

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import random
 from dataclasses import dataclass
+from datetime import timedelta
 from itertools import count
 
 import pytest
@@ -27,7 +28,7 @@ async def consumer(qm: QueueManager, tally: Tally) -> None:
     def syncfetch(job: Job) -> None:
         tally.count += 1
 
-    await qm.run()
+    await qm.run(dequeue_timeout=timedelta(seconds=0))
 
 
 async def enqueue(
