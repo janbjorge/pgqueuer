@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager, suppress
+from datetime import timedelta
 from typing import AsyncContextManager, AsyncGenerator, Callable, Generator
 
 import asyncpg
@@ -29,7 +30,7 @@ async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
         conninfo=dsn(),
         autocommit=True,
     ) as conn:
-        yield PsycopgDriver(conn)
+        yield PsycopgDriver(conn, notify_timeout=timedelta(0))
 
 
 def drivers() -> (
