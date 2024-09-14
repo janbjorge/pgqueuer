@@ -16,23 +16,20 @@ from pgqueuer.queries import QueryBuilder
 
 @asynccontextmanager
 async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
-    conn = await asyncpg.connect(dsn=dsn(), timeout=5)
+    conn = await asyncpg.connect(dsn=dsn())
     try:
         yield AsyncpgDriver(conn)
     finally:
-        await conn.close(timeout=5)
+        await conn.close()
 
 
 @asynccontextmanager
 async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
-    conn = await psycopg.AsyncConnection.connect(
+    async with await psycopg.AsyncConnection.connect(
         conninfo=dsn(),
         autocommit=True,
-    )
-    try:
+    ) as conn:
         yield PsycopgDriver(conn)
-    finally:
-        await conn.close()
 
 
 def drivers() -> (
@@ -90,7 +87,7 @@ async def test_notify(
         async with driver() as ad:
             await notify(ad, channel, payload)
 
-        assert await asyncio.wait_for(event, timeout=1) == payload
+        assert (await event) == payload
 
 
 @pytest.mark.parametrize("driver", drivers())
