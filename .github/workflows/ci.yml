@@ -130,7 +130,7 @@ jobs:
           pip install ".[dev]"
 
       - name: Full test
-        run: pytest -vs
+        run: PYTHONASYNCIODEBUG=1 pytest -vs
 
   ruff:
     runs-on: ubuntu-latest
