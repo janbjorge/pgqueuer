@@ -12,13 +12,13 @@ from pgqueuer.queries import Queries
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
 async def test_cancellation_async(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
     event = asyncio.Event()
     cancel_called_not_cancel_called = list[bool]()
-    q = Queries(pgdriver)
-    qm = QueueManager(pgdriver)
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
@@ -54,13 +54,13 @@ async def test_cancellation_async(
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
 async def test_cancellation_sync(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
     event = threading.Event()
     cancel_called_not_cancel_called = list[bool]()
-    q = Queries(pgdriver)
-    qm = QueueManager(pgdriver)
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
 
     @qm.entrypoint("to_be_canceled")
     def to_be_canceled(job: Job) -> None:
@@ -97,13 +97,13 @@ async def test_cancellation_sync(
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
 async def test_cancellation_async_context_manager(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
     event = asyncio.Event()
     cancel_called_not_cancel_called = list[bool]()
-    q = Queries(pgdriver)
-    qm = QueueManager(pgdriver)
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
@@ -139,7 +139,7 @@ async def test_cancellation_async_context_manager(
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
 async def test_cancellation_sync_context_manager(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
     with pytest.raises(NotImplementedError):

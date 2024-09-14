@@ -48,15 +48,15 @@ async def enqueue(
 @pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
 async def test_rps(
     concurrency: int,
-    pgdriver: Driver,
+    apgdriver: Driver,
     n_tasks: int = 1_000,
     wait: int = 5,
 ) -> None:
     tally = Tally(count=0)
 
-    await enqueue(Queries(pgdriver), size=n_tasks)
+    await enqueue(Queries(apgdriver), size=n_tasks)
 
-    qms = [QueueManager(pgdriver) for _ in range(concurrency)]
+    qms = [QueueManager(apgdriver) for _ in range(concurrency)]
 
     async def dequeue() -> None:
         consumers = [consumer(q, tally) for q in qms]

@@ -7,8 +7,8 @@ from pgqueuer import db, models, queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
-async def test_queries_put(pgdriver: db.Driver, N: int) -> None:
-    q = queries.Queries(pgdriver)
+async def test_queries_put(apgdriver: db.Driver, N: int) -> None:
+    q = queries.Queries(apgdriver)
 
     assert sum(x.count for x in await q.queue_size()) == 0
 
@@ -20,10 +20,10 @@ async def test_queries_put(pgdriver: db.Driver, N: int) -> None:
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queries_next_jobs(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -45,11 +45,11 @@ async def test_queries_next_jobs(
 @pytest.mark.parametrize("N", (1, 2, 64))
 @pytest.mark.parametrize("concurrency", (1, 2, 4, 16))
 async def test_queries_next_jobs_concurrent(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
     concurrency: int,
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -78,8 +78,8 @@ async def test_queries_next_jobs_concurrent(
     assert sorted(seen) == list(range(N))
 
 
-async def test_queries_clear(pgdriver: db.Driver) -> None:
-    q = queries.Queries(pgdriver)
+async def test_queries_clear(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
     await q.clear_queue()
     assert sum(x.count for x in await q.queue_size()) == 0
 
@@ -92,10 +92,10 @@ async def test_queries_clear(pgdriver: db.Driver) -> None:
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_move_job_log(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
 
     await q.enqueue(
         ["placeholder"] * N,
@@ -115,10 +115,10 @@ async def test_move_job_log(
 
 @pytest.mark.parametrize("N", (1, 2, 5))
 async def test_clear_queue(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
 
     # Test delete all by listing all
     await q.enqueue(
@@ -159,10 +159,10 @@ async def test_clear_queue(
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_priority(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
     jobs = list[models.Job]()
 
     await q.enqueue(
@@ -184,11 +184,11 @@ async def test_queue_priority(
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
-    pgdriver: db.Driver,
+    apgdriver: db.Driver,
     N: int,
     retry_timer: timedelta = timedelta(seconds=0.1),
 ) -> None:
-    q = queries.Queries(pgdriver)
+    q = queries.Queries(apgdriver)
     jobs = list[models.Job]()
 
     await q.enqueue(
@@ -216,16 +216,16 @@ async def test_queue_retry_timer(
     assert len(jobs) == N
 
 
-async def test_queue_retry_timer_negative_raises(pgdriver: db.Driver) -> None:
+async def test_queue_retry_timer_negative_raises(apgdriver: db.Driver) -> None:
     with pytest.raises(ValueError):
-        await queries.Queries(pgdriver).dequeue(
+        await queries.Queries(apgdriver).dequeue(
             entrypoints={"placeholder"},
             batch_size=10,
             retry_timer=-timedelta(seconds=0.001),
         )
 
     with pytest.raises(ValueError):
-        await queries.Queries(pgdriver).dequeue(
+        await queries.Queries(apgdriver).dequeue(
             entrypoints={"placeholder"},
             batch_size=10,
             retry_timer=timedelta(seconds=-0.001),

@@ -57,14 +57,14 @@ async def enqueue(
 async def test_max_concurrency(
     n_consumers: int,
     max_concurrency: int,
-    pgdriver: Driver,
+    apgdriver: Driver,
     n_tasks: int = 500,
     wait: int = 1,
 ) -> None:
-    await enqueue(Queries(pgdriver), size=n_tasks)
+    await enqueue(Queries(apgdriver), size=n_tasks)
 
     tallys = [Tally() for _ in range(n_consumers)]
-    qms = [QueueManager(pgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
 
     async def dequeue() -> None:
         consumers = [consumer(q, tally, max_concurrency) for q, tally in zip(qms, tallys)]
