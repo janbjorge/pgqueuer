@@ -267,22 +267,20 @@ class QueueManager:
                             )
                         )
 
-                try:
-                    event_task = asyncio.create_task(
-                        asyncio.wait_for(
-                            notice_event_listener.get(),
-                            timeout=dequeue_timeout.total_seconds(),
-                        )
-                    )
-                    await asyncio.wait(
-                        (alive_task, event_task),
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
-                except asyncio.TimeoutError:
-                    logconfig.logger.debug(
-                        "Timeout after %r without receiving an event.",
-                        dequeue_timeout,
-                    )
+                event_task = helpers.wait_for_notice_event(
+                    notice_event_listener,
+                    dequeue_timeout,
+                )
+                await asyncio.wait(
+                    (alive_task, event_task),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+        if not event_task.done():
+            event_task.cancel()
+
+        if not alive_task.done():
+            alive_task.cancel()
 
     async def _dispatch(
         self,
