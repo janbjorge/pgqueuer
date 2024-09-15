@@ -369,13 +369,13 @@ class PsycopgDriver:
             await self._connection.execute(f"LISTEN {channel};")
 
             async def notify_handler() -> None:
-                while not self.alive.is_set() and not self._connection.closed:
+                while not self.alive.is_set():
                     gen = self._connection.notifies(
                         timeout=self._notify_timeout.total_seconds(),
                         stop_after=self._notify_stop_after,
                     )
                     async for note in gen:
-                        if not self.alive.is_set() and not self._connection.closed:
+                        if not self.alive.is_set():
                             callback(note.payload)
                     await asyncio.sleep(self._notify_timeout.total_seconds())
 

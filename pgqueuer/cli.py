@@ -274,7 +274,7 @@ def cliparser() -> argparse.Namespace:
 
 
 async def querier(
-    driver: Literal["psy", "apg"],
+    driver: Literal["psy", "apg", "apgpool"],
     conninfo: str,
 ) -> queries.Queries:
     match driver:
@@ -286,6 +286,13 @@ async def querier(
                     await asyncpg.connect(dsn=conninfo),
                 )
             )
+        case "apgpool":
+            import asyncpg
+
+            pool = await asyncpg.create_pool(dsn=conninfo)
+            assert pool is not None
+            return queries.Queries(db.AsyncpgPoolDriver(pool))
+
         case "psy":
             import psycopg
 

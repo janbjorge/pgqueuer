@@ -62,7 +62,7 @@ jobs:
       matrix:
         python-version: ["3.11"]
         os: [ubuntu-latest]
-        pgdriver: ["apg", "psy"]
+        pgdriver: ["apg", "apgpool", "psy"]
 
     env:
       PGHOST: localhost

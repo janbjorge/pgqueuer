@@ -72,7 +72,7 @@ def cli_parser() -> argparse.Namespace:
         "--driver",
         default="apg",
         help="Postgres driver to be used asyncpg (apg) or psycopg (psy).",
-        choices=["apg", "psy"],
+        choices=["apg", "apgpool", "psy"],
     )
 
     parser.add_argument(
