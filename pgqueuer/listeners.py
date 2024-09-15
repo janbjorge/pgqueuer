@@ -1,3 +1,12 @@
+"""
+Module for initializing and managing PostgreSQL event listeners.
+
+This module defines the `PGNoticeEventListener` class, which extends `asyncio.Queue`
+to store events received from a PostgreSQL NOTIFY channel. It also provides the
+`initialize_notice_event_listener` function to set up the listener and handle
+different types of events, such as table changes, request rates, and job cancellations.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -7,8 +16,11 @@ from . import db, logconfig, models
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """
-    A PostgreSQL event queue that listens to a specified
-    channel and stores incoming events.
+    Asynchronous queue for PostgreSQL events from a specified channel.
+
+    The `PGNoticeEventListener` class is a specialized `asyncio.Queue` that stores
+    `TableChangedEvent` instances received from a PostgreSQL NOTIFY channel.
+    It allows consumers to asynchronously retrieve events as they are received.
     """
 
 
@@ -19,8 +31,24 @@ async def initialize_notice_event_listener(
     canceled: dict[models.JobId, models.Context],
 ) -> PGNoticeEventListener:
     """
-    Initializes a listener on a PostgreSQL channel, handling different types
-    of events such as table changes, requests per second, and job cancellations.
+    Initialize a listener on a PostgreSQL channel to handle various events.
+
+    Sets up a listener on the specified PostgreSQL NOTIFY channel using the provided
+    database connection. When notifications are received, it parses the payloads
+    and handles different types of events, such as table changes, requests per second,
+    and job cancellations.
+
+    Args:
+        connection (db.Driver): The database driver instance used to add the listener.
+        channel (models.PGChannel): The name of the PostgreSQL channel to listen on.
+        statistics (dict[str, models.EntrypointStatistics]): A dictionary to store
+            request rate statistics for entrypoints.
+        canceled (dict[models.JobId, models.Context]): A mapping of job IDs to their
+            cancellation contexts.
+
+    Returns:
+        PGNoticeEventListener: An instance of `PGNoticeEventListener` that queues
+            received `TableChangedEvent` instances.
     """
 
     def parse_and_queue(
@@ -29,7 +57,18 @@ async def initialize_notice_event_listener(
         statistics: dict[str, models.EntrypointStatistics],
     ) -> None:
         """
-        Parses a JSON payload and inserts it into the queue as an `models.Event` object.
+        Parse a notification payload and handle the event accordingly.
+
+        Parses the JSON payload received from the PostgreSQL NOTIFY channel and processes
+        it based on the event type. It supports handling table change events, requests
+        per second events, and cancellation events.
+
+        Args:
+            payload (str | bytes | bytearray): The raw payload from the notification.
+            notice_event_queue (PGNoticeEventListener): The event queue to put table
+                change events into.
+            statistics (dict[str, models.EntrypointStatistics]): A dictionary to update
+                with requests per second statistics.
         """
         try:
             parsed = models.AnyEvent.model_validate_json(payload)

@@ -1,3 +1,11 @@
+"""
+Models and type definitions for events, jobs, and statistics.
+
+This module defines data classes and types used throughout the application,
+including events received from PostgreSQL channels, job representations,
+and statistical data structures for logging and monitoring.
+"""
+
 from __future__ import annotations
 
 import asyncio

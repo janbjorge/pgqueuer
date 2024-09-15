@@ -1,3 +1,13 @@
+"""
+Database query builder and executor for job queue operations.
+
+This module provides classes and functions to construct and execute SQL queries
+related to job queuing, such as installing the necessary database schema,
+enqueueing and dequeueing jobs, logging job statuses, and managing job statistics.
+It abstracts the SQL details and offers a high-level interface for interacting
+with the database in the context of the pgqueuer application.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -11,18 +21,42 @@ from . import db, helpers, models
 
 def add_prefix(string: str) -> str:
     """
-    Appends a predefined prefix from environment variables to
-    the given string, typically used for database object names.
+    Append a prefix from environment variables to a given string.
+
+    This function prepends the value of the 'PGQUEUER_PREFIX' environment variable
+    to the provided string. It is typically used to add a consistent prefix to
+    database object names (e.g., tables, triggers) to avoid naming conflicts
+    or to namespace the objects.
+
+    Args:
+        string (str): The base string to which the prefix will be added.
+
+    Returns:
+        str: The string with the prefix appended.
     """
+
     return f"{os.environ.get('PGQUEUER_PREFIX', '')}{string}"
 
 
 @dataclasses.dataclass
 class DBSettings:
     """
-    Stores database settings such as table names and SQL
-    function names, dynamically appending prefixes from
-    environment variables.
+    Configuration settings for database object names with optional prefixes.
+
+    This class holds the names of various database objects used by the job queue
+    system, such as tables, functions, triggers, and channels. It allows for
+    dynamic generation of these names, incorporating a prefix if specified via
+    environment variables. This aids in avoiding naming collisions and in
+    deploying multiple instances of the application using different namespaces.
+
+    Attributes:
+        channel (Final[str]): The name of the PostgreSQL NOTIFY channel used for notifications.
+        function (Final[str]): The name of the trigger function invoked on table changes.
+        statistics_table (Final[str]): The name of the table that stores job processing statistics.
+        statistics_table_status_type (Final[str]): The name of the ENUM type for log statuses.
+        queue_status_type (Final[str]): The name of the ENUM type for queue job statuses.
+        queue_table (Final[str]): The name of the main queue table where jobs are stored.
+        trigger (Final[str]): The name of the trigger that calls the trigger function.
     """
 
     # Channel name for PostgreSQL LISTEN/NOTIFY used to
@@ -75,27 +109,31 @@ class DBSettings:
 @dataclasses.dataclass
 class QueryBuilder:
     """
-    Generates SQL queries for job queuing operations.
+    Generates SQL queries for job queue operations.
+
+    This class provides methods to create SQL query strings required for various
+    database operations related to the job queue, such as installing or uninstalling
+    the schema, enqueueing and dequeueing jobs, updating job statuses, and retrieving
+    statistics. It uses the settings from the `DBSettings` class to ensure that
+    object names are correctly prefixed.
+
+    Attributes:
+        settings (DBSettings): An instance of `DBSettings` containing database object names.
     """
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     def create_install_query(self) -> str:
         """
-        Generates the SQL query string to create necessary database objects for
-        the job queue system.
+        Generate SQL statements to install the job queue schema.
 
-        This includes:
+        Constructs the SQL commands needed to set up the database schema required
+        by the job queue system. This includes creating custom ENUM types for statuses,
+        creating the queue and statistics tables, defining indexes to optimize queries,
+        and setting up triggers and functions for notifications.
 
-        - Enums for job statuses (e.g., 'queued', 'picked') and log statuses
-            (e.g., 'exception', 'successful').
-        - Tables for storing job queue data and log statistics with appropriate fields
-            such as job ID,
-          priority, status, entrypoint, and payload.
-        - Indexes to improve the performance of querying these tables.
-        - A trigger function that emits notifications upon changes to the
-            job queue table, facilitating real-time update mechanisms using
-            PostgreSQL's LISTEN/NOTIFY system.
+        Returns:
+            str: A string containing the SQL commands to install the schema.
         """
 
         return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked');
@@ -179,10 +217,15 @@ class QueryBuilder:
 
     def create_uninstall_query(self) -> str:
         """
-        Generates the SQL query string to remove all database structures
-        related to the job queue system.
-        """
+        Generate SQL statements to uninstall the job queue schema.
 
+        Constructs the SQL commands needed to remove all database objects created
+        by the `create_install_query` method. This includes dropping triggers,
+        functions, tables, and custom ENUM types.
+
+        Returns:
+            str: A string containing the SQL commands to uninstall the schema.
+        """
         return f"""DROP TRIGGER {self.settings.trigger} ON {self.settings.queue_table};
     DROP FUNCTION {self.settings.function};
     DROP TABLE {self.settings.queue_table};
@@ -193,12 +236,18 @@ class QueryBuilder:
 
     def create_dequeue_query(self) -> str:
         """
-        Constructs an SQL query to for job retrieval from the queue. The SQL prioritizes
-        jobs based on their status: 'queued' or 'picked'. It selects 'queued' jobs first based
-        on highest priority and ascending ID order, and then 'picked' jobs that have exceeded
-        a retry interval, ensuring they are locked and retrieved without conflict using
-        FOR UPDATE SKIP LOCKED.
+        Generate SQL query to retrieve and update the next jobs from the queue.
+
+        Constructs an SQL query that selects jobs from the queue based on their
+        status ('queued' or 'picked'), priority, and entrypoints. It updates the
+        selected jobs to 'picked' status and sets the 'updated' timestamp to now.
+        This ensures that jobs are processed in a controlled manner and supports
+        retrying jobs that have been picked but not processed within a certain time.
+
+        Returns:
+            str: The SQL query string for dequeuing jobs.
         """
+
         return f"""WITH next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
@@ -239,10 +288,16 @@ class QueryBuilder:
 
     def create_enqueue_query(self) -> str:
         """
-        Constructs an SQL query to add new jobs to the queue. The query inserts jobs with
-        specific attributes: priority, entrypoint, and payload. Each job is initially set
-        to 'queued' status.
+        Generate SQL query to insert new jobs into the queue.
+
+        Constructs an SQL query that inserts new jobs into the queue table with
+        specified priorities, entrypoints, and payloads. The jobs are initially
+        set to 'queued' status.
+
+        Returns:
+            str: The SQL query string for enqueueing jobs.
         """
+
         return f"""INSERT INTO {self.settings.queue_table}
         (priority, entrypoint, payload, status)
         VALUES (unnest($1::int[]), unnest($2::text[]), unnest($3::bytea[]), 'queued')
@@ -251,25 +306,43 @@ class QueryBuilder:
 
     def create_delete_from_queue_query(self) -> str:
         """
-        Generates the SQL query string to delete jobs from the queue based on a
-        list of entrypoints. This query uses the ANY clause to match any of the
-        specified entrypoints for deletion.
+        Generate SQL query to delete jobs from the queue based on entrypoints.
+
+        Constructs an SQL query that deletes jobs from the queue table where the
+        entrypoint matches any in a provided list. This allows for selective
+        removal of jobs associated with specific entrypoints.
+
+        Returns:
+            str: The SQL query string for deleting jobs from the queue.
         """
         return f"DELETE FROM {self.settings.queue_table} WHERE entrypoint = ANY($1)"
 
     def create_truncate_queue_query(self) -> str:
         """
-        Generates the SQL query string to truncate the job queue table,
-        effectively removing all jobs from the queue.
+        Generate SQL query to truncate the entire queue table.
+
+        Constructs an SQL command that removes all records from the queue table.
+        This is a fast operation that effectively resets the queue by deleting
+        all jobs.
+
+        Returns:
+            str: The SQL command string to truncate the queue table.
         """
+
         return f"TRUNCATE {self.settings.queue_table}"
 
     def create_queue_size_query(self) -> str:
         """
-        Generates the SQL query string to count the number of jobs in the queue,
-        grouped by entrypoint and priority. This helps in understanding the distribution
-        of jobs across different priorities and entrypoints.
+        Generate SQL query to count the number of jobs in the queue.
+
+        Constructs an SQL query that counts the jobs in the queue table,
+        grouping them by entrypoint, priority, and status. This provides
+        insight into the current load and distribution of jobs.
+
+        Returns:
+            str: The SQL query string to get queue size statistics.
         """
+
         return f"""SELECT
         count(*) AS count,
         priority,
@@ -283,10 +356,18 @@ class QueryBuilder:
 
     def create_log_job_query(self) -> str:
         """
-        Generates the SQL query string to move a completed or failed job from the
-        queue table to the log table, capturing details like job priority,
-        entrypoint, time in queue, creation time, and final status.
+        Generate SQL query to move jobs from the queue to the log table.
+
+        Constructs an SQL query that deletes specified jobs from the queue table
+        and inserts corresponding entries into the statistics (log) table.
+        It captures details such as priority, entrypoint, time in queue,
+        creation time, and final status. The query uses upsert logic to handle
+        conflicts and aggregate counts.
+
+        Returns:
+            str: The SQL query string to log jobs.
         """
+
         return f"""WITH deleted AS (
         DELETE FROM {self.settings.queue_table}
         WHERE id = ANY($1::integer[])
@@ -338,25 +419,40 @@ class QueryBuilder:
 
     def create_truncate_log_query(self) -> str:
         """
-        Generates the SQL query string to truncate the job log table,
-        effectively removing all logged entries.
+        Generate SQL query to truncate the statistics (log) table.
+
+        Constructs an SQL command that removes all records from the statistics
+        table. This effectively clears the job processing history.
+
+        Returns:
+            str: The SQL command string to truncate the log table.
         """
         return f"""TRUNCATE {self.settings.statistics_table}"""
 
     def create_delete_from_log_query(self) -> str:
         """
-        Generates the SQL query string to delete entries from the job log table,
-        optionally filtered by a list of entrypoints. This allows selective clearing
-        of log entries based on their source entrypoints.
+        Generate SQL query to delete entries from the log table based on entrypoints.
+
+        Constructs an SQL query that deletes records from the statistics table
+        where the entrypoint matches any in a provided list. This allows for
+        selective cleanup of log entries.
+
+        Returns:
+            str: The SQL query string to delete entries from the log table.
         """
         return f"""DELETE FROM {self.settings.statistics_table} WHERE entrypoint = ANY($1)"""
 
     def create_log_statistics_query(self) -> str:
         """
-        Generates the SQL query string to retrieve statistical data from the job
-        log table, including count of jobs, creation time, time in queue,
-        entrypoint, priority, and status, limited to a specified number of most
-        recent records defined by 'tail'.
+        Generate SQL query to retrieve job processing statistics.
+
+        Constructs an SQL query that selects statistical data from the
+        statistics table, including counts, creation times, time in queue,
+        entrypoints, priorities, and statuses. The results can be limited
+        by a tail value and a time window.
+
+        Returns:
+            str: The SQL query string to fetch log statistics.
         """
         return f"""SELECT
         count,
@@ -372,6 +468,16 @@ class QueryBuilder:
     """
 
     def create_upgrade_queries(self) -> Generator[str, None, None]:
+        """
+        Generate SQL queries required to upgrade the existing schema.
+
+        Yields SQL commands needed to modify the existing database schema to
+        a newer version, such as adding columns, indexes, or modifying functions.
+        This is useful when the application schema evolves over time.
+
+        Yields:
+            Generator[str, None, None]: A generator that yields SQL commands.
+        """
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"""CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
@@ -417,6 +523,15 @@ class QueryBuilder:
         yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
+        """
+        Generate SQL query to check if a specific column exists in a table.
+
+        Constructs an SQL query that checks the information schema for the
+        existence of a column within a table in the current schema.
+
+        Returns:
+            str: The SQL query string to check for a column's existence.
+        """
         return """
         SELECT EXISTS (
             SELECT FROM information_schema.columns
@@ -426,19 +541,48 @@ class QueryBuilder:
             );"""
 
     def create_user_types_query(self) -> str:
+        """
+        Generate SQL query to list user-defined ENUM types and their labels.
+
+        Constructs an SQL query that retrieves all ENUM labels and their type
+        names from the PostgreSQL system catalogs. This can be used to verify
+        the presence of specific ENUM values.
+
+        Returns:
+            str: The SQL query string to fetch user-defined ENUM types.
+        """
         return """SELECT enumlabel, typname
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
 
     def create_notify_query(self) -> str:
+        """
+        Generate SQL query to send a notification via PostgreSQL NOTIFY.
+
+        Constructs an SQL command that sends a notification on the configured
+        channel with a specified payload. This is used to inform listeners
+        about events such as job cancellations or rate adjustments.
+
+        Returns:
+            str: The SQL command string to send a notification.
+        """
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
 
 @dataclasses.dataclass
 class Queries:
     """
-    Handles operations related to job queuing such as
-    enqueueing, dequeueing, and querying the size of the queue.
+    High-level interface for executing job queue operations.
+
+    This class provides methods to perform actions on the job queue and statistics
+    tables, such as installing or uninstalling the schema, enqueueing and dequeuing jobs,
+    logging job statuses, clearing the queue or logs, and retrieving statistics.
+    It utilizes the SQL queries generated by `QueryBuilder` and executes them using
+    the provided database driver.
+
+    Attributes:
+        driver (db.Driver): The database driver used to execute SQL commands.
+        qb (QueryBuilder): An instance of `QueryBuilder` to generate SQL queries.
     """
 
     driver: db.Driver
@@ -446,16 +590,26 @@ class Queries:
 
     async def install(self) -> None:
         """
-        Creates necessary database structures such as enums,
-        tables, and triggers for job queuing and logging.
-        """
+        Install the job queue schema in the database.
 
+        Executes the SQL commands generated by `create_install_query` to set up
+        the necessary tables, types, indexes, triggers, and functions required
+        for the job queue system to operate.
+
+        This method should be called during the initial setup of the application.
+        """
         await self.driver.execute(self.qb.create_install_query())
 
     async def uninstall(self) -> None:
         """
-        Drops all database structures related to job queuing
-        and logging that were created by the install method.
+        Uninstall the job queue schema from the database.
+
+        Executes the SQL commands generated by `create_uninstall_query` to remove
+        all database objects created during installation. This includes dropping
+        tables, types, triggers, and functions.
+
+        Use this method with caution, as it will delete all data and schema
+        related to the job queue system.
         """
         await self.driver.execute(self.qb.create_uninstall_query())
 
@@ -466,15 +620,24 @@ class Queries:
         retry_timer: timedelta | None = None,
     ) -> list[models.Job]:
         """
-        Retrieves and updates the next 'queued' job to 'picked' status,
-        ensuring no two jobs with the same entrypoint are picked simultaneously.
+        Retrieve and update jobs from the queue to be processed.
 
-        Parameters:
-        - batch_size: The number of jobs to retrieve. Must be greater than or equal to one (1).
-        - entrypoints: A set of entrypoints to filter the jobs.
-        - retry_timer: If specified, selects jobs that have been in 'picked' status for
-            longer than the specified retry-timer duration. If `None`, the retry-timer
-            checking is skipped.
+        Selects jobs from the queue that match the specified entrypoints and updates
+        their status to 'picked'. The selection prioritizes 'queued' jobs but can
+        also include 'picked' jobs that have exceeded the retry timer, allowing
+        for retries of stalled jobs.
+
+        Args:
+            batch_size (int): The maximum number of jobs to retrieve.
+            entrypoints (set[str]): A set of entrypoints to filter the jobs.
+            retry_timer (timedelta | None): The duration after which 'picked' jobs
+                are considered for retry. If None, retry logic is skipped.
+
+        Returns:
+            list[models.Job]: A list of Job instances representing the dequeued jobs.
+
+        Raises:
+            ValueError: If batch_size is less than 1 or retry_timer is negative.
         """
 
         if batch_size < 1:
@@ -514,13 +677,22 @@ class Queries:
         priority: int | list[int] = 0,
     ) -> list[models.JobId]:
         """
-        Inserts a new job into the queue with the specified
-        entrypoint, payload, and priority, marking it as 'queued'.
-        This method ensures that if any of entrypoint, payload, or priority is a list,
-        all list arguments must be of the same length.
+        Insert new jobs into the queue.
 
-        If two or more arguments are lists, they must be the same length;
-            otherwise, an ValueError is raised.
+        Adds one or more jobs to the queue with specified entrypoints, payloads,
+        and priorities. Supports inserting multiple jobs in a single operation
+        by accepting lists for the parameters.
+
+        Args:
+            entrypoint (str | list[str]): The entrypoint(s) associated with the job(s).
+            payload (bytes | None | list[bytes | None]): The payload(s) for the job(s).
+            priority (int | list[int]): The priority level(s) for the job(s).
+
+        Returns:
+            list[models.JobId]: A list of JobId instances representing the IDs of the enqueued jobs.
+
+        Raises:
+            ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
 
         # If they are not lists, create single-item lists for uniform processing
@@ -540,7 +712,13 @@ class Queries:
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """
-        Clears jobs from the queue, optionally filtering by entrypoint if specified.
+        Remove jobs from the queue, optionally filtered by entrypoints.
+
+        Deletes jobs from the queue table. If entrypoints are provided, only jobs
+        matching those entrypoints are removed; otherwise, the entire queue is cleared.
+
+        Args:
+            entrypoint (str | list[str] | None): The entrypoint(s) to filter jobs for deletion.
         """
         await (
             self.driver.execute(
@@ -553,7 +731,13 @@ class Queries:
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
-        Mark a job(s) for cancellation.
+        Mark specific jobs as cancelled and notify the system.
+
+        Moves the specified jobs from the queue table to the statistics table with
+        a status of 'canceled' and sends a cancellation event notification.
+
+        Args:
+            ids (list[models.JobId]): The IDs of the jobs to cancel.
         """
         await asyncio.gather(
             self.driver.execute(self.qb.create_log_job_query(), ids, ["canceled"] * len(ids)),
@@ -562,7 +746,13 @@ class Queries:
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         """
-        Returns the number of jobs in the queue grouped by entrypoint and priority.
+        Get statistics about the current size of the queue.
+
+        Retrieves the number of jobs in the queue, grouped by entrypoint, priority,
+        and status. This provides insight into the workload and helps with monitoring.
+
+        Returns:
+            list[models.QueueStatistics]: A list of statistics entries for the queue.
         """
         return [
             models.QueueStatistics.model_validate(dict(x))
@@ -574,8 +764,15 @@ class Queries:
         job_status: list[tuple[models.Job, models.STATUS_LOG]],
     ) -> None:
         """
-        Moves a completed or failed job from the queue table to the log
-        table, recording its final status and duration.
+        Move completed or failed jobs from the queue to the log table.
+
+        Processes a list of jobs along with their final statuses, removing them
+        from the queue table and recording their details in the statistics table.
+
+        Args:
+            job_status (list[tuple[models.Job, models.STATUS_LOG]]): A list of tuples
+                containing jobs and their corresponding statuses
+                ('successful', 'exception', or 'canceled').
         """
         await self.driver.execute(
             self.qb.create_log_job_query(),
@@ -585,8 +782,15 @@ class Queries:
 
     async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
-        Clears entries from the job log table, optionally filtering
-        by entrypoint if specified.
+        Remove entries from the statistics (log) table.
+
+        Deletes log entries from the statistics table. If entrypoints are provided,
+        only entries matching those entrypoints are removed; otherwise, the entire
+        log is cleared.
+
+        Args:
+            entrypoint (str | list[str] | None): The entrypoint(s) to filter log
+                entries for deletion.
         """
         await (
             self.driver.execute(
@@ -602,6 +806,20 @@ class Queries:
         tail: int | None,
         last: timedelta | None = None,
     ) -> list[models.LogStatistics]:
+        """
+        Retrieve job processing statistics from the log.
+
+        Fetches entries from the statistics table, optionally limited by the number
+        of recent entries (`tail`) and a time window (`last`). This information
+        can be used for monitoring and analysis.
+
+        Args:
+            tail (int | None): The maximum number of recent entries to retrieve.
+            last (timedelta | None): The time window to consider (e.g., last hour).
+
+        Returns:
+            list[models.LogStatistics]: A list of log statistics entries.
+        """
         return [
             models.LogStatistics.model_validate(dict(x))
             for x in await self.driver.fetch(
@@ -612,9 +830,28 @@ class Queries:
         ]
 
     async def upgrade(self) -> None:
+        """
+        Upgrade the existing database schema to the latest version.
+
+        Executes the SQL commands generated by `create_upgrade_queries` to modify
+        the database schema as needed. This may involve adding columns, indexes,
+        or updating functions to support new features.
+
+        This method should be called when updating the application to a new version
+        that requires schema changes.
+        """
         await self.driver.execute("\n\n".join(self.qb.create_upgrade_queries()))
 
     async def has_updated_column(self) -> bool:
+        """
+        Check if the 'updated' column exists in the queue table.
+
+        Determines whether the 'updated' timestamp column is present in the queue
+        table, which is necessary for certain queue operations, such as retrying jobs.
+
+        Returns:
+            bool: True if the 'updated' column exists, False otherwise.
+        """
         rows = await self.driver.fetch(
             self.qb.create_has_column_query(),
             self.qb.settings.queue_table,
@@ -629,6 +866,20 @@ class Queries:
         key: str,
         user_type: str,
     ) -> bool:
+        """
+        Check if a specific value exists within a user-defined ENUM type.
+
+        Queries the database to determine whether the specified ENUM type contains
+        the given label (value). This is useful for ensuring that required statuses
+        or values are defined in the database schema.
+
+        Args:
+            key (str): The label to look for within the ENUM type.
+            user_type (str): The name of the user-defined ENUM type.
+
+        Returns:
+            bool: True if the label exists within the ENUM type, False otherwise.
+        """
         rows = await self.driver.fetch(self.qb.create_user_types_query())
         return (key, user_type) in ((row["enumlabel"], row["typname"]) for row in rows)
 
@@ -637,6 +888,17 @@ class Queries:
         entrypoing: str,
         quantity: int,
     ) -> None:
+        """
+        Send a requests-per-second event notification for an entrypoint.
+
+        Emits a 'requests_per_second_event' notification via the PostgreSQL NOTIFY
+        system to inform other components about the current request rate for an
+        entrypoint. This can be used to adjust processing rates or trigger scaling.
+
+        Args:
+            entrypoint (str): The entrypoint for which the event is being sent.
+            quantity (int): The number of requests per second to report.
+        """
         await self.driver.execute(
             self.qb.create_notify_query(),
             models.RequestsPerSecondEvent(
@@ -650,8 +912,14 @@ class Queries:
 
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """
-        Emits a cancellation event for the specified job IDs, notifying the
-        system that these jobs have been cancelled.
+        Send a cancellation event notification for specific job IDs.
+
+        Emits a 'cancellation_event' notification via the PostgreSQL NOTIFY system
+        to inform other components that certain jobs have been cancelled. This
+        allows running tasks to check for cancellation and terminate if necessary.
+
+        Args:
+            ids (list[models.JobId]): The IDs of the jobs that have been cancelled.
         """
         await self.driver.execute(
             self.qb.create_notify_query(),
