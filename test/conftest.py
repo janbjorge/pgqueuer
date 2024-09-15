@@ -2,10 +2,9 @@ import asyncio
 from typing import AsyncGenerator
 
 import asyncpg
-import psycopg
 import pytest
 
-from pgqueuer.db import AsyncpgDriver, Driver, PsycopgDriver, dsn
+from pgqueuer.db import AsyncpgDriver, Driver, dsn
 from pgqueuer.queries import Queries
 
 
@@ -16,15 +15,6 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
         yield AsyncpgDriver(conn)
     finally:
         await conn.close()
-
-
-@pytest.fixture(scope="function")
-async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
-    async with await psycopg.AsyncConnection.connect(
-        conninfo=dsn(),
-        autocommit=True,
-    ) as conn:
-        yield PsycopgDriver(conn)
 
 
 @pytest.fixture(scope="function", autouse=True)
