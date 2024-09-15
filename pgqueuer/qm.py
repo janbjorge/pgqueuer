@@ -1,3 +1,11 @@
+"""
+Queue Manager module for handling job queues and dispatching jobs.
+
+This module defines the `QueueManager` class, which manages job queues, dispatches
+jobs to registered entrypoints, and handles database connections and events.
+It also provides utility functions and types for job execution and rate limiting.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -60,6 +68,18 @@ def is_async_callable(obj: object) -> bool:
 
 
 class JobExecutor:
+    """
+    Wrapper class for executing jobs using registered entrypoint functions.
+
+    Manages the execution of jobs, respecting the configured requests per second,
+    and determines whether the entrypoint function is asynchronous or synchronous.
+
+    Attributes:
+        func (Entrypoint): The entrypoint function to execute jobs.
+        requests_per_second (float): The maximum number of requests per second allowed.
+        is_async (bool): Indicates if the entrypoint function is asynchronous.
+    """
+
     def __init__(
         self,
         func: Entrypoint,
@@ -70,6 +90,12 @@ class JobExecutor:
         self.is_async = is_async_callable(func)
 
     async def __call__(self, job: models.Job) -> None:
+        """
+        Execute the job using the entrypoint function.
+
+        Args:
+            job (models.Job): The job to execute.
+        """
         if self.is_async:
             await cast(AsyncEntrypoint, self.func)(job)
         else:
@@ -79,8 +105,21 @@ class JobExecutor:
 @dataclasses.dataclass
 class QueueManager:
     """
-    Manages job queues and dispatches jobs to registered entry points,
-    handling database connections and events.
+    Manages job queues and dispatches jobs to registered entrypoints.
+
+    The `QueueManager` handles the lifecycle of jobs, including dequeueing,
+    dispatching to entrypoint functions, handling rate limiting, concurrency
+    limits, and managing cancellations.
+
+    Attributes:
+        connection (db.Driver): The database driver used for database operations.
+        channel (models.PGChannel): The PostgreSQL channel for notifications.
+        alive (asyncio.Event): Event to signal when the QueueManager is shutting down.
+        queries (queries.Queries): Instance for executing database queries.
+        entrypoint_registry (dict[str, JobExecutor]): Registered entrypoint functions.
+        entrypoint_statistics (dict[str, models.EntrypointStatistics]): Statistics for entrypoints.
+        job_context (dict[models.JobId, models.Context]): Contexts for jobs,
+            including cancellation scopes.
     """
 
     connection: db.Driver
@@ -112,15 +151,21 @@ class QueueManager:
 
     def __post_init__(self) -> None:
         """
-        Initializes database query handlers and validates pool size upon
-        instance creation.
+        Initialize the QueueManager after dataclass fields have been set.
+
+        Sets up the `queries` instance using the provided database connection.
         """
         self.queries = queries.Queries(self.connection)
 
     def get_context(self, job_id: models.JobId) -> models.Context:
         """
-        Retrieves the cancellation scope for a specific job, allowing the job to be checked
-        and managed for cancellation.
+        Retrieve the context associated with a specific job ID.
+
+        Args:
+            job_id (models.JobId): The unique identifier of the job.
+
+        Returns:
+            models.Context: The context object associated with the job.
         """
         return self.job_context[job_id]
 
@@ -131,15 +176,23 @@ class QueueManager:
         concurrency_limit: int = 0,
     ) -> Callable[[T], T]:
         """
-        Registers a function as an entrypoint for handling specific
-        job types. Ensures unique naming in the registry.
+        Decorator to register a function as an entrypoint for job processing.
 
-        Parameters:
-            - name: The name used to identify the entrypoint in the database.
-            - requests_per_second: The upper limit on the number of jobs that will
-                be processed for this entrypoint accross all consumers.
-            - concurrency_limit: The upper limit on the number of concurrent jobs
-                that can be executed for this entrypoint in any one consumer.
+        Associates a function with a named entrypoint, configuring rate limits
+        and concurrency controls for jobs that will be handled by this function.
+
+        Args:
+            name (str): The name of the entrypoint as referenced in the job queue.
+            requests_per_second (float): Max number of jobs per second to process for
+                this entrypoint.
+            concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
+
+        Returns:
+            Callable[[T], T]: A decorator that registers the function as an entrypoint.
+
+        Raises:
+            RuntimeError: If the entrypoint name is already registered.
+            ValueError: If `requests_per_second` or `concurrency_limit` are negative.
         """
 
         if name in self.entrypoint_registry:
@@ -169,6 +222,16 @@ class QueueManager:
         entrypoint: str,
         epsilon: timedelta = timedelta(milliseconds=0.01),
     ) -> float:
+        """
+        Calculate the observed requests per second for an entrypoint.
+
+        Args:
+            entrypoint (str): The entrypoint to calculate the rate for.
+            epsilon (timedelta): Small time delta to prevent division by zero.
+
+        Returns:
+            float: The observed requests per second.
+        """
         samples = self.entrypoint_statistics[entrypoint].samples
         if not samples:
             return 0.0
@@ -177,6 +240,12 @@ class QueueManager:
         return requests / timespan.total_seconds()
 
     def entrypoints_below_capacity_limits(self) -> set[str]:
+        """
+        Determine which entrypoints are below their configured capacity limits.
+
+        Returns:
+            set[str]: A set of entrypoint names that are below capacity.
+        """
         return {
             entrypoint
             for entrypoint, fn in self.entrypoint_registry.items()
@@ -191,17 +260,20 @@ class QueueManager:
         retry_timer: timedelta | None = None,
     ) -> None:
         """
-        Continuously listens for events and dispatches jobs. Manages connections and
-        tasks, logs timeouts, and resets connections upon termination.
+        Run the main loop to process jobs from the queue.
 
-        Parameters:
-            - dequeue_timeout: The timeout duration for waiting to dequeue jobs.
-            Defaults to 30 seconds.
-            - batch_size : The number of jobs to retrieve in each batch. Defaults to 10.
-            - retry_timer: If specified, selects jobs that have been in 'picked' status
-            for longer than the specified retry timer duration. If `None`, the timeout
-            job checking is skipped.
+        Continuously listens for events and dispatches jobs, managing connections
+        and tasks, logging timeouts, and resetting connections upon termination.
+
+        Args:
+            dequeue_timeout (timedelta): Timeout duration for waiting to dequeue jobs.
+            batch_size (int): Number of jobs to retrieve in each batch.
+            retry_timer (timedelta | None): Duration to wait before retrying 'picked' jobs.
+
+        Raises:
+            RuntimeError: If required database columns or types are missing.
         """
+
         if not (await self.queries.has_updated_column()):
             raise RuntimeError(
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
@@ -288,8 +360,14 @@ class QueueManager:
         buffer: buffers.JobBuffer,
     ) -> None:
         """
-        Handles asynchronous job dispatch. Logs exceptions, updates job status,
-        and adapts execution method based on whether the job's function is asynchronous.
+        Dispatch a job to its associated entrypoint function.
+
+        Handles asynchronous job execution, logs exceptions, updates job status,
+        and manages job context including cancellation.
+
+        Args:
+            job (models.Job): The job to dispatch.
+            buffer (buffers.JobBuffer): The buffer to log job completion status.
         """
 
         logconfig.logger.debug(

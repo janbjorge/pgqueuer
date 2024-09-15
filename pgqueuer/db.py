@@ -1,7 +1,9 @@
-"""Database Abstraction Layer for pgqueuer.
+"""
+Database abstraction layer for asynchronous PostgreSQL operations.
 
-This module provides database driver abstractions and a specific implementation
-for AsyncPG to handle database operations asynchronously.
+This module defines the `Driver` protocol and provides implementations for different
+asynchronous PostgreSQL drivers, such as AsyncPG and Psycopg. It allows for fetching data,
+executing queries, and handling notifications using a consistent interface.
 """
 
 from __future__ import annotations
@@ -28,6 +30,16 @@ def dsn(
     database: str = "",
     port: str = "",
 ) -> str:
+    """
+    Construct a PostgreSQL DSN (Data Source Name) from parameters or environment variables.
+
+    Assembles a PostgreSQL connection string using provided parameters. If any parameter
+    is not specified, it attempts to retrieve it from environment variables (`PGHOST`, `PGUSER`,
+    `PGPASSWORD`, `PGDATABASE`, `PGPORT`).
+
+    Returns:
+        str: A PostgreSQL DSN string in the format 'postgresql://user:password@host:port/database'.
+    """
     host = host or os.getenv("PGHOST", "")
     user = user or os.getenv("PGUSER", "")
     password = password or os.getenv("PGPASSWORD", "")
@@ -38,7 +50,11 @@ def dsn(
 
 class Driver(Protocol):
     """
-    Defines a protocol for database drivers with essential database operations.
+    Protocol defining the essential database operations for drivers.
+
+    The `Driver` protocol specifies the methods that a database driver must implement
+    to be compatible with the system. This includes methods for fetching records,
+    executing queries, adding listeners for notifications, and managing the driver's lifecycle.
     """
 
     async def fetch(
@@ -46,7 +62,16 @@ class Driver(Protocol):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        """Fetch multiple records from the database."""
+        """
+        Fetch multiple records from the database.
+
+        Args:
+            query (str): The SQL query to execute.
+            *args (Any): Positional arguments to substitute into the query.
+
+        Returns:
+            list[dict]: A list of dictionaries representing the fetched records.
+        """
         raise NotImplementedError
 
     async def execute(
@@ -54,7 +79,16 @@ class Driver(Protocol):
         query: str,
         *args: Any,
     ) -> str:
-        """Execute a single query and return a status message."""
+        """
+        Execute a SQL query and return the status message.
+
+        Args:
+            query (str): The SQL query to execute.
+            *args (Any): Positional arguments to substitute into the query.
+
+        Returns:
+            str: The status message returned by the database after execution.
+        """
         raise NotImplementedError
 
     async def add_listener(
@@ -62,27 +96,63 @@ class Driver(Protocol):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        """Add a listener for a specific PostgreSQL NOTIFY channel."""
+        """
+        Add a listener for a PostgreSQL NOTIFY channel.
+
+        Registers a callback function to be called whenever a notification is received
+        on the specified channel.
+
+        Args:
+            channel (str): The name of the PostgreSQL channel to listen on.
+            callback (Callable[[str | bytes | bytearray], None]): The function to call when a
+                notification is received.
+        """
         raise NotImplementedError
 
     @property
     def alive(self) -> asyncio.Event:
+        """
+        An asyncio.Event indicating the liveness of the driver.
+
+        This event can be used to signal when the driver is shutting down or no longer active.
+        """
         raise NotImplementedError
 
     @property
     def tm(self) -> tm.TaskManager:
+        """
+        TaskManager instance for managing background tasks.
+
+        Provides a way to manage and await background tasks associated with the driver.
+        """
         raise NotImplementedError
 
     async def __aenter__(self) -> Driver:
+        """
+        Enter the runtime context related to this object.
+
+        Returns:
+            Self: Returns self to allow the driver to be used as an asynchronous context manager.
+        """
         raise NotImplementedError
 
     async def __aexit__(self, *_: object) -> None:
+        """
+        Exit the runtime context and perform cleanup actions.
+
+        Args:
+            *_ (object): Ignored arguments.
+        """
         raise NotImplementedError
 
 
 class AsyncpgDriver(Driver):
     """
-    Implements the Driver protocol using AsyncPG for PostgreSQL database operations.
+    AsyncPG implementation of the `Driver` protocol.
+
+    This driver uses an AsyncPG connection to perform asynchronous database operations
+    such as fetching records, executing queries, and listening for notifications.
+    It ensures thread safety using an asyncio.Lock.
     """
 
     def __init__(
@@ -99,7 +169,6 @@ class AsyncpgDriver(Driver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        """Fetch records with query locking to ensure thread safety."""
         async with self._lock:
             return [dict(x) for x in await self._connection.fetch(query, *args)]
 
@@ -108,7 +177,6 @@ class AsyncpgDriver(Driver):
         query: str,
         *args: Any,
     ) -> str:
-        """Execute a query with locking to avoid concurrent access issues."""
         async with self._lock:
             return await self._connection.execute(query, *args)
 
@@ -117,7 +185,6 @@ class AsyncpgDriver(Driver):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        """Add a database listener with locking to manage concurrency."""
         async with self._lock:
             await self._connection.add_listener(
                 channel,
@@ -141,13 +208,34 @@ class AsyncpgDriver(Driver):
 @functools.cache
 def _replace_dollar_named_parameter(query: str) -> str:
     """
-    Replaces all instances of $1, $2, etc. with %(parameter_1)s in a
-    given SQL query string.
+    Replace positional parameters in a SQL query with named parameters.
+
+    This function replaces all occurrences of $1, $2, etc., in the provided SQL query
+    string with named parameters of the form %(parameter_1)s, which is compatible with
+    Psycopg's named parameter syntax.
+
+    Args:
+        query (str): The SQL query string containing positional parameters.
+
+    Returns:
+        str: The modified SQL query string with named parameters.
     """
     return re.sub(r"\$(\d+)", r"%(parameter_\1)s", query)
 
 
 def _named_parameter(args: tuple) -> dict[str, Any]:
+    """
+    Convert positional arguments into a dictionary of named parameters.
+
+    Creates a dictionary mapping parameter names like 'parameter_1', 'parameter_2', etc.,
+    to the provided positional arguments. This is used for parameter substitution in SQL queries.
+
+    Args:
+        args (tuple): A tuple of positional arguments.
+
+    Returns:
+        dict[str, Any]: A dictionary mapping parameter names to their corresponding values.
+    """
     return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
 
 
