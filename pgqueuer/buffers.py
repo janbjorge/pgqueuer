@@ -12,7 +12,13 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from datetime import timedelta
-from typing import AsyncGenerator, Awaitable, Callable, Generic, TypeVar
+from typing import (
+    AsyncGenerator,
+    Awaitable,
+    Callable,
+    Generic,
+    TypeVar,
+)
 
 from typing_extensions import Self
 
@@ -35,7 +41,7 @@ class TimedOverflowBuffer(Generic[T]):
         max_size (int): The maximum number of items to buffer before flushing.
         timeout (timedelta): The maximum duration to wait before flushing the buffer,
             regardless of size.
-        flush_callable (Callable[[List[T]], Awaitable[None]]): The asynchronous
+        flush_callable (Callable[[list[T]], Awaitable[None]]): The asynchronous
             callable used to flush items, such as logging to a database.
         alive (asyncio.Event): An event to signal when the buffer should stop monitoring
             (e.g., during shutdown).
@@ -137,8 +143,8 @@ class TimedOverflowBuffer(Generic[T]):
         Collects all items currently in the buffer by consuming the events from
         the internal queue using `pop_until`. If there are any events, it attempts to invoke the
         provided asynchronous callable with the events. If an exception occurs during the invocation
-        of the callable, it logs the exception and waits for the specified timeout before retrying.
-        This helps in handling transient errors without losing items.
+        of the callable, it logs the exception, re-adds the items to the queue, and schedules
+        a retry. This helps in handling transient errors without losing items.
         """
         items = [item async for item in self.pop_until()]
 
@@ -152,8 +158,13 @@ class TimedOverflowBuffer(Generic[T]):
                 "Exception during buffer flush, waiting: %s seconds before retry.",
                 self.timeout.total_seconds(),
             )
+            # Re-add the items to the queue for retry
+            for item in items:
+                await self.events.put(item)
+            # Schedule a retry flush
+            self._schedule_flush()
+            # Wait for the timeout before allowing further operations
             await asyncio.sleep(self.timeout.total_seconds())
-            # Optionally, you might want to re-add the items to the queue or handle retries
 
     async def __aenter__(self) -> Self:
         """
