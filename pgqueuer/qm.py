@@ -37,6 +37,16 @@ Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
 T = TypeVar("T", bound=Entrypoint)
 
 
+class JobTimedOverflowBuffer(
+    buffers.TimedOverflowBuffer[
+        tuple[
+            models.Job,
+            models.STATUS_LOG,
+        ]
+    ]
+): ...
+
+
 @overload
 def is_async_callable(obj: AsyncEntrypoint) -> TypeGuard[AsyncEntrypoint]: ...
 
@@ -291,10 +301,10 @@ class QueueManager:
             )
 
         async with (
-            buffers.JobBuffer(
-                queries=self.queries,
+            JobTimedOverflowBuffer(
                 max_size=batch_size,
                 timeout=timedelta(seconds=0.01),
+                flush_callable=self.queries.log_jobs,
             ) as buffer,
             tm.TaskManager() as task_manger,
             self.connection,
@@ -357,7 +367,7 @@ class QueueManager:
     async def _dispatch(
         self,
         job: models.Job,
-        buffer: buffers.JobBuffer,
+        buffer: JobTimedOverflowBuffer,
     ) -> None:
         """
         Dispatch a job to its associated entrypoint function.
@@ -389,7 +399,7 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                await buffer.add_job(job, "exception")
+                await buffer.add((job, "exception"))
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
@@ -397,6 +407,6 @@ class QueueManager:
                     job.id,
                 )
                 canceled = self.get_context(job.id).cancellation.cancel_called
-                await buffer.add_job(job, "canceled" if canceled else "successful")
+                await buffer.add((job, "canceled" if canceled else "successful"))
             finally:
                 self.job_context.pop(job.id, None)
