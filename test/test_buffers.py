@@ -4,11 +4,12 @@ from datetime import timedelta
 
 import pytest
 
-from pgqueuer.buffers import JobBuffer
-from pgqueuer.db import Driver
+from pgqueuer.buffers import TimedOverflowBuffer
 from pgqueuer.helpers import perf_counter_dt
-from pgqueuer.models import Job
-from pgqueuer.queries import Queries
+from pgqueuer.models import STATUS_LOG, Job
+
+
+class TestBuff(TimedOverflowBuffer[tuple[Job, STATUS_LOG]]): ...
 
 
 def job_faker() -> Job:
@@ -23,28 +24,22 @@ def job_faker() -> Job:
 
 
 @pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
-async def test_job_buffer_max_size(
-    max_size: int,
-    apgdriver: Driver,
-) -> None:
+async def test_job_buffer_max_size(max_size: int) -> None:
     helper_buffer = []
 
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    queries = Queries(apgdriver)
-    queries.log_jobs = helper  # type: ignore
-
-    async with JobBuffer(
+    async with TestBuff(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        queries=queries,
+        flush_callable=helper,
     ) as buffer:
         for _ in range(max_size - 1):
-            await buffer.add_job(job_faker(), "successful")
+            await buffer.add((job_faker(), "successful"))
             assert len(helper_buffer) == 0
 
-        await buffer.add_job(job_faker(), "successful")
+        await buffer.add((job_faker(), "successful"))
         assert len(helper_buffer) == max_size
 
 
@@ -53,23 +48,19 @@ async def test_job_buffer_max_size(
 async def test_job_buffer_timeout(
     N: int,
     timeout: timedelta,
-    apgdriver: Driver,
 ) -> None:
     helper_buffer = []
 
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    queries = Queries(apgdriver)
-    queries.log_jobs = helper  # type: ignore
-
-    async with JobBuffer(
+    async with TimedOverflowBuffer(
         max_size=N * 2,
         timeout=timeout,
-        queries=queries,
+        flush_callable=helper,
     ) as buffer:
         for _ in range(N):
-            await buffer.add_job(job_faker(), "successful")
+            await buffer.add((job_faker(), "successful"))
             assert len(helper_buffer) == 0
 
         await asyncio.sleep(timeout.total_seconds() * 1.1)
