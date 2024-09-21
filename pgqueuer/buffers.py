@@ -95,6 +95,10 @@ class TimedOverflowBuffer(Generic[T]):
         async with self.lock:
             await self.flush()
 
+    def add_nowait(self, item: T) -> None:
+        self.events.put_nowait(item)
+        self._schedule_flush()
+
     async def add(self, item: T) -> None:
         """
         Add an item to the buffer; flush if buffer reaches maximum size.

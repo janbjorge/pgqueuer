@@ -47,6 +47,9 @@ class JobTimedOverflowBuffer(
 ): ...
 
 
+class HeartbeatTimedOverflowBuffer(buffers.TimedOverflowBuffer[models.JobId]): ...
+
+
 @overload
 def is_async_callable(obj: AsyncEntrypoint) -> TypeGuard[AsyncEntrypoint]: ...
 
@@ -94,22 +97,55 @@ class JobExecutor:
         self,
         func: Entrypoint,
         requests_per_second: float,
+        heartbeat_rate: timedelta | None,
     ) -> None:
         self.func = func
         self.requests_per_second = requests_per_second
         self.is_async = is_async_callable(func)
+        self.heartbeat_handle: asyncio.TimerHandle | None = None
+        self.heartbeat_rate = heartbeat_rate
+        self.done = False
 
-    async def __call__(self, job: models.Job) -> None:
+    def schedule_heartbeat(
+        self,
+        buff: HeartbeatTimedOverflowBuffer,
+        job_id: models.JobId,
+    ) -> None:
+        if self.heartbeat_handle is not None:
+            self.heartbeat_handle.cancel()
+
+        if self.done:
+            return
+
+        loop = asyncio.get_event_loop()
+        buff.add_nowait(job_id)
+
+        assert self.heartbeat_rate is not None
+        self.heartbeat_handle = loop.call_later(
+            self.heartbeat_rate.total_seconds(),
+            lambda: self.schedule_heartbeat(buff, job_id),
+        )
+
+    async def __call__(
+        self,
+        job: models.Job,
+        buff: HeartbeatTimedOverflowBuffer,
+    ) -> None:
         """
         Execute the job using the entrypoint function.
 
         Args:
             job (models.Job): The job to execute.
         """
-        if self.is_async:
-            await cast(AsyncEntrypoint, self.func)(job)
-        else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.func), job)
+        if self.heartbeat_rate:
+            self.schedule_heartbeat(buff, job.id)
+        try:
+            if self.is_async:
+                await cast(AsyncEntrypoint, self.func)(job)
+            else:
+                await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.func), job)
+        finally:
+            self.done = True
 
 
 @dataclasses.dataclass
@@ -184,6 +220,7 @@ class QueueManager:
         name: str,
         requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
+        retry_heartbeat_rate: timedelta | None = None,
     ) -> Callable[[T], T]:
         """
         Decorator to register a function as an entrypoint for job processing.
@@ -218,6 +255,7 @@ class QueueManager:
             self.entrypoint_registry[name] = JobExecutor(
                 func=func,
                 requests_per_second=requests_per_second,
+                heartbeat_rate=retry_heartbeat_rate,
             )
             self.entrypoint_statistics[name] = models.EntrypointStatistics(
                 samples=deque(maxlen=1_000),
@@ -300,12 +338,26 @@ class QueueManager:
                 "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
             )
 
+        if not (await self.queries.has_heartbeat_column()):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.queue_table} table is missing the "
+                "heartbeat column, please run 'python3 -m pgqueuer upgrade'"
+            )
+
         async with (
             JobTimedOverflowBuffer(
                 max_size=batch_size,
                 timeout=timedelta(seconds=0.01),
                 flush_callable=self.queries.log_jobs,
-            ) as buffer,
+            ) as jbuff,
+            HeartbeatTimedOverflowBuffer(
+                max_size=batch_size,
+                timeout=min(
+                    x.heartbeat_rate for x in self.entrypoint_registry.values() if x.heartbeat_rate
+                )
+                // 2,
+                flush_callable=self.queries.notify_activity,
+            ) as hbuff,
             tm.TaskManager() as task_manger,
             self.connection,
         ):
@@ -331,7 +383,7 @@ class QueueManager:
                     self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                     )
-                    task_manger.add(asyncio.create_task(self._dispatch(job, buffer)))
+                    task_manger.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
                     entrypoint_tally[job.entrypoint] += 1
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
@@ -367,7 +419,8 @@ class QueueManager:
     async def _dispatch(
         self,
         job: models.Job,
-        buffer: JobTimedOverflowBuffer,
+        jbuff: JobTimedOverflowBuffer,
+        hbuff: HeartbeatTimedOverflowBuffer,
     ) -> None:
         """
         Dispatch a job to its associated entrypoint function.
@@ -392,14 +445,14 @@ class QueueManager:
                 # can be cancelled between when they are dequeued and when the acquire the
                 # concurrency limit semaphore.
                 if not self.get_context(job.id).cancellation.cancel_called:
-                    await self.entrypoint_registry[job.entrypoint](job)
+                    await self.entrypoint_registry[job.entrypoint](job, hbuff)
             except Exception:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",
                     job.entrypoint,
                     job.id,
                 )
-                await buffer.add((job, "exception"))
+                await jbuff.add((job, "exception"))
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
@@ -407,6 +460,6 @@ class QueueManager:
                     job.id,
                 )
                 canceled = self.get_context(job.id).cancellation.cancel_called
-                await buffer.add((job, "canceled" if canceled else "successful"))
+                await jbuff.add((job, "canceled" if canceled else "successful"))
             finally:
                 self.job_context.pop(job.id, None)

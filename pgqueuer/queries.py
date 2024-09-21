@@ -155,6 +155,7 @@ class QueryBuilder:
         priority INT NOT NULL,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         payload BYTEA
@@ -277,8 +278,8 @@ class QueryBuilder:
         WHERE
                 entrypoint = ANY($2)
             AND status = 'picked'
-            AND ($3::interval IS NOT NULL AND updated < NOW() - $3::interval)
-        ORDER BY updated DESC, id ASC
+            AND ($3::interval IS NOT NULL AND heartbeat < NOW() - $3::interval)
+        ORDER BY heartbeat DESC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
@@ -292,7 +293,7 @@ class QueryBuilder:
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW()
+        SET status = 'picked', updated = NOW(), heartbeat = NOW()
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     )
@@ -534,6 +535,7 @@ class QueryBuilder:
     END;
     $$ LANGUAGE plpgsql;"""
         yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         """
@@ -580,6 +582,10 @@ class QueryBuilder:
             str: The SQL command string to send a notification.
         """
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
+
+    def create_notify_activity_query(self) -> str:
+        return f"""UPDATE {self.settings.queue_table}
+    SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""
 
 
 @dataclasses.dataclass
@@ -874,6 +880,25 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def has_heartbeat_column(self) -> bool:
+        """
+        Check if the 'heartbeat' column exists in the queue table.
+
+        Determines whether the 'heartbeat' timestamp column is present in the queue
+        table, which is necessary for certain queue operations, such as retrying jobs.
+
+        Returns:
+            bool: True if the 'heartbeat' column exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qb.create_has_column_query(),
+            self.qb.settings.queue_table,
+            "heartbeat",
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def has_user_type(
         self,
         key: str,
@@ -943,3 +968,6 @@ class Queries:
                 type="cancellation_event",
             ).model_dump_json(),
         )
+
+    async def notify_activity(self, job_ids: list[models.JobId]) -> None:
+        await self.driver.execute(self.qb.create_notify_activity_query(), job_ids)
