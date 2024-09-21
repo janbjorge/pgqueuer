@@ -14,7 +14,9 @@ import dataclasses
 from datetime import datetime, timedelta
 from typing import AsyncGenerator, TypeAlias
 
-from . import helpers, logconfig, models, queries, tm
+from typing_extensions import Self
+
+from . import helpers, logconfig, models, queries
 
 JobSatusTup: TypeAlias = tuple[models.Job, models.STATUS_LOG]
 
@@ -40,7 +42,7 @@ class JobBuffer:
             and their statuses.
         last_event_time (datetime): Timestamp of the last event added to the buffer.
         lock (asyncio.Lock): A lock to ensure thread safety during flush operations.
-        tm (tm.TaskManager): A task manager to handle background tasks, such as the monitor.
+        flush_handle (asyncio.TimerHandle | None): Handle for the scheduled flush callback.
     """
 
     max_size: int
@@ -63,10 +65,33 @@ class JobBuffer:
         init=False,
         default_factory=asyncio.Lock,
     )
-    tm: tm.TaskManager = dataclasses.field(
+    flush_handle: asyncio.TimerHandle | None = dataclasses.field(
         init=False,
-        default_factory=tm.TaskManager,
+        default=None,
     )
+
+    def _schedule_flush(self) -> None:
+        """
+        Schedule the flush_jobs coroutine to be called after the specified timeout.
+        If a flush is already scheduled, it cancels the previous one before scheduling a new one.
+        """
+        if self.flush_handle is not None:
+            self.flush_handle.cancel()
+
+        loop = asyncio.get_event_loop()
+        self.flush_handle = loop.call_later(
+            self.timeout.total_seconds(),
+            lambda: asyncio.create_task(
+                self._flush_jobs_callback(),
+            ),
+        )
+
+    async def _flush_jobs_callback(self) -> None:
+        """
+        Callback wrapper to safely call the flush_jobs coroutine.
+        """
+        async with self.lock:
+            await self.flush_jobs()
 
     async def add_job(self, job: models.Job, status: models.STATUS_LOG) -> None:
         """
@@ -75,20 +100,22 @@ class JobBuffer:
         This method adds a job and its associated status to the internal events queue.
         It updates the `last_event_time` to the current time. If the number of events in
         the buffer reaches or exceeds `max_size`, it triggers a flush of the buffer to
-        log the accumulated jobs to the database.
+        log the accumulated jobs to the database. Additionally, it schedules a flush
+        operation to occur after the specified timeout.
 
         Args:
             job (models.Job): The job to be added to the buffer.
             status (models.STATUS_LOG): The status of the job
                 (e.g., 'successful', 'exception', 'canceled').
         """
+        async with self.lock:
+            await self.events.put((job, status))
+            self.last_event_time = helpers.perf_counter_dt()
 
-        await self.events.put((job, status))
-        self.last_event_time = helpers.perf_counter_dt()
-        if self.events.qsize() >= self.max_size:
-            async with self.lock:
-                if self.events.qsize() >= self.max_size:
-                    await self.flush_jobs()
+            if self.events.qsize() >= self.max_size:
+                await self.flush_jobs()
+            else:
+                self._schedule_flush()
 
     async def pop_until(self) -> AsyncGenerator[JobSatusTup, None]:
         """
@@ -107,6 +134,8 @@ class JobBuffer:
         for _ in range(2 * self.max_size):
             if not self.events.empty() and helpers.perf_counter_dt() - enter < self.timeout * 2:
                 yield await self.events.get()
+            else:
+                break
 
     async def flush_jobs(self) -> None:
         """
@@ -131,47 +160,28 @@ class JobBuffer:
                 self.timeout.total_seconds(),
             )
             await asyncio.sleep(self.timeout.total_seconds())
+            # Optionally, you might want to re-add the events to the queue or handle retries
 
-    async def monitor(self) -> None:
-        """
-        Monitor the buffer and flush jobs based on the timeout.
-
-        This method runs in a background task and periodically checks whether the buffer needs
-        to be flushed based on the elapsed time since the last event was added. If the
-        elapsed time exceeds the specified `timeout`, it triggers a flush of the buffer.
-        The monitor runs until the `alive` event is set, which typically happens during shutdown.
-        """
-
-        while not self.alive.is_set():
-            await asyncio.sleep(self.timeout.total_seconds())
-            if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
-                async with self.lock:
-                    if helpers.perf_counter_dt() - self.last_event_time >= self.timeout:
-                        await self.flush_jobs()
-
-    async def __aenter__(self) -> JobBuffer:
+    async def __aenter__(self) -> Self:
         """
         Enter the asynchronous context manager.
 
-        Starts the monitor task by adding it to the task manager and returns the JobBuffer instance.
-        This allows the JobBuffer to be used within an `async with` block,
-        ensuring proper setup and teardown.
+        Returns the JobBuffer instance itself, allowing it to be used within an `async with` block.
 
         Returns:
             JobBuffer: The JobBuffer instance itself.
         """
-        self.tm.add(asyncio.create_task(self.monitor()))
         return self
 
     async def __aexit__(self, *_: object) -> None:
         """
         Exit the asynchronous context manager, ensuring all jobs are flushed.
 
-        Sets the `alive` event to signal the monitor task to stop. Then, while there are events
-        in the buffer, it flushes the jobs to ensure no events are left unprocessed. Finally,
-        it waits for all tasks in the task manager to complete by calling `tm.gather_tasks()`.
+        Cancels any scheduled flush operation, sets the `alive` event to signal that no
+        more flushes should be scheduled, and flushes any remaining jobs in the buffer.
         """
-        self.alive.set()
-        while not self.events.empty():
+        if self.flush_handle is not None:
+            self.flush_handle.cancel()
+
+        async with self.lock:
             await self.flush_jobs()
-        await self.tm.gather_tasks()
