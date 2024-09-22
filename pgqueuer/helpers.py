@@ -63,3 +63,13 @@ def wait_for_notice_event(
         return None
 
     return asyncio.create_task(suppressed_timeout())
+
+
+def heartbeat_buffer_timeout(
+    dts: list[timedelta],
+    default: timedelta = timedelta(hours=24),
+) -> timedelta:
+    try:
+        return min(dt for dt in dts if dt > timedelta(seconds=0))
+    except ValueError:
+        return default

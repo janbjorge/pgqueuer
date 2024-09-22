@@ -536,6 +536,7 @@ class QueryBuilder:
     $$ LANGUAGE plpgsql;"""
         yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         """
@@ -584,8 +585,7 @@ class QueryBuilder:
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
     def create_notify_activity_query(self) -> str:
-        return f"""UPDATE {self.settings.queue_table}
-    SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""
+        return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
 
 @dataclasses.dataclass
@@ -970,4 +970,7 @@ class Queries:
         )
 
     async def notify_activity(self, job_ids: list[models.JobId]) -> None:
-        await self.driver.execute(self.qb.create_notify_activity_query(), job_ids)
+        await self.driver.execute(
+            self.qb.create_notify_activity_query(),
+            list(set(job_ids)),
+        )

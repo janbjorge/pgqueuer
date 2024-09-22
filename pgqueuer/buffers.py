@@ -22,7 +22,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from . import helpers, logconfig
+from . import helpers, logconfig, models
 
 T = TypeVar("T")
 
@@ -94,10 +94,6 @@ class TimedOverflowBuffer(Generic[T]):
         """
         async with self.lock:
             await self.flush()
-
-    def add_nowait(self, item: T) -> None:
-        self.events.put_nowait(item)
-        self._schedule_flush()
 
     async def add(self, item: T) -> None:
         """
@@ -193,3 +189,21 @@ class TimedOverflowBuffer(Generic[T]):
 
         async with self.lock:
             await self.flush()
+
+
+class JobStatusLogBuffer(
+    TimedOverflowBuffer[
+        tuple[
+            models.Job,
+            models.STATUS_LOG,
+        ]
+    ]
+): ...
+
+
+class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
+    """
+    Specialized TimedOverflowBuffer for handling heartbeats.
+
+    Inherits from TimedOverflowBuffer with JobId as the generic type.
+    """
