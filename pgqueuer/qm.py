@@ -13,6 +13,7 @@ import contextlib
 import dataclasses
 import functools
 import sys
+import warnings
 from collections import Counter, deque
 from datetime import timedelta
 from math import isfinite
@@ -35,6 +36,9 @@ AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
 Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
 T = TypeVar("T", bound=Entrypoint)
+
+
+class Unset: ...
 
 
 @overload
@@ -261,7 +265,7 @@ class QueueManager:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
-        retry_timer: timedelta | None = None,
+        retry_timer: timedelta | None | Unset = Unset(),
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -277,6 +281,12 @@ class QueueManager:
         Raises:
             RuntimeError: If required database columns or types are missing.
         """
+
+        if not isinstance(retry_timer, Unset):
+            warnings.warn(
+                "retey_timer is deprecated, use heartbeat_interval form the entrypoint decorator.",
+                DeprecationWarning,
+            )
 
         if not (await self.queries.has_updated_column()):
             raise RuntimeError(
@@ -329,7 +339,11 @@ class QueueManager:
                 jobs = await self.queries.dequeue(
                     batch_size=batch_size,
                     entrypoints=self.entrypoints_below_capacity_limits(),
-                    retry_timer=retry_timer,
+                    entrypoint_timeouts=[
+                        (k, v.heartbeat_interval)
+                        for k, v in self.entrypoint_registry.items()
+                        if v.heartbeat_interval > timedelta(0)
+                    ],
                 )
 
                 entrypoint_tally = Counter[str]()

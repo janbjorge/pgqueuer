@@ -88,6 +88,9 @@ select = [
     "C90"
 ]
 
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
 [tool.ruff.lint.isort]
 combine-as-imports = true
 
@@ -106,3 +109,8 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function" 
+
+[tool.uv]
+dev-dependencies = [
+    "icecream>=2.1.3",
+]

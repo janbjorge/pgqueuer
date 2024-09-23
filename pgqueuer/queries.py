@@ -262,7 +262,13 @@ class QueryBuilder:
             str: The SQL query string for dequeuing jobs.
         """
 
-        return f"""WITH next_job_queued AS (
+        return f"""WITH
+    entrypoint_retry_timeout AS (
+        SELECT
+            unnest($3::interval[]) AS retry_after,
+            unnest($4::text[]) AS entrypoint
+    ),
+    next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
         WHERE
@@ -275,10 +281,12 @@ class QueryBuilder:
     next_job_retry AS (
         SELECT id
         FROM {self.settings.queue_table}
+        INNER JOIN entrypoint_retry_timeout ON
+            entrypoint_retry_timeout.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-                entrypoint = ANY($2)
+                {self.settings.queue_table}.entrypoint = ANY($2)
             AND status = 'picked'
-            AND ($3::interval IS NOT NULL AND heartbeat < NOW() - $3::interval)
+            AND heartbeat < NOW() - entrypoint_retry_timeout.retry_after
         ORDER BY heartbeat DESC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
@@ -288,7 +296,7 @@ class QueryBuilder:
         FROM (
             SELECT id FROM next_job_queued
             UNION ALL
-            SELECT id FROM next_job_retry WHERE $3::interval IS NOT NULL
+            SELECT id FROM next_job_retry
         ) AS combined
     ),
     updated AS (
@@ -636,7 +644,7 @@ class Queries:
         self,
         batch_size: int,
         entrypoints: set[str],
-        retry_timer: timedelta | None = None,
+        entrypoint_timeouts: list[tuple[str, timedelta]],
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -662,14 +670,12 @@ class Queries:
         if batch_size < 1:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
-        if retry_timer and retry_timer < timedelta(seconds=0):
-            raise ValueError("Retry timer must be a non-negative timedelta")
-
         rows = await self.driver.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
             list(entrypoints),
-            retry_timer,
+            [x for _, x in entrypoint_timeouts],
+            [x for x, _ in entrypoint_timeouts],
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
