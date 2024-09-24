@@ -470,7 +470,7 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.8.11.dev3+g213c336.d20240923"
+version = "0.8.11.dev4+gb3417b7.d20240923"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -508,6 +508,7 @@ psycopg = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "async-timeout" },
     { name = "icecream" },
 ]
 
@@ -537,7 +538,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "icecream", specifier = ">=2.1.3" }]
+dev = [
+    { name = "async-timeout", specifier = ">=4.0.3" },
+    { name = "icecream", specifier = ">=2.1.3" },
+]
 
 [[package]]
 name = "pluggy"

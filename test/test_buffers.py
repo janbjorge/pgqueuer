@@ -10,10 +10,12 @@ from pgqueuer.models import Job
 
 
 def job_faker() -> Job:
+    dt = perf_counter_dt()
     return Job(
         id=random.choice(range(1_000_000_000)),
         priority=0,
-        created=perf_counter_dt(),
+        created=dt,
+        heartbeat=dt,
         status="picked",
         entrypoint="foo",
         payload=None,

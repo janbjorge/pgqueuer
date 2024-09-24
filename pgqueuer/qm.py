@@ -88,11 +88,11 @@ class JobExecutor:
         self,
         func: Entrypoint,
         requests_per_second: float,
-        heartbeat_interval: timedelta,
+        retry_timer: timedelta,
     ) -> None:
         self.func = func
         self.requests_per_second = requests_per_second
-        self.heartbeat_interval = heartbeat_interval
+        self.retry_timer = retry_timer
         self.is_async = is_async_callable(func)
 
     async def __call__(self, job: models.Job) -> None:
@@ -180,7 +180,7 @@ class QueueManager:
         name: str,
         requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
-        heartbeat_interval: timedelta = timedelta(seconds=0),
+        retry_timer: timedelta = timedelta(seconds=0),
     ) -> Callable[[T], T]:
         """
         Decorator to register a function as an entrypoint for job processing.
@@ -215,7 +215,7 @@ class QueueManager:
             self.entrypoint_registry[name] = JobExecutor(
                 func=func,
                 requests_per_second=requests_per_second,
-                heartbeat_interval=heartbeat_interval,
+                retry_timer=retry_timer,
             )
             self.entrypoint_statistics[name] = models.EntrypointStatistics(
                 samples=deque(maxlen=1_000),
@@ -284,7 +284,7 @@ class QueueManager:
 
         if not isinstance(retry_timer, Unset):
             warnings.warn(
-                "retey_timer is deprecated, use heartbeat_interval form the entrypoint decorator.",
+                "retry_timer is deprecated, use retry_timer with the entrypoint decorator.",
                 DeprecationWarning,
             )
 
@@ -318,8 +318,8 @@ class QueueManager:
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=batch_size,
-                timeout=helpers.heartbeat_buffer_timeout(
-                    [x.heartbeat_interval for x in self.entrypoint_registry.values()]
+                timeout=helpers.retry_timer_buffer_timeout(
+                    [x.retry_timer for x in self.entrypoint_registry.values()]
                 ),
                 flush_callable=self.queries.notify_activity,
             ) as hbuff,
@@ -336,24 +336,24 @@ class QueueManager:
             alive_task = asyncio.create_task(self.alive.wait())
 
             while not self.alive.is_set():
+                entrypoints = {
+                    x: self.entrypoint_registry[x].retry_timer
+                    for x in self.entrypoints_below_capacity_limits()
+                }
+
                 jobs = await self.queries.dequeue(
                     batch_size=batch_size,
-                    entrypoints=self.entrypoints_below_capacity_limits(),
-                    entrypoint_timeouts=[
-                        (k, v.heartbeat_interval)
-                        for k, v in self.entrypoint_registry.items()
-                        if v.heartbeat_interval > timedelta(0)
-                    ],
+                    entrypoints=entrypoints,
                 )
 
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
-                    self.job_context[job.id] = models.Context(
-                        cancellation=anyio.CancelScope(),
-                    )
-                    task_manger.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
+                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
                     entrypoint_tally[job.entrypoint] += 1
+
+                    task_manger.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
+
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
@@ -411,7 +411,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                self.entrypoint_registry[job.entrypoint].heartbeat_interval,
+                self.entrypoint_registry[job.entrypoint].retry_timer / 2,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
@@ -420,7 +420,8 @@ class QueueManager:
                 # Run the job unless it has already been cancelled. Check this here because jobs
                 # can be cancelled between when they are dequeued and when the acquire the
                 # concurrency limit semaphore.
-                if not self.get_context(job.id).cancellation.cancel_called:
+                ctx = self.get_context(job.id)
+                if not ctx.cancellation.cancel_called:
                     await self.entrypoint_registry[job.entrypoint](job)
             except Exception:
                 logconfig.logger.exception(
@@ -435,7 +436,7 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                canceled = self.get_context(job.id).cancellation.cancel_called
+                canceled = ctx.cancellation.cancel_called
                 await jbuff.add((job, "canceled" if canceled else "successful"))
             finally:
                 self.job_context.pop(job.id, None)

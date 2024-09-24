@@ -265,8 +265,8 @@ class QueryBuilder:
         return f"""WITH
     entrypoint_retry_timeout AS (
         SELECT
-            unnest($3::interval[]) AS retry_after,
-            unnest($4::text[]) AS entrypoint
+            unnest($2::text[]) AS entrypoint,
+            unnest($3::interval[]) AS retry_after
     ),
     next_job_queued AS (
         SELECT id
@@ -286,6 +286,7 @@ class QueryBuilder:
         WHERE
                 {self.settings.queue_table}.entrypoint = ANY($2)
             AND status = 'picked'
+            AND entrypoint_retry_timeout.retry_after > interval '0'
             AND heartbeat < NOW() - entrypoint_retry_timeout.retry_after
         ORDER BY heartbeat DESC, id ASC
         FOR UPDATE SKIP LOCKED
@@ -643,8 +644,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: set[str],
-        entrypoint_timeouts: list[tuple[str, timedelta]],
+        entrypoints: dict[str, timedelta],
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -673,9 +673,8 @@ class Queries:
         rows = await self.driver.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
-            list(entrypoints),
-            [x for _, x in entrypoint_timeouts],
-            [x for x, _ in entrypoint_timeouts],
+            list(entrypoints.keys()),
+            list(entrypoints.values()),
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 

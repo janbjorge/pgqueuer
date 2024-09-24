@@ -50,15 +50,17 @@ Repository = "https://github.com/janbjorge/pgqueuer/"
 asyncpg = ["asyncpg"]
 psycopg = ["psycopg>=3.2.0"]
 dev = [
-    "asyncpg",
+    "async-timeout>=4.0.3",
     "asyncpg-stubs",
+    "asyncpg",
     "fastapi",
     "httpx",
-    "mypy",
+    "icecream>=2.1.3",
     "mypy-extensions",
+    "mypy",
     "psycopg>=3.2.0",
-    "pytest",
     "pytest-asyncio",
+    "pytest",
     "ruff",
     "tqdm",
     "types-tabulate",
@@ -109,8 +111,3 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function" 
-
-[tool.uv]
-dev-dependencies = [
-    "icecream>=2.1.3",
-]
