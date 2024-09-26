@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import os
+import re
 from datetime import timedelta
 from typing import Final, Generator, overload
 
@@ -35,7 +36,19 @@ def add_prefix(string: str) -> str:
         str: The string with the prefix appended.
     """
 
-    return f"{os.environ.get('PGQUEUER_PREFIX', '')}{string}"
+    env = os.environ.get("PGQUEUER_PREFIX", "")
+    # - Starts with a letter or underscore
+    # - Contains only letters, numbers, and underscores
+    # - No dots or special characters
+    if env and not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", env):
+        raise ValueError(
+            "Invalid prefix: The 'PGQUEUER_PREFIX' environment variable must "
+            "start with a letter or underscore and contain only letters, "
+            "numbers, and underscores. It cannot contain '.', spaces, or "
+            "other special characters."
+        )
+
+    return f"{env}{string}"
 
 
 @dataclasses.dataclass
