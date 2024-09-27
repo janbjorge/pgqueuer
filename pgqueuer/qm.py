@@ -317,7 +317,7 @@ class QueueManager:
                 flush_callable=self.queries.log_jobs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
-                max_size=batch_size,
+                max_size=sys.maxsize,
                 timeout=helpers.retry_timer_buffer_timeout(
                     [x.retry_timer for x in self.entrypoint_registry.values()]
                 ),
