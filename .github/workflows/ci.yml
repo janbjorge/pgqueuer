@@ -91,8 +91,60 @@ jobs:
           pip install pip -U
           pip install ".[dev]"
 
+      - name: Set ISO Timestamp
+        id: timestamp
+        run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
+
       - name: Benchmark
-        run: PYTHONUNBUFFERED=1 python3 tools/benchmark.py --driver ${{ matrix.pgdriver }}
+        run: |
+            PYTHONUNBUFFERED=1 python3 tools/benchmark.py \
+              --driver ${{ matrix.pgdriver }} \
+              --output-json benchmark.json
+
+      - name: Commit and Push to Artifact Repository
+        env:
+          ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
+          ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
+        run: |
+          # Clone the artifacts repository
+          git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge//artifacts-storage.git artifacts-repo
+
+          # Copy the benchmark JSON file to the artifacts repository
+          mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
+          cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
+
+          # Navigate to the artifacts repository
+          cd artifacts-repo
+
+          # Configure Git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Add the new benchmark file
+          git add .
+
+          # Commit the changes
+          git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
+
+          # Push to the main branch of the artifacts repository
+          # Function to push with retry
+          push_with_retry() {
+            local retries=5
+            local count=0
+            until git push origin main; do
+              count=$((count + 1))
+              if [ $count -ge $retries ]; then
+                echo "Push failed after $retries attempts."
+                exit 1
+              fi
+              echo "Push failed, attempting to pull and retry... ($count/$retries)"
+              git fetch origin main
+              git merge origin/main --no-edit
+            done
+          }
+
+          # Push to the main branch with retry
+          push_with_retry
 
   test-pgqueuer:
     strategy:
