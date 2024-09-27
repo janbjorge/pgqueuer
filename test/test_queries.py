@@ -32,7 +32,10 @@ async def test_queries_next_jobs(
     )
 
     seen = list[int]()
-    while jobs := await q.dequeue(entrypoints={"placeholder"}, batch_size=10):
+    while jobs := await q.dequeue(
+        batch_size=10,
+        entrypoints={"placeholder": timedelta(days=1)},
+    ):
         for job in jobs:
             payoad = job.payload
             assert payoad is not None
@@ -61,7 +64,7 @@ async def test_queries_next_jobs_concurrent(
 
     async def consumer() -> None:
         while jobs := await q.dequeue(
-            entrypoints={"placeholder"},
+            entrypoints={"placeholder": timedelta(days=1)},
             batch_size=10,
         ):
             for job in jobs:
@@ -104,8 +107,8 @@ async def test_move_job_log(
     )
 
     while jobs := await q.dequeue(
-        entrypoints={"placeholder"},
         batch_size=10,
+        entrypoints={"placeholder": timedelta(days=1)},
     ):
         for job in jobs:
             await q.log_jobs([(job, "successful")])
@@ -172,7 +175,7 @@ async def test_queue_priority(
     )
 
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder"},
+        entrypoints={"placeholder": timedelta(days=1)},
         batch_size=10,
     ):
         for job in next_jobs:
@@ -198,35 +201,46 @@ async def test_queue_retry_timer(
     )
 
     # Pick all jobs, and mark then as "in progress"
-    while _ := await q.dequeue(batch_size=10, entrypoints={"placeholder"}):
+    while _ := await q.dequeue(
+        batch_size=10,
+        entrypoints={"placeholder": timedelta(days=1)},
+    ):
         ...
-    assert len(await q.dequeue(batch_size=10, entrypoints={"placeholder"})) == 0
+
+    assert (
+        len(
+            await q.dequeue(
+                batch_size=10,
+                entrypoints={"placeholder": timedelta(days=1)},
+            ),
+        )
+        == 0
+    )
 
     # Sim. slow entrypoint function.
     await asyncio.sleep(retry_timer.total_seconds())
 
     # Re-fetch, should get the same number of jobs as queued (N).
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder"},
+        entrypoints={"placeholder": retry_timer},
         batch_size=10,
-        retry_timer=retry_timer,
     ):
         jobs.extend(next_jobs)
 
     assert len(jobs) == N
 
 
-async def test_queue_retry_timer_negative_raises(apgdriver: db.Driver) -> None:
-    with pytest.raises(ValueError):
-        await queries.Queries(apgdriver).dequeue(
-            entrypoints={"placeholder"},
-            batch_size=10,
-            retry_timer=-timedelta(seconds=0.001),
-        )
+# async def test_queue_retry_timer_negative_raises(apgdriver: db.Driver) -> None:
+#     with pytest.raises(ValueError):
+#         await queries.Queries(apgdriver).dequeue(
+#             entrypoints={"placeholder"},
+#             batch_size=10,
+#             retry_timer=-timedelta(seconds=0.001),
+#         )
 
-    with pytest.raises(ValueError):
-        await queries.Queries(apgdriver).dequeue(
-            entrypoints={"placeholder"},
-            batch_size=10,
-            retry_timer=timedelta(seconds=-0.001),
-        )
+#     with pytest.raises(ValueError):
+#         await queries.Queries(apgdriver).dequeue(
+#             entrypoints={"placeholder"},
+#             batch_size=10,
+#             retry_timer=timedelta(seconds=-0.001),
+#         )

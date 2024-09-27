@@ -155,6 +155,7 @@ class QueryBuilder:
         priority INT NOT NULL,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         payload BYTEA
@@ -261,7 +262,13 @@ class QueryBuilder:
             str: The SQL query string for dequeuing jobs.
         """
 
-        return f"""WITH next_job_queued AS (
+        return f"""WITH
+    entrypoint_retry_timeout AS (
+        SELECT
+            unnest($2::text[]) AS entrypoint,
+            unnest($3::interval[]) AS retry_after
+    ),
+    next_job_queued AS (
         SELECT id
         FROM {self.settings.queue_table}
         WHERE
@@ -274,11 +281,14 @@ class QueryBuilder:
     next_job_retry AS (
         SELECT id
         FROM {self.settings.queue_table}
+        INNER JOIN entrypoint_retry_timeout ON
+            entrypoint_retry_timeout.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-                entrypoint = ANY($2)
+                {self.settings.queue_table}.entrypoint = ANY($2)
             AND status = 'picked'
-            AND ($3::interval IS NOT NULL AND updated < NOW() - $3::interval)
-        ORDER BY updated DESC, id ASC
+            AND entrypoint_retry_timeout.retry_after > interval '0'
+            AND heartbeat < NOW() - entrypoint_retry_timeout.retry_after
+        ORDER BY heartbeat DESC, id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
@@ -287,12 +297,12 @@ class QueryBuilder:
         FROM (
             SELECT id FROM next_job_queued
             UNION ALL
-            SELECT id FROM next_job_retry WHERE $3::interval IS NOT NULL
+            SELECT id FROM next_job_retry
         ) AS combined
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW()
+        SET status = 'picked', updated = NOW(), heartbeat = NOW()
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     )
@@ -534,6 +544,8 @@ class QueryBuilder:
     END;
     $$ LANGUAGE plpgsql;"""
         yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         """
@@ -580,6 +592,9 @@ class QueryBuilder:
             str: The SQL command string to send a notification.
         """
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
+
+    def create_notify_activity_query(self) -> str:
+        return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
 
 @dataclasses.dataclass
@@ -629,8 +644,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: set[str],
-        retry_timer: timedelta | None = None,
+        entrypoints: dict[str, timedelta],
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -656,14 +670,11 @@ class Queries:
         if batch_size < 1:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
-        if retry_timer and retry_timer < timedelta(seconds=0):
-            raise ValueError("Retry timer must be a non-negative timedelta")
-
         rows = await self.driver.fetch(
             self.qb.create_dequeue_query(),
             batch_size,
-            list(entrypoints),
-            retry_timer,
+            list(entrypoints.keys()),
+            list(entrypoints.values()),
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
@@ -874,6 +885,25 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def has_heartbeat_column(self) -> bool:
+        """
+        Check if the 'heartbeat' column exists in the queue table.
+
+        Determines whether the 'heartbeat' timestamp column is present in the queue
+        table, which is necessary for certain queue operations, such as retrying jobs.
+
+        Returns:
+            bool: True if the 'heartbeat' column exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qb.create_has_column_query(),
+            self.qb.settings.queue_table,
+            "heartbeat",
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def has_user_type(
         self,
         key: str,
@@ -942,4 +972,10 @@ class Queries:
                 sent_at=helpers.perf_counter_dt(),
                 type="cancellation_event",
             ).model_dump_json(),
+        )
+
+    async def notify_activity(self, job_ids: list[models.JobId]) -> None:
+        await self.driver.execute(
+            self.qb.create_notify_activity_query(),
+            list(set(job_ids)),
         )

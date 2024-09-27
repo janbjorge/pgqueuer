@@ -138,6 +138,7 @@ class Job(BaseModel):
     id: JobId
     priority: int
     created: AwareDatetime
+    heartbeat: AwareDatetime
     status: STATUS
     entrypoint: str
     payload: bytes | None

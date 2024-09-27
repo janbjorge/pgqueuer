@@ -63,3 +63,15 @@ def wait_for_notice_event(
         return None
 
     return asyncio.create_task(suppressed_timeout())
+
+
+def retry_timer_buffer_timeout(
+    dts: list[timedelta],
+    *,
+    _default: timedelta = timedelta(hours=24),
+    _t0: timedelta = timedelta(seconds=0),
+) -> timedelta:
+    try:
+        return min(dt for dt in dts if dt > _t0)
+    except ValueError:
+        return _default

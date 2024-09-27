@@ -4,16 +4,18 @@ from datetime import timedelta
 
 import pytest
 
+from pgqueuer.buffers import JobStatusLogBuffer
 from pgqueuer.helpers import perf_counter_dt
 from pgqueuer.models import Job
-from pgqueuer.qm import JobTimedOverflowBuffer
 
 
 def job_faker() -> Job:
+    dt = perf_counter_dt()
     return Job(
         id=random.choice(range(1_000_000_000)),
         priority=0,
-        created=perf_counter_dt(),
+        created=dt,
+        heartbeat=dt,
         status="picked",
         entrypoint="foo",
         payload=None,
@@ -27,7 +29,7 @@ async def test_job_buffer_max_size(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -51,7 +53,7 @@ async def test_job_buffer_timeout(
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=N * 2,
         timeout=timeout,
         flush_callable=helper,
@@ -79,7 +81,7 @@ async def test_job_buffer_flush_on_exit(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -105,7 +107,7 @@ async def test_job_buffer_multiple_flushes(max_size: int) -> None:
         flush_call_count += 1
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -134,7 +136,7 @@ async def test_job_buffer_flush_on_exception(max_size: int) -> None:
             raise RuntimeError("Simulated flush failure")
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=0.01),
         flush_callable=faulty_helper,
@@ -160,7 +162,7 @@ async def test_job_buffer_flush_order(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -182,7 +184,7 @@ async def test_job_buffer_no_flush_before_timeout(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=0.1),
         flush_callable=helper,
@@ -209,7 +211,7 @@ async def test_job_buffer_concurrent_adds(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -236,7 +238,7 @@ async def test_job_buffer_empty_flush() -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=10,
         timeout=timedelta(seconds=0.1),
         flush_callable=helper,
@@ -257,7 +259,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
     async def helper(x: list) -> None:
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,
@@ -291,7 +293,7 @@ async def test_job_buffer_exception_during_flush(max_size: int) -> None:
             raise RuntimeError("Simulated flush failure")
         helper_buffer.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=0.01),
         flush_callable=faulty_helper,
@@ -317,7 +319,7 @@ async def test_job_buffer_flush_callable_called_correctly(max_size: int) -> None
     async def helper(x: list) -> None:
         received_items.extend(x)
 
-    async with JobTimedOverflowBuffer(
+    async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
         flush_callable=helper,

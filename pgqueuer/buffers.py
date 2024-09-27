@@ -22,7 +22,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from . import helpers, logconfig
+from . import helpers, logconfig, models
 
 T = TypeVar("T")
 
@@ -128,13 +128,11 @@ class TimedOverflowBuffer(Generic[T]):
             AsyncGenerator[T, None]: An asynchronous generator yielding items.
         """
         start_time = helpers.perf_counter_dt()
-        for _ in range(2 * self.max_size):
-            if not self.events.empty() and (helpers.perf_counter_dt() - start_time) < (
-                self.timeout * 2
-            ):
-                yield await self.events.get()
-            else:
+        for _ in range(self.max_size):
+            if self.events.empty() or helpers.perf_counter_dt() - start_time > self.timeout:
                 break
+
+            yield await self.events.get()
 
     async def flush(self) -> None:
         """
@@ -189,3 +187,22 @@ class TimedOverflowBuffer(Generic[T]):
 
         async with self.lock:
             await self.flush()
+
+
+class JobStatusLogBuffer(
+    TimedOverflowBuffer[
+        tuple[
+            models.Job,
+            models.STATUS_LOG,
+        ]
+    ]
+):
+    """
+    Specialized TimedOverflowBuffer for handling Job/Status-log.
+    """
+
+
+class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
+    """
+    Specialized TimedOverflowBuffer for handling heartbeats.
+    """
