@@ -91,8 +91,46 @@ jobs:
           pip install pip -U
           pip install ".[dev]"
 
+      - name: Set ISO Timestamp
+        id: timestamp
+        run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
+
       - name: Benchmark
-        run: PYTHONUNBUFFERED=1 python3 tools/benchmark.py --driver ${{ matrix.pgdriver }}
+        run: |
+            PYTHONUNBUFFERED=1 python3 tools/benchmark.py \
+              --driver ${{ matrix.pgdriver }} \
+              --output-json benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json
+
+      - name: Upload Benchmark Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}
+          path: benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json
+
+  list-benchmark-results:
+    needs: benchmark
+    runs-on: ubuntu-latest
+    name: List Benchmark Results
+    steps:
+      - name: Download All Benchmark Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmarks
+          path: benchmarks
+
+      - name: List artifacts
+        run: |
+          echo "Listing all artifact JSON files:"
+          find benchmarks -name "*.json"
+
+      - name: Display Contents of Each JSON
+        run: |
+          echo "Contents of benchmark JSON files:"
+          for file in benchmarks/**/*.json; do
+            echo "----- Contents of $file -----"
+            cat "$file"
+            echo ""
+          done
 
   test-pgqueuer:
     strategy:

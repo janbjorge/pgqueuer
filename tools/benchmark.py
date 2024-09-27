@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import random
 import signal
 import sys
 from contextlib import suppress
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from itertools import count, groupby
+from typing import Literal
 
+from pydantic import AwareDatetime, BaseModel
 from tqdm.asyncio import tqdm
 
 from pgqueuer.cli import querier
@@ -16,6 +19,14 @@ from pgqueuer.db import dsn
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
+
+
+class BenchmarkResult(BaseModel):
+    driver: Literal["apg", "apgpool", "psy"]
+    created_at: AwareDatetime
+    steps: int
+    rate: float
+    elapsed: timedelta
 
 
 async def consumer(
@@ -126,6 +137,13 @@ def cli_parser() -> argparse.Namespace:
         default=[sys.maxsize, sys.maxsize],
         help=f"Concurrency limit for endporints given as a list, defautl is '{sys.maxsize}'.",
     )
+    parser.add_argument(
+        "-o",
+        "--output-json",
+        type=str,
+        default=None,
+        help="Path to the output JSON file for benchmark metrics.",
+    )
     return parser.parse_args()
 
 
@@ -143,6 +161,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
     alive = asyncio.Event()
     qms = list[QueueManager]()
+    tqdm_format_dict = {}
 
     async def enqueue(alive: asyncio.Event) -> None:
         cnt = count()
@@ -179,6 +198,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
                 for q in qms
             ]
             await asyncio.gather(*consumers)
+            tqdm_format_dict.update(bar.format_dict)
 
     async def dequeue_alive_timer(
         qms: list[QueueManager],
@@ -218,6 +238,19 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     print("Queue size:")
     for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
         print(f"  {status} {sum(x.count for x in items)}")
+
+    if tqdm_format_dict and args.output_json:
+        with open(args.output_json, "w") as f:
+            json.dump(
+                BenchmarkResult(
+                    driver=args.driver,
+                    created_at=datetime.now(timezone.utc),
+                    elapsed=tqdm_format_dict["elapsed"],
+                    rate=tqdm_format_dict["rate"],
+                    steps=tqdm_format_dict["n"],
+                ).model_dump(mode="json"),
+                f,
+            )
 
 
 if __name__ == "__main__":
