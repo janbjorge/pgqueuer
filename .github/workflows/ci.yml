@@ -127,7 +127,24 @@ jobs:
           git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
 
           # Push to the main branch of the artifacts repository
-          git push origin main
+          # Function to push with retry
+          push_with_retry() {
+            local retries=5
+            local count=0
+            until git push origin main; do
+              count=$((count + 1))
+              if [ $count -ge $retries ]; then
+                echo "Push failed after $retries attempts."
+                exit 1
+              fi
+              echo "Push failed, attempting to pull and retry... ($count/$retries)"
+              git fetch origin main
+              git merge origin/main --no-edit
+            done
+          }
+
+          # Push to the main branch with retry
+          push_with_retry
 
   test-pgqueuer:
     strategy:
