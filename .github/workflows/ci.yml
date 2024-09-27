@@ -91,42 +91,43 @@ jobs:
           pip install pip -U
           pip install ".[dev]"
 
+      - name: Set ISO Timestamp
+        id: timestamp
+        run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
+
       - name: Benchmark
         run: |
             PYTHONUNBUFFERED=1 python3 tools/benchmark.py \
               --driver ${{ matrix.pgdriver }} \
               --output-json benchmark.json
 
-      - name: Upload Benchmark Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-${{ matrix.pgdriver }}
-          path: benchmark.json
+      - name: Commit and Push to Artifact Repository
+        env:
+          ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
+          ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
+        run: |
+          # Clone the artifacts repository
+          git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge//artifacts-storage.git artifacts-repo
 
-  list-benchmark-results:
-    needs: benchmark
-    runs-on: ubuntu-latest
-    name: List Benchmark Results
-    steps:
-      - name: Download All Benchmark Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: benchmarks
-          pattern: benchmark-*
+          # Copy the benchmark JSON file to the artifacts repository
+          mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
+          cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
 
-      - name: List artifacts
-        run: tree
-      #     echo "Listing all artifact JSON files:"
-      #     find benchmarks -name "*.json"
+          # Navigate to the artifacts repository
+          cd artifacts-repo
 
-      # - name: Display Contents of Each JSON
-      #   run: |
-      #     echo "Contents of benchmark JSON files:"
-      #     for file in benchmarks/**/*.json; do
-      #       echo "----- Contents of $file -----"
-      #       cat "$file"
-      #       echo ""
-      #     done
+          # Configure Git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Add the new benchmark file
+          git add .
+
+          # Commit the changes
+          git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
+
+          # Push to the main branch of the artifacts repository
+          git push origin main
 
   test-pgqueuer:
     strategy:
