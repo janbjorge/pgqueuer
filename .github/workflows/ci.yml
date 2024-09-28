@@ -95,6 +95,15 @@ jobs:
         id: timestamp
         run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
 
+      - name: Set Branch or Tag Name
+        id: get_ref
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+          else
+            echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+          fi
+
       - name: Benchmark
         run: |
             PYTHONUNBUFFERED=1 python3 tools/benchmark.py \
@@ -107,7 +116,7 @@ jobs:
           ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
         run: |
           # Clone the artifacts repository
-          git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge//artifacts-storage.git artifacts-repo
+          git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
 
           # Copy the benchmark JSON file to the artifacts repository
           mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
@@ -139,7 +148,7 @@ jobs:
               fi
               echo "Push failed, attempting to pull and retry... ($count/$retries)"
               git fetch origin main
-              git merge origin/main --no-edit
+              git rebase origin/main --autosquash
             done
           }
 

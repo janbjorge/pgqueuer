@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import random
 import signal
 import sys
@@ -22,11 +23,12 @@ from pgqueuer.queries import Queries
 
 
 class BenchmarkResult(BaseModel):
-    driver: Literal["apg", "apgpool", "psy"]
     created_at: AwareDatetime
-    steps: int
-    rate: float
+    driver: Literal["apg", "apgpool", "psy"]
     elapsed: timedelta
+    github_ref_name: str
+    rate: float
+    steps: int
 
 
 async def consumer(
@@ -248,6 +250,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
                     elapsed=tqdm_format_dict["elapsed"],
                     rate=tqdm_format_dict["rate"],
                     steps=tqdm_format_dict["n"],
+                    github_ref_name=os.environ.get("REF_NAME", ""),
                 ).model_dump(mode="json"),
                 f,
             )
