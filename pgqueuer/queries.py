@@ -263,50 +263,64 @@ class QueryBuilder:
         """
 
         return f"""WITH
-    entrypoint_retry_timeout AS (
+    entrypoint_settings AS (
         SELECT
-            unnest($2::text[]) AS entrypoint,
-            unnest($3::interval[]) AS retry_after
+            unnest($2::text[])      AS entrypoint,
+            unnest($3::interval[])  AS retry_after,
+            unnest($4::integer[])   AS concurrency_limit
     ),
     next_job_queued AS (
-        SELECT id
-        FROM {self.settings.queue_table}
+        SELECT qt.id, qt.entrypoint
+        FROM {self.settings.queue_table} qt
         WHERE
-                entrypoint = ANY($2)
-            AND status = 'queued'
-        ORDER BY priority DESC, id ASC
+                qt.entrypoint = ANY($2)
+            AND qt.status = 'queued'
+        ORDER BY qt.priority DESC, qt.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
     next_job_retry AS (
-        SELECT id
-        FROM {self.settings.queue_table}
-        INNER JOIN entrypoint_retry_timeout ON
-            entrypoint_retry_timeout.entrypoint = {self.settings.queue_table}.entrypoint
+        SELECT qt.id, qt.entrypoint
+        FROM {self.settings.queue_table} qt
+        INNER JOIN entrypoint_settings es ON
+            es.entrypoint = qt.entrypoint
         WHERE
-                {self.settings.queue_table}.entrypoint = ANY($2)
-            AND status = 'picked'
-            AND entrypoint_retry_timeout.retry_after > interval '0'
-            AND heartbeat < NOW() - entrypoint_retry_timeout.retry_after
-        ORDER BY heartbeat DESC, id ASC
+                qt.entrypoint = ANY($2)
+            AND qt.status = 'picked'
+            AND es.retry_after > interval '0'
+            AND qt.heartbeat < NOW() - es.retry_after
+        ORDER BY qt.heartbeat DESC, qt.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
     combined_jobs AS (
-        SELECT DISTINCT id
-        FROM (
-            SELECT id FROM next_job_queued
-            UNION ALL
-            SELECT id FROM next_job_retry
-        ) AS combined
+        SELECT id, entrypoint
+        FROM next_job_queued
+        UNION ALL
+        SELECT id, entrypoint
+        FROM next_job_retry
+    ),
+    job_counts AS (
+        SELECT
+            cj.entrypoint,
+            COUNT(*) AS job_count
+        FROM combined_jobs cj
+        GROUP BY cj.entrypoint
+    ),
+    filtered_jobs AS (
+        SELECT cj.id
+        FROM combined_jobs cj
+        JOIN job_counts jc ON cj.entrypoint = jc.entrypoint
+        JOIN entrypoint_settings es ON es.entrypoint = jc.entrypoint
+        WHERE jc.job_count <= es.concurrency_limit
     ),
     updated AS (
-        UPDATE {self.settings.queue_table}
+        UPDATE {self.settings.queue_table} qt
         SET status = 'picked', updated = NOW(), heartbeat = NOW()
-        WHERE id = ANY(SELECT id FROM combined_jobs)
+        WHERE qt.id = ANY(SELECT id FROM filtered_jobs)
         RETURNING *
     )
-    SELECT * FROM updated ORDER BY priority DESC, id ASC
+    SELECT * FROM updated ORDER BY priority DESC, id ASC;
     """
 
     def create_enqueue_query(self) -> str:
@@ -644,7 +658,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, timedelta],
+        entrypoints: dict[str, tuple[timedelta, int]],
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -674,7 +688,8 @@ class Queries:
             self.qb.create_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
-            list(entrypoints.values()),
+            [t for t, _ in entrypoints.values()],
+            [c for _, c in entrypoints.values()],
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 

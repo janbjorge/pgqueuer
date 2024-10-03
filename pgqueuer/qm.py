@@ -89,11 +89,13 @@ class JobExecutor:
         func: Entrypoint,
         requests_per_second: float,
         retry_timer: timedelta,
+        concurrency_limit: int,
     ) -> None:
         self.func = func
         self.requests_per_second = requests_per_second
         self.retry_timer = retry_timer
         self.is_async = is_async_callable(func)
+        self.concurrency_limit = concurrency_limit
 
     async def __call__(self, job: models.Job) -> None:
         """
@@ -216,10 +218,10 @@ class QueueManager:
                 func=func,
                 requests_per_second=requests_per_second,
                 retry_timer=retry_timer,
+                concurrency_limit=concurrency_limit,
             )
             self.entrypoint_statistics[name] = models.EntrypointStatistics(
                 samples=deque(maxlen=1_000),
-                concurrency_limiter=asyncio.Semaphore(concurrency_limit or sys.maxsize),
             )
             return func
 
@@ -258,7 +260,6 @@ class QueueManager:
             entrypoint
             for entrypoint, fn in self.entrypoint_registry.items()
             if self.observed_requests_per_second(entrypoint) < fn.requests_per_second
-            and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
     async def run(
@@ -337,7 +338,10 @@ class QueueManager:
 
             while not self.alive.is_set():
                 entrypoints = {
-                    x: self.entrypoint_registry[x].retry_timer
+                    x: (
+                        self.entrypoint_registry[x].retry_timer,
+                        self.entrypoint_registry[x].concurrency_limit,
+                    )
                     for x in self.entrypoints_below_capacity_limits()
                 }
 
@@ -408,13 +412,10 @@ class QueueManager:
             job.id,
         )
 
-        async with (
-            heartbeat.Heartbeat(
-                job.id,
-                self.entrypoint_registry[job.entrypoint].retry_timer / 2,
-                hbuff,
-            ),
-            self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
+        async with heartbeat.Heartbeat(
+            job.id,
+            self.entrypoint_registry[job.entrypoint].retry_timer / 2,
+            hbuff,
         ):
             try:
                 # Run the job unless it has already been cancelled. Check this here because jobs

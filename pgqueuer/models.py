@@ -184,4 +184,3 @@ class Context:
 @dataclasses.dataclass
 class EntrypointStatistics:
     samples: deque[tuple[int, datetime]]
-    concurrency_limiter: asyncio.Semaphore
