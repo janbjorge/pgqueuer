@@ -92,7 +92,7 @@ def cli_parser() -> argparse.Namespace:
         "-t",
         "--timer",
         type=lambda x: timedelta(seconds=float(x)),
-        default=timedelta(seconds=10),
+        default=timedelta(seconds=30),
         help="Run the benchmark for a specified number of seconds. Default is 10.",
     )
 

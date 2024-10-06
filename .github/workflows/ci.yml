@@ -133,7 +133,7 @@ jobs:
           push_with_retry
 
   validate-benchmark:
-    # needs: [run-benchmark]
+    needs: [run-benchmark]
     strategy:
       fail-fast: false
       matrix:
