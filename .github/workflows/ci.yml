@@ -1,4 +1,4 @@
-name: Test PGQueuer
+name: PGQueuer CI Pipeline
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  example:
+  run-example:
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +21,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: PGQueuer example
+    name: Run PGQueuer Example
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -33,7 +33,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build custom PostgreSQL Docker image
+      - name: Build PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
       - name: Install PGQueuer
@@ -41,22 +41,15 @@ jobs:
           pip install pip -U
           pip install ".[dev]"
 
-      - name: Run example and send SIGINT
+      - name: Run Example with SIGINT
         run: |
-          # Start the Python program in the background
           PYTHONUNBUFFERED=1 python3 -m pgqueuer run tools.consumer.main &
           pid=$!
-
-          # Wait for 10 seconds
           sleep 10
-
-          # Send SIGINT to the process
           kill -SIGINT $pid
-
-          # Wait for the process to exit
           wait $pid
 
-  benchmark:
+  run-benchmark:
     strategy:
       fail-fast: false
       matrix:
@@ -71,7 +64,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: pgqueuer Benchmark
+    name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -83,10 +76,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build custom PostgreSQL Docker image
+      - name: Build PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
-      - name: Install pgqueuer
+      - name: Install PGQueuer
         run: |
           pip install pip -U
           pip install ".[dev]"
@@ -110,33 +103,19 @@ jobs:
               --driver ${{ matrix.pgdriver }} \
               --output-json benchmark.json
 
-      - name: Commit and Push to Artifact Repository
+      - name: Commit and Push Benchmark to Artifact Repository
         env:
           ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
           ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
         run: |
-          # Clone the artifacts repository
           git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
-
-          # Copy the benchmark JSON file to the artifacts repository
           mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
           cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
-
-          # Navigate to the artifacts repository
           cd artifacts-repo
-
-          # Configure Git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Add the new benchmark file
           git add .
-
-          # Commit the changes
           git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
-
-          # Push to the main branch of the artifacts repository
-          # Function to push with retry
           push_with_retry() {
             local retries=5
             local count=0
@@ -151,11 +130,49 @@ jobs:
               git rebase origin/main --autosquash
             done
           }
-
-          # Push to the main branch with retry
           push_with_retry
 
-  test-pgqueuer:
+  validate-benchmark:
+    # needs: [run-benchmark]
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+        os: [ubuntu-latest]
+
+    name: Validate Benchmark Results
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set Branch or Tag Name
+        id: get_ref
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+          else
+            echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+          fi
+
+      - name: Clone Artifact Repository
+        run: git clone https://github.com/janbjorge/artifacts-storage.git
+
+      - name: Install Dependencies
+        run: pip install pydantic
+
+      - name: Validate RPS Against Main
+        run: |
+          cd artifacts-storage
+          PYTHONUNBUFFERED=1 python3 pgqueuer/compare_rps_main.py
+
+  run-tests:
     strategy:
       fail-fast: false
       matrix:
@@ -170,7 +187,7 @@ jobs:
       PGDATABASE: testdb
       PGPORT: 5432
 
-    name: Python ${{ matrix.python-version }} on ${{ matrix.os }} using PG ${{ matrix.postgres-version }}
+    name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
@@ -182,7 +199,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build custom PostgreSQL Docker image
+      - name: Build PostgreSQL Docker Image
         run: |
           POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
       - name: Install PGQueuer
@@ -190,42 +207,42 @@ jobs:
           pip install pip -U
           pip install ".[dev]"
 
-      - name: Full test
+      - name: Run Full Test Suite
         run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 pytest -v
 
-  ruff:
+  run-ruff:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up python
+      - name: Set up Python
         uses: actions/setup-python@v4
-      - name: Install dev-env.
+      - name: Install Dev Environment
         run: |
           pip install -U pip
           pip install ".[dev]"
-      - name: Ruff check
+      - name: Run Ruff Linter
         if: ${{ always() }}
         run: ruff check .
-      - name: Ruff format
+      - name: Apply Ruff Formatting
         if: ${{ always() }}
         run: ruff format . --check
 
-  mypy:
+  run-mypy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up python
+      - name: Set up Python
         uses: actions/setup-python@v4
-      - name: Install dev-env.
+      - name: Install Dev Environment
         run: |
           pip install -U pip
           pip install ".[dev]"
-      - name: Mypy
+      - name: Run Mypy Type Check
         run: mypy .
 
-  all-tests-completed:
-    needs: [benchmark, test-pgqueuer, ruff, mypy]
+  complete-pipeline:
+    needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
     runs-on: ubuntu-latest
     steps:
-      - name: Check all jobs success
+      - name: Confirm All Tests Completed
         run: echo "All tests completed successfully."
