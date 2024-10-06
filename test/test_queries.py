@@ -34,7 +34,7 @@ async def test_queries_next_jobs(
     seen = list[int]()
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": timedelta(days=1)},
+        entrypoints={"placeholder": (timedelta(days=1), False)},
     ):
         for job in jobs:
             payoad = job.payload
@@ -64,7 +64,7 @@ async def test_queries_next_jobs_concurrent(
 
     async def consumer() -> None:
         while jobs := await q.dequeue(
-            entrypoints={"placeholder": timedelta(days=1)},
+            entrypoints={"placeholder": (timedelta(days=1), False)},
             batch_size=10,
         ):
             for job in jobs:
@@ -108,7 +108,7 @@ async def test_move_job_log(
 
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": timedelta(days=1)},
+        entrypoints={"placeholder": (timedelta(days=1), False)},
     ):
         for job in jobs:
             await q.log_jobs([(job, "successful")])
@@ -175,7 +175,7 @@ async def test_queue_priority(
     )
 
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": timedelta(days=1)},
+        entrypoints={"placeholder": (timedelta(days=1), False)},
         batch_size=10,
     ):
         for job in next_jobs:
@@ -203,7 +203,7 @@ async def test_queue_retry_timer(
     # Pick all jobs, and mark then as "in progress"
     while _ := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": timedelta(days=1)},
+        entrypoints={"placeholder": (timedelta(days=1), False)},
     ):
         ...
 
@@ -211,7 +211,7 @@ async def test_queue_retry_timer(
         len(
             await q.dequeue(
                 batch_size=10,
-                entrypoints={"placeholder": timedelta(days=1)},
+                entrypoints={"placeholder": (timedelta(days=1), False)},
             ),
         )
         == 0
@@ -222,7 +222,7 @@ async def test_queue_retry_timer(
 
     # Re-fetch, should get the same number of jobs as queued (N).
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": retry_timer},
+        entrypoints={"placeholder": (retry_timer, False)},
         batch_size=10,
     ):
         jobs.extend(next_jobs)

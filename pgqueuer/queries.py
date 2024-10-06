@@ -263,32 +263,44 @@ class QueryBuilder:
         """
 
         return f"""WITH
-    entrypoint_retry_timeout AS (
+    entrypoint_execution_params AS (
         SELECT
             unnest($2::text[]) AS entrypoint,
-            unnest($3::interval[]) AS retry_after
+            unnest($3::interval[]) AS retry_after,
+            unnest($4::boolean[]) AS serialized
     ),
     next_job_queued AS (
-        SELECT id
+        SELECT {self.settings.queue_table}.id
         FROM {self.settings.queue_table}
+        INNER JOIN entrypoint_execution_params
+        ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-                entrypoint = ANY($2)
-            AND status = 'queued'
-        ORDER BY priority DESC, id ASC
+            {self.settings.queue_table}.entrypoint = ANY($2)
+            AND {self.settings.queue_table}.status = 'queued'
+            AND (
+                NOT entrypoint_execution_params.serialized
+                OR NOT EXISTS (
+                    SELECT 1
+                    FROM {self.settings.queue_table} existing_job
+                    WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
+                    AND existing_job.status = 'picked'
+                )
+            )
+        ORDER BY {self.settings.queue_table}.priority DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
     next_job_retry AS (
-        SELECT id
+        SELECT {self.settings.queue_table}.id
         FROM {self.settings.queue_table}
-        INNER JOIN entrypoint_retry_timeout ON
-            entrypoint_retry_timeout.entrypoint = {self.settings.queue_table}.entrypoint
+        INNER JOIN entrypoint_execution_params
+        ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-                {self.settings.queue_table}.entrypoint = ANY($2)
-            AND status = 'picked'
-            AND entrypoint_retry_timeout.retry_after > interval '0'
-            AND heartbeat < NOW() - entrypoint_retry_timeout.retry_after
-        ORDER BY heartbeat DESC, id ASC
+            {self.settings.queue_table}.entrypoint = ANY($2)
+            AND {self.settings.queue_table}.status = 'picked'
+            AND entrypoint_execution_params.retry_after > interval '0'
+            AND {self.settings.queue_table}.heartbeat < NOW() - entrypoint_execution_params.retry_after
+        ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
     ),
@@ -306,8 +318,8 @@ class QueryBuilder:
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     )
-    SELECT * FROM updated ORDER BY priority DESC, id ASC
-    """
+    SELECT * FROM updated ORDER BY priority DESC, id ASC;
+    """  # noqa
 
     def create_enqueue_query(self) -> str:
         """
@@ -644,7 +656,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, timedelta],
+        entrypoints: dict[str, tuple[timedelta, bool]],
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -674,7 +686,8 @@ class Queries:
             self.qb.create_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
-            list(entrypoints.values()),
+            [t for t, _ in entrypoints.values()],
+            [s for _, s in entrypoints.values()],
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 

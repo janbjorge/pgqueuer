@@ -89,10 +89,12 @@ class JobExecutor:
         func: Entrypoint,
         requests_per_second: float,
         retry_timer: timedelta,
+        serialized_dispatch: bool,
     ) -> None:
         self.func = func
         self.requests_per_second = requests_per_second
         self.retry_timer = retry_timer
+        self.serialized_dispatch = serialized_dispatch
         self.is_async = is_async_callable(func)
 
     async def __call__(self, job: models.Job) -> None:
@@ -181,6 +183,7 @@ class QueueManager:
         requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
+        serialized_dispatch: bool = False,
     ) -> Callable[[T], T]:
         """
         Decorator to register a function as an entrypoint for job processing.
@@ -205,17 +208,30 @@ class QueueManager:
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
+        # Check requests_per_second type / value range.
+        if not isinstance(requests_per_second, (float, int)):
+            raise ValueError("Rate must be float | int.")
+
         if requests_per_second < 0:
             raise ValueError("Rate must be greater or eq. to zero.")
 
+        # Check concurrency_limit type / value range.
+        if not isinstance(concurrency_limit, int):
+            raise ValueError("Concurrency limit must be int.")
+
         if concurrency_limit < 0:
             raise ValueError("Concurrency limit must be greater or eq. to zero.")
+
+        # Check serialized_dispatch type.
+        if not isinstance(serialized_dispatch, bool):
+            raise ValueError("Serialized dispatch must be boolean")
 
         def register(func: T) -> T:
             self.entrypoint_registry[name] = JobExecutor(
                 func=func,
                 requests_per_second=requests_per_second,
                 retry_timer=retry_timer,
+                serialized_dispatch=serialized_dispatch,
             )
             self.entrypoint_statistics[name] = models.EntrypointStatistics(
                 samples=deque(maxlen=1_000),
@@ -337,7 +353,10 @@ class QueueManager:
 
             while not self.alive.is_set():
                 entrypoints = {
-                    x: self.entrypoint_registry[x].retry_timer
+                    x: (
+                        self.entrypoint_registry[x].retry_timer,
+                        self.entrypoint_registry[x].serialized_dispatch,
+                    )
                     for x in self.entrypoints_below_capacity_limits()
                 }
 
