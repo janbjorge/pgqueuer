@@ -5,9 +5,12 @@ on:
     branches: [main]
   push:
     branches: [main]
+  schedule:
+    - cron: "0 */6 * * *"
 
 jobs:
   run-example:
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -173,6 +176,7 @@ jobs:
           PYTHONUNBUFFERED=1 python3 pgqueuer/compare_rps_main.py
 
   run-tests:
+    if: github.event_name != 'schedule'
     strategy:
       fail-fast: false
       matrix:
@@ -211,6 +215,7 @@ jobs:
         run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 pytest -v
 
   run-ruff:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -228,6 +233,7 @@ jobs:
         run: ruff format . --check
 
   run-mypy:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -241,6 +247,7 @@ jobs:
         run: mypy .
 
   complete-pipeline:
+    if: github.event_name != 'schedule'
     needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
     runs-on: ubuntu-latest
     steps:
