@@ -241,8 +241,7 @@ jobs:
         run: mypy .
 
   complete-pipeline:
-    needs: [run-tests, run-ruff, run-mypy, run-example]
-    # needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
+    needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
     runs-on: ubuntu-latest
     steps:
       - name: Confirm All Tests Completed
