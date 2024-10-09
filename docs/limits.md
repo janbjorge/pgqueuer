@@ -37,11 +37,9 @@ Rate limiting in PGQueuer is enhanced by several key components.
 
 **Usage of PostgreSQL NOTIFY**: Essential for broadcasting job count updates and controlling rates. This feature is particularly important for syncing rate limits across multiple workers in a distributed environment, ensuring consistent enforcement across all instances.
 
-
 ### Concurrency Limiting
 
 Users can control the number of concurrent jobs of each type which can run on each consumer. This type of control can be appropriate when jobs use resources local to the consumer, such as compute- or filesystem-bound tasks.
-
 
 #### Setting up Concurrency Limits
 
@@ -63,3 +61,43 @@ async def process_data(job: Job):
 #### Implementation
 
 When `concurrency_limit` is specified, a per-entrypoint semaphore is used to limit the number of concurrent calls to the user's entrypoint function. Additionally, while the semaphore is fully utilized, jobs for the endpoint will not be dequeued. This provides back-pressure to avoid consumers dequeuing more jobs than they can handle. Note that this means that up to `batch_size - 1` jobs may be dequeued by the consumer and waiting for the semaphore at any one time.
+
+### Serialized Dispatch
+Serialized dispatch is a new feature in PGQueuer designed to improve control over how job execution is managed in terms of concurrency. By using the `serialized_dispatch` flag, you can control whether jobs of the same type should be processed strictly in sequence or can be executed concurrently.
+
+This feature is especially useful when you have jobs that modify shared resources and require strict serialization to avoid race conditions.
+
+#### How to Use Serialized Dispatch
+
+You can enable serialized dispatch by passing the `serialized_dispatch` parameter when defining a job entrypoint using `@QueueManager.entrypoint()`.
+
+Example:
+
+```python
+from datetime import timedelta
+from pgqueuer.qm import QueueManager
+
+qm = QueueManager(...)
+
+@qm.entrypoint(
+    "process_shared_resource",
+    serialized_dispatch=True,  # Enforces strict serialization for this entrypoint
+)
+async def process_shared_resource(job):
+    # Job processing logic
+    ...
+```
+
+In this example, jobs registered under the entrypoint `process_shared_resource` will be processed strictly one at a time, ensuring no other jobs of the same type are processed concurrently.
+
+#### Implementation
+
+Serialized dispatch is implemented through several key mechanisms to ensure exclusive processing of jobs:
+
+- **Serialized Dispatch Parameter**: The `serialized_dispatch` parameter is a boolean flag that determines if jobs for a given entrypoint should be strictly serialized (`True`) or can be processed concurrently (`False`).
+
+- **Job Query Changes**: The job selection logic in PGQueuer has been updated to incorporate serialized dispatch by enforcing that, if the `serialized_dispatch` flag is set to `True`, jobs will only be picked if no other jobs are currently marked as "in-progress" (`picked`) for the same entrypoint. This ensures that jobs are processed one at a time.
+
+Serialized dispatch is suitable for jobs that:
+  - Access shared resources and need to ensure no concurrent modifications occur.
+  - Require consistent order of execution to maintain correctness.
