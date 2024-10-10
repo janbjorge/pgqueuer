@@ -38,17 +38,18 @@ jobs:
           cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
+        run: |
+          uv python install ${{ matrix.python-version }}
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install '.[dev]'
 
       - name: Build PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
-      - name: Install PGQueuer
-        run: uv sync --all-extras --dev
-
       - name: Run Example with SIGINT
         run: |
-          PYTHONUNBUFFERED=1 uv run python3 -m pgqueuer run tools.consumer.main &
+          source .venv/bin/activate
+          PYTHONUNBUFFERED=1 python3 -m pgqueuer run tools.consumer.main &
           pid=$!
           sleep 10
           kill -SIGINT $pid
