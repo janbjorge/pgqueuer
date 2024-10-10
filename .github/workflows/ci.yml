@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.12"]
         os: [ubuntu-latest]
 
     env:
@@ -31,22 +31,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Build PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
       - name: Install PGQueuer
-        run: |
-          pip install pip -U
-          pip install ".[dev]"
+        run: uv sync --all-extras --dev
 
       - name: Run Example with SIGINT
         run: |
-          PYTHONUNBUFFERED=1 python3 -m pgqueuer run tools.consumer.main &
+          PYTHONUNBUFFERED=1 uv run python3 -m pgqueuer run tools.consumer.main &
           pid=$!
           sleep 10
           kill -SIGINT $pid
@@ -56,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.12"]
         os: [ubuntu-latest]
         pgdriver: ["apg", "apgpool", "psy"]
 
@@ -74,18 +76,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Build PostgreSQL Docker image
         run: docker compose up --build -d pgq
 
       - name: Install PGQueuer
-        run: |
-          pip install pip -U
-          pip install ".[dev]"
+        run: uv sync --all-extras --dev
 
       - name: Set ISO Timestamp
         id: timestamp
@@ -102,7 +106,7 @@ jobs:
 
       - name: Benchmark
         run: |
-            PYTHONUNBUFFERED=1 python3 tools/benchmark.py \
+            PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
               --driver ${{ matrix.pgdriver }} \
               --output-json benchmark.json
 
@@ -140,7 +144,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11"]
+        python-version: ["3.12"]
         os: [ubuntu-latest]
 
     name: Validate Benchmark Results
@@ -150,10 +154,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Set Branch or Tag Name
         id: get_ref
@@ -168,12 +176,12 @@ jobs:
         run: git clone https://github.com/janbjorge/artifacts-storage.git
 
       - name: Install Dependencies
-        run: pip install pydantic
+        run: uv venv && uv pip install pydantic
 
       - name: Validate RPS Against Main
         run: |
           cd artifacts-storage
-          PYTHONUNBUFFERED=1 python3 pgqueuer/compare_rps_main.py
+          PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py
 
   run-tests:
     if: github.event_name != 'schedule'
@@ -198,53 +206,70 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
 
       - name: Build PostgreSQL Docker Image
-        run: |
-          POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
+        run: POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
+
       - name: Install PGQueuer
-        run: |
-          pip install pip -U
-          pip install ".[dev]"
+        run: uv sync --all-extras --dev
 
       - name: Run Full Test Suite
-        run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 pytest -v
+        run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 uv run pytest -v
 
   run-ruff:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        run: uv python install 3.12
+
       - name: Install Dev Environment
-        run: |
-          pip install -U pip
-          pip install ".[dev]"
+        run: uv sync --all-extras --dev
+
       - name: Run Ruff Linter
         if: ${{ always() }}
-        run: ruff check .
+        run: uv run ruff check .
+
       - name: Apply Ruff Formatting
         if: ${{ always() }}
-        run: ruff format . --check
+        run: uv run ruff format . --check
 
   run-mypy:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
       - name: Set up Python
-        uses: actions/setup-python@v4
+        run: uv python install 3.12
+
       - name: Install Dev Environment
-        run: |
-          pip install -U pip
-          pip install ".[dev]"
+        run: uv sync --all-extras --dev
+
       - name: Run Mypy Type Check
-        run: mypy .
+        run: uv run mypy .
 
   complete-pipeline:
     if: github.event_name != 'schedule'
