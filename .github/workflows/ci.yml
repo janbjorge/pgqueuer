@@ -36,8 +36,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build PostgreSQL Docker image
-        run: docker compose up --build -d pgq
+      - name: Cache Docker Images and Spin Up Container
+        uses: ./.github/actions/docker-cache/
 
       - name: Install PGQueuer
         run: |
@@ -79,8 +79,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build PostgreSQL Docker image
-        run: docker compose up --build -d pgq
+      - name: Cache Docker Images and Spin Up Container
+        uses: ./.github/actions/docker-cache/
 
       - name: Install PGQueuer
         run: |
@@ -203,9 +203,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build PostgreSQL Docker Image
-        run: |
-          POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
+      - name: Cache Docker Images and Spin Up Container
+        uses: ./.github/actions/docker-cache/
+
       - name: Install PGQueuer
         run: |
           pip install pip -U
