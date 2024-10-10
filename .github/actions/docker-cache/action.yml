@@ -17,6 +17,6 @@ runs:
 
     - name: Build and Run Docker Compose
       shell: bash
-      run: docker compose up --build -d pgq
+      run: docker compose up -d pgq
       env:
         DOCKER_BUILDKIT: 1
