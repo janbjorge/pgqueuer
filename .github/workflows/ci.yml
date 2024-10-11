@@ -43,8 +43,21 @@ jobs:
           uv venv --python ${{ matrix.python-version }}
           uv pip install '.[dev]'
 
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
       - name: Build PostgreSQL Docker image
-        run: docker compose up --build -d pgq
+        run: |
+          docker buildx create --use --name mybuilder --driver docker-container --driver-opt network=host || true
+          docker buildx use mybuilder
+          docker buildx build --cache-to=type=local,dest=/tmp/.buildx-cache --cache-from=type=local,src=/tmp/.buildx-cache --build-arg BUILDKIT_INLINE_CACHE=1 --progress=plain -t pgq --load -f test/db/Dockerfile .
+          docker compose up -d pgq
+          sleep 5
 
       - name: Run Example with SIGINT
         run: |
@@ -86,8 +99,20 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
 
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-docker-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-docker-
+
       - name: Build PostgreSQL Docker image
-        run: docker compose up --build -d pgq
+        run: |
+          docker buildx create --use --name mybuilder --driver docker-container --driver-opt network=host || true
+          docker buildx use mybuilder
+          docker buildx build --cache-to=type=local,dest=/tmp/.buildx-cache --cache-from=type=local,src=/tmp/.buildx-cache --build-arg BUILDKIT_INLINE_CACHE=1 --progress=plain -t pgq --load -f test/db/Dockerfile .
+          docker compose up -d pgq
 
       - name: Install PGQueuer
         run: uv sync --all-extras --dev
