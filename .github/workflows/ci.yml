@@ -145,6 +145,7 @@ jobs:
           mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
           cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
           cd artifacts-repo
+          PYTHONUNBUFFERED=1 uv run python3 pgqueuer/main.py
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
