@@ -11,103 +11,19 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-import functools
 import sys
 import warnings
 from collections import Counter, deque
 from datetime import timedelta
 from math import isfinite
-from typing import (
-    Awaitable,
-    Callable,
-    TypeAlias,
-    TypeGuard,
-    TypeVar,
-    cast,
-    overload,
-)
+from typing import Callable
 
 import anyio
-import anyio.to_thread
 
-from . import buffers, db, heartbeat, helpers, listeners, logconfig, models, queries, tm
-
-AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
-SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
-Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
-T = TypeVar("T", bound=Entrypoint)
+from . import buffers, db, executors, heartbeat, helpers, listeners, logconfig, models, queries, tm
 
 
 class Unset: ...
-
-
-@overload
-def is_async_callable(obj: AsyncEntrypoint) -> TypeGuard[AsyncEntrypoint]: ...
-
-
-@overload
-def is_async_callable(obj: SyncEntrypoint) -> TypeGuard[SyncEntrypoint]: ...
-
-
-def is_async_callable(obj: object) -> bool:
-    """
-    Determines whether an object is an asynchronous callable.
-    This function identifies objects that are either asynchronous coroutine functions
-    or have a callable __call__ method that is an asynchronous coroutine function.
-
-    The function handles functools.partial objects by evaluating the
-    underlying function. It supports overloads to ensure type-specific behavior
-    with AsyncEntrypoint and SyncEntrypoint types.
-
-    Inspired by:
-    https://github.com/encode/starlette/blob/9f16bf5c25e126200701f6e04330864f4a91a898/starlette/_utils.py#L38
-    """
-
-    while isinstance(obj, functools.partial):
-        obj = obj.func
-
-    return asyncio.iscoroutinefunction(obj) or (
-        callable(obj) and asyncio.iscoroutinefunction(obj.__call__)
-    )
-
-
-class JobExecutor:
-    """
-    Wrapper class for executing jobs using registered entrypoint functions.
-
-    Manages the execution of jobs, respecting the configured requests per second,
-    and determines whether the entrypoint function is asynchronous or synchronous.
-
-    Attributes:
-        func (Entrypoint): The entrypoint function to execute jobs.
-        requests_per_second (float): The maximum number of requests per second allowed.
-        is_async (bool): Indicates if the entrypoint function is asynchronous.
-    """
-
-    def __init__(
-        self,
-        func: Entrypoint,
-        requests_per_second: float,
-        retry_timer: timedelta,
-        serialized_dispatch: bool,
-    ) -> None:
-        self.func = func
-        self.requests_per_second = requests_per_second
-        self.retry_timer = retry_timer
-        self.serialized_dispatch = serialized_dispatch
-        self.is_async = is_async_callable(func)
-
-    async def __call__(self, job: models.Job) -> None:
-        """
-        Execute the job using the entrypoint function.
-
-        Args:
-            job (models.Job): The job to execute.
-        """
-        if self.is_async:
-            await cast(AsyncEntrypoint, self.func)(job)
-        else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.func), job)
 
 
 @dataclasses.dataclass
@@ -124,7 +40,7 @@ class QueueManager:
         channel (models.PGChannel): The PostgreSQL channel for notifications.
         alive (asyncio.Event): Event to signal when the QueueManager is shutting down.
         queries (queries.Queries): Instance for executing database queries.
-        entrypoint_registry (dict[str, JobExecutor]): Registered entrypoint functions.
+        entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
         entrypoint_statistics (dict[str, models.EntrypointStatistics]): Statistics for entrypoints.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
             including cancellation scopes.
@@ -142,7 +58,7 @@ class QueueManager:
     queries: queries.Queries = dataclasses.field(init=False)
 
     # Per entrypoint
-    entrypoint_registry: dict[str, JobExecutor] = dataclasses.field(
+    entrypoint_registry: dict[str, executors.JobExecutor] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -177,25 +93,53 @@ class QueueManager:
         """
         return self.job_context[job_id]
 
+    def register_executor(
+        self,
+        name: str,
+        executor: executors.JobExecutor,
+    ) -> None:
+        """
+        Register a job executor with a specific name.
+
+        Args:
+            name (str): The name of the entrypoint as referenced in the job queue.
+            executor (JobExecutor): The job executor instance.
+
+        Raises:
+            RuntimeError: If the entrypoint name is already registered.
+        """
+        if name in self.entrypoint_registry:
+            raise RuntimeError(f"{name} already in registry, name must be unique.")
+
+        self.entrypoint_registry[name] = executor
+        self.entrypoint_statistics[name] = models.EntrypointStatistics(
+            samples=deque(maxlen=1_000),
+            concurrency_limiter=asyncio.Semaphore(executor.concurrency_limit or sys.maxsize),
+        )
+
     def entrypoint(
         self,
         name: str,
+        *,
         requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-    ) -> Callable[[T], T]:
+        executor: type[executors.JobExecutor] = executors.EntrypointExecutor,
+    ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
         """
-        Decorator to register a function as an entrypoint for job processing.
+        Decorator to register an entrypoint for job processing.
 
-        Associates a function with a named entrypoint, configuring rate limits
-        and concurrency controls for jobs that will be handled by this function.
+        Users can specify a custom executor or use the default EntrypointExecutor.
 
         Args:
             name (str): The name of the entrypoint as referenced in the job queue.
             requests_per_second (float): Max number of jobs per second to process for
                 this entrypoint.
             concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
+            retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
+            serialized_dispatch (bool): Whether to serialize dispatching of jobs.
+            executor (JobExecutor): Custom executor instance to use.
 
         Returns:
             Callable[[T], T]: A decorator that registers the function as an entrypoint.
@@ -226,16 +170,16 @@ class QueueManager:
         if not isinstance(serialized_dispatch, bool):
             raise ValueError("Serialized dispatch must be boolean")
 
-        def register(func: T) -> T:
-            self.entrypoint_registry[name] = JobExecutor(
-                func=func,
-                requests_per_second=requests_per_second,
-                retry_timer=retry_timer,
-                serialized_dispatch=serialized_dispatch,
-            )
-            self.entrypoint_statistics[name] = models.EntrypointStatistics(
-                samples=deque(maxlen=1_000),
-                concurrency_limiter=asyncio.Semaphore(concurrency_limit or sys.maxsize),
+        def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
+            self.register_executor(
+                name,
+                executor(
+                    func=func,
+                    requests_per_second=requests_per_second,
+                    retry_timer=retry_timer,
+                    serialized_dispatch=serialized_dispatch,
+                    concurrency_limit=concurrency_limit,
+                ),
             )
             return func
 
@@ -272,8 +216,8 @@ class QueueManager:
         """
         return {
             entrypoint
-            for entrypoint, fn in self.entrypoint_registry.items()
-            if self.observed_requests_per_second(entrypoint) < fn.requests_per_second
+            for entrypoint, executor in self.entrypoint_registry.items()
+            if self.observed_requests_per_second(entrypoint) < executor.requests_per_second
             and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
@@ -339,7 +283,7 @@ class QueueManager:
                 ),
                 flush_callable=self.queries.notify_activity,
             ) as hbuff,
-            tm.TaskManager() as task_manger,
+            tm.TaskManager() as task_manager,
             self.connection,
         ):
             notice_event_listener = await listeners.initialize_notice_event_listener(
@@ -368,10 +312,20 @@ class QueueManager:
                 entrypoint_tally = Counter[str]()
 
                 for job in jobs:
-                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
+                    self.job_context[job.id] = models.Context(
+                        cancellation=anyio.CancelScope(),
+                    )
                     entrypoint_tally[job.entrypoint] += 1
 
-                    task_manger.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
+                    task_manager.add(
+                        asyncio.create_task(
+                            self._dispatch(
+                                job,
+                                jbuff,
+                                hbuff,
+                            )
+                        )
+                    )
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
@@ -380,7 +334,7 @@ class QueueManager:
                     # skip if rate is inf.
                     rps = self.entrypoint_registry[entrypoint].requests_per_second
                     if isfinite(rps):
-                        task_manger.add(
+                        task_manager.add(
                             asyncio.create_task(
                                 self.queries.notify_debounce_event(
                                     entrypoint,
@@ -411,14 +365,15 @@ class QueueManager:
         hbuff: buffers.HeartbeatBuffer,
     ) -> None:
         """
-        Dispatch a job to its associated entrypoint function.
+        Dispatch a job to its associated entrypoint executor.
 
         Handles asynchronous job execution, logs exceptions, updates job status,
         and manages job context including cancellation.
 
         Args:
             job (models.Job): The job to dispatch.
-            buffer (buffers.JobBuffer): The buffer to log job completion status.
+            jbuff (buffers.JobStatusLogBuffer): Buffer to log job completion status.
+            hbuff (buffers.HeartbeatBuffer): Buffer to manage heartbeats.
         """
 
         logconfig.logger.debug(
@@ -427,21 +382,23 @@ class QueueManager:
             job.id,
         )
 
+        executor = self.entrypoint_registry[job.entrypoint]
+
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                self.entrypoint_registry[job.entrypoint].retry_timer / 2,
+                executor.retry_timer / 2,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
         ):
             try:
                 # Run the job unless it has already been cancelled. Check this here because jobs
-                # can be cancelled between when they are dequeued and when the acquire the
+                # can be cancelled between when they are dequeued and when they acquire the
                 # concurrency limit semaphore.
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
-                    await self.entrypoint_registry[job.entrypoint](job)
+                    await executor.execute(job)
             except Exception:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",
