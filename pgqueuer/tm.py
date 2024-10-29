@@ -64,7 +64,7 @@ class TaskManager:
         task.add_done_callback(self.log_unhandled_exception)
         task.add_done_callback(self.tasks.remove)
 
-    async def gather_tasks(self) -> list[BaseException | None]:
+    async def gather_tasks(self, return_exceptions: bool = True) -> list[BaseException | None]:
         """
         Wait for all managed tasks to complete and gather their results.
 
@@ -76,7 +76,10 @@ class TaskManager:
             list[BaseException | None]: A list containing exceptions raised by tasks,
                 or None for tasks that completed successfully.
         """
-        return await asyncio.gather(*self.tasks, return_exceptions=True)
+        return await asyncio.gather(
+            *self.tasks,
+            return_exceptions=return_exceptions,
+        )
 
     async def __aenter__(self) -> TaskManager:
         """

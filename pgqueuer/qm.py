@@ -269,18 +269,19 @@ class QueueManager:
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
                 "heartbeat column, please run 'python3 -m pgqueuer upgrade'"
             )
-
+        job_status_log_buffer_timeout = timedelta(seconds=0.01)
+        heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
+            [x.retry_timer for x in self.entrypoint_registry.values()]
+        )
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
-                timeout=timedelta(seconds=0.01),
+                timeout=job_status_log_buffer_timeout,
                 flush_callable=self.queries.log_jobs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
-                timeout=helpers.retry_timer_buffer_timeout(
-                    [x.retry_timer for x in self.entrypoint_registry.values()]
-                ),
+                timeout=heartbeat_buffer_timeout,
                 flush_callable=self.queries.notify_activity,
             ) as hbuff,
             tm.TaskManager() as task_manager,
