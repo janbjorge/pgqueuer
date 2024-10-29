@@ -148,3 +148,109 @@ To enhance the efficiency of job handling, the `QueueManager` uses a job buffer.
 Incorporating a signal handler that sets a flag (such as `alive` to `False`) is essential for ensuring a graceful shutdown of the `QueueManager`. When the application receives a termination signal (e.g., SIGINT or SIGTERM), the signal handler can set the `alive` flag to `False`, informing the `QueueManager` to stop processing new jobs and complete the jobs currently in the buffer. This helps maintain the integrity and consistency of the job queue by ensuring that no jobs are left unprocessed or partially processed.
 
 In this setup, the `handle_signal` signal handler sets `alive` to `False` upon receiving a termination signal. The main loop checks the `alive` flag, and if set to `False`, it stops running the `QueueManager`, ensuring a clean and graceful shutdown.
+
+## Custom Job Executors
+
+Job Executors are responsible for executing jobs that have been dequeued from the job queue. The `QueueManager` provides a default job executor called `EntrypointExecutor`, but you can also create and register your own custom executors to extend its functionality.
+
+### The `JobExecutor` Interface
+
+The `JobExecutor` is an abstract base class that defines the interface for any custom job executors. It contains the necessary methods and properties that your custom executor must implement. By subclassing `JobExecutor`, you can control how jobs are executed, modify concurrency behavior, add custom logging, or even interact with external systems as needed.
+
+The key method that needs to be implemented is:
+
+- `async def execute(self, job: models.Job) -> None`: This method is called to execute the given job. Your implementation should handle all the logic associated with processing the job, including error handling and logging.
+
+Below is an example of how you can create your own custom job executor.
+
+### Example: Creating a Custom Job Executor
+
+Let's create a custom job executor called `NotificationExecutor` that dispatches notifications via email, SMS, or push notifications based on the job data. This example showcases how you can use a custom executor to integrate different notification channels in a flexible and centralized way.
+
+```python
+import random
+from datetime import timedelta
+from pgqueuer.executors import JobExecutor
+from pgqueuer.models import Job
+
+class NotificationExecutor(JobExecutor):
+    def __init__(
+        self,
+        func,
+        requests_per_second: float = 2.0,
+        retry_timer: timedelta = timedelta(seconds=30),
+        serialized_dispatch: bool = True,
+        concurrency_limit: int = 5,
+    ):
+        super().__init__(func, requests_per_second, retry_timer, serialized_dispatch, concurrency_limit)
+
+    async def execute(self, job: Job) -> None:
+        # Extract notification type and message from job data
+        notification_type, message = job.data.decode().split('|')
+
+        if notification_type == 'email':
+            await self.send_email(message)
+        elif notification_type == 'sms':
+            await self.send_sms(message)
+        elif notification_type == 'push':
+            await self.send_push_notification(message)
+
+        # Execute the original job function if required
+        await self.func(job)
+
+    async def send_email(self, message: str) -> None:
+        print(f"Sending Email: {message}")
+
+    async def send_sms(self, message: str) -> None:
+        print(f"Sending SMS: {message}")
+
+    async def send_push_notification(self, message: str) -> None:
+        print(f"Sending Push Notification: {message}")
+```
+
+### Registering the Custom Executor with `QueueManager`
+
+Here's how you would use the `NotificationExecutor` with `QueueManager` to handle different types of user notifications.
+
+```python
+from pgqueuer.qm import QueueManager
+from pgqueuer.models import Job
+from pgqueuer.db import AsyncpgDriver
+import asyncpg
+import asyncio
+
+async def main() -> None:
+    # Establish a database connection; asyncpg and psycopg are supported.
+    connection = await asyncpg.connect()
+    # Initialize a database driver
+    driver = AsyncpgDriver(connection)
+    # Create a QueueManager instance
+    qm = QueueManager(driver)
+
+    # Register an entrypoint for notifications with the custom executor
+    @qm.entrypoint(
+        "user_notification",
+        executor=NotificationExecutor,  # Use the custom NotificationExecutor
+    )
+    async def notification_task(job: Job) -> None:
+        print(f"Executing notification job with ID: {job.id}")
+
+    # Enqueue jobs for the notification entrypoint
+    notifications = [
+        "email|Welcome to our service!",
+        "sms|Your verification code is 123456",
+        "push|You have a new friend request",
+    ]
+    
+    await qm.queries.enqueue(
+        ["user_notification"] * len(notifications),
+        [notif.encode() for notif in notifications],
+    )
+
+    await qm.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+In this example, we create a custom `NotificationExecutor` that can dispatch notifications via email, SMS, or push notifications based on the job data. The `@qm.entrypoint` decorator registers the custom executor to manage these notification jobs, enabling the `QueueManager` to process them efficiently.
