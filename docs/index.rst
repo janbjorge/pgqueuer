@@ -43,7 +43,7 @@ Start a long-lived consumer that will begin processing jobs as soon as they are 
 
 .. code-block:: bash
 
-    python3 -m PGQueuer run tools.consumer.main
+    python3 -m PGQueuer run examples.consumer.main
 
 Start a producer
 ~~~~~~~~~~~~~~~~
@@ -52,7 +52,7 @@ Start a short-lived producer that will enqueue 10,000 jobs.
 
 .. code-block:: bash
 
-    python3 tools/producer.py 10000
+    python3 examples/producer.py 10000
 
 .. toctree::
    :maxdepth: 2
