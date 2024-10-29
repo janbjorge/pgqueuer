@@ -3,6 +3,11 @@ import contextlib
 
 from . import cli
 
-if __name__ == "__main__":
+
+def main() -> None:
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(cli.main())
+
+
+if __name__ == "__main__":
+    main()
