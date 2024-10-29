@@ -1,7 +1,7 @@
 CLI Module for PGQueuer
 =======================
 
-The pgq cli provides a command-line interface for managing various aspects of the PGQueuer system.
+The pgq CLI provides a command-line interface for managing various aspects of the PGQueuer system. The CLI can be invoked via the alias `pgq` or the traditional method `python3 -m pgqueuer`. Both methods are fully supported and provide identical functionality.
 
 Functionality
 -------------
@@ -28,11 +28,16 @@ When the `run` command is invoked, it ensures that appropriate signal handlers a
 Usage
 -----
 
-To use the CLI, invoke it with the desired command and options. For example, to start the QueueManager with automatic signal handling:
+To use the CLI, invoke it with the desired command and options. You can use either the new alias `pgq` or the original command structure. Here are examples of both methods:
 
 .. code-block:: bash
 
-    python3 -m pgqueuer run <moduele+factory-function>
+    # Using the new alias
+    pgq run <module+factory-function>
 
+    # Using the traditional approach
+    python3 -m pgqueuer run <module+factory-function>
 
 This command initializes the QueueManager using the factory function provided, setting up signal handling automatically to manage job processing interruptions gracefully.
+
+The new `pgq` alias makes it more convenient to work with the CLI, while maintaining full compatibility with the traditional approach for those who prefer it.
