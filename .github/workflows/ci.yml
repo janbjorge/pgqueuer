@@ -68,6 +68,11 @@ jobs:
           kill -SIGINT $pid
           wait $pid
 
+      - name: Test pgq CLI Command
+        run: |
+            source .venv/bin/activate
+            pgq --help
+
   run-benchmark:
     strategy:
       fail-fast: false
