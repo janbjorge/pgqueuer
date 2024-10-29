@@ -46,6 +46,9 @@ Homepage = "https://github.com/janbjorge/pgqueuer/"
 Issues = "https://github.com/janbjorge/pgqueuer/issues"
 Repository = "https://github.com/janbjorge/pgqueuer/"
 
+[project.scripts]
+pgq = "pgqueuer.__main__:main"
+
 [project.optional-dependencies]
 asyncpg = ["asyncpg"]
 psycopg = ["psycopg>=3.2.0"]
