@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Literal
 
 from tabulate import tabulate, tabulate_formats
 
 from . import db, listeners, models, queries, supervisor
+
+__local_tz = datetime.now().astimezone().strftime("%z")
 
 
 async def display_stats(
@@ -19,7 +21,7 @@ async def display_stats(
         tabulate(
             [
                 (
-                    stat.created.astimezone(),
+                    stat.created.astimezone().strftime("%Y-%m-%d %H:%M:%S"),
                     stat.count,
                     stat.entrypoint,
                     stat.time_in_queue,
@@ -29,7 +31,7 @@ async def display_stats(
                 for stat in log_stats
             ],
             headers=[
-                "Created",
+                f"Created ({__local_tz})",
                 "Count",
                 "Entrypoint",
                 "Time in Queue (HH:MM:SS)",
