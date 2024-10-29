@@ -80,26 +80,26 @@ def cliparser() -> argparse.Namespace:
         "--prefix",
         default="",
         help=(
-            "All pgqueuer tables/functions/etc... will start with this prefix. "
-            "(If set, addinal config is required.)"
+            "Specify a prefix for all pgqueuer tables, functions, etc. "
+            "This helps in avoiding conflicts if running multiple instances. "
+            "(If set, additional config is required.)"
         ),
     )
 
     common_arguments.add_argument(
         "--driver",
         default="apg",
-        help="Postgres driver to be used asyncpg (apg) or psycopg (psy).",
+        help="Specify the PostgreSQL driver to be used: asyncpg (apg) or psycopg (psy).",
         choices=["apg", "psy"],
     )
 
     common_arguments.add_argument(
         "--pg-dsn",
         help=(
-            "Connection string in the libpq URI format, including host, port, user, "
+            "Provide the connection string in the libpq URI format, including host, port, user, "
             "database, password, passfile, and SSL options. Must be properly quoted; "
-            "IPv6 addresses must be in brackets. "
-            "Example: postgres://user:pass@host:port/database. Defaults to PGDSN "
-            "environment variable if set."
+            "IPv6 addresses must be in brackets. Example: postgres://user:pass@host:port/database. "
+            "Defaults to the PGDSN environment variable if set."
         ),
         default=os.environ.get("PGDSN"),
     )
@@ -107,8 +107,8 @@ def cliparser() -> argparse.Namespace:
     common_arguments.add_argument(
         "--pg-host",
         help=(
-            "Database host address, which can be an IP or domain name. "
-            "Defaults to PGHOST environment variable if set."
+            "Specify the database host address, which can be an IP or domain name. "
+            "Defaults to the PGHOST environment variable if set."
         ),
         default=os.environ.get("PGHOST"),
     )
@@ -116,8 +116,8 @@ def cliparser() -> argparse.Namespace:
     common_arguments.add_argument(
         "--pg-port",
         help=(
-            "Port number for the server host Defaults to PGPORT environment variable "
-            "or 5432 if not set."
+            "Specify the port number for the server host. "
+            "Defaults to the PGPORT environment variable or 5432 if not set."
         ),
         default=os.environ.get("PGPORT", "5432"),
     )
@@ -125,7 +125,8 @@ def cliparser() -> argparse.Namespace:
     common_arguments.add_argument(
         "--pg-user",
         help=(
-            "Database role for authentication. Defaults to PGUSER environment " "variable if set."
+            "Specify the database role for authentication. "
+            "Defaults to the PGUSER environment variable if set."
         ),
         default=os.environ.get("PGUSER"),
     )
@@ -133,38 +134,45 @@ def cliparser() -> argparse.Namespace:
     common_arguments.add_argument(
         "--pg-database",
         help=(
-            "Name of the database to connect to. Defaults to PGDATABASE environment "
-            "variable if set."
+            "Specify the name of the database to connect to. "
+            "Defaults to the PGDATABASE environment variable if set."
         ),
         default=os.environ.get("PGDATABASE"),
     )
 
     common_arguments.add_argument(
         "--pg-password",
-        help=("Password for authentication. Defaults to PGPASSWORD " "environment variable if set"),
+        help=(
+            "Specify the password for authentication. "
+            "Defaults to the PGPASSWORD environment variable if set."
+        ),
         default=os.environ.get("PGPASSWORD"),
     )
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         prog="pgqueuer",
+        description=(
+            "PGQueuer command-line interface for managing the "
+            "PostgreSQL-backed job queue system."
+        ),
     )
 
     subparsers = parser.add_subparsers(
-        dest="command",
-        required=True,
+        dest="command", required=True, help="Available commands for managing pgqueuer."
     )
 
     subparsers.add_parser(
         "install",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Install the necessary database schema for PGQueuer.",
     ).add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Prints the SQL statements that would be executed without actually "
-            " applying any changes to the database."
+            "Print the SQL statements that would be executed without actually "
+            "applying any changes to the database."
         ),
     )
 
@@ -172,11 +180,12 @@ def cliparser() -> argparse.Namespace:
         "uninstall",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Remove the PGQueuer schema from the database.",
     ).add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Prints the SQL statements that would be executed without "
+            "Print the SQL statements that would be executed without "
             "actually applying any changes to the database."
         ),
     )
@@ -185,11 +194,12 @@ def cliparser() -> argparse.Namespace:
         "upgrade",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Apply upgrades to the existing PGQueuer database schema.",
     ).add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Prints the SQL statements that would be executed without "
+            "Print the SQL statements that would be executed without "
             "actually applying any changes to the database."
         ),
     )
@@ -198,6 +208,7 @@ def cliparser() -> argparse.Namespace:
         "dashboard",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Display a live dashboard showing job statistics.",
     )
     dashboardparser.add_argument(
         "-i",
@@ -209,7 +220,7 @@ def cliparser() -> argparse.Namespace:
     dashboardparser.add_argument(
         "-n",
         "--tail",
-        help="The number of the most recent log entries to display on the dashboard.",
+        help="Specify the number of the most recent log entries to display on the dashboard.",
         type=int,
         default=25,
     )
@@ -227,10 +238,11 @@ def cliparser() -> argparse.Namespace:
         "listen",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Listen to a PostgreSQL NOTIFY channel for debug purposes.",
     )
     listen_parser.add_argument(
         "--channel",
-        help="Specifies the PostgreSQL NOTIFY channel to listen on for debug purposes.",
+        help="Specify the PostgreSQL NOTIFY channel to listen on for debug purposes.",
         default=queries.DBSettings().channel,
     )
 
@@ -239,12 +251,13 @@ def cliparser() -> argparse.Namespace:
         description="Run a QueueManager from a factory function.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
+        help="Start a QueueManager to manage job queues and process jobs.",
     )
     wm_parser.add_argument(
         "--dequeue-timeout",
         help=(
-            "Specifies timeout (in seconds) to wait to dequeue jobs "
-            "(see the 'dequeue_timeout' argument of 'QueueManager.run')"
+            "Specify the timeout (in seconds) to wait to dequeue jobs. "
+            "This determines how long the QueueManager will wait for new jobs before retrying."
         ),
         type=lambda s: timedelta(seconds=float(s)),
         default=timedelta(seconds=30.0),
@@ -252,8 +265,8 @@ def cliparser() -> argparse.Namespace:
     wm_parser.add_argument(
         "--batch-size",
         help=(
-            "Specifies the number of jobs to dequeue in each batch "
-            "(see the 'batch_size' argument of 'QueueManager.run')"
+            "Specify the number of jobs to dequeue in each batch. "
+            "A larger batch size can increase throughput but may require more memory."
         ),
         type=int,
         default=10,
@@ -261,15 +274,16 @@ def cliparser() -> argparse.Namespace:
     wm_parser.add_argument(
         "--retry-timer",
         help=(
-            "Specifies time to wait (in seconds) before retrying jobs "
-            "(see the 'retry_timer' argument of 'QueueManager.run')"
+            "Specify the time to wait (in seconds) before retrying jobs "
+            "that have been picked but not processed."
         ),
         type=lambda s: timedelta(seconds=float(s)),
     )
     wm_parser.add_argument(
         "qm_factory",
-        help=("Path to the QueueManager factory function, e.g., " '"myapp.create_queue_manager"'),
+        help="Path to the QueueManager factory function, e.g., 'myapp.create_queue_manager'.",
     )
+
     return parser.parse_args()
 
 
