@@ -10,7 +10,6 @@ from tabulate import tabulate, tabulate_formats
 
 from . import db, listeners, models, queries, supervisor
 
-__local_tz = datetime.now().astimezone().strftime("%z")
 
 
 async def display_stats(
@@ -31,7 +30,7 @@ async def display_stats(
                 for stat in log_stats
             ],
             headers=[
-                f"Created ({__local_tz})",
+                f"Created ({datetime.now().astimezone().strftime("%Z")})",
                 "Count",
                 "Entrypoint",
                 "Time in Queue (HH:MM:SS)",
