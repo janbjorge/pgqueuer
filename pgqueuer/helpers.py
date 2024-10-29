@@ -71,6 +71,19 @@ def retry_timer_buffer_timeout(
     _default: timedelta = timedelta(hours=24),
     _t0: timedelta = timedelta(seconds=0),
 ) -> timedelta:
+    """
+    Returns the smallest timedelta from the input list `dts` that is greater than `_t0`.
+    If no such timedelta exists, returns `_default`.
+
+    Parameters:
+        dts (list[timedelta]): A list of timedelta objects to evaluate.
+        _default (timedelta, optional): The fallback value returned if no valid timedelta is found.
+            Defaults to 24 hours.
+        _t0 (timedelta, optional): The minimum threshold timedelta. Defaults to 0 seconds.
+
+    Returns:
+        timedelta: The smallest valid timedelta from the list or `_default` if none found.
+    """
     try:
         return min(dt for dt in dts if dt > _t0)
     except ValueError:
