@@ -19,7 +19,7 @@ async def display_stats(
         tabulate(
             [
                 (
-                    stat.created,
+                    stat.created.astimezone(),
                     stat.count,
                     stat.entrypoint,
                     stat.time_in_queue,
