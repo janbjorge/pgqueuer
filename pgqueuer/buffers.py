@@ -185,8 +185,9 @@ class TimedOverflowBuffer(Generic[T]):
         if self.flush_handle is not None:
             self.flush_handle.cancel()
 
-        async with self.lock:
-            await self.flush()
+        while not self.events.empty():
+            async with self.lock:
+                await self.flush()
 
 
 class JobStatusLogBuffer(
