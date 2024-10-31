@@ -89,7 +89,7 @@ async def test_serialized_dispatch(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     await asyncio.gather(timer(), dequeue())
 
@@ -112,7 +112,7 @@ async def test_serialized_dispatch_mixed(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     _, consumed = await asyncio.gather(timer(), dequeue())
     serialized_dispatch_true = list(
@@ -151,7 +151,7 @@ async def test_no_jobs_processed_when_locked(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     _, consumed = await asyncio.gather(timer(), dequeue())
     serialized_dispatch_true = list(
@@ -180,7 +180,7 @@ async def test_mixed_serialized_and_concurrent_processing(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     _, consumed = await asyncio.gather(timer(), dequeue())
     serialized_dispatch_true = list(
@@ -212,7 +212,7 @@ async def test_single_consumer_serialized_behavior(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     _, consumed = await asyncio.gather(timer(), dequeue())
     serialized_dispatch_true = list(

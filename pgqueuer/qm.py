@@ -38,7 +38,7 @@ class QueueManager:
     Attributes:
         connection (db.Driver): The database driver used for database operations.
         channel (models.PGChannel): The PostgreSQL channel for notifications.
-        alive (asyncio.Event): Event to signal when the QueueManager is shutting down.
+        shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
         queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
         entrypoint_statistics (dict[str, models.EntrypointStatistics]): Statistics for entrypoints.
@@ -51,7 +51,7 @@ class QueueManager:
         default=models.PGChannel(queries.DBSettings().channel),
     )
 
-    alive: asyncio.Event = dataclasses.field(
+    shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
@@ -72,6 +72,11 @@ class QueueManager:
         init=False,
         default_factory=dict,
     )
+
+    @property
+    def alive(self) -> asyncio.Event:
+        # For backwards compatibility
+        return self.shutdown
 
     def __post_init__(self) -> None:
         """
@@ -294,9 +299,9 @@ class QueueManager:
                 self.job_context,
             )
 
-            alive_task = asyncio.create_task(self.alive.wait())
+            shutdown_task = asyncio.create_task(self.shutdown.wait())
 
-            while not self.alive.is_set():
+            while not self.shutdown.is_set():
                 entrypoints = {
                     x: (
                         self.entrypoint_registry[x].retry_timer,
@@ -349,15 +354,15 @@ class QueueManager:
                     dequeue_timeout,
                 )
                 await asyncio.wait(
-                    (alive_task, event_task),
+                    (shutdown_task, event_task),
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
         if not event_task.done():
             event_task.cancel()
 
-        if not alive_task.done():
-            alive_task.cancel()
+        if not shutdown_task.done():
+            shutdown_task.cancel()
 
     async def _dispatch(
         self,

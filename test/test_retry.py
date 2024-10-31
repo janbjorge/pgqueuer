@@ -32,7 +32,7 @@ async def test_retry(
     async def until_retry_updated() -> None:
         while len(seen) <= N:
             await asyncio.sleep(0)
-        c.alive.set()
+        c.shutdown.set()
         e.set()
 
     async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):
@@ -67,7 +67,7 @@ async def test_no_retry_on_zero_timer(
 
     async def until_retry_updated() -> None:
         await asyncio.sleep(1)
-        c.alive.set()
+        c.shutdown.set()
         e.set()
 
     await asyncio.gather(
@@ -98,7 +98,7 @@ async def test_heartbeat_updates(
     async def until_retry_updated() -> None:
         while len(seen) < N:
             await asyncio.sleep(0)
-        c.alive.set()
+        c.shutdown.set()
         e.set()
 
     async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):
@@ -138,7 +138,7 @@ async def test_concurrent_retry_jobs(
     async def until_retry_updated() -> None:
         while len(seen_job1) < N or len(seen_job2) < N:
             await asyncio.sleep(0)
-        c.alive.set()
+        c.shutdown.set()
         e1.set()
         e2.set()
 
@@ -192,7 +192,7 @@ async def test_varying_retry_timers(
     async def until_retry_updated() -> None:
         while len(seen_short) < N or len(seen_long) < N:
             await asyncio.sleep(0)
-        c.alive.set()
+        c.shutdown.set()
         e_short.set()
         e_long.set()
 
@@ -235,7 +235,7 @@ async def test_retry_with_cancellation(
     async def until_retry_updated() -> None:
         while len(seen) < N:
             await asyncio.sleep(0)
-        c.alive.set()
+        c.shutdown.set()
         e.set()
 
     async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):

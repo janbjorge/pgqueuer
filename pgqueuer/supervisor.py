@@ -60,7 +60,7 @@ async def runit(
         Handle incoming signals to perform a graceful shutdown.
 
         When a termination signal is received (e.g., SIGINT or SIGTERM), this function
-        sets the 'alive' event in the QueueManager to initiate a controlled shutdown
+        sets the 'shutdown' event in the QueueManager to initiate a controlled shutdown
         process, allowing tasks to complete cleanly.
 
         Args:
@@ -68,7 +68,7 @@ async def runit(
             frame (object): The current stack frame (unused).
         """
         print(f"Received signal {signum}, shutting down...")
-        qm.alive.set()
+        qm.shutdown.set()
 
     # Setup signal handlers for graceful shutdown of the QueueManager.
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C

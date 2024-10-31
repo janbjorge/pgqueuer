@@ -20,7 +20,7 @@ class Heartbeat:
     job_id: models.JobId
     interval: timedelta
     buffer: buffers.HeartbeatBuffer
-    alive: asyncio.Event = field(
+    shutdown: asyncio.Event = field(
         init=False,
         default_factory=asyncio.Event,
     )
@@ -38,7 +38,7 @@ class Heartbeat:
         Returns:
             Heartbeat: The Heartbeat instance itself.
         """
-        self.alive.set()  # Activate heartbeats
+        self.shutdown.set()  # Activate heartbeats
         if self.interval > timedelta(seconds=0):
             self.schedule_heartbeat()
         return self
@@ -54,7 +54,7 @@ class Heartbeat:
             exc_val: The exception value, if any.
             exc_tb: The traceback, if any.
         """
-        self.alive.clear()  # Deactivate heartbeats
+        self.shutdown.clear()  # Deactivate heartbeats
         if self.handle:
             self.handle.cancel()
         await self.buffer.flush()
@@ -73,7 +73,7 @@ class Heartbeat:
         """
         Send a heartbeat by adding a JobId to the buffer and scheduling the next heartbeat.
         """
-        if not self.alive.is_set():
+        if not self.shutdown.is_set():
             return
 
         try:
@@ -81,5 +81,5 @@ class Heartbeat:
         except Exception as e:
             logconfig.logger.exception("Failed to send heartbeat: %s", e)
         finally:
-            if self.alive.is_set():
+            if self.shutdown.is_set():
                 self.schedule_heartbeat()

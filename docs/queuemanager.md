@@ -34,7 +34,7 @@ async def main() -> None:
 
     # Ensures a clean and graceful shutdown of the job processing system.
     def handle_signal(signum: object, frame: object) -> None:
-        qm.alive = False
+        qm.shutdown.set()
 
     signal.signal(signal.SIGINT, handle_signal)
 
@@ -143,11 +143,11 @@ The QueueManager offers several configurable parameters to optimize job processi
 
 To enhance the efficiency of job handling, the `QueueManager` uses a job buffer. This buffer is a temporary storage area for jobs before they are processed, minimizing database access and enabling the system to handle bursts of jobs more effectively.
 
-### Why Add a Signal Handler?
+### Why use a Signal Handler?
 
-Incorporating a signal handler that sets a flag (such as `alive` to `False`) is essential for ensuring a graceful shutdown of the `QueueManager`. When the application receives a termination signal (e.g., SIGINT or SIGTERM), the signal handler can set the `alive` flag to `False`, informing the `QueueManager` to stop processing new jobs and complete the jobs currently in the buffer. This helps maintain the integrity and consistency of the job queue by ensuring that no jobs are left unprocessed or partially processed.
+Using an asyncio.Event for the shutdown event ensures that the shutdown process integrates smoothly with the asynchronous nature of QueueManager. When the application receives a termination signal (e.g., SIGINT or SIGTERM), the signal handler sets the shutdown event, which allows the main loop to detect this and stop processing new jobs while completing the current ones.
 
-In this setup, the `handle_signal` signal handler sets `alive` to `False` upon receiving a termination signal. The main loop checks the `alive` flag, and if set to `False`, it stops running the `QueueManager`, ensuring a clean and graceful shutdown.
+This mechanism helps maintain the integrity and consistency of the job queue, ensuring that all jobs in progress are finalized properly before the system shuts down, thereby preventing data corruption or incomplete tasks.
 
 ## Custom Job Executors
 

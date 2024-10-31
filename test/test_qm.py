@@ -18,7 +18,7 @@ async def wait_until_empty_queue(
         await asyncio.sleep(0.01)
 
     for qm in qms:
-        qm.alive.set()
+        qm.shutdown.set()
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))
@@ -130,7 +130,7 @@ async def test_pick_local_entrypoints(
     async def waiter() -> None:
         while sum(x.count for x in await q.queue_size() if x.entrypoint == "to_be_picked"):
             await asyncio.sleep(0.01)
-        qm.alive.set()
+        qm.shutdown.set()
 
     await asyncio.gather(
         qm.run(dequeue_timeout=timedelta(seconds=0.01)),
