@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from pgqueuer.helpers import perf_counter_dt, retry_timer_buffer_timeout
+from pgqueuer.helpers import perf_counter_dt, retry_timer_buffer_timeout, timeout_with_jitter
 
 
 async def test_perf_counter_dt() -> None:
@@ -42,3 +42,34 @@ def test_heartbeat_buffer_timeout_custom_default() -> None:
     dts = list[timedelta]()
     expected = timedelta(hours=48)
     assert retry_timer_buffer_timeout(dts, _default=timedelta(hours=48)) == expected
+
+
+def test_delay_within_jitter_range() -> None:
+    base_timeout = timedelta(seconds=10)
+    delay_multiplier = 2.0
+    jitter_span = (0.8, 1.2)
+
+    # Call the function multiple times to check the jitter range
+    for _ in range(100):
+        delay = timeout_with_jitter(base_timeout, delay_multiplier, jitter_span)
+        base_delay = base_timeout.total_seconds() * delay_multiplier
+        assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
+
+
+def test_delay_is_timedelta() -> None:
+    base_timeout = timedelta(seconds=5)
+    delay_multiplier = 1.5
+    delay = timeout_with_jitter(base_timeout, delay_multiplier)
+    assert isinstance(delay, timedelta)
+
+
+def test_custom_jitter_range() -> None:
+    base_timeout = timedelta(seconds=8)
+    delay_multiplier = 1.0
+    jitter_span = (0.5, 1.5)
+
+    # Call the function multiple times to check the custom jitter range
+    for _ in range(100):
+        delay = timeout_with_jitter(base_timeout, delay_multiplier, jitter_span)
+        base_delay = base_timeout.total_seconds() * delay_multiplier
+        assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]

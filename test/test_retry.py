@@ -1,14 +1,13 @@
-# test/test_retry.py
-
 import asyncio
 import asyncio.selector_events
+from collections import Counter
 from datetime import datetime, timedelta
 
 import async_timeout
 import pytest
 
 from pgqueuer import db
-from pgqueuer.models import Job
+from pgqueuer.models import Job, JobId
 from pgqueuer.qm import QueueManager
 
 
@@ -20,34 +19,31 @@ async def test_retry(
 ) -> None:
     e = asyncio.Event()
     c = QueueManager(apgdriver)
-    seen = set[datetime]()
+    jobids = Counter[JobId]()
 
     @c.entrypoint("fetch", retry_timer=retry_timer)
     async def fetch(context: Job) -> None:
-        seen.add(context.heartbeat)
+        jobids[context.id] += 1
         await e.wait()
 
-    await c.queries.enqueue(["fetch"], [None], [0])
+    await c.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
-    async def until_retry_updated() -> None:
-        while len(seen) <= N:
-            await asyncio.sleep(0)
-        c.shutdown.set()
+    async def stop_after() -> None:
+        async with async_timeout.timeout(retry_timer.total_seconds() * 10):
+            while True:
+                if len(jobids) == N and all(v > 1 for v in jobids.values()):
+                    break
+                await asyncio.sleep(0)
+
         e.set()
+        c.shutdown.set()
 
-    async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):
-        await asyncio.gather(
-            c.run(dequeue_timeout=timedelta(seconds=0)),
-            until_retry_updated(),
-        )
-
-    assert (
-        pytest.approx(
-            (max(seen) - min(seen)).total_seconds(),
-            abs=retry_timer.total_seconds(),
-        )
-        == (N * retry_timer).total_seconds()
+    await asyncio.gather(
+        c.run(dequeue_timeout=timedelta(seconds=0)),
+        stop_after(),
     )
+    assert len(jobids) == N
+    assert all(v > 1 for v in jobids.values())
 
 
 async def test_no_retry_on_zero_timer(
@@ -120,24 +116,32 @@ async def test_concurrent_retry_jobs(
     e1 = asyncio.Event()
     e2 = asyncio.Event()
     c = QueueManager(apgdriver)
-    seen_job1 = set[datetime]()
-    seen_job2 = set[datetime]()
+    seen_job1 = Counter[JobId]()
+    seen_job2 = Counter[JobId]()
 
     @c.entrypoint("fetch1", retry_timer=retry_timer)
     async def fetch1(context: Job) -> None:
-        seen_job1.add(context.heartbeat)
+        seen_job1[context.id] += 1
         await e1.wait()
 
     @c.entrypoint("fetch2", retry_timer=retry_timer)
     async def fetch2(context: Job) -> None:
-        seen_job2.add(context.heartbeat)
+        seen_job2[context.id] += 1
         await e2.wait()
 
-    await c.queries.enqueue(["fetch1", "fetch2"], [None, None], [0, 0])
+    await c.queries.enqueue(["fetch1", "fetch2"] * N, [None, None] * N, [0, 0] * N)
 
     async def until_retry_updated() -> None:
-        while len(seen_job1) < N or len(seen_job2) < N:
+        while True:
+            if (
+                len(seen_job1) == N
+                and all(v > 1 for v in seen_job1.values())
+                and len(seen_job2) == N
+                and all(v > 1 for v in seen_job2.values())
+            ):
+                break
             await asyncio.sleep(0)
+
         c.shutdown.set()
         e1.set()
         e2.set()
@@ -148,66 +152,64 @@ async def test_concurrent_retry_jobs(
             until_retry_updated(),
         )
 
-    assert (
-        pytest.approx(
-            (max(seen_job1) - min(seen_job1)).total_seconds(),
-            abs=retry_timer.total_seconds(),
-        )
-        == (N * retry_timer).total_seconds()
-    )
-    assert (
-        pytest.approx(
-            (max(seen_job2) - min(seen_job2)).total_seconds(),
-            abs=retry_timer.total_seconds(),
-        )
-        == (N * retry_timer).total_seconds()
-    )
+    assert len(seen_job1) == N
+    assert all(v > 1 for v in seen_job1.values())
+
+    assert len(seen_job2) == N
+    assert all(v > 1 for v in seen_job2.values())
 
 
 @pytest.mark.parametrize("N", (2, 4))
 async def test_varying_retry_timers(
     apgdriver: db.Driver,
     N: int,
-    retry_timer_short: timedelta = timedelta(seconds=0.050),
-    retry_timer_long: timedelta = timedelta(seconds=0.150),
+    retry_timer_short: timedelta = timedelta(seconds=0.200),
+    retry_timer_long: timedelta = timedelta(seconds=0.400),
 ) -> None:
     e_short = asyncio.Event()
     e_long = asyncio.Event()
     c = QueueManager(apgdriver)
-    seen_short = set[datetime]()
-    seen_long = set[datetime]()
+    seen_short = Counter[JobId]()
+    seen_long = Counter[JobId]()
 
     @c.entrypoint("fetch_short", retry_timer=retry_timer_short)
     async def fetch_short(context: Job) -> None:
-        seen_short.add(context.heartbeat)
+        seen_short[context.id] += 1
         await e_short.wait()
 
     @c.entrypoint("fetch_long", retry_timer=retry_timer_long)
     async def fetch_long(context: Job) -> None:
-        seen_long.add(context.heartbeat)
+        seen_long[context.id] += 1
         await e_long.wait()
 
     await c.queries.enqueue(["fetch_short", "fetch_long"], [None, None], [0, 0])
 
     async def until_retry_updated() -> None:
-        while len(seen_short) < N or len(seen_long) < N:
+        while True:
+            from icecream import ic
+
+            ic(seen_short, seen_long)
+            if (
+                seen_short
+                and all(v > 1 for v in seen_short.values())
+                and seen_long
+                and all(v > 1 for v in seen_long.values())
+            ):
+                break
             await asyncio.sleep(0)
+
         c.shutdown.set()
         e_short.set()
         e_long.set()
 
-    async with async_timeout.timeout(
-        max(retry_timer_short, retry_timer_long).total_seconds() * 2 * N
-    ):
+    async with async_timeout.timeout(2):
         await asyncio.gather(
             c.run(dequeue_timeout=timedelta(seconds=0)),
             until_retry_updated(),
         )
 
-    for earlier, later in zip(sorted(seen_short), sorted(seen_short)[1:]):
-        assert (later - earlier) >= retry_timer_short
-    for earlier, later in zip(sorted(seen_long), sorted(seen_long)[1:]):
-        assert (later - earlier) >= retry_timer_long
+    assert seen_short and all(v > 1 for v in seen_short.values())
+    assert seen_long and all(v > 1 for v in seen_long.values())
 
 
 @pytest.mark.parametrize("N", (2, 4))

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import (
     AsyncGenerator,
     Awaitable,
@@ -22,7 +22,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from . import helpers, logconfig, models
+from . import helpers, logconfig, models, tm
 
 T = TypeVar("T")
 
@@ -41,19 +41,22 @@ class TimedOverflowBuffer(Generic[T]):
         max_size (int): The maximum number of items to buffer before flushing.
         timeout (timedelta): The maximum duration to wait before flushing the buffer,
             regardless of size.
-        flush_callable (Callable[[list[T]], Awaitable[None]]): The asynchronous
+        callback (Callable[[list[T]], Awaitable[None]]): The asynchronous
             callable used to flush items, such as logging to a database.
         shutdown (asyncio.Event): An event to signal when the buffer should stop monitoring
             (e.g., during shutdown).
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
-        lock (asyncio.Lock): A lock to ensure thread safety during flush operations.
         flush_handle (Optional[asyncio.TimerHandle]): Handle for the scheduled flush callback.
     """
 
     max_size: int
     timeout: timedelta
-    flush_callable: Callable[[list[T]], Awaitable[None]]
+    callback: Callable[[list[T]], Awaitable[None]]
 
+    next_flush: datetime = dataclasses.field(
+        init=False,
+        default_factory=helpers.perf_counter_dt,
+    )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -66,34 +69,38 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Lock,
     )
-    flush_handle: asyncio.TimerHandle | None = dataclasses.field(
+    delay_multiplier: float = dataclasses.field(
         init=False,
-        default=None,
+        default=1,
+    )
+    tm: tm.TaskManager = dataclasses.field(
+        init=False,
+        default_factory=tm.TaskManager,
     )
 
-    def _schedule_flush(self) -> None:
-        """
-        Schedule the flush_callable to be called after the specified timeout.
+    async def periodic_flush(self) -> None:
+        shutdown_task = asyncio.create_task(self.shutdown.wait())
+        pending = set[asyncio.Task]()
+        while not self.shutdown.is_set():
+            if helpers.perf_counter_dt() > self.next_flush:
+                await self.flush()
 
-        If a flush is already scheduled, it cancels the previous one before scheduling a new one.
-        """
-        if self.flush_handle is not None:
-            self.flush_handle.cancel()
+            sleep_task = asyncio.create_task(
+                asyncio.sleep(
+                    helpers.timeout_with_jitter(
+                        self.timeout,
+                        self.delay_multiplier,
+                    ).total_seconds()
+                )
+            )
 
-        loop = asyncio.get_event_loop()
-        self.flush_handle = loop.call_later(
-            self.timeout.total_seconds(),
-            lambda: asyncio.create_task(
-                self._flush_callback(),
-            ),
-        )
+            _, pending = await asyncio.wait(
+                (sleep_task, shutdown_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
-    async def _flush_callback(self) -> None:
-        """
-        Callback wrapper to safely call the flush_callable coroutine.
-        """
-        async with self.lock:
-            await self.flush()
+        for p in pending:
+            p.cancel()
 
     async def add(self, item: T) -> None:
         """
@@ -107,15 +114,15 @@ class TimedOverflowBuffer(Generic[T]):
         Args:
             item (T): The item to be added to the buffer.
         """
-        async with self.lock:
-            await self.events.put(item)
+        await self.events.put(item)
 
-            if self.events.qsize() >= self.max_size:
-                await self.flush()
-            else:
-                self._schedule_flush()
+        if self.events.qsize() >= self.max_size and helpers.perf_counter_dt() > self.next_flush:
+            self.tm.add(asyncio.create_task(self.flush()))
 
-    async def pop_until(self) -> AsyncGenerator[T, None]:
+    async def pop_until(
+        self,
+        until: timedelta = timedelta(seconds=0.01),
+    ) -> AsyncGenerator[T, None]:
         """
         Yield items from the buffer until conditions are met.
 
@@ -127,11 +134,8 @@ class TimedOverflowBuffer(Generic[T]):
         Yields:
             AsyncGenerator[T, None]: An asynchronous generator yielding items.
         """
-        start_time = helpers.perf_counter_dt()
-        for _ in range(self.max_size):
-            if self.events.empty() or helpers.perf_counter_dt() - start_time > self.timeout:
-                break
-
+        deadline = helpers.perf_counter_dt() + until
+        while not self.events.empty() and helpers.perf_counter_dt() < deadline:
             yield await self.events.get()
 
     async def flush(self) -> None:
@@ -144,25 +148,33 @@ class TimedOverflowBuffer(Generic[T]):
         of the callable, it logs the exception, re-adds the items to the queue, and schedules
         a retry. This helps in handling transient errors without losing items.
         """
+
+        if helpers.perf_counter_dt() < self.next_flush:
+            return
+
         items = [item async for item in self.pop_until()]
 
         if not items:
             return
 
         try:
-            await self.flush_callable(items)
+            await self.callback(items)
         except Exception:
+            self.delay_multiplier = min(256, self.delay_multiplier * 2)
             logconfig.logger.exception(
-                "Exception during buffer flush, waiting: %s seconds before retry.",
-                self.timeout.total_seconds(),
+                "Unable to flush: %s, using delay multiplier: %d",
+                self.callback.__name__,
+                self.delay_multiplier,
             )
             # Re-add the items to the queue for retry
             for item in items:
-                await self.events.put(item)
-            # Schedule a retry flush
-            self._schedule_flush()
-            # Wait for the timeout before allowing further operations
-            await asyncio.sleep(self.timeout.total_seconds())
+                self.events.put_nowait(item)
+        else:
+            self.delay_multiplier = 1
+        finally:
+            self.next_flush = helpers.perf_counter_dt() + helpers.timeout_with_jitter(
+                self.timeout, self.delay_multiplier
+            )
 
     async def __aenter__(self) -> Self:
         """
@@ -174,6 +186,7 @@ class TimedOverflowBuffer(Generic[T]):
         Returns:
             TimedOverflowBuffer: The TimedOverflowBuffer instance itself.
         """
+        self.tm.add(asyncio.create_task(self.periodic_flush()))
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -182,10 +195,10 @@ class TimedOverflowBuffer(Generic[T]):
 
         Cancels any scheduled flush operation and flushes any remaining items in the buffer.
         """
-        if self.flush_handle is not None:
-            self.flush_handle.cancel()
 
-        async with self.lock:
+        self.shutdown.set()
+        await self.tm.gather_tasks()
+        while not self.events.empty():
             await self.flush()
 
 

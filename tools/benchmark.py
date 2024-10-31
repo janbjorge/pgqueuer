@@ -240,6 +240,8 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     print("Queue size:")
     for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
         print(f"  {status} {sum(x.count for x in items)}")
+    if not qsize:
+        print("  0")
 
     if tqdm_format_dict and args.output_json:
         with open(args.output_json, "w") as f:
