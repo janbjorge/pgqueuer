@@ -311,7 +311,7 @@ def _named_parameter(args: tuple) -> dict[str, Any]:
     return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
 
 
-class PsycopgDriver:
+class PsycopgDriver(Driver):
     def __init__(
         self,
         connection: psycopg.AsyncConnection,
