@@ -4,8 +4,8 @@
 
 ---
 
-📚 **Documentation**: [Explore the Docs](https://pgqueuer.readthedocs.io/en/latest/)  
-🔍 **Source Code**: [View on GitHub](https://github.com/janbjorge/pgqueuer/)  
+📚 **Documentation**: [Explore the Docs](https://pgqueuer.readthedocs.io/en/latest/)
+🔍 **Source Code**: [View on GitHub](https://github.com/janbjorge/pgqueuer/)
 💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
 
 ---
@@ -122,4 +122,3 @@ PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
 
 ---
 Ready to supercharge your workflows? Install PGQueuer today and take your job management to the next level!
-

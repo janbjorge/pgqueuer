@@ -111,7 +111,7 @@ class Driver(Protocol):
         raise NotImplementedError
 
     @property
-    def alive(self) -> asyncio.Event:
+    def shutdown(self) -> asyncio.Event:
         """
         An asyncio.Event indicating the liveness of the driver.
 
@@ -161,7 +161,7 @@ class AsyncpgDriver(Driver):
         connection: asyncpg.Connection,
     ) -> None:
         """Initialize the driver with an AsyncPG connection."""
-        self._alive = asyncio.Event()
+        self._shutdown = asyncio.Event()
         self._connection = connection
         self._lock = asyncio.Lock()
 
@@ -193,8 +193,8 @@ class AsyncpgDriver(Driver):
             )
 
     @property
-    def alive(self) -> asyncio.Event:
-        return self._alive
+    def shutdown(self) -> asyncio.Event:
+        return self._shutdown
 
     @property
     def tm(self) -> tm.TaskManager:
@@ -222,7 +222,7 @@ class AsyncpgPoolDriver(Driver):
         """
         Initialize the AsyncpgPoolDriver with a connection pool.
         """
-        self._alive = asyncio.Event()
+        self._shutdown = asyncio.Event()
         self._pool = pool
         self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
         self._lock = asyncio.Lock()
@@ -261,8 +261,8 @@ class AsyncpgPoolDriver(Driver):
             )
 
     @property
-    def alive(self) -> asyncio.Event:
-        return self._alive
+    def shutdown(self) -> asyncio.Event:
+        return self._shutdown
 
     @property
     def tm(self) -> tm.TaskManager:
@@ -318,7 +318,7 @@ class PsycopgDriver(Driver):
         notify_timeout: timedelta = timedelta(seconds=0.25),
         notify_stop_after: int = 10,
     ) -> None:
-        self._alive = asyncio.Event()
+        self._shutdown = asyncio.Event()
         self._connection = connection
         self._lock = asyncio.Lock()
         self._tm = tm.TaskManager()
@@ -326,8 +326,8 @@ class PsycopgDriver(Driver):
         self._notify_timeout = notify_timeout
 
     @property
-    def alive(self) -> asyncio.Event:
-        return self._alive
+    def shutdown(self) -> asyncio.Event:
+        return self._shutdown
 
     @property
     def tm(self) -> tm.TaskManager:
@@ -369,13 +369,13 @@ class PsycopgDriver(Driver):
             await self._connection.execute(f"LISTEN {channel};")
 
             async def notify_handler() -> None:
-                while not self.alive.is_set():
+                while not self.shutdown.is_set():
                     gen = self._connection.notifies(
                         timeout=self._notify_timeout.total_seconds(),
                         stop_after=self._notify_stop_after,
                     )
                     async for note in gen:
-                        if not self.alive.is_set():
+                        if not self.shutdown.is_set():
                             callback(note.payload)
                     await asyncio.sleep(self._notify_timeout.total_seconds())
 
@@ -390,5 +390,5 @@ class PsycopgDriver(Driver):
         return self
 
     async def __aexit__(self, *_: object) -> None:
-        self.alive.set()
+        self.shutdown.set()
         await self.tm.gather_tasks()

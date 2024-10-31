@@ -158,7 +158,7 @@ async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
 
     task = asyncio.create_task(run_queue_manager())
     await asyncio.sleep(1)  # Allow some time for the job to be processed
-    qm.alive.set()  # Signal the queue manager to stop
+    qm.shutdown.set()  # Signal the queue manager to stop
     await task
 
     assert results == [b"test_data"]

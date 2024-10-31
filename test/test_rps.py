@@ -65,7 +65,7 @@ async def test_rps(
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
     await asyncio.gather(timer(), dequeue())
     assert 100 <= tally.count / wait <= 140

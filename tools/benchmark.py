@@ -62,14 +62,14 @@ async def consumer(
 
 
 async def producer(
-    alive: asyncio.Event,
+    shutdown: asyncio.Event,
     queries: Queries,
     batch_size: int,
     cnt: count,
 ) -> None:
     assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
-    while not alive.is_set():
+    while not shutdown.is_set():
         await queries.enqueue(
             random.sample(entrypoints, k=batch_size),
             [f"{next(cnt)}".encode() for _ in range(batch_size)],
@@ -161,15 +161,15 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     await (await querier(args.driver, dsn())).clear_log()
     await (await querier(args.driver, dsn())).clear_queue()
 
-    alive = asyncio.Event()
+    shutdown = asyncio.Event()
     qms = list[QueueManager]()
     tqdm_format_dict = {}
 
-    async def enqueue(alive: asyncio.Event) -> None:
+    async def enqueue(shutdown: asyncio.Event) -> None:
         cnt = count()
         producers = [
             producer(
-                alive,
+                shutdown,
                 await querier(args.driver, dsn()),
                 int(args.enqueue_batch_size),
                 cnt,
@@ -202,38 +202,38 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             await asyncio.gather(*consumers)
             tqdm_format_dict.update(bar.format_dict)
 
-    async def dequeue_alive_timer(
+    async def dequeue_shutdown_timer(
         qms: list[QueueManager],
-        alive: asyncio.Event,
+        shutdown: asyncio.Event,
     ) -> None:
         _, pending = await asyncio.wait(
             (
                 asyncio.create_task(asyncio.sleep(args.timer.total_seconds())),
-                asyncio.create_task(alive.wait()),
+                asyncio.create_task(shutdown.wait()),
             ),
             return_when=asyncio.FIRST_COMPLETED,
         )
         # Stop producers
-        alive.set()
+        shutdown.set()
         # Stop consumers
         for q in qms:
-            q.alive.set()
+            q.shutdown.set()
 
         for p in pending:
             p.cancel()
 
     def graceful_shutdown(signum: int, frame: object) -> None:
-        alive.set()
+        shutdown.set()
         for qm in qms:
-            qm.alive.set()
+            qm.shutdown.set()
 
     signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
     signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
 
     await asyncio.gather(
         dequeue(qms),
-        enqueue(alive),
-        dequeue_alive_timer(qms, alive),
+        enqueue(shutdown),
+        dequeue_shutdown_timer(qms, shutdown),
     )
 
     qsize = await (await querier(args.driver, dsn())).queue_size()

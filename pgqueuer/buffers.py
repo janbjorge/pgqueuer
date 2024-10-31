@@ -43,7 +43,7 @@ class TimedOverflowBuffer(Generic[T]):
             regardless of size.
         flush_callable (Callable[[list[T]], Awaitable[None]]): The asynchronous
             callable used to flush items, such as logging to a database.
-        alive (asyncio.Event): An event to signal when the buffer should stop monitoring
+        shutdown (asyncio.Event): An event to signal when the buffer should stop monitoring
             (e.g., during shutdown).
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
         lock (asyncio.Lock): A lock to ensure thread safety during flush operations.
@@ -54,7 +54,7 @@ class TimedOverflowBuffer(Generic[T]):
     timeout: timedelta
     flush_callable: Callable[[list[T]], Awaitable[None]]
 
-    alive: asyncio.Event = dataclasses.field(
+    shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
