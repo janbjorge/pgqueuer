@@ -79,10 +79,10 @@ class TimedOverflowBuffer(Generic[T]):
     )
 
     async def periodic_flush(self) -> None:
-        shutdown_task = asyncio.create_task(self.shutdown.wait())
+        shutdown = asyncio.create_task(self.shutdown.wait())
         pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
-            if helpers.perf_counter_dt() > self.next_flush:
+            if helpers.perf_counter_dt() > self.next_flush and not self.lock.locked():
                 await self.flush()
 
             sleep_task = asyncio.create_task(
@@ -95,7 +95,7 @@ class TimedOverflowBuffer(Generic[T]):
             )
 
             _, pending = await asyncio.wait(
-                (sleep_task, shutdown_task),
+                (sleep_task, shutdown),
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
@@ -116,7 +116,11 @@ class TimedOverflowBuffer(Generic[T]):
         """
         await self.events.put(item)
 
-        if self.events.qsize() >= self.max_size and helpers.perf_counter_dt() > self.next_flush:
+        if (
+            self.events.qsize() >= self.max_size
+            and helpers.perf_counter_dt() > self.next_flush
+            and not self.lock.locked()
+        ):
             self.tm.add(asyncio.create_task(self.flush()))
 
     async def pop_until(
@@ -152,29 +156,33 @@ class TimedOverflowBuffer(Generic[T]):
         if helpers.perf_counter_dt() < self.next_flush:
             return
 
-        items = [item async for item in self.pop_until()]
-
-        if not items:
+        if self.lock.locked():
             return
 
-        try:
-            await self.callback(items)
-        except Exception:
-            self.delay_multiplier = min(256, self.delay_multiplier * 2)
-            logconfig.logger.exception(
-                "Unable to flush: %s, using delay multiplier: %d",
-                self.callback.__name__,
-                self.delay_multiplier,
-            )
-            # Re-add the items to the queue for retry
-            for item in items:
-                self.events.put_nowait(item)
-        else:
-            self.delay_multiplier = 1
-        finally:
-            self.next_flush = helpers.perf_counter_dt() + helpers.timeout_with_jitter(
-                self.timeout, self.delay_multiplier
-            )
+        async with self.lock:
+            items = [item async for item in self.pop_until()]
+
+            if not items:
+                return
+
+            try:
+                await self.callback(items)
+            except Exception:
+                self.delay_multiplier = min(256, self.delay_multiplier * 2)
+                logconfig.logger.exception(
+                    "Unable to flush: %s, using delay multiplier: %d",
+                    self.callback.__name__,
+                    self.delay_multiplier,
+                )
+                # Re-add the items to the queue for retry
+                for item in items:
+                    self.events.put_nowait(item)
+            else:
+                self.delay_multiplier = 1
+            finally:
+                self.next_flush = helpers.perf_counter_dt() + helpers.timeout_with_jitter(
+                    self.timeout, self.delay_multiplier
+                )
 
     async def __aenter__(self) -> Self:
         """

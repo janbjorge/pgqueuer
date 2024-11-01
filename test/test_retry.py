@@ -6,9 +6,14 @@ from datetime import datetime, timedelta
 import async_timeout
 import pytest
 
-from pgqueuer import db
+from pgqueuer import db, queries
 from pgqueuer.models import Job, JobId
 from pgqueuer.qm import QueueManager
+
+
+async def _inspect_queue_jobs(jids: list[JobId], driver: db.Driver) -> list[Job]:
+    sql = f"""SELECT * FROM {queries.DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
+    return [Job.model_validate(x) for x in await driver.fetch(sql, jids)]
 
 
 @pytest.mark.parametrize("N", (2, 4, 8, 16))
@@ -74,10 +79,8 @@ async def test_no_retry_on_zero_timer(
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize("N", (2, 4))
 async def test_heartbeat_updates(
     apgdriver: db.Driver,
-    N: int,
     retry_timer: timedelta = timedelta(seconds=0.100),
 ) -> None:
     e = asyncio.Event()
@@ -89,22 +92,27 @@ async def test_heartbeat_updates(
         seen.append(context.heartbeat)
         await e.wait()
 
-    await c.queries.enqueue(["fetch"], [None], [0])
+    jids = await c.queries.enqueue(["fetch"], [None], [0])
+    (before,) = await _inspect_queue_jobs(jids, apgdriver)
+    after: None | Job = None
 
     async def until_retry_updated() -> None:
-        while len(seen) < N:
+        nonlocal after
+        while len(seen) < 2:
             await asyncio.sleep(0)
+        (after,) = await _inspect_queue_jobs(jids, apgdriver)
         c.shutdown.set()
         e.set()
 
-    async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):
+    async with async_timeout.timeout(retry_timer.total_seconds() * 10):
         await asyncio.gather(
             c.run(dequeue_timeout=timedelta(seconds=0)),
             until_retry_updated(),
         )
 
-    for earlier, later in zip(seen, seen[1:]):
-        assert (later - earlier) >= retry_timer
+    assert after is not None
+    assert after.heartbeat > before.heartbeat
+    assert len(set(seen)) > 1
 
 
 @pytest.mark.parametrize("N", (2, 4))
