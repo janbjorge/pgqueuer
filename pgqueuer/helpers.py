@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import random
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -88,3 +89,25 @@ def retry_timer_buffer_timeout(
         return min(dt for dt in dts if dt > _t0)
     except ValueError:
         return _default
+
+
+def timeout_with_jitter(
+    timeout: timedelta,
+    delay_multiplier: float,
+    jitter_span: tuple[float, float] = (0.8, 1.2),
+) -> timedelta:
+    """
+    Calculate a delay with a jitter applied.
+
+    Args:
+        base_timeout (timedelta): The base timeout as a timedelta object.
+        delay_multiplier (float): The multiplier to scale the base timeout.
+        jitter_span (tuple[float, float]): A tuple representing the lower and upper
+            bounds of the jitter range.
+
+    Returns:
+        float: The calculated delay with jitter applied, in seconds.
+        The jitter will be in the specified range of the base delay.
+    """
+    jitter = random.uniform(*jitter_span)
+    return timedelta(seconds=timeout.total_seconds() * delay_multiplier * jitter)

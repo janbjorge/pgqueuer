@@ -282,12 +282,12 @@ class QueueManager:
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 timeout=job_status_log_buffer_timeout,
-                flush_callable=self.queries.log_jobs,
+                callback=self.queries.log_jobs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
-                timeout=heartbeat_buffer_timeout,
-                flush_callable=self.queries.notify_activity,
+                timeout=heartbeat_buffer_timeout / 2,
+                callback=self.queries.notify_activity,
             ) as hbuff,
             tm.TaskManager() as task_manager,
             self.connection,
@@ -393,7 +393,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                executor.retry_timer / 2,
+                executor.retry_timer,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
