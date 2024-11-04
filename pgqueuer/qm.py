@@ -17,7 +17,7 @@ import warnings
 from collections import Counter, deque
 from datetime import timedelta
 from math import isfinite
-from typing import Callable
+from typing import AsyncGenerator, Callable
 
 import anyio
 
@@ -238,6 +238,54 @@ class QueueManager:
             and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
+    async def fetch_jobs(
+        self,
+        batch_size: int,
+        task_manager: tm.TaskManager,
+    ) -> AsyncGenerator[models.Job, None]:
+        """
+        Fetch jobs from the queue that are ready for processing, yielding them one at a time.
+
+        This method retrieves a batch of jobs that match the current capacity constraints
+        of each entrypoint. It ensures that jobs are fetched only when the QueueManager
+        is operational and that rate limits and concurrency controls are respected.
+        """
+
+        while not self.shutdown.is_set():
+            entrypoints = {
+                x: (
+                    self.entrypoint_registry[x].retry_timer,
+                    self.entrypoint_registry[x].serialized_dispatch,
+                    self.entrypoint_registry[x].concurrency_limit,
+                )
+                for x in self.entrypoints_below_capacity_limits()
+            }
+
+            if not (
+                jobs := await self.queries.dequeue(
+                    batch_size=batch_size,
+                    entrypoints=entrypoints,
+                    queue_manager_id=self.queue_manager_id,
+                )
+            ):
+                break
+
+            for job in jobs:
+                yield job
+
+            for entrypoint, count in Counter(job.entrypoint for job in jobs).items():
+                # skip if rate is inf.
+                target_rps = self.entrypoint_registry[entrypoint].requests_per_second
+                if isfinite(target_rps):
+                    task_manager.add(
+                        asyncio.create_task(
+                            self.queries.notify_debounce_event(
+                                entrypoint,
+                                count,
+                            )
+                        )
+                    )
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
@@ -321,28 +369,10 @@ class QueueManager:
             shutdown_task = asyncio.create_task(self.shutdown.wait())
 
             while not self.shutdown.is_set():
-                entrypoints = {
-                    x: (
-                        self.entrypoint_registry[x].retry_timer,
-                        self.entrypoint_registry[x].serialized_dispatch,
-                        self.entrypoint_registry[x].concurrency_limit,
-                    )
-                    for x in self.entrypoints_below_capacity_limits()
-                }
-
-                jobs = await self.queries.dequeue(
-                    batch_size=batch_size,
-                    entrypoints=entrypoints,
-                    queue_manager_id=self.queue_manager_id,
-                )
-
-                entrypoint_tally = Counter[str]()
-
-                for job in jobs:
+                async for job in self.fetch_jobs(batch_size, task_manager):
                     self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                     )
-                    entrypoint_tally[job.entrypoint] += 1
 
                     task_manager.add(
                         asyncio.create_task(
@@ -356,19 +386,6 @@ class QueueManager:
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
-
-                for entrypoint, count in entrypoint_tally.items():
-                    # skip if rate is inf.
-                    rps = self.entrypoint_registry[entrypoint].requests_per_second
-                    if isfinite(rps):
-                        task_manager.add(
-                            asyncio.create_task(
-                                self.queries.notify_debounce_event(
-                                    entrypoint,
-                                    count,
-                                )
-                            )
-                        )
 
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,

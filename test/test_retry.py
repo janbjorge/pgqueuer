@@ -194,9 +194,6 @@ async def test_varying_retry_timers(
 
     async def until_retry_updated() -> None:
         while True:
-            from icecream import ic
-
-            ic(seen_short, seen_long)
             if (
                 seen_short
                 and all(v > 1 for v in seen_short.values())
