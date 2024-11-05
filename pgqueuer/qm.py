@@ -43,6 +43,7 @@ class QueueManager:
         queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
         entrypoint_statistics (dict[str, models.EntrypointStatistics]): Statistics for entrypoints.
+        queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
             including cancellation scopes.
     """
