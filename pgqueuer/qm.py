@@ -273,18 +273,13 @@ class QueueManager:
             for job in jobs:
                 yield job
 
-            for entrypoint, count in Counter(job.entrypoint for job in jobs).items():
-                # skip if rate is inf.
-                target_rps = self.entrypoint_registry[entrypoint].requests_per_second
-                if isfinite(target_rps):
-                    task_manager.add(
-                        asyncio.create_task(
-                            self.queries.notify_debounce_event(
-                                entrypoint,
-                                count,
-                            )
-                        )
-                    )
+    async def flush_rps(self, events: list[str]) -> None:
+        """Update rate-per-second statistics for the given entrypoints."""
+        for entrypoint, count in Counter(events).items():
+            # skip if rate is inf.
+            target_rps = self.entrypoint_registry[entrypoint].requests_per_second
+            if isfinite(target_rps):
+                await self.queries.notify_debounce_event(entrypoint, count)
 
     async def run(
         self,
@@ -356,6 +351,11 @@ class QueueManager:
                 timeout=heartbeat_buffer_timeout / 2,
                 callback=self.queries.notify_activity,
             ) as hbuff,
+            buffers.RequestsPerSecondBuffer(
+                max_size=0,
+                timeout=timedelta(seconds=0.01),
+                callback=self.flush_rps,
+            ) as rpsbuff,
             tm.TaskManager() as task_manager,
             self.connection,
         ):
@@ -370,10 +370,8 @@ class QueueManager:
 
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(batch_size, task_manager):
-                    self.job_context[job.id] = models.Context(
-                        cancellation=anyio.CancelScope(),
-                    )
-
+                    await rpsbuff.add(job.entrypoint)
+                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
                     task_manager.add(
                         asyncio.create_task(
                             self._dispatch(
