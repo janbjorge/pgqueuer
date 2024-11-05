@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections import defaultdict
 from datetime import timedelta
 from itertools import chain
@@ -138,7 +139,9 @@ async def test_no_jobs_processed_when_locked(
     queries = Queries(apgdriver)
     await enqueue(queries, size=n_tasks)
     picked_job = await queries.dequeue(
-        1, {"serialized_dispatch_true": (timedelta(seconds=30), True)}
+        1,
+        {"serialized_dispatch_true": (timedelta(seconds=30), True, 0)},
+        queue_manager_id=uuid.uuid4(),
     )
     assert len(picked_job) == 1, "Failed to pick a job for locking"
 

@@ -1,5 +1,6 @@
 import asyncio
 import time
+import uuid
 from datetime import timedelta
 
 import pytest
@@ -140,3 +141,31 @@ async def test_pick_local_entrypoints(
     assert pikced_by == ["to_be_picked"] * N
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
     assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
+
+
+async def test_pick_set_queue_manager_id(
+    apgdriver: db.Driver,
+    N: int = 100,
+) -> None:
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
+    qmids = set[uuid.UUID]()
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        assert job.queue_manager_id is not None
+        qmids.add(job.queue_manager_id)
+
+    await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+
+    async def waiter() -> None:
+        while sum(x.count for x in await q.queue_size()):
+            await asyncio.sleep(0.01)
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0.01)),
+        waiter(),
+    )
+
+    assert len(qmids) == 1

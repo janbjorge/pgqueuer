@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import uuid
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process, Queue as MPQueue
 
@@ -49,6 +50,7 @@ async def test_entrypoint_executor_sync() -> None:
         status="queued",
         entrypoint="test",
         payload=b"test_payload",
+        queue_manager_id=uuid.uuid4(),
     )
 
     await executor.execute(job)
@@ -74,6 +76,7 @@ async def test_entrypoint_executor_async() -> None:
         status="queued",
         entrypoint="test",
         payload=b"test_payload",
+        queue_manager_id=uuid.uuid4(),
     )
 
     await executor.execute(job)
@@ -109,6 +112,7 @@ async def test_custom_threading_executor() -> None:
         status="queued",
         entrypoint="test",
         payload=b"thread_payload",
+        queue_manager_id=uuid.uuid4(),
     )
 
     await executor.execute(job)
@@ -128,6 +132,7 @@ async def test_custom_multiprocessing_executor() -> None:
         status="queued",
         entrypoint="test",
         payload=b"process_payload",
+        queue_manager_id=uuid.uuid4(),
     )
 
     await executor.execute(job)
