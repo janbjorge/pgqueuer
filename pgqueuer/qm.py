@@ -81,6 +81,12 @@ class QueueManager:
     @property
     def alive(self) -> asyncio.Event:
         # For backwards compatibility
+        warnings.warn(
+            "The `alive` property is deprecated and will be removed in a future release. "
+            "Please use `shutdown` instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self.shutdown
 
     def __post_init__(self) -> None:
