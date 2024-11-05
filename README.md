@@ -4,9 +4,9 @@
 
 ---
 
-📚 **Documentation**: [Explore the Docs](https://pgqueuer.readthedocs.io/en/latest/)
-🔍 **Source Code**: [View on GitHub](https://github.com/janbjorge/pgqueuer/)
-💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
+- 📚 **Documentation**: [Explore the Docs](https://pgqueuer.readthedocs.io/en/latest/)
+- 🔍 **Source Code**: [View on GitHub](https://github.com/janbjorge/pgqueuer/)
+- 💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
 
 ---
 
@@ -111,10 +111,6 @@ Example output:
 - **Built for Scale**: Handles thousands of jobs per second, making it ideal for high-throughput applications.
 - **PostgreSQL Native**: Utilizes advanced PostgreSQL features for robust job handling.
 - **Flexible Concurrency**: Offers rate and concurrency limiting to cater to different use-cases, from bursty workloads to critical resource-bound tasks.
-
-## Community & Support
-
-Join our [Discord Community](https://discord.gg/C7YMBzcRMQ) to discuss PGQueuer, ask questions, and get support from other developers.
 
 ## License
 
