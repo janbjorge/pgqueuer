@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import dataclasses
 import sys
+import uuid
 import warnings
 from collections import Counter, deque
 from datetime import timedelta
@@ -65,6 +66,10 @@ class QueueManager:
     entrypoint_statistics: dict[str, models.EntrypointStatistics] = dataclasses.field(
         init=False,
         default_factory=dict,
+    )
+    queue_manager_id: uuid.UUID = dataclasses.field(
+        init=False,
+        default_factory=uuid.uuid4,
     )
 
     # Per job.
@@ -274,6 +279,13 @@ class QueueManager:
                 f"The {self.queries.qb.settings.queue_table} table is missing the "
                 "heartbeat column, please run 'python3 -m pgqueuer upgrade'"
             )
+
+        if not (await self.queries.has_queue_manager_id_column()):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.queue_table} table is missing the "
+                "queue_manager_id column, please run 'python3 -m pgqueuer upgrade'"
+            )
+
         job_status_log_buffer_timeout = timedelta(seconds=0.01)
         heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
             [x.retry_timer for x in self.entrypoint_registry.values()]
@@ -306,6 +318,7 @@ class QueueManager:
                     x: (
                         self.entrypoint_registry[x].retry_timer,
                         self.entrypoint_registry[x].serialized_dispatch,
+                        self.entrypoint_registry[x].concurrency_limit,
                     )
                     for x in self.entrypoints_below_capacity_limits()
                 }
@@ -313,6 +326,7 @@ class QueueManager:
                 jobs = await self.queries.dequeue(
                     batch_size=batch_size,
                     entrypoints=entrypoints,
+                    queue_manager_id=self.queue_manager_id,
                 )
 
                 entrypoint_tally = Counter[str]()

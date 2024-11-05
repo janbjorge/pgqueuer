@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from datetime import timedelta
 from itertools import count
 
@@ -9,7 +10,10 @@ from pgqueuer.helpers import perf_counter_dt
 from pgqueuer.models import Job
 
 
-def job_faker(cnt: count = count()) -> Job:
+def job_faker(
+    cnt: count = count(),
+    queue_manager_id: uuid.UUID = uuid.uuid4(),
+) -> Job:
     dt = perf_counter_dt()
     return Job(
         id=next(cnt),
@@ -19,6 +23,7 @@ def job_faker(cnt: count = count()) -> Job:
         status="picked",
         entrypoint="foo",
         payload=None,
+        queue_manager_id=queue_manager_id,
     )
 
 

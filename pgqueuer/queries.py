@@ -14,6 +14,7 @@ import asyncio
 import dataclasses
 import os
 import re
+import uuid
 from datetime import timedelta
 from typing import Final, Generator, overload
 
@@ -153,6 +154,7 @@ class QueryBuilder:
     CREATE TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
+        queue_manager_id UUID,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -164,6 +166,8 @@ class QueryBuilder:
         INCLUDE (id) WHERE status = 'queued';
     CREATE INDEX {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC)
         INCLUDE (id) WHERE status = 'picked';
+    CREATE INDEX {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id)
+        WHERE queue_manager_id IS NOT NULL;
 
     CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful', 'canceled');
     CREATE TABLE {self.settings.statistics_table} (
@@ -265,15 +269,27 @@ class QueryBuilder:
         return f"""WITH
     entrypoint_execution_params AS (
         SELECT
-            unnest($2::text[]) AS entrypoint,
-            unnest($3::interval[]) AS retry_after,
-            unnest($4::boolean[]) AS serialized
+            unnest($2::text[])      AS entrypoint,
+            unnest($3::interval[])  AS retry_after,
+            unnest($4::boolean[])   AS serialized,
+            unnest($5::bigint[])    AS concurrency_limit
+    ),
+    jobs_by_queue_manager_entrypoint AS (
+        SELECT COUNT(*), entrypoint
+        FROM {self.settings.queue_table}
+        WHERE
+                queue_manager_id IS NOT NULL
+            AND queue_manager_id = $6
+            AND entrypoint = ANY($2)
+        GROUP BY entrypoint
     ),
     next_job_queued AS (
         SELECT {self.settings.queue_table}.id
         FROM {self.settings.queue_table}
         INNER JOIN entrypoint_execution_params
         ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
+        LEFT JOIN jobs_by_queue_manager_entrypoint
+        ON jobs_by_queue_manager_entrypoint.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
             {self.settings.queue_table}.entrypoint = ANY($2)
             AND {self.settings.queue_table}.status = 'queued'
@@ -285,6 +301,11 @@ class QueryBuilder:
                     WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
                     AND existing_job.status = 'picked'
                 )
+            )
+            AND (
+                entrypoint_execution_params.concurrency_limit <= 0
+                OR jobs_by_queue_manager_entrypoint.count IS NULL
+                OR jobs_by_queue_manager_entrypoint.count < entrypoint_execution_params.concurrency_limit
             )
         ORDER BY {self.settings.queue_table}.priority DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
@@ -314,7 +335,7 @@ class QueryBuilder:
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW(), heartbeat = NOW()
+        SET status = 'picked', updated = NOW(), heartbeat = NOW(), queue_manager_id = $6
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     )
@@ -558,6 +579,8 @@ class QueryBuilder:
         yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} queue_manager_id WHERE queue_manager_id IS NOT NULL;"  # noqa: E501
 
     def create_has_column_query(self) -> str:
         """
@@ -656,7 +679,8 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, tuple[timedelta, bool]],
+        entrypoints: dict[str, tuple[timedelta, bool, int]],
+        queue_manager_id: uuid.UUID,
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -686,8 +710,10 @@ class Queries:
             self.qb.create_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
-            [t for t, _ in entrypoints.values()],
-            [s for _, s in entrypoints.values()],
+            [t for t, _, _ in entrypoints.values()],
+            [s for _, s, _ in entrypoints.values()],
+            [c for _, _, c in entrypoints.values()],
+            queue_manager_id,
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
@@ -912,6 +938,21 @@ class Queries:
             self.qb.create_has_column_query(),
             self.qb.settings.queue_table,
             "heartbeat",
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
+    async def has_queue_manager_id_column(self) -> bool:
+        """
+        Check if the 'queue_manager_id' column exists in the queue table.
+        Returns:
+            bool: True if the 'queue_manager_id' column exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qb.create_has_column_query(),
+            self.qb.settings.queue_table,
+            "queue_manager_id",
         )
         assert len(rows) == 1
         (row,) = rows

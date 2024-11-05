@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NewType
@@ -142,6 +143,7 @@ class Job(BaseModel):
     status: STATUS
     entrypoint: str
     payload: bytes | None
+    queue_manager_id: uuid.UUID | None
 
 
 ###### Statistics ######
