@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import sys
+from collections import defaultdict, deque
 from datetime import timedelta
 from typing import Literal
 
@@ -45,10 +47,16 @@ async def display_pg_channel(
     connection: db.Driver,
     channel: models.PGChannel,
 ) -> None:
+    def entrypoint_statistics() -> models.EntrypointStatistics:
+        return models.EntrypointStatistics(
+            samples=deque(maxlen=1_000),
+            concurrency_limiter=asyncio.Semaphore(sys.maxsize),
+        )
+
     listener = await listeners.initialize_notice_event_listener(
         connection,
         channel,
-        {},
+        defaultdict(entrypoint_statistics),
         {},
     )
     while True:
