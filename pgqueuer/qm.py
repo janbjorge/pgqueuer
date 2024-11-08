@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import functools
 import sys
 import uuid
 import warnings
@@ -359,11 +360,16 @@ class QueueManager:
             tm.TaskManager() as task_manager,
             self.connection,
         ):
-            notice_event_listener = await listeners.initialize_notice_event_listener(
+            notice_event_listener = listeners.PGNoticeEventListener()
+            await listeners.initialize_notice_event_listener(
                 self.connection,
                 self.channel,
-                self.entrypoint_statistics,
-                self.job_context,
+                functools.partial(
+                    listeners.handle_event_type,
+                    notice_event_queue=notice_event_listener,
+                    statistics=self.entrypoint_statistics,
+                    canceled=self.job_context,
+                ),
             )
 
             shutdown_task = asyncio.create_task(self.shutdown.wait())

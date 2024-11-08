@@ -10,91 +10,72 @@ different types of events, such as table changes, request rates, and job cancell
 from __future__ import annotations
 
 import asyncio
-from typing import MutableMapping
+from typing import Callable, MutableMapping
 
 from . import db, logconfig, models
 
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """
-    Asynchronous queue for PostgreSQL events from a specified channel.
-
-    The `PGNoticeEventListener` class is a specialized `asyncio.Queue` that stores
-    `TableChangedEvent` instances received from a PostgreSQL NOTIFY channel.
-    It allows consumers to asynchronously retrieve events as they are received.
+    Queue for PostgreSQL NOTIFY events.
     """
+
+
+def handle_event_type(
+    event: models.AnyEvent,
+    notice_event_queue: PGNoticeEventListener,
+    statistics: MutableMapping[str, models.EntrypointStatistics],
+    canceled: MutableMapping[models.JobId, models.Context],
+) -> None:
+    """
+    Handle parsed event based on its type.
+    """
+    if event.root.type == "table_changed_event":
+        notice_event_queue.put_nowait(event.root)
+    elif event.root.type == "requests_per_second_event":
+        statistics[event.root.entrypoint].samples.append((event.root.count, event.root.sent_at))
+    elif event.root.type == "cancellation_event":
+        for jid in event.root.ids:
+            if ctx := canceled.get(jid):
+                ctx.cancellation.cancel()
+    else:
+        raise NotImplementedError(event)
 
 
 async def initialize_notice_event_listener(
     connection: db.Driver,
     channel: models.PGChannel,
-    statistics: MutableMapping[str, models.EntrypointStatistics],
-    canceled: MutableMapping[models.JobId, models.Context],
-) -> PGNoticeEventListener:
+    event_handler: Callable[[models.AnyEvent], None],
+) -> None:
     """
-    Initialize a listener on a PostgreSQL channel to handle various events.
-
-    Sets up a listener on the specified PostgreSQL NOTIFY channel using the provided
-    database connection. When notifications are received, it parses the payloads
-    and handles different types of events, such as table changes, requests per second,
-    and job cancellations.
-
-    Args:
-        connection (db.Driver): The database driver instance used to add the listener.
-        channel (models.PGChannel): The name of the PostgreSQL channel to listen on.
-        statistics (dict[str, models.EntrypointStatistics]): A dictionary to store
-            request rate statistics for entrypoints.
-        canceled (dict[models.JobId, models.Context]): A mapping of job IDs to their
-            cancellation contexts.
-
-    Returns:
-        PGNoticeEventListener: An instance of `PGNoticeEventListener` that queues
-            received `TableChangedEvent` instances.
+    Initialize listener on a PostgreSQL channel.
     """
 
-    def parse_and_queue(
-        payload: str | bytes | bytearray,
-        notice_event_queue: PGNoticeEventListener,
-        statistics: MutableMapping[str, models.EntrypointStatistics],
-    ) -> None:
+    def process_notification_payload(payload: str | bytes | bytearray) -> None:
         """
-        Parse a notification payload and handle the event accordingly.
-
-        Parses the JSON payload received from the PostgreSQL NOTIFY channel and processes
-        it based on the event type. It supports handling table change events, requests
-        per second events, and cancellation events.
+        Process notification payload and handle event.
 
         Args:
-            payload (str | bytes | bytearray): The raw payload from the notification.
-            notice_event_queue (PGNoticeEventListener): The event queue to put table
-                change events into.
-            statistics (dict[str, models.EntrypointStatistics]): A dictionary to update
-                with requests per second statistics.
+            payload (str | bytes | bytearray): Raw notification payload.
         """
         try:
             parsed = models.AnyEvent.model_validate_json(payload)
         except Exception as e:
-            logconfig.logger.critical("Failed to parse payload: `%s`", payload, exc_info=e)
+            logconfig.logger.critical(
+                "Error while parsing notification payload: %s",
+                payload,
+                exc_info=e,
+            )
             return
 
-        if parsed.root.type == "table_changed_event":
-            notice_event_queue.put_nowait(parsed.root)
-        elif parsed.root.type == "requests_per_second_event":
-            statistics[parsed.root.entrypoint].samples.append(
-                (parsed.root.count, parsed.root.sent_at)
+        try:
+            event_handler(parsed)
+        except Exception as e:
+            logconfig.logger.critical(
+                "Error while handling parsed event: %s",
+                payload,
+                exc_info=e,
             )
-        elif parsed.root.type == "cancellation_event":
-            for jid in parsed.root.ids:
-                if ctx := canceled.get(jid):
-                    ctx.cancellation.cancel()
-        else:
-            raise NotImplementedError(parsed, payload)
+            return
 
-    notice_event_listener = PGNoticeEventListener()
-
-    await connection.add_listener(
-        channel,
-        lambda x: parse_and_queue(x, notice_event_listener, statistics),
-    )
-
-    return notice_event_listener
+    await connection.add_listener(channel, process_notification_payload)
