@@ -10,6 +10,7 @@ different types of events, such as table changes, request rates, and job cancell
 from __future__ import annotations
 
 import asyncio
+from typing import MutableMapping
 
 from . import db, logconfig, models
 
@@ -27,8 +28,8 @@ class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
 async def initialize_notice_event_listener(
     connection: db.Driver,
     channel: models.PGChannel,
-    statistics: dict[str, models.EntrypointStatistics],
-    canceled: dict[models.JobId, models.Context],
+    statistics: MutableMapping[str, models.EntrypointStatistics],
+    canceled: MutableMapping[models.JobId, models.Context],
 ) -> PGNoticeEventListener:
     """
     Initialize a listener on a PostgreSQL channel to handle various events.
@@ -54,7 +55,7 @@ async def initialize_notice_event_listener(
     def parse_and_queue(
         payload: str | bytes | bytearray,
         notice_event_queue: PGNoticeEventListener,
-        statistics: dict[str, models.EntrypointStatistics],
+        statistics: MutableMapping[str, models.EntrypointStatistics],
     ) -> None:
         """
         Parse a notification payload and handle the event accordingly.
