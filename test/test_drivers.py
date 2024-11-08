@@ -1,4 +1,5 @@
 import asyncio
+import functools
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable
 
@@ -9,7 +10,11 @@ from conftest import dsn
 
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
 from pgqueuer.helpers import utc_now
-from pgqueuer.listeners import initialize_notice_event_listener
+from pgqueuer.listeners import (
+    PGNoticeEventListener,
+    handle_event_type,
+    initialize_notice_event_listener,
+)
 from pgqueuer.models import PGChannel, TableChangedEvent
 from pgqueuer.queries import DBSettings, QueryBuilder
 
@@ -151,11 +156,16 @@ async def test_event_listener(
             type="table_changed_event",
         )
 
-        listener = await initialize_notice_event_listener(
+        listener = PGNoticeEventListener()
+        await initialize_notice_event_listener(
             d,
             channel,
-            {},
-            {},
+            functools.partial(
+                handle_event_type,
+                notice_event_queue=listener,
+                statistics={},
+                canceled={},
+            ),
         )
 
         # Seems psycopg does not pick up on
