@@ -12,25 +12,20 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
-import time
 from datetime import datetime, timedelta, timezone
 
 from . import listeners, models
 
 
-def perf_counter_dt() -> datetime:
+def utc_now() -> datetime:
     """
-    Get the current high-resolution time as a timezone-aware datetime object.
+    Get the current UTC time as a timezone-aware datetime object.
 
-    This function uses `time.perf_counter()` to retrieve the current time
-    with the highest available resolution, suitable for measuring short durations.
-    The timestamp is then converted to a timezone-aware `datetime` object
-    in UTC.
-
-    Returns:
-        datetime: The current high-resolution time as a datetime object in UTC timezone.
+    This function returns the current time using `datetime.now()`,
+    with UTC as the specified timezone, ensuring the result is
+    timezone-aware.
     """
-    return datetime.fromtimestamp(time.perf_counter(), tz=timezone.utc)
+    return datetime.now(timezone.utc)
 
 
 def wait_for_notice_event(

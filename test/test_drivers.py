@@ -8,7 +8,7 @@ import pytest
 from conftest import dsn
 
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
-from pgqueuer.helpers import perf_counter_dt
+from pgqueuer.helpers import utc_now
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import PGChannel, TableChangedEvent
 from pgqueuer.queries import DBSettings, QueryBuilder
@@ -146,7 +146,7 @@ async def test_event_listener(
         payload = TableChangedEvent(
             channel=channel,
             operation="update",
-            sent_at=perf_counter_dt(),
+            sent_at=utc_now(),
             table="foo",
             type="table_changed_event",
         )

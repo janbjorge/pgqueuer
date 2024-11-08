@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
 
-from pgqueuer.helpers import perf_counter_dt, retry_timer_buffer_timeout, timeout_with_jitter
+from pgqueuer.helpers import retry_timer_buffer_timeout, timeout_with_jitter, utc_now
 
 
 async def test_perf_counter_dt() -> None:
-    assert isinstance(perf_counter_dt(), datetime)
-    assert perf_counter_dt().tzinfo is not None
+    assert isinstance(utc_now(), datetime)
+    assert utc_now().tzinfo is not None
 
 
 def test_heartbeat_buffer_timeout_empty_list() -> None:

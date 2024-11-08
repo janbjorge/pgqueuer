@@ -1002,7 +1002,7 @@ class Queries:
                 channel=self.qb.settings.channel,
                 entrypoint=entrypoing,
                 count=quantity,
-                sent_at=helpers.perf_counter_dt(),
+                sent_at=helpers.utc_now(),
                 type="requests_per_second_event",
             ).model_dump_json(),
         )
@@ -1023,7 +1023,7 @@ class Queries:
             models.CancellationEvent(
                 channel=self.qb.settings.channel,
                 ids=ids,
-                sent_at=helpers.perf_counter_dt(),
+                sent_at=helpers.utc_now(),
                 type="cancellation_event",
             ).model_dump_json(),
         )

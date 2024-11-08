@@ -55,7 +55,7 @@ class TimedOverflowBuffer(Generic[T]):
 
     next_flush: datetime = dataclasses.field(
         init=False,
-        default_factory=helpers.perf_counter_dt,
+        default_factory=helpers.utc_now,
     )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -82,7 +82,7 @@ class TimedOverflowBuffer(Generic[T]):
         shutdown = asyncio.create_task(self.shutdown.wait())
         pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
-            if helpers.perf_counter_dt() > self.next_flush and not self.lock.locked():
+            if helpers.utc_now() > self.next_flush and not self.lock.locked():
                 await self.flush()
 
             sleep_task = asyncio.create_task(
@@ -118,7 +118,7 @@ class TimedOverflowBuffer(Generic[T]):
 
         if (
             self.events.qsize() >= self.max_size
-            and helpers.perf_counter_dt() > self.next_flush
+            and helpers.utc_now() > self.next_flush
             and not self.lock.locked()
         ):
             self.tm.add(asyncio.create_task(self.flush()))
@@ -138,8 +138,8 @@ class TimedOverflowBuffer(Generic[T]):
         Yields:
             AsyncGenerator[T, None]: An asynchronous generator yielding items.
         """
-        deadline = helpers.perf_counter_dt() + until
-        while not self.events.empty() and helpers.perf_counter_dt() < deadline:
+        deadline = helpers.utc_now() + until
+        while not self.events.empty() and helpers.utc_now() < deadline:
             yield await self.events.get()
 
     async def flush(self) -> None:
@@ -153,7 +153,7 @@ class TimedOverflowBuffer(Generic[T]):
         a retry. This helps in handling transient errors without losing items.
         """
 
-        if helpers.perf_counter_dt() < self.next_flush:
+        if helpers.utc_now() < self.next_flush:
             return
 
         if self.lock.locked():
@@ -180,7 +180,7 @@ class TimedOverflowBuffer(Generic[T]):
             else:
                 self.delay_multiplier = 1
             finally:
-                self.next_flush = helpers.perf_counter_dt() + helpers.timeout_with_jitter(
+                self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(
                     self.timeout, self.delay_multiplier
                 )
 
