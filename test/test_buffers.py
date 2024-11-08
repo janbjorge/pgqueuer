@@ -6,7 +6,7 @@ from itertools import count
 import pytest
 
 from pgqueuer.buffers import JobStatusLogBuffer
-from pgqueuer.helpers import perf_counter_dt
+from pgqueuer.helpers import utc_now
 from pgqueuer.models import Job
 
 
@@ -14,7 +14,7 @@ def job_faker(
     cnt: count = count(),
     queue_manager_id: uuid.UUID = uuid.uuid4(),
 ) -> Job:
-    dt = perf_counter_dt()
+    dt = utc_now()
     return Job(
         id=next(cnt),
         priority=0,
@@ -117,7 +117,7 @@ async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
         for _ in range(flushes):
             for _ in range(max_size):
                 await buffer.add((job_faker(), "successful"))
-            buffer.next_flush = perf_counter_dt()
+            buffer.next_flush = utc_now()
             await buffer.flush()
 
     # Verify that the buffer flushed three times
@@ -243,7 +243,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
         # First flush
         for _ in range(max_size):
             await buffer.add((job_faker(), "successful"))
-        buffer.next_flush = perf_counter_dt()
+        buffer.next_flush = utc_now()
         await buffer.flush()
         assert len(helper_buffer) == max_size
 
@@ -253,7 +253,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
         # Second flush
         for _ in range(max_size):
             await buffer.add((job_faker(), "successful"))
-        buffer.next_flush = perf_counter_dt()
+        buffer.next_flush = utc_now()
         await buffer.flush()
         assert len(helper_buffer) == max_size
 

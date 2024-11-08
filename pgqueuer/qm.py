@@ -220,7 +220,7 @@ class QueueManager:
         samples = self.entrypoint_statistics[entrypoint].samples
         if not samples:
             return 0.0
-        timespan = helpers.perf_counter_dt() - min(t for _, t in samples) + epsilon
+        timespan = helpers.utc_now() - min(t for _, t in samples) + epsilon
         requests = sum(c for c, _ in samples)
         return requests / timespan.total_seconds()
 
