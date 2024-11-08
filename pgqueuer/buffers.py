@@ -210,14 +210,7 @@ class TimedOverflowBuffer(Generic[T]):
             await self.flush()
 
 
-class JobStatusLogBuffer(
-    TimedOverflowBuffer[
-        tuple[
-            models.Job,
-            models.STATUS_LOG,
-        ]
-    ]
-):
+class JobStatusLogBuffer(TimedOverflowBuffer[tuple[models.Job, models.STATUS_LOG]]):
     """
     Specialized TimedOverflowBuffer for handling Job/Status-log.
     """
@@ -226,4 +219,10 @@ class JobStatusLogBuffer(
 class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     """
     Specialized TimedOverflowBuffer for handling heartbeats.
+    """
+
+
+class RequestsPerSecondBuffer(TimedOverflowBuffer[str]):
+    """
+    Specialized TimedOverflowBuffer for handling RPS.
     """
