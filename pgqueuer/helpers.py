@@ -14,6 +14,8 @@ import contextlib
 import random
 from datetime import datetime, timedelta, timezone
 
+from croniter import croniter
+
 from . import listeners, models
 
 
@@ -106,3 +108,19 @@ def timeout_with_jitter(
     """
     jitter = random.uniform(*jitter_span)
     return timedelta(seconds=timeout.total_seconds() * delay_multiplier * jitter)
+
+
+def normalize_cron_expression(expression: str) -> str:
+    """Expands a cron expression into its component parts as a space-separated string.
+
+    Args:
+        expression (str): A cron expression or shorthand to expand.
+
+    Returns:
+        str: Expanded cron fields as a space-separated string.
+
+    Example:
+        >>> expand_cron_expressions("@hourly")
+        '0 * * * *'
+    """
+    return " ".join(croniter(expression).expressions)

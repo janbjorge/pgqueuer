@@ -1,6 +1,13 @@
 from datetime import datetime, timedelta
 
-from pgqueuer.helpers import retry_timer_buffer_timeout, timeout_with_jitter, utc_now
+import pytest
+
+from pgqueuer.helpers import (
+    normalize_cron_expression,
+    retry_timer_buffer_timeout,
+    timeout_with_jitter,
+    utc_now,
+)
 
 
 async def test_perf_counter_dt() -> None:
@@ -73,3 +80,14 @@ def test_custom_jitter_range() -> None:
         delay = timeout_with_jitter(base_timeout, delay_multiplier, jitter_span)
         base_delay = base_timeout.total_seconds() * delay_multiplier
         assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
+
+
+@pytest.mark.parametrize(
+    "expression, expected",
+    (
+        ("@hourly", "0 * * * *"),
+        ("@midnight", "0 0 * * *"),
+    ),
+)
+def test_normalize_cron_expression(expression: str, expected: str) -> None:
+    assert normalize_cron_expression(expression) == expected

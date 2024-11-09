@@ -280,8 +280,11 @@ def cliparser() -> argparse.Namespace:
         type=lambda s: timedelta(seconds=float(s)),
     )
     wm_parser.add_argument(
-        "qm_factory",
-        help="Path to the QueueManager factory function, e.g., 'myapp.create_queue_manager'.",
+        "factory_fn",
+        help=(
+            "Path to the QueueManager or Schedule factory function, "
+            "e.g., 'myapp.create_queue_manager'."
+        ),
     )
 
     return parser.parse_args()
@@ -363,7 +366,7 @@ async def main() -> None:  # noqa: C901
             )
         case "run":
             await supervisor.runit(
-                parsed.qm_factory,
+                parsed.factory_fn,
                 dequeue_timeout=parsed.dequeue_timeout,
                 batch_size=parsed.batch_size,
                 retry_timer=parsed.retry_timer,

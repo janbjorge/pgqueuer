@@ -13,7 +13,7 @@ import dataclasses
 import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal, NewType
+from typing import Annotated, Literal, NamedTuple, NewType
 
 import anyio
 from pydantic import AwareDatetime, BaseModel, Field, RootModel
@@ -187,3 +187,26 @@ class Context:
 class EntrypointStatistics:
     samples: deque[tuple[int, datetime]]
     concurrency_limiter: asyncio.Semaphore
+
+
+# Schedules
+CronEntrypoint = NewType("CronEntrypoint", str)
+CronExpression = NewType("CronExpression", str)
+ScheduleId = NewType("ScheduleId", int)
+
+
+class CronExpressionEntrypoint(NamedTuple):
+    entrypoint: CronEntrypoint
+    expression: CronExpression
+
+
+class Schedule(BaseModel):
+    id: ScheduleId
+    expression: CronExpression
+    heartbeat: AwareDatetime
+    created: AwareDatetime
+    updated: AwareDatetime
+    next_run: AwareDatetime
+    last_run: AwareDatetime | None = None
+    status: STATUS
+    entrypoint: CronEntrypoint

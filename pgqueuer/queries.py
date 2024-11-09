@@ -119,6 +119,12 @@ class DBSettings:
         kw_only=True,
     )
 
+    # Name of scheduler table
+    schedules_table: Final[str] = dataclasses.field(
+        default_factory=lambda: add_prefix("pgqueuer_schedules"),
+        kw_only=True,
+    )
+
 
 @dataclasses.dataclass
 class QueryBuilder:
@@ -187,6 +193,19 @@ class QueryBuilder:
         entrypoint
     );
 
+    CREATE TABLE {self.settings.schedules_table} (
+        id SERIAL PRIMARY KEY,
+        expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
+        entrypoint TEXT NOT NULL,
+        heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        last_run TIMESTAMP WITH TIME ZONE,
+        status pgqueuer_status DEFAULT 'queued',
+        UNIQUE (expression, entrypoint)
+    );
+
     CREATE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
     DECLARE
         to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
@@ -248,6 +267,7 @@ class QueryBuilder:
     DROP FUNCTION {self.settings.function};
     DROP TABLE {self.settings.queue_table};
     DROP TABLE {self.settings.statistics_table};
+    DROP TABLE {self.settings.schedules_table};
     DROP TYPE {self.settings.queue_status_type};
     DROP TYPE {self.settings.statistics_table_status_type};
     """
@@ -581,6 +601,18 @@ class QueryBuilder:
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id) WHERE queue_manager_id IS NOT NULL;"  # noqa: E501
+        yield f"""CREATE TABLE IF NOT EXISTS {self.settings.schedules_table} (
+        id SERIAL PRIMARY KEY,
+        expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
+        entrypoint TEXT NOT NULL,
+        heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        last_run TIMESTAMP WITH TIME ZONE,
+        status pgqueuer_status DEFAULT 'queued',
+        UNIQUE (expression, entrypoint)
+    );"""
 
     def create_has_column_query(self) -> str:
         """
@@ -630,6 +662,53 @@ class QueryBuilder:
 
     def create_notify_activity_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
+
+    def create_insert_schedule_query(self) -> str:
+        return f"""WITH params AS (
+        SELECT UNNEST($1::text[])       AS expression,
+               UNNEST($2::text[])       AS entrypoint,
+               UNNEST($3::interval[])   AS delay
+        )
+        INSERT INTO {self.settings.schedules_table} (expression, next_run, entrypoint)
+        SELECT expression, date_trunc('seconds', NOW() + delay), entrypoint FROM params
+        ON CONFLICT (entrypoint, expression) DO NOTHING"""
+
+    def create_fetch_schedule_query(self) -> str:
+        return f"""WITH params AS (
+        SELECT UNNEST($1::text[])       AS expression,
+               UNNEST($2::text[])       AS entrypoint,
+               UNNEST($3::interval[])   AS delay
+    ), picked_jobs AS (
+        SELECT id, expression, entrypoint
+        FROM {self.settings.schedules_table}
+        WHERE
+                ((entrypoint, expression) IN (SELECT entrypoint, expression FROM params)
+            AND next_run <= NOW()
+            AND status = 'queued')
+            OR
+                ((entrypoint, expression) IN (SELECT entrypoint, expression FROM params)
+            AND NOW() - heartbeat > interval '30 seconds'
+            AND status = 'picked')
+        FOR UPDATE SKIP LOCKED
+    )
+    UPDATE {self.settings.schedules_table}
+    SET
+        status = 'picked',
+        updated = NOW(),
+        next_run = date_trunc('seconds', NOW() + (
+                SELECT delay FROM params
+                WHERE
+                    params.entrypoint = {self.settings.schedules_table}.entrypoint
+                AND params.expression = {self.settings.schedules_table}.expression
+            ))
+    WHERE (entrypoint, expression) IN (SELECT entrypoint, expression FROM picked_jobs)
+    RETURNING *;"""  # noqa: E501
+
+    def create_set_schedule_queued_query(self) -> str:
+        return f"""UPDATE {self.settings.schedules_table} SET status = 'queued', last_run = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
+
+    def create_update_schedule_heartbeat(self) -> str:
+        return f"""UPDATE {self.settings.schedules_table} SET heartbeat = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
 
 
 @dataclasses.dataclass
@@ -1033,3 +1112,37 @@ class Queries:
             self.qb.create_notify_activity_query(),
             list(set(job_ids)),
         )
+
+    async def insert_schedule(
+        self,
+        schedules: dict[models.CronExpressionEntrypoint, timedelta],
+    ) -> None:
+        await self.driver.execute(
+            self.qb.create_insert_schedule_query(),
+            [k.expression for k in schedules],
+            [k.entrypoint for k in schedules],
+            list(schedules.values()),
+        )
+
+    async def fetch_schedule(
+        self,
+        entrypoints: dict[models.CronExpressionEntrypoint, timedelta],
+    ) -> list[models.Schedule]:
+        return [
+            models.Schedule.model_validate(dict(row))
+            for row in await self.driver.fetch(
+                self.qb.create_fetch_schedule_query(),
+                [s for _, s in entrypoints],
+                [n for n, _ in entrypoints],
+                list(entrypoints.values()),
+            )
+        ]
+
+    async def set_schedule_queued(self, ids: set[models.ScheduleId]) -> None:
+        await self.driver.execute(
+            self.qb.create_set_schedule_queued_query(),
+            list(ids),
+        )
+
+    async def update_schedule_heartbeat(self, ids: set[models.ScheduleId]) -> None:
+        await self.driver.execute(self.qb.create_update_schedule_heartbeat(), list(ids))
