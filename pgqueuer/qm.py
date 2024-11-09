@@ -239,11 +239,7 @@ class QueueManager:
             and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
-    async def fetch_jobs(
-        self,
-        batch_size: int,
-        task_manager: tm.TaskManager,
-    ) -> AsyncGenerator[models.Job, None]:
+    async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[models.Job, None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
 
@@ -375,7 +371,7 @@ class QueueManager:
             shutdown_task = asyncio.create_task(self.shutdown.wait())
 
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(batch_size, task_manager):
+                async for job in self.fetch_jobs(batch_size):
                     await rpsbuff.add(job.entrypoint)
                     self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
                     task_manager.add(
