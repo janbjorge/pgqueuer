@@ -1087,11 +1087,7 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
-    async def notify_debounce_event(
-        self,
-        entrypoing: str,
-        quantity: int,
-    ) -> None:
+    async def notify_debounce_event(self, entrypoint_count: dict[str, int]) -> None:
         """
         Send a requests-per-second event notification for an entrypoint.
 
@@ -1107,8 +1103,7 @@ class Queries:
             self.qb.create_notify_query(),
             models.RequestsPerSecondEvent(
                 channel=self.qb.settings.channel,
-                entrypoint=entrypoing,
-                count=quantity,
+                entrypoint_count=entrypoint_count,
                 sent_at=helpers.utc_now(),
                 type="requests_per_second_event",
             ).model_dump_json(),

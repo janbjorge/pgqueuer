@@ -33,7 +33,8 @@ def handle_event_type(
     if event.root.type == "table_changed_event":
         notice_event_queue.put_nowait(event.root)
     elif event.root.type == "requests_per_second_event":
-        statistics[event.root.entrypoint].samples.append((event.root.count, event.root.sent_at))
+        for entrypoint, count in event.root.entrypoint_count.items():
+            statistics[entrypoint].samples.append((count, event.root.sent_at))
     elif event.root.type == "cancellation_event":
         for jid in event.root.ids:
             if ctx := canceled.get(jid):

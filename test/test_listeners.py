@@ -58,8 +58,7 @@ async def test_handle_requests_per_second_event() -> None:
             channel="channel_1",
             sent_at=datetime.now(tz=timezone.utc),
             type="requests_per_second_event",
-            entrypoint="entrypoint_1",
-            count=10,
+            entrypoint_count={"entrypoint_1": 10},
         )
     )
 

@@ -272,11 +272,14 @@ class QueueManager:
 
     async def flush_rps(self, events: list[str]) -> None:
         """Update rate-per-second statistics for the given entrypoints."""
-        for entrypoint, count in Counter(events).items():
-            # skip if rate is inf.
-            target_rps = self.entrypoint_registry[entrypoint].requests_per_second
-            if isfinite(target_rps):
-                await self.queries.notify_debounce_event(entrypoint, count)
+        if events:
+            await self.queries.notify_debounce_event(
+                {
+                    k: v
+                    for k, v in Counter(events).items()
+                    if isfinite(self.entrypoint_registry[k].requests_per_second)
+                }
+            )
 
     async def run(
         self,
@@ -349,7 +352,7 @@ class QueueManager:
                 callback=self.queries.notify_activity,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
-                max_size=0,
+                max_size=batch_size,
                 timeout=timedelta(seconds=0.01),
                 callback=self.flush_rps,
             ) as rpsbuff,
