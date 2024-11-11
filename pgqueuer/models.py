@@ -92,8 +92,7 @@ class RequestsPerSecondEvent(Event):
     """
 
     type: Literal["requests_per_second_event"]
-    entrypoint: str
-    count: int
+    entrypoint_count: dict[str, int]
 
 
 class CancellationEvent(Event):
