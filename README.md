@@ -16,9 +16,10 @@ PGQueuer is a minimalist, high-performance job queue library for Python, leverag
 
 - **💡 Simple Integration**: PGQueuer seamlessly integrates with any Python application using PostgreSQL, providing a clean and lightweight interface.
 - **⚛️ Efficient Concurrency Handling**: Supports `FOR UPDATE SKIP LOCKED` to ensure reliable concurrency control and smooth job processing without contention.
-- **🛠️ Real-time Notifications**: Uses PostgreSQL's `LISTEN` and `NOTIFY` commands to trigger real-time job status updates.
-- **👨‍💼 Batch Processing**: Supports large job batches, optimizing enqueueing and dequeuing with minimal overhead.
+- **🚧 Real-time Notifications**: Uses PostgreSQL's `LISTEN` and `NOTIFY` commands to trigger real-time job status updates.
+- **👨‍🎓 Batch Processing**: Supports large job batches, optimizing enqueueing and dequeuing with minimal overhead.
 - **⏳ Graceful Shutdowns**: Built-in signal handling ensures safe job processing shutdown without data loss.
+- **⌛ Recurring Job Scheduling**: Register and manage recurring tasks using cron-like expressions for periodic execution.
 
 ## Installation
 
@@ -86,6 +87,56 @@ Run the producer:
 python3 examples/producer.py 10000
 ```
 
+### Step 3: Scheduler - Recurring Jobs
+
+PGQueuer also supports recurring job scheduling, allowing you to register tasks that run periodically based on cron-like expressions.
+
+Here is a minimal example of how to use the scheduling feature to run tasks periodically:
+
+```python
+import asyncio
+import asyncpg
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.scheduler import Scheduler
+from pgqueuer.models import Schedule
+
+async def create_scheduler() -> Scheduler:
+    connection = await asyncpg.connect("postgresql://user:password@localhost:5432/yourdatabase")
+    driver = AsyncpgDriver(connection)
+    scheduler = Scheduler(driver)
+
+    # Define and register recurring tasks using cron expressions
+    # The cron expression "* * * * *" means the task will run every minute
+    @scheduler.schedule("update_product_catalog", "* * * * *")
+    async def update_product_catalog(schedule: Schedule) -> None:
+        print(f"Running update_product_catalog task: {schedule}")
+        await asyncio.sleep(0.1)
+        print("update_product_catalog task completed.")
+
+    # The cron expression "0 0 * * *" means the task will run every day at midnight
+    @scheduler.schedule("clean_expired_tokens", "0 0 * * *")
+    async def clean_expired_tokens(schedule: Schedule) -> None:
+        print(f"Running clean_expired_tokens task: {schedule}")
+        await asyncio.sleep(0.2)
+        print("clean_expired_tokens task completed.")
+
+    return scheduler
+
+async def main():
+    # Create and run the scheduler
+    scheduler = await create_scheduler()
+    await scheduler.run()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+Run the scheduler:
+```bash
+pgq run myapp.create_scheduler
+```
+
+This example showcases how you can use the new scheduling feature to automate recurring tasks such as data synchronization or cleanup jobs.
+
 ## Dashboard
 
 Monitor job processing statistics in real-time using the built-in dashboard:
@@ -118,3 +169,4 @@ PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
 
 ---
 Ready to supercharge your workflows? Install PGQueuer today and take your job management to the next level!
+
