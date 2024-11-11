@@ -15,14 +15,14 @@ import signal
 from datetime import timedelta
 from typing import Awaitable, Callable
 
-from . import qm, scheduler
+from . import qm, sm
 
 
 def load_manager_factory(
     factory_path: str,
 ) -> Callable[
     [],
-    Awaitable[qm.QueueManager | scheduler.Scheduler],
+    Awaitable[qm.QueueManager | sm.SchedulerManager],
 ]:
     """
     Load the QueueManager factory function from a given module path.
@@ -91,7 +91,7 @@ async def runit(
             batch_size=batch_size,
             retry_timer=retry_timer,
         )
-    elif isinstance(instance, scheduler.Scheduler):
+    elif isinstance(instance, sm.SchedulerManager):
         await instance.run()
     else:
         raise NotImplementedError(instance)
