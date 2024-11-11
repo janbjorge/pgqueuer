@@ -632,6 +632,19 @@ class QueryBuilder:
                 AND column_name = $2
             );"""
 
+    def create_has_table_query(self) -> str:
+        """
+        Generate SQL query to check if a specific table exists in a table.
+
+        Returns:
+            str: The SQL query string to check for a table's existence.
+        """
+        return """
+        SELECT EXISTS (
+            SELECT FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = $1
+            );"""
+
     def create_user_types_query(self) -> str:
         """
         Generate SQL query to list user-defined ENUM types and their labels.
@@ -1058,6 +1071,15 @@ class Queries:
         """
         rows = await self.driver.fetch(self.qb.create_user_types_query())
         return (key, user_type) in ((row["enumlabel"], row["typname"]) for row in rows)
+
+    async def has_table(self, table: str) -> bool:
+        rows = await self.driver.fetch(
+            self.qb.create_has_table_query(),
+            self.qb.settings.schedules_table,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
 
     async def notify_debounce_event(
         self,

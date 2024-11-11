@@ -100,6 +100,12 @@ class Scheduler:
         Continuously polls for jobs that need to be executed and dispatches them accordingly.
         Also waits for shutdown events and manages the scheduling loop.
         """
+        if not (await self.queries.has_table(self.queries.qb.settings.schedules_table)):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.schedules_table} table is missing "
+                "please run 'python3 -m pgqueuer upgrade'"
+            )
+
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 
         async with (
