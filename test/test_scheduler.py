@@ -7,7 +7,7 @@ import pytest
 from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.models import CronExpressionEntrypoint, Schedule
 from pgqueuer.queries import DBSettings
-from pgqueuer.scheduler import Scheduler
+from pgqueuer.sm import SchedulerManager
 
 
 async def inspect_schedule(connection: Driver) -> list[Schedule]:
@@ -16,12 +16,12 @@ async def inspect_schedule(connection: Driver) -> list[Schedule]:
 
 
 @pytest.fixture
-async def scheduler(apgdriver: AsyncpgDriver) -> Scheduler:
-    return Scheduler(apgdriver)
+async def scheduler(apgdriver: AsyncpgDriver) -> SchedulerManager:
+    return SchedulerManager(apgdriver)
 
 
 async def shutdown_Scheduler_after(
-    scheduler: Scheduler,
+    scheduler: SchedulerManager,
     delay: timedelta = timedelta(seconds=1),
 ) -> None:
     await asyncio.sleep(delay.total_seconds())
@@ -29,7 +29,7 @@ async def shutdown_Scheduler_after(
 
 
 @pytest.mark.asyncio
-async def test_scheduler_register(scheduler: Scheduler) -> None:
+async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
 
@@ -50,7 +50,7 @@ async def test_scheduler_register(scheduler: Scheduler) -> None:
 
 
 @pytest.mark.asyncio
-async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler) -> None:
+async def test_scheduler_register_raises_invalid_expression(scheduler: SchedulerManager) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
 
@@ -59,7 +59,7 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
 
 
 @pytest.mark.asyncio
-async def test_scheduler_runs_tasks(scheduler: Scheduler, mocker: Mock) -> None:
+async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
@@ -83,7 +83,7 @@ async def test_scheduler_runs_tasks(scheduler: Scheduler, mocker: Mock) -> None:
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_updates(scheduler: Scheduler, mocker: Mock) -> None:
+async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
@@ -107,7 +107,7 @@ async def test_heartbeat_updates(scheduler: Scheduler, mocker: Mock) -> None:
 
 @pytest.mark.asyncio
 async def test_schedule_storage_and_retrieval(
-    scheduler: Scheduler,
+    scheduler: SchedulerManager,
     mocker: Mock,
 ) -> None:
     mocker.patch(

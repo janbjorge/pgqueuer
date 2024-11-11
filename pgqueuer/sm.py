@@ -12,7 +12,7 @@ from . import db, executors, helpers, logconfig, models, queries, tm
 
 
 @dataclasses.dataclass
-class Scheduler:
+class SchedulerManager:
     """
     Scheduler class responsible for managing and scheduling jobs using cron expressions.
 

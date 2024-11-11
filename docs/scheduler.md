@@ -6,7 +6,7 @@ PGQueuer includes a scheduling feature that allows you to register and run recur
 The Scheduler class allows users to register asynchronous tasks with cron expressions for recurring execution. It leverages PostgreSQL for storing and managing schedules, ensuring robustness and visibility into the state of each scheduled job.
 
 ### How It Works
-The `Scheduler` class is responsible for managing jobs, tracking their schedules, and dispatching them for execution. Jobs are defined using cron-like expressions and can be registered through the `@schedule` decorator. Once registered, the Scheduler ensures that each job runs at the specified intervals. It also tracks metadata, including the next scheduled run time and the status of the job.
+The `SchedulerManager` class is responsible for managing jobs, tracking their schedules, and dispatching them for execution. Jobs are defined using cron-like expressions and can be registered through the `@schedule` decorator. Once registered, the Scheduler ensures that each job runs at the specified intervals. It also tracks metadata, including the next scheduled run time and the status of the job.
 
 The main components of the scheduling feature are:
 
@@ -34,12 +34,12 @@ To use the scheduling feature, you first need to create a `Scheduler` instance a
 ```python
 import asyncpg
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.scheduler import Scheduler
+from pgqueuer.sc import SchedulerManager
 
 async def main() -> Scheduler:
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
-    sc = Scheduler(driver)
+    sc = SchedulerManager(driver)
 
     @sc.schedule("fetch_db", "* * * * *")
     async def fetch_db(schedule: Schedule) -> None:
@@ -52,9 +52,9 @@ async def main() -> Scheduler:
 After defining the schedules, the `Scheduler` can be started by calling its `run()` method. It will continuously poll for jobs that need to be executed and dispatch them accordingly.
 
 ### Integration with CLI
-The CLI allows users to run either a `QueueManager` or a `Scheduler` instance. This means you can easily switch between queue and schedule modes by specifying the appropriate factory function in the CLI.
+The CLI allows users to run either a `QueueManager` or a `SchedulerManager` instance. This means you can easily switch between queue and schedule modes by specifying the appropriate factory function in the CLI.
 
-To run the `Scheduler` class using the CLI, you can use the `run` command and provide the path to your factory function that creates the `Scheduler` instance. For example:
+To run the `SchedulerManager` class using the CLI, you can use the `run` command and provide the path to your factory function that creates the `SchedulerManager` instance. For example:
 
 ```sh
 pgq run myapp.create_scheduler
