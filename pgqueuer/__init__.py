@@ -2,6 +2,7 @@ from .db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
 from .models import Job, JobId
 from .qm import QueueManager
 from .queries import Queries
+from .sm import SchedulerManager
 
 __all__ = [
     "AsyncpgDriver",
@@ -11,4 +12,5 @@ __all__ = [
     "PsycopgDriver",
     "Queries",
     "QueueManager",
+    "SchedulerManager",
 ]
