@@ -64,6 +64,7 @@ dev = [
     "mypy",
     "psycopg>=3.2.0",
     "pytest-asyncio",
+    "pytest-mock>=3.14.0",
     "pytest",
     "ruff",
     "tqdm",

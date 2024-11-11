@@ -139,7 +139,7 @@ class Scheduler:
                     else timedelta(seconds=0)
                 )
 
-                with suppress(TimeoutError):
+                with suppress(TimeoutError, asyncio.TimeoutError):
                     await asyncio.wait_for(
                         self.shutdown.wait(),
                         timeout=(wait + leeway).total_seconds(),

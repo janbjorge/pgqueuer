@@ -407,6 +407,9 @@ class QueryBuilder:
 
         return f"TRUNCATE {self.settings.queue_table}"
 
+    def create_truncate_schedule_query(self) -> str:
+        return f"TRUNCATE {self.settings.schedules_table}"
+
     def create_queue_size_query(self) -> str:
         """
         Generate SQL query to count the number of jobs in the queue.
@@ -883,6 +886,9 @@ class Queries:
             if entrypoint
             else self.driver.execute(self.qb.create_truncate_queue_query())
         )
+
+    async def clear_schedule(self) -> None:
+        await self.driver.execute(self.qb.create_truncate_schedule_query())
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
