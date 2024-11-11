@@ -22,4 +22,5 @@ async def trucate_tables(apgdriver: Driver) -> None:
     await asyncio.gather(
         Queries(apgdriver).clear_log(),
         Queries(apgdriver).clear_queue(),
+        Queries(apgdriver).clear_schedule(),
     )
