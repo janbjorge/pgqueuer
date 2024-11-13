@@ -52,6 +52,7 @@ def is_async_callable(obj: object) -> bool:
     )
 
 
+@dataclasses.dataclass
 class JobExecutor(ABC):
     """
     Abstract base class for job executors.
@@ -59,20 +60,11 @@ class JobExecutor(ABC):
     Users can subclass this to create custom job executors.
     """
 
-    def __init__(
-        self,
-        func: Entrypoint,
-        requests_per_second: float,
-        retry_timer: timedelta,
-        serialized_dispatch: bool,
-        concurrency_limit: int,
-    ):
-        super().__init__()
-        self.func = func
-        self.requests_per_second = requests_per_second
-        self.retry_timer = retry_timer
-        self.serialized_dispatch = serialized_dispatch
-        self.concurrency_limit = concurrency_limit
+    func: Entrypoint
+    requests_per_second: float = float("inf")
+    retry_timer: timedelta = timedelta(seconds=0)
+    serialized_dispatch: bool = False
+    concurrency_limit: int = 0
 
     @abstractmethod
     async def execute(self, job: models.Job) -> None:
@@ -84,6 +76,7 @@ class JobExecutor(ABC):
         """
 
 
+@dataclasses.dataclass
 class EntrypointExecutor(JobExecutor):
     """
     Job executor that wraps an entrypoint function.
@@ -91,20 +84,10 @@ class EntrypointExecutor(JobExecutor):
     Executes the provided function when processing a job.
     """
 
-    def __init__(
-        self,
-        func: Entrypoint,
-        requests_per_second: float = float("inf"),
-        retry_timer: timedelta = timedelta(seconds=0),
-        serialized_dispatch: bool = False,
-        concurrency_limit: int = 0,
-    ) -> None:
-        self.func = func
-        self.requests_per_second = requests_per_second
-        self.retry_timer = retry_timer
-        self.serialized_dispatch = serialized_dispatch
-        self.concurrency_limit = concurrency_limit
-        self.is_async = is_async_callable(func)
+    is_async: bool = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.is_async = is_async_callable(self.func)
 
     async def execute(self, job: models.Job) -> None:
         """
@@ -163,6 +146,7 @@ class AbstractScheduleExecutor(ABC):
         return self.get_next() - helpers.utc_now()
 
 
+@dataclasses.dataclass
 class ScheduleExecutor(AbstractScheduleExecutor):
     """
     Job executor that wraps an entrypoint function.
