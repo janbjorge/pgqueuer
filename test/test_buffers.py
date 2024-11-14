@@ -20,6 +20,8 @@ def job_faker(
         priority=0,
         created=dt,
         heartbeat=dt,
+        updated=dt,
+        execute_after=dt,
         status="picked",
         entrypoint="foo",
         payload=None,

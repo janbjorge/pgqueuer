@@ -164,6 +164,7 @@ class QueryBuilder:
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        execute_after TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         payload BYTEA
@@ -311,8 +312,9 @@ class QueryBuilder:
         LEFT JOIN jobs_by_queue_manager_entrypoint
         ON jobs_by_queue_manager_entrypoint.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-            {self.settings.queue_table}.entrypoint = ANY($2)
+                {self.settings.queue_table}.entrypoint = ANY($2)
             AND {self.settings.queue_table}.status = 'queued'
+            AND {self.settings.queue_table}.execute_after < NOW()
             AND (
                 NOT entrypoint_execution_params.serialized
                 OR NOT EXISTS (
@@ -337,8 +339,9 @@ class QueryBuilder:
         INNER JOIN entrypoint_execution_params
         ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
         WHERE
-            {self.settings.queue_table}.entrypoint = ANY($2)
+                {self.settings.queue_table}.entrypoint = ANY($2)
             AND {self.settings.queue_table}.status = 'picked'
+            AND {self.settings.queue_table}.execute_after < NOW()
             AND entrypoint_execution_params.retry_after > interval '0'
             AND {self.settings.queue_table}.heartbeat < NOW() - entrypoint_execution_params.retry_after
         ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
@@ -375,8 +378,14 @@ class QueryBuilder:
         """
 
         return f"""INSERT INTO {self.settings.queue_table}
-        (priority, entrypoint, payload, status)
-        VALUES (UNNEST($1::int[]), UNNEST($2::text[]), UNNEST($3::bytea[]), 'queued')
+        (priority, entrypoint, payload, execute_after, status)
+        VALUES (
+            UNNEST($1::int[]),                  -- priority
+            UNNEST($2::text[]),                 -- entrypoint
+            UNNEST($3::bytea[]),                -- payload
+            UNNEST($4::interval[]) + NOW(),     -- execute_after
+            'queued'                            -- status
+        )
         RETURNING id
     """
 
@@ -616,6 +625,7 @@ class QueryBuilder:
         status pgqueuer_status DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );"""
+        yield f"""ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
 
     def create_table_has_column_query(self) -> str:
         """
@@ -816,6 +826,7 @@ class Queries:
         entrypoint: str,
         payload: bytes | None,
         priority: int = 0,
+        execute_after: timedelta | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -824,6 +835,7 @@ class Queries:
         entrypoint: list[str],
         payload: list[bytes | None],
         priority: list[int],
+        execute_after: list[timedelta | None] | None = None,
     ) -> list[models.JobId]: ...
 
     async def enqueue(
@@ -831,6 +843,7 @@ class Queries:
         entrypoint: str | list[str],
         payload: bytes | None | list[bytes | None],
         priority: int | list[int] = 0,
+        execute_after: timedelta | None | list[timedelta | None] = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -856,6 +869,18 @@ class Queries:
         normed_payload = payload if isinstance(payload, list) else [payload]
         normed_priority = priority if isinstance(priority, list) else [priority]
 
+        execute_after = (
+            [timedelta(seconds=0)] * len(normed_entrypoint)
+            if execute_after is None
+            else execute_after
+        )
+
+        normed_execute_after = (
+            [x or timedelta(seconds=0) for x in execute_after]
+            if isinstance(execute_after, list)
+            else [execute_after or timedelta(seconds=0)]
+        )
+
         return [
             models.JobId(row["id"])
             for row in await self.driver.fetch(
@@ -863,6 +888,7 @@ class Queries:
                 normed_priority,
                 normed_entrypoint,
                 normed_payload,
+                normed_execute_after,
             )
         ]
 

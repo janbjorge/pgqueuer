@@ -138,7 +138,9 @@ class Job(BaseModel):
     id: JobId
     priority: int
     created: AwareDatetime
+    updated: AwareDatetime
     heartbeat: AwareDatetime
+    execute_after: AwareDatetime
     status: STATUS
     entrypoint: str
     payload: bytes | None
