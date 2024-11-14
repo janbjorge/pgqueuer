@@ -289,10 +289,10 @@ class QueryBuilder:
         return f"""WITH
     entrypoint_execution_params AS (
         SELECT
-            unnest($2::text[])      AS entrypoint,
-            unnest($3::interval[])  AS retry_after,
-            unnest($4::boolean[])   AS serialized,
-            unnest($5::bigint[])    AS concurrency_limit
+            UNNEST($2::text[])      AS entrypoint,
+            UNNEST($3::interval[])  AS retry_after,
+            UNNEST($4::boolean[])   AS serialized,
+            UNNEST($5::bigint[])    AS concurrency_limit
     ),
     jobs_by_queue_manager_entrypoint AS (
         SELECT COUNT(*), entrypoint
@@ -376,7 +376,7 @@ class QueryBuilder:
 
         return f"""INSERT INTO {self.settings.queue_table}
         (priority, entrypoint, payload, status)
-        VALUES (unnest($1::int[]), unnest($2::text[]), unnest($3::bytea[]), 'queued')
+        VALUES (UNNEST($1::int[]), UNNEST($2::text[]), UNNEST($3::bytea[]), 'queued')
         RETURNING id
     """
 
@@ -457,8 +457,8 @@ class QueryBuilder:
                     DATE_TRUNC('sec', AGE(updated, created)) AS time_in_queue
     ), job_status AS (
         SELECT
-            unnest($1::integer[]) AS id,
-            unnest($2::{self.settings.statistics_table_status_type}[]) AS status
+            UNNEST($1::integer[]) AS id,
+            UNNEST($2::{self.settings.statistics_table_status_type}[]) AS status
     ), grouped_data AS (
         SELECT
             priority,
