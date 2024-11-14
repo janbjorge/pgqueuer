@@ -617,40 +617,38 @@ class QueryBuilder:
         UNIQUE (expression, entrypoint)
     );"""
 
-    def create_has_column_query(self) -> str:
+    def create_table_has_column_query(self) -> str:
         """
-        Generate SQL query to check if a specific column exists in a table.
-
-        Constructs an SQL query that checks the information schema for the
-        existence of a column within a table in the current schema.
+        A query to check if a specific column exists in a table.
 
         Returns:
             str: The SQL query string to check for a column's existence.
         """
-        return """
-        SELECT EXISTS (
-            SELECT FROM information_schema.columns
-            WHERE table_schema = current_schema()
-                AND table_name = $1
-                AND column_name = $2
-            );"""
+        return """SELECT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE
+                table_schema = current_schema()
+            AND table_name = $1
+            AND column_name = $2
+        );"""
 
     def create_has_table_query(self) -> str:
         """
-        Generate SQL query to check if a specific table exists in a table.
+        A query to check if a specific table exists in a table.
 
         Returns:
             str: The SQL query string to check for a table's existence.
         """
-        return """
-        SELECT EXISTS (
-            SELECT FROM information_schema.columns
-            WHERE table_schema = current_schema() AND table_name = $1
-            );"""
+        return """SELECT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE
+                table_schema = current_schema()
+            AND table_name = $1
+        );"""
 
     def create_user_types_query(self) -> str:
         """
-        Generate SQL query to list user-defined ENUM types and their labels.
+        A query to list user-defined ENUM types and their labels.
 
         Constructs an SQL query that retrieves all ENUM labels and their type
         names from the PostgreSQL system catalogs. This can be used to verify
@@ -1003,54 +1001,17 @@ class Queries:
         """
         await self.driver.execute("\n\n".join(self.qb.create_upgrade_queries()))
 
-    async def has_updated_column(self) -> bool:
+    async def table_has_column(self, table: str, column: str) -> bool:
         """
-        Check if the 'updated' column exists in the queue table.
-
-        Determines whether the 'updated' timestamp column is present in the queue
-        table, which is necessary for certain queue operations, such as retrying jobs.
+        Check if the column exists in table.
 
         Returns:
-            bool: True if the 'updated' column exists, False otherwise.
+            bool: True if the column exists, False otherwise.
         """
         rows = await self.driver.fetch(
-            self.qb.create_has_column_query(),
-            self.qb.settings.queue_table,
-            "updated",
-        )
-        assert len(rows) == 1
-        (row,) = rows
-        return row["exists"]
-
-    async def has_heartbeat_column(self) -> bool:
-        """
-        Check if the 'heartbeat' column exists in the queue table.
-
-        Determines whether the 'heartbeat' timestamp column is present in the queue
-        table, which is necessary for certain queue operations, such as retrying jobs.
-
-        Returns:
-            bool: True if the 'heartbeat' column exists, False otherwise.
-        """
-        rows = await self.driver.fetch(
-            self.qb.create_has_column_query(),
-            self.qb.settings.queue_table,
-            "heartbeat",
-        )
-        assert len(rows) == 1
-        (row,) = rows
-        return row["exists"]
-
-    async def has_queue_manager_id_column(self) -> bool:
-        """
-        Check if the 'queue_manager_id' column exists in the queue table.
-        Returns:
-            bool: True if the 'queue_manager_id' column exists, False otherwise.
-        """
-        rows = await self.driver.fetch(
-            self.qb.create_has_column_query(),
-            self.qb.settings.queue_table,
-            "queue_manager_id",
+            self.qb.create_table_has_column_query(),
+            table,
+            column,
         )
         assert len(rows) == 1
         (row,) = rows
@@ -1081,7 +1042,7 @@ class Queries:
     async def has_table(self, table: str) -> bool:
         rows = await self.driver.fetch(
             self.qb.create_has_table_query(),
-            self.qb.settings.schedules_table,
+            table,
         )
         assert len(rows) == 1
         (row,) = rows

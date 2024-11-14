@@ -115,7 +115,7 @@ async def test_notify(
         QueryBuilder().create_delete_from_queue_query,
         QueryBuilder().create_dequeue_query,
         QueryBuilder().create_enqueue_query,
-        QueryBuilder().create_has_column_query,
+        QueryBuilder().create_table_has_column_query,
         QueryBuilder().create_log_job_query,
         QueryBuilder().create_log_statistics_query,
         QueryBuilder().create_queue_size_query,

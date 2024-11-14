@@ -281,6 +281,40 @@ class QueueManager:
                 }
             )
 
+    async def verify_structure(self) -> None:
+        """
+        Verify the required database structure.
+
+        Checks necessary columns and user-defined types. Raises RuntimeError if missing.
+        """
+
+        for table, column in (
+            (self.queries.qb.settings.queue_table, "updated"),
+            (self.queries.qb.settings.queue_table, "heartbeat"),
+            (self.queries.qb.settings.queue_table, "queue_manager_id"),
+        ):
+            if not (
+                await self.queries.table_has_column(
+                    self.queries.qb.settings.queue_table,
+                    column,
+                )
+            ):
+                raise RuntimeError(
+                    f"The {table} table is missing the {column} column, "
+                    "please run 'python3 -m pgqueuer upgrade'"
+                )
+
+        if not (
+            await self.queries.has_user_type(
+                "canceled",
+                self.queries.qb.settings.statistics_table_status_type,
+            )
+        ):
+            raise RuntimeError(
+                f"The {self.queries.qb.settings.statistics_table_status_type} is missing the "
+                "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
+            )
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
@@ -308,38 +342,13 @@ class QueueManager:
                 DeprecationWarning,
             )
 
-        if not (await self.queries.has_updated_column()):
-            raise RuntimeError(
-                f"The {self.queries.qb.settings.queue_table} table is missing the "
-                "updated column, please run 'python3 -m pgqueuer upgrade'"
-            )
-
-        if not (
-            await self.queries.has_user_type(
-                "canceled", self.queries.qb.settings.statistics_table_status_type
-            )
-        ):
-            raise RuntimeError(
-                f"The {self.queries.qb.settings.statistics_table_status_type} is missing the "
-                "'canceled' type, please run 'python3 -m pgqueuer upgrade'"
-            )
-
-        if not (await self.queries.has_heartbeat_column()):
-            raise RuntimeError(
-                f"The {self.queries.qb.settings.queue_table} table is missing the "
-                "heartbeat column, please run 'python3 -m pgqueuer upgrade'"
-            )
-
-        if not (await self.queries.has_queue_manager_id_column()):
-            raise RuntimeError(
-                f"The {self.queries.qb.settings.queue_table} table is missing the "
-                "queue_manager_id column, please run 'python3 -m pgqueuer upgrade'"
-            )
+        await self.verify_structure()
 
         job_status_log_buffer_timeout = timedelta(seconds=0.01)
         heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
             [x.retry_timer for x in self.entrypoint_registry.values()]
         )
+
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
