@@ -81,3 +81,16 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
         uuid.uuid4(),
     )
     assert len(after) == 1
+
+
+async def test_execute_after_updated_gt_execute_after(apgdriver: Driver) -> None:
+    execute_after = timedelta(seconds=1)
+    await Queries(apgdriver).enqueue("foo", None, 0, execute_after)
+    await asyncio.sleep(execute_after.total_seconds())
+    after = await Queries(apgdriver).dequeue(
+        10,
+        {"foo": (timedelta(seconds=60), False, 0)},
+        uuid.uuid4(),
+    )
+    assert len(after) == 1
+    assert all(x.updated > x.execute_after for x in after)
