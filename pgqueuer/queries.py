@@ -1017,27 +1017,10 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
-    async def has_user_type(
-        self,
-        key: str,
-        user_type: str,
-    ) -> bool:
-        """
-        Check if a specific value exists within a user-defined ENUM type.
-
-        Queries the database to determine whether the specified ENUM type contains
-        the given label (value). This is useful for ensuring that required statuses
-        or values are defined in the database schema.
-
-        Args:
-            key (str): The label to look for within the ENUM type.
-            user_type (str): The name of the user-defined ENUM type.
-
-        Returns:
-            bool: True if the label exists within the ENUM type, False otherwise.
-        """
+    async def has_user_defined_enum(self, key: str, enum: str) -> bool:
+        """Check if a value exists in a user-defined ENUM type."""
         rows = await self.driver.fetch(self.qb.create_user_types_query())
-        return (key, user_type) in ((row["enumlabel"], row["typname"]) for row in rows)
+        return (key, enum) in {(row["enumlabel"], row["typname"]) for row in rows}
 
     async def has_table(self, table: str) -> bool:
         rows = await self.driver.fetch(
