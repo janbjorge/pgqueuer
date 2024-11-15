@@ -88,6 +88,37 @@ This function sends a cancellation event that the QueueManager processes. Where 
 await queries.mark_job_as_cancelled(job_ids)
 ```
 
+## Execute After
+
+### Overview
+
+The `execute_after` attribute in `pgqueuer` provides a mechanism for scheduling deferred job execution within the queue. This attribute allows jobs to be queued but held back from execution until a specified point in time has passed, adding flexibility for scenarios where control over job timing is needed.
+
+#### Attribute Description
+
+- **`execute_after`**: Specifies the earliest point in time that the job can be picked for execution. This is particularly useful for delaying execution without holding system resources.
+
+The attribute is stored as a timestamp and, if not explicitly specified during job creation, it defaults to the current time (`NOW()`). This means that, unless otherwise specified, jobs are immediately available for execution.
+
+#### Execution Timing
+
+The addition of the `execute_after` attribute directly influences the timing of job processing. The job will be considered for execution only if the current timestamp exceeds the `execute_after` timestamp. In practical terms:
+
+- If a job is enqueued with an `execute_after` time set in the future, it will remain in the queue until that time has passed.
+
+- In the worst-case scenario, the actual time a job is eligible for execution is given by: **`execute_after + dequeue_timeout_interval`**
+
+#### Usage
+
+The `execute_after` attribute can be provided when enqueueing jobs via the `enqueue` method. For instance, to enqueue a job that should not be executed until 1 minute from now:
+
+```python
+from datetime import timedelta
+await Queries(apgdriver).enqueue("my_task", payload=None, priority=0, execute_after=timedelta(minutes=1))
+```
+
+This job will only become eligible for execution once the specified minute has passed.
+
 ### Handling Cancellations in Job Logic
 
 Jobs should include logic to handle potential cancellations gracefully. Below are examples of how to integrate cancellation checks into both asynchronous and synchronous job processing logic.
