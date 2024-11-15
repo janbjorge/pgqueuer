@@ -292,6 +292,7 @@ class QueueManager:
             (self.queries.qb.settings.queue_table, "updated"),
             (self.queries.qb.settings.queue_table, "heartbeat"),
             (self.queries.qb.settings.queue_table, "queue_manager_id"),
+            (self.queries.qb.settings.queue_table, "execute_after"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
