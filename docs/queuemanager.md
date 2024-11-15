@@ -88,9 +88,9 @@ This function sends a cancellation event that the QueueManager processes. Where 
 await queries.mark_job_as_cancelled(job_ids)
 ```
 
-## Execute After
+### Execute After
 
-### Overview
+#### Overview
 
 The `execute_after` attribute in `pgqueuer` provides a mechanism for scheduling deferred job execution within the queue. This attribute allows jobs to be queued but held back from execution until a specified point in time has passed, adding flexibility for scenarios where control over job timing is needed.
 
