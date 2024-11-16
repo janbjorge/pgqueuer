@@ -20,7 +20,7 @@ Install PGQueuer using pip:
 
 .. code-block:: bash
 
-    pip install PGQueuer
+    pip install pgqueuer
 
 
 Features
@@ -43,7 +43,7 @@ Start a long-lived consumer that will begin processing jobs as soon as they are 
 
 .. code-block:: bash
 
-    python3 -m PGQueuer run examples.consumer.main
+    pgq run examples.consumer.main
 
 Start a producer
 ~~~~~~~~~~~~~~~~
@@ -59,6 +59,7 @@ Start a short-lived producer that will enqueue 10,000 jobs.
 
    cli
    database_initialization
+   pgqueuer
    queuemanager
    scheduler
    limits
