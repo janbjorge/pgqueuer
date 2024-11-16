@@ -17,14 +17,14 @@ import sys
 from datetime import timedelta
 from typing import Awaitable, Callable
 
-from . import qm, sm
+from . import applications, qm, sm
 
 
 def load_manager_factory(
     factory_path: str,
 ) -> Callable[
     [],
-    Awaitable[qm.QueueManager | sm.SchedulerManager],
+    Awaitable[qm.QueueManager | sm.SchedulerManager | applications.PgQueuer],
 ]:
     """
     Load the QueueManager factory function from a given module path.
@@ -96,5 +96,10 @@ async def runit(
         )
     elif isinstance(instance, sm.SchedulerManager):
         await instance.run()
+    elif isinstance(instance, applications.PgQueuer):
+        await instance.run(
+            dequeue_timeout=dequeue_timeout,
+            batch_size=batch_size,
+        )
     else:
         raise NotImplementedError(instance)

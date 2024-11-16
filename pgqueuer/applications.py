@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import functools
 from datetime import timedelta
 from typing import Callable
 
@@ -26,6 +25,7 @@ from .models import PGChannel
 from .qm import QueueManager
 from .queries import DBSettings
 from .sm import SchedulerManager
+from .tm import TaskManager
 
 
 @dataclasses.dataclass
@@ -35,7 +35,6 @@ class PgQueuer:
 
     This class provides a unified interface for job queue management and task scheduling,
     leveraging PostgreSQL for managing job states and distributed processing.
-
     """
 
     connection: Driver
@@ -70,12 +69,20 @@ class PgQueuer:
         This method starts both the `QueueManager` and `SchedulerManager` concurrently to
         handle job processing and scheduling.
         """
-        await asyncio.gather(
-            self.qm.run(batch_size=batch_size, dequeue_timeout=dequeue_timeout),
-            self.sm.run(),
-        )
 
-    @functools.wraps(QueueManager.entrypoint)
+        # The task manager waits for all tasks for complite before
+        # exit.
+        async with TaskManager() as tm:
+            tm.add(
+                asyncio.create_task(
+                    self.qm.run(
+                        batch_size=batch_size,
+                        dequeue_timeout=dequeue_timeout,
+                    )
+                )
+            )
+            tm.add(asyncio.create_task(self.sm.run()))
+
     def entrypoint(
         self,
         name: str,
@@ -95,7 +102,6 @@ class PgQueuer:
             executor=executor,
         )
 
-    @functools.wraps(SchedulerManager.schedule)
     def schedule(
         self,
         entrypoint: str,
