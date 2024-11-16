@@ -85,3 +85,16 @@ async def test_task_manager_logs_unhandled_exception(
         event.set()
 
     assert len(caplog.messages) == N
+
+
+async def test_task_manager_no_log_on_cancel(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    event = asyncio.Event()
+
+    async with TaskManager() as tm:
+        task = asyncio.create_task(event.wait())
+        tm.add(task)
+        task.cancel()
+
+    assert len(caplog.messages) == 0
