@@ -1,10 +1,12 @@
 """
-This module provides functionality to dynamically load and run queue management components.
+This module loads and runs queue management components:
+    - QueueManager
+    - Scheduler
+    - PgQueuer.
 
-It includes the ability to load a factory function for creating instances of
-QueueManager or Scheduler, manage their lifecycle, and handle graceful shutdowns.
-The module is designed to support asynchronous queue processing and scheduling
-using configurable factory paths.
+It supports factory functions to create instances,
+manage lifecycle, and handle graceful shutdowns for
+asynchronous processing and scheduling.
 """
 
 from __future__ import annotations
@@ -27,18 +29,14 @@ def load_manager_factory(
     Awaitable[qm.QueueManager | sm.SchedulerManager | applications.PgQueuer],
 ]:
     """
-    Load the QueueManager factory function from a given module path.
-
-    Dynamically imports the specified module and retrieves the factory function
-    used to create a QueueManager or Scheduler instance. The factory function should be an
-    asynchronous callable that returns a QueueManager or Scheduler.
+    Load factory function from a given module path.
 
     Args:
-        factory_path (str): The full module path to the factory function,
-            e.g., 'myapp.create_queue_manager'.
+        factory_path (str): Module path to the factory function.
 
     Returns:
-        Callable: A callable that returns an awaitable QueueManager or Scheduler instance.
+        Callable: Async callable returning a QueueManager,
+            SchedulerManager, or PgQueuer instance.
     """
     sys.path.insert(0, os.getcwd())
     module_name, factory_name = factory_path.rsplit(".", 1)
@@ -53,33 +51,22 @@ async def runit(
     retry_timer: timedelta | None,
 ) -> None:
     """
-    Instantiate and run a QueueManager or Scheduler using the provided factory function.
-
-    This function handles the setup and lifecycle management of the QueueManager or Scheduler,
-    including signal handling for graceful shutdown. It loads the QueueManager or Scheduler
-    factory, creates an instance, sets up signal handlers, and starts the QueueManager's or
-    Scheduler's run loop with the specified parameters.
+    Run QueueManager, SchedulerManager, or PgQueuer using the factory function.
 
     Args:
-        factory_fn (str): The module path to the QueueManager or Scheduler factory function,
-            e.g., 'myapp.create_queue_manager'.
-        dequeue_timeout (timedelta): The timeout duration for dequeuing jobs.
-        batch_size (int): The number of jobs to retrieve in each batch.
-        retry_timer (timedelta | None): The duration after which to retry 'picked' jobs
-            that may have stalled. If None, retry logic is disabled.
+        factory_fn (str): Module path to the factory function.
+        dequeue_timeout (timedelta): Timeout for dequeuing jobs.
+        batch_size (int): Number of jobs per batch.
+        retry_timer (timedelta | None): Retry timer for stalled jobs.
     """
     instance = await load_manager_factory(factory_fn)()
 
     def set_shutdown(signum: int) -> None:
         """
-        Handle incoming signals to perform a graceful shutdown.
-
-        When a termination signal is received (e.g., SIGINT or SIGTERM), this function
-        sets the 'shutdown' event in the QueueManager or Scheduler to initiate a controlled shutdown
-        process, allowing tasks to complete cleanly.
+        Handle shutdown signals.
 
         Args:
-            signum (int): The signal number received.
+            signum (int): Signal number received.
         """
         print(f"Received signal {signum}, shutting down...", flush=True)
         instance.shutdown.set()

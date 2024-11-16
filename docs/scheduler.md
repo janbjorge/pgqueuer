@@ -1,4 +1,4 @@
-# Schedule Feature in PGQueuer
+# Scheduler
 
 PGQueuer includes a scheduling feature that allows you to register and run recurring jobs using cron-like expressions. This feature is ideal for scheduling tasks that need to run at fixed intervals, such as data synchronization, monitoring, or regular cleanup activities.
 
