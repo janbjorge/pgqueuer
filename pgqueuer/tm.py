@@ -43,7 +43,9 @@ class TaskManager:
         Args:
             task (asyncio.Task): The task that has completed.
         """
-        if exception := task.exception():
+
+        # If the task has been cancelled; raises CancelledError.
+        if not task.cancelled() and (exception := task.exception()):
             logconfig.logger.error(
                 "Unhandled exception in task: %s",
                 task,
