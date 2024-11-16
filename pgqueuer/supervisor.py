@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 import signal
+import sys
 from datetime import timedelta
 from typing import Awaitable, Callable
 
@@ -38,6 +40,7 @@ def load_manager_factory(
     Returns:
         Callable: A callable that returns an awaitable QueueManager or Scheduler instance.
     """
+    sys.path.insert(0, os.getcwd())
     module_name, factory_name = factory_path.rsplit(".", 1)
     module = importlib.import_module(module_name)
     return getattr(module, factory_name)
