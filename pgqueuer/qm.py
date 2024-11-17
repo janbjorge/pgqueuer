@@ -296,15 +296,13 @@ class QueueManager:
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
-                    f"The {table} table is missing the {column} column, "
-                    "please run 'python3 -m pgqueuer upgrade'"
+                    f"The {table} table is missing the {column} column, please run 'pgq upgrade'"
                 )
 
         for key, enum in (("canceled", self.queries.qb.settings.statistics_table_status_type),):
             if not (await self.queries.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
-                    f"The {enum} is missing the "
-                    f"'{key}' type, please run 'python3 -m pgqueuer upgrade'"
+                    f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
                 )
 
     async def run(

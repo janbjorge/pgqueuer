@@ -47,12 +47,12 @@ PGQueuer provides a command-line interface for easy management of installation a
 
 ### Installing PGQueuer database components:
 ```bash
-python -m pgqueuer install
+pgq install
 ```
 
 ### Uninstalling PGQueuer database components:
 ```bash
-python -m pgqueuer uninstall
+pgq uninstall
 ```
 
 The CLI supports several flags to customize the connection settings. Use `--help` to see all available options.
@@ -61,5 +61,5 @@ The CLI supports several flags to customize the connection settings. Use `--help
 
 You can find the commands needed for setting up your database for you version of PGQueuer by running:
 ```bash
-python -m pgqueuer install --dry-run
+pgq install --dry-run
 ```

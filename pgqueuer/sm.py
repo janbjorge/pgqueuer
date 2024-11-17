@@ -103,7 +103,7 @@ class SchedulerManager:
         if not (await self.queries.has_table(self.queries.qb.settings.schedules_table)):
             raise RuntimeError(
                 f"The {self.queries.qb.settings.schedules_table} table is missing "
-                "please run 'python3 -m pgqueuer upgrade'"
+                "please run 'pgq upgrade'"
             )
 
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})

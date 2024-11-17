@@ -1,12 +1,10 @@
 """
-This module loads and runs queue management components:
-    - QueueManager
-    - Scheduler
-    - PgQueuer.
+This module provides functionality to dynamically load and run queue management components.
 
-It supports factory functions to create instances,
-manage lifecycle, and handle graceful shutdowns for
-asynchronous processing and scheduling.
+It includes the ability to load a factory function for creating instances of
+QueueManager, Scheduler and PgQueuer, manage their lifecycle, and handle graceful shutdowns.
+The module is designed to support asynchronous queue processing and scheduling
+using configurable factory paths.
 """
 
 from __future__ import annotations

@@ -52,21 +52,21 @@ async def main() -> PgQueuer:
     driver = AsyncpgDriver(connection)
     pgq = PgQueuer(driver)
 
+    # Entrypoint for jobs whos entrypoint is named 'fetch'.
     @pgq.entrypoint("fetch")
     async def process_message(job: Job) -> None:
         print(f"Processed message: {job!r}")
 
+    # Define and register recurring tasks using cron expressions
+    # The cron expression "* * * * *" means the task will run every minute
     @pgq.schedule("scheduled_every_minute", "* * * * *")
     async def scheduled_every_minute(schedule: Schedule) -> None:
         print(f"Executed every minute {schedule!r} {datetime.now()!r}")
 
     return pgq
-
-# Example of how to run the consumer
-if __name__ == "__main__":
-    asyncio.run(main())
 ```
-Run the consumer:
+
+The above example is located in the examples folder, and can be run by using the `pgq` cli.
 ```bash
 pgq run examples.consumer.main
 ```
@@ -100,6 +100,7 @@ if __name__ == "__main__":
     N = 1_000 if len(sys.argv) == 1 else int(sys.argv[1])
     asyncio.run(main(N))
 ```
+
 Run the producer:
 ```bash
 python3 examples/producer.py 10000

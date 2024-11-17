@@ -1,6 +1,6 @@
 # PgQueuer: Unified Job and Schedule Orchestrator
 
-The `PgQueuer` class orchestrates job queues and schedules recurring tasks using PostgreSQL. It combines the `QueueManager` and `SchedulerManager` to manage one-off and periodic tasks efficiently.
+The `PgQueuer` class orchestrates job queues and schedules recurring tasks using PostgreSQL. It combines the `QueueManager` and `SchedulerManager` to manage periodic tasks and queued tasks.
 
 ## Setting Up PgQueuer
 
