@@ -309,7 +309,6 @@ class QueueManager:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
-        retry_timer: timedelta | None | Unset = Unset(),
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -320,17 +319,10 @@ class QueueManager:
         Args:
             dequeue_timeout (timedelta): Timeout duration for waiting to dequeue jobs.
             batch_size (int): Number of jobs to retrieve in each batch.
-            retry_timer (timedelta | None): Duration to wait before retrying 'picked' jobs.
 
         Raises:
             RuntimeError: If required database columns or types are missing.
         """
-
-        if not isinstance(retry_timer, Unset):
-            warnings.warn(
-                "retry_timer is deprecated, use retry_timer with the entrypoint decorator.",
-                DeprecationWarning,
-            )
 
         await self.verify_structure()
 

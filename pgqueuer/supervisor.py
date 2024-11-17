@@ -46,7 +46,6 @@ async def runit(
     factory_fn: str,
     dequeue_timeout: timedelta,
     batch_size: int,
-    retry_timer: timedelta | None,
 ) -> None:
     """
     Run QueueManager, SchedulerManager, or PgQueuer using the factory function.
@@ -77,7 +76,6 @@ async def runit(
         await instance.run(
             dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
-            retry_timer=retry_timer,
         )
     elif isinstance(instance, sm.SchedulerManager):
         await instance.run()
