@@ -272,14 +272,6 @@ def cliparser() -> argparse.Namespace:
         default=10,
     )
     wm_parser.add_argument(
-        "--retry-timer",
-        help=(
-            "Specify the time to wait (in seconds) before retrying jobs "
-            "that have been picked but not processed."
-        ),
-        type=lambda s: timedelta(seconds=float(s)),
-    )
-    wm_parser.add_argument(
         "factory_fn",
         help=(
             "Path to the QueueManager or Schedule factory function, "
@@ -369,5 +361,4 @@ async def main() -> None:  # noqa: C901
                 parsed.factory_fn,
                 dequeue_timeout=parsed.dequeue_timeout,
                 batch_size=parsed.batch_size,
-                retry_timer=parsed.retry_timer,
             )
