@@ -16,10 +16,10 @@ from .db import Driver
 from .executors import (
     AbstractScheduleExecutor,
     AsyncCrontab,
+    DefaultScheduleExecutor,
     EntrypointExecutor,
     EntrypointTypeVar,
     JobExecutor,
-    ScheduleExecutor,
 )
 from .models import PGChannel
 from .qm import QueueManager
@@ -106,7 +106,7 @@ class PgQueuer:
         self,
         entrypoint: str,
         expression: str,
-        executor: type[AbstractScheduleExecutor] = ScheduleExecutor,
+        executor: type[AbstractScheduleExecutor] = DefaultScheduleExecutor,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,

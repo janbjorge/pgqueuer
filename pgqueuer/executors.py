@@ -147,7 +147,7 @@ class AbstractScheduleExecutor(ABC):
 
 
 @dataclasses.dataclass
-class ScheduleExecutor(AbstractScheduleExecutor):
+class DefaultScheduleExecutor(AbstractScheduleExecutor):
     """
     Job executor that wraps an entrypoint function.
 
