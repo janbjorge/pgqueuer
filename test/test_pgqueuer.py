@@ -182,7 +182,7 @@ async def test_scheduler_register(scheduler: PgQueuer) -> None:
     itr = iter(scheduler.sm.registry.keys())
     key = next(itr)
     assert key.entrypoint == "sample_task"
-    assert scheduler.sm.registry[key].expression == "1 * * * *"
+    assert scheduler.sm.registry[key].parameters.expression == "1 * * * *"
 
     scheduler.schedule("sample_task", "2 * * * *")(sample_task)
     assert len(scheduler.sm.registry) == 2
@@ -190,7 +190,7 @@ async def test_scheduler_register(scheduler: PgQueuer) -> None:
     key = next(itr)
     key = next(itr)
     assert key.entrypoint == "sample_task"
-    assert scheduler.sm.registry[key].expression == "2 * * * *"
+    assert scheduler.sm.registry[key].parameters.expression == "2 * * * *"
 
 
 @pytest.mark.asyncio

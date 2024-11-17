@@ -11,6 +11,12 @@ import croniter
 from . import db, executors, helpers, logconfig, models, queries, tm
 
 
+def default_executor_factory(
+    parameters: executors.ScheduleExecutorFactoryParameters,
+) -> executors.AbstractScheduleExecutor:
+    return executors.DefaultScheduleExecutor(parameters=parameters)
+
+
 @dataclasses.dataclass
 class SchedulerManager:
     """
@@ -55,7 +61,11 @@ class SchedulerManager:
         self,
         entrypoint: str,
         expression: str,
-        executor: type[executors.AbstractScheduleExecutor] = executors.ScheduleExecutor,
+        executor: type[executors.AbstractScheduleExecutor] | None = None,
+        executor_factory: Callable[
+            [executors.ScheduleExecutorFactoryParameters],
+            executors.AbstractScheduleExecutor,
+        ] = default_executor_factory,
     ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
         """
         Register a new job with a cron schedule.
@@ -63,17 +73,32 @@ class SchedulerManager:
         Args:
             entrypoint (str): The entrypoint identifier for the job to be scheduled.
             expression (str): The cron expression defining the schedule.
-            executor (type[executors.AbstractScheduleExecutor]): The executor type that
-                will run the job.
+            executor (type[executors.AbstractScheduleExecutor] | None, optional):
+                Deprecated. The executor type that will run the job.
+                This parameter is deprecated and will be removed in a future version.
+                Please use 'executor_factory' instead for custom executor handling.
+            executor_factory (Callable[[str, str, executors.AsyncCrontab],
+                executors.AbstractScheduleExecutor]): A factory function to
+                create the executor for the job. Defaults to `default_executor_factory`.
 
         Returns:
-            Callable[[executors.AsyncCrontab], executors.AsyncCrontab]: A decorator
-                function that registers the provided function as a job.
+            Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
+                A decorator function that registers the provided function as a job.
 
         Raises:
             ValueError: If the provided cron expression is invalid.
             RuntimeError: If the entrypoint and expression are already registered.
         """
+
+        if executor is not None:
+            import warnings
+
+            warnings.warn(
+                "The 'executor' parameter is deprecated and will be removed in a future version. "
+                "Please use 'executor_factory' instead for custom executor handling.",
+                DeprecationWarning,
+            )
+
         if not croniter.croniter.is_valid(expression):
             raise ValueError(f"Invalid cron expression: {expression}")
 
@@ -85,10 +110,21 @@ class SchedulerManager:
             expression=expression,
         )
         if key in self.registry:
-            raise RuntimeError(f"{key} already in registry, name must be unique.")
+            raise RuntimeError(
+                f"{key} already in registry, tuple (name, expression) must be unique."
+            )
 
         def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
-            self.registry[key] = executor(entrypoint, expression, func)
+            self.registry[key] = executor_factory(
+                executors.ScheduleExecutorFactoryParameters(
+                    connection=self.connection,
+                    shutdown=self.shutdown,
+                    queries=self.queries,
+                    entrypoint=entrypoint,
+                    expression=expression,
+                    func=func,
+                )
+            )
             return func
 
         return register
@@ -177,7 +213,7 @@ class SchedulerManager:
         task_manager.add(asyncio.create_task(heartbeat()))
 
         try:
-            await executor.func(schedule)
+            await executor.execute(schedule)
         except Exception:
             logconfig.logger.exception(
                 "Exception while processing entrypoint/expression: %s/%s",

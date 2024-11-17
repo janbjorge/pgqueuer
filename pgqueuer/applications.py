@@ -16,15 +16,15 @@ from .db import Driver
 from .executors import (
     AbstractScheduleExecutor,
     AsyncCrontab,
-    EntrypointExecutor,
     EntrypointTypeVar,
     JobExecutor,
-    ScheduleExecutor,
+    JobExecutorFactoryParameters,
+    ScheduleExecutorFactoryParameters,
 )
 from .models import PGChannel
-from .qm import QueueManager
+from .qm import QueueManager, default_executor_factory as qm_default_executor_factory
 from .queries import DBSettings
-from .sm import SchedulerManager
+from .sm import SchedulerManager, default_executor_factory as sm_default_executor_factory
 from .tm import TaskManager
 
 
@@ -91,7 +91,11 @@ class PgQueuer:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[JobExecutor] = EntrypointExecutor,
+        executor: type[JobExecutor] | None = None,
+        executor_factory: Callable[
+            [JobExecutorFactoryParameters],
+            JobExecutor,
+        ] = qm_default_executor_factory,
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:
         return self.qm.entrypoint(
             name=name,
@@ -100,16 +104,22 @@ class PgQueuer:
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
             executor=executor,
+            executor_factory=executor_factory,
         )
 
     def schedule(
         self,
         entrypoint: str,
         expression: str,
-        executor: type[AbstractScheduleExecutor] = ScheduleExecutor,
+        executor: type[AbstractScheduleExecutor] | None = None,
+        executor_factory: Callable[
+            [ScheduleExecutorFactoryParameters],
+            AbstractScheduleExecutor,
+        ] = sm_default_executor_factory,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,
             expression=expression,
             executor=executor,
+            executor_factory=executor_factory,
         )

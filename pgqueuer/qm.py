@@ -25,7 +25,10 @@ import anyio
 from . import buffers, db, executors, heartbeat, helpers, listeners, logconfig, models, queries, tm
 
 
-class Unset: ...
+def default_executor_factory(
+    parameters: executors.JobExecutorFactoryParameters,
+) -> executors.JobExecutor:
+    return executors.DefaultJobExecutor(parameters)
 
 
 @dataclasses.dataclass
@@ -132,7 +135,9 @@ class QueueManager:
         self.entrypoint_registry[name] = executor
         self.entrypoint_statistics[name] = models.EntrypointStatistics(
             samples=deque(maxlen=1_000),
-            concurrency_limiter=asyncio.Semaphore(executor.concurrency_limit or sys.maxsize),
+            concurrency_limiter=asyncio.Semaphore(
+                executor.parameters.concurrency_limit or sys.maxsize
+            ),
         )
 
     def entrypoint(
@@ -143,7 +148,11 @@ class QueueManager:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[executors.JobExecutor] = executors.EntrypointExecutor,
+        executor: type[executors.JobExecutor] | None = None,
+        executor_factory: Callable[
+            [executors.JobExecutorFactoryParameters],
+            executors.JobExecutor,
+        ] = default_executor_factory,
     ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
         """
         Decorator to register an entrypoint for job processing.
@@ -166,6 +175,15 @@ class QueueManager:
             RuntimeError: If the entrypoint name is already registered.
             ValueError: If `requests_per_second` or `concurrency_limit` are negative.
         """
+
+        if executor is not None:
+            import warnings
+
+            warnings.warn(
+                "The 'executor' parameter is deprecated and will be removed in a future version. "
+                "Please use 'executor_factory' instead for custom executor handling.",
+                DeprecationWarning,
+            )
 
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
@@ -191,12 +209,18 @@ class QueueManager:
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
             self.register_executor(
                 name,
-                executor(
-                    func=func,
-                    requests_per_second=requests_per_second,
-                    retry_timer=retry_timer,
-                    serialized_dispatch=serialized_dispatch,
-                    concurrency_limit=concurrency_limit,
+                executor_factory(
+                    executors.JobExecutorFactoryParameters(
+                        connection=self.connection,
+                        channel=self.channel,
+                        shutdown=self.shutdown,
+                        queries=self.queries,
+                        func=func,
+                        requests_per_second=requests_per_second,
+                        retry_timer=retry_timer,
+                        serialized_dispatch=serialized_dispatch,
+                        concurrency_limit=concurrency_limit,
+                    )
                 ),
             )
             return func
@@ -235,7 +259,8 @@ class QueueManager:
         return {
             entrypoint
             for entrypoint, executor in self.entrypoint_registry.items()
-            if self.observed_requests_per_second(entrypoint) < executor.requests_per_second
+            if self.observed_requests_per_second(entrypoint)
+            < executor.parameters.requests_per_second
             and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
         }
 
@@ -251,9 +276,9 @@ class QueueManager:
         while not self.shutdown.is_set():
             entrypoints = {
                 x: (
-                    self.entrypoint_registry[x].retry_timer,
-                    self.entrypoint_registry[x].serialized_dispatch,
-                    self.entrypoint_registry[x].concurrency_limit,
+                    self.entrypoint_registry[x].parameters.retry_timer,
+                    self.entrypoint_registry[x].parameters.serialized_dispatch,
+                    self.entrypoint_registry[x].parameters.concurrency_limit,
                 )
                 for x in self.entrypoints_below_capacity_limits()
             }
@@ -277,7 +302,7 @@ class QueueManager:
                 {
                     k: v
                     for k, v in Counter(events).items()
-                    if isfinite(self.entrypoint_registry[k].requests_per_second)
+                    if isfinite(self.entrypoint_registry[k].parameters.requests_per_second)
                 }
             )
 
@@ -328,7 +353,7 @@ class QueueManager:
 
         job_status_log_buffer_timeout = timedelta(seconds=0.01)
         heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
-            [x.retry_timer for x in self.entrypoint_registry.values()]
+            [x.parameters.retry_timer for x in self.entrypoint_registry.values()]
         )
 
         async with (
@@ -425,7 +450,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                executor.retry_timer,
+                executor.parameters.retry_timer,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
@@ -436,7 +461,7 @@ class QueueManager:
                 # concurrency limit semaphore.
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
-                    await executor.execute(job)
+                    await executor.execute(job, ctx)
             except Exception:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",

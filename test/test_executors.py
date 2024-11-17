@@ -4,11 +4,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from multiprocessing import Process, Queue as MPQueue
 
+import anyio
 import pytest
 
 from pgqueuer.db import Driver
-from pgqueuer.executors import EntrypointExecutor, JobExecutor, is_async_callable
-from pgqueuer.models import Job
+from pgqueuer.executors import (
+    DefaultJobExecutor,
+    JobExecutor,
+    JobExecutorFactoryParameters,
+    is_async_callable,
+)
+from pgqueuer.models import Context, Job, PGChannel
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
@@ -21,7 +27,7 @@ class MultiprocessingExecutor(JobExecutor):
         self.concurrency_limit = 2
         self.queue: MPQueue[object] = MPQueue()
 
-    async def execute(self, job: Job) -> None:
+    async def execute(self, job: Job, context: Context) -> None:
         process = Process(target=self.process_function, args=(job,))
         process.start()
         process.join()
@@ -33,14 +39,26 @@ class MultiprocessingExecutor(JobExecutor):
 
 
 @pytest.mark.asyncio
-async def test_entrypoint_executor_sync() -> None:
+async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
     result = []
 
     def sync_function(job: Job) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = EntrypointExecutor(func=sync_function)
+    executor = DefaultJobExecutor(
+        JobExecutorFactoryParameters(
+            channel=PGChannel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=sync_function,
+        )
+    )
     now = datetime.now(timezone.utc)
     job = Job(
         id=1,
@@ -55,20 +73,35 @@ async def test_entrypoint_executor_sync() -> None:
         queue_manager_id=uuid.uuid4(),
     )
 
-    await executor.execute(job)
+    await executor.execute(
+        job,
+        Context(anyio.CancelScope()),
+    )
 
     assert result == [b"test_payload"]
 
 
 @pytest.mark.asyncio
-async def test_entrypoint_executor_async() -> None:
+async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     result = []
 
     async def async_function(job: Job) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = EntrypointExecutor(func=async_function)
+    executor = DefaultJobExecutor(
+        JobExecutorFactoryParameters(
+            channel=PGChannel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=async_function,
+        )
+    )
     now = datetime.now(timezone.utc)
     job = Job(
         id=1,
@@ -83,7 +116,10 @@ async def test_entrypoint_executor_async() -> None:
         queue_manager_id=uuid.uuid4(),
     )
 
-    await executor.execute(job)
+    await executor.execute(
+        job,
+        Context(anyio.CancelScope()),
+    )
 
     assert result == [b"test_payload"]
 
@@ -98,7 +134,7 @@ async def test_custom_threading_executor() -> None:
             self.concurrency_limit = 5
             self.result = list[bytes]()
 
-        async def execute(self, job: Job) -> None:
+        async def execute(self, job: Job, context: Context) -> None:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self.threaded_function, job)
 
@@ -121,7 +157,10 @@ async def test_custom_threading_executor() -> None:
         queue_manager_id=uuid.uuid4(),
     )
 
-    await executor.execute(job)
+    await executor.execute(
+        job,
+        Context(anyio.CancelScope()),
+    )
 
     assert executor.result == [b"thread_payload"]
 
@@ -143,7 +182,10 @@ async def test_custom_multiprocessing_executor() -> None:
         queue_manager_id=uuid.uuid4(),
     )
 
-    await executor.execute(job)
+    await executor.execute(
+        job,
+        Context(anyio.CancelScope()),
+    )
     result = executor.queue.get()
 
     assert result == b"process_payload"
@@ -155,11 +197,14 @@ async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
     results = []
 
     class CustomExecutor(JobExecutor):
-        async def execute(self, job: Job) -> None:
+        async def execute(self, job: Job, context: Context) -> None:
             if job.payload:
                 results.append(job.payload)
 
-    @qm.entrypoint(name="custom_entrypoint", executor=CustomExecutor)
+    @qm.entrypoint(
+        name="custom_entrypoint",
+        executor_factory=lambda x: CustomExecutor(x),
+    )
     def entrypoint_function(job: Job) -> None:
         pass  # Not used since executor handles execution
 
