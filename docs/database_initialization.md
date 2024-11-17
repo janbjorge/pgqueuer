@@ -12,13 +12,16 @@ The queue table stores all the jobs that are to be processed.
 
 ```sql
 CREATE TABLE pgqueuer (
-    id SERIAL PRIMARY KEY,               -- Unique identifier for each job.
-    priority INT NOT NULL,               -- Priority of the job, higher value means higher priority.
-    created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL, -- Timestamp when the job was created.
-    updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL, -- Timestamp when the job was last updated.
-    status pgqueuer_status NOT NULL,     -- Status of the job (queued, picked).
-    entrypoint TEXT NOT NULL,            -- The entrypoint function that will process the job.
-    payload BYTEA                        -- The job's data payload.
+    id SERIAL PRIMARY KEY,
+    priority INT NOT NULL,
+    queue_manager_id UUID,
+    created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    execute_after TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    status pgqueuer_status NOT NULL,
+    entrypoint TEXT NOT NULL,
+    payload BYTEA
 );
 ```
 
@@ -44,12 +47,12 @@ PGQueuer provides a command-line interface for easy management of installation a
 
 ### Installing PGQueuer database components:
 ```bash
-python -m pgqueuer install 
+pgq install
 ```
 
 ### Uninstalling PGQueuer database components:
 ```bash
-python -m pgqueuer uninstall 
+pgq uninstall
 ```
 
 The CLI supports several flags to customize the connection settings. Use `--help` to see all available options.
@@ -58,5 +61,5 @@ The CLI supports several flags to customize the connection settings. Use `--help
 
 You can find the commands needed for setting up your database for you version of PGQueuer by running:
 ```bash
-python -m pgqueuer install --dry-run
+pgq install --dry-run
 ```

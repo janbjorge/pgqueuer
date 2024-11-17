@@ -1,20 +1,26 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import asyncpg
 
+from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Job
-from pgqueuer.qm import QueueManager
+from pgqueuer.models import Job, Schedule
 
 
-async def main() -> QueueManager:
+async def main() -> PgQueuer:
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
-    qm = QueueManager(driver)
+    pgq = PgQueuer(driver)
 
     # Setup the 'fetch' entrypoint
-    @qm.entrypoint("fetch")
+    @pgq.entrypoint("fetch")
     async def process_message(job: Job) -> None:
-        print(f"Processed message: {job}")
+        print(f"Processed message: {job!r}")
 
-    return qm
+    @pgq.schedule("scheduled_every_minute", "* * * * *")
+    async def scheduled_every_minute(schedule: Schedule) -> None:
+        print(f"Executed every minute {schedule!r} {datetime.now()!r}")
+
+    return pgq

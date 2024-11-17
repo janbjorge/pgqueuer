@@ -62,7 +62,7 @@ jobs:
       - name: Run Example with SIGINT
         run: |
           source .venv/bin/activate
-          PYTHONUNBUFFERED=1 python3 -m pgqueuer run examples.consumer.main &
+          PYTHONUNBUFFERED=1 pgq run examples.consumer.main &
           pid=$!
           sleep 10
           kill -SIGINT $pid
