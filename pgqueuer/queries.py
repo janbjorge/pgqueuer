@@ -203,7 +203,7 @@ class QueryBuilder:
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         last_run TIMESTAMP WITH TIME ZONE,
-        status pgqueuer_status DEFAULT 'queued',
+        status {self.settings.queue_status_type} DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );
 
@@ -622,7 +622,7 @@ class QueryBuilder:
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         last_run TIMESTAMP WITH TIME ZONE,
-        status pgqueuer_status DEFAULT 'queued',
+        status {self.settings.queue_status_type} DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );"""
         yield f"""ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
