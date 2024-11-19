@@ -148,7 +148,8 @@ class QueueManager:
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
-        ] = executors.DefaultEntrypointExecutor,
+        ]
+        | None = None,
     ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
         """
         Decorator to register an entrypoint for job processing.
@@ -200,6 +201,8 @@ class QueueManager:
         # Check serialized_dispatch type.
         if not isinstance(serialized_dispatch, bool):
             raise ValueError("Serialized dispatch must be boolean")
+
+        executor_factory = executor_factory or executors.DefaultEntrypointExecutor
 
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
             self.register_executor(

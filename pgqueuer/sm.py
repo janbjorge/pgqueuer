@@ -62,7 +62,8 @@ class SchedulerManager:
         executor_factory: Callable[
             [executors.ScheduleExecutorFactoryParameters],
             executors.AbstractScheduleExecutor,
-        ] = executors.DefaultScheduleExecutor,
+        ]
+        | None = None,
     ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
         """
         Register a new job with a cron schedule.
@@ -109,6 +110,8 @@ class SchedulerManager:
             raise RuntimeError(
                 f"{key} already in registry, tuple (name, expression) must be unique."
             )
+
+        executor_factory = executor_factory or executors.DefaultScheduleExecutor
 
         def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
             self.registry[key] = executor_factory(

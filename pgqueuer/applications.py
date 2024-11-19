@@ -17,8 +17,6 @@ from .executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
     AsyncCrontab,
-    DefaultEntrypointExecutor,
-    DefaultScheduleExecutor,
     EntrypointExecutorParameters,
     EntrypointTypeVar,
     ScheduleExecutorFactoryParameters,
@@ -97,7 +95,8 @@ class PgQueuer:
         executor_factory: Callable[
             [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
-        ] = DefaultEntrypointExecutor,
+        ]
+        | None = None,
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:
         return self.qm.entrypoint(
             name=name,
@@ -117,7 +116,8 @@ class PgQueuer:
         executor_factory: Callable[
             [ScheduleExecutorFactoryParameters],
             AbstractScheduleExecutor,
-        ] = DefaultScheduleExecutor,
+        ]
+        | None = None,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,
