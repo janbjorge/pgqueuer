@@ -14,17 +14,19 @@ from typing import Callable
 
 from .db import Driver
 from .executors import (
+    AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
     AsyncCrontab,
+    DefaultEntrypointExecutor,
+    DefaultScheduleExecutor,
     EntrypointTypeVar,
-    JobExecutor,
     JobExecutorFactoryParameters,
     ScheduleExecutorFactoryParameters,
 )
 from .models import PGChannel
-from .qm import QueueManager, default_executor_factory as qm_default_executor_factory
+from .qm import QueueManager
 from .queries import DBSettings
-from .sm import SchedulerManager, default_executor_factory as sm_default_executor_factory
+from .sm import SchedulerManager
 from .tm import TaskManager
 
 
@@ -91,11 +93,11 @@ class PgQueuer:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[JobExecutor] | None = None,
+        executor: type[AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
             [JobExecutorFactoryParameters],
-            JobExecutor,
-        ] = qm_default_executor_factory,
+            AbstractEntrypointExecutor,
+        ] = DefaultEntrypointExecutor,
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:
         return self.qm.entrypoint(
             name=name,
@@ -115,7 +117,7 @@ class PgQueuer:
         executor_factory: Callable[
             [ScheduleExecutorFactoryParameters],
             AbstractScheduleExecutor,
-        ] = sm_default_executor_factory,
+        ] = DefaultScheduleExecutor,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,

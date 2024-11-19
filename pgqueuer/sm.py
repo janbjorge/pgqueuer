@@ -11,12 +11,6 @@ import croniter
 from . import db, executors, helpers, logconfig, models, queries, tm
 
 
-def default_executor_factory(
-    parameters: executors.ScheduleExecutorFactoryParameters,
-) -> executors.AbstractScheduleExecutor:
-    return executors.DefaultScheduleExecutor(parameters=parameters)
-
-
 @dataclasses.dataclass
 class SchedulerManager:
     """
@@ -65,7 +59,7 @@ class SchedulerManager:
         executor_factory: Callable[
             [executors.ScheduleExecutorFactoryParameters],
             executors.AbstractScheduleExecutor,
-        ] = default_executor_factory,
+        ] = executors.DefaultScheduleExecutor,
     ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
         """
         Register a new job with a cron schedule.
@@ -77,9 +71,9 @@ class SchedulerManager:
                 Deprecated. The executor type that will run the job.
                 This parameter is deprecated and will be removed in a future version.
                 Please use 'executor_factory' instead for custom executor handling.
-            executor_factory (Callable[[str, str, executors.AsyncCrontab],
+            executor_factory (Callable[[ScheduleExecutorFactoryParameters],
                 executors.AbstractScheduleExecutor]): A factory function to
-                create the executor for the job. Defaults to `default_executor_factory`.
+                create the executor for the job.
 
         Returns:
             Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:

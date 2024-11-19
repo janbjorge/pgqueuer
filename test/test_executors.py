@@ -9,8 +9,8 @@ import pytest
 
 from pgqueuer.db import Driver
 from pgqueuer.executors import (
-    DefaultJobExecutor,
-    JobExecutor,
+    AbstractEntrypointExecutor,
+    DefaultEntrypointExecutor,
     JobExecutorFactoryParameters,
     is_async_callable,
 )
@@ -19,7 +19,7 @@ from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
 
-class MultiprocessingExecutor(JobExecutor):
+class MultiprocessingExecutor(AbstractEntrypointExecutor):
     def __init__(self) -> None:
         self.requests_per_second = 5
         self.retry_timer = timedelta(seconds=10)
@@ -46,7 +46,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = DefaultJobExecutor(
+    executor = DefaultEntrypointExecutor(
         JobExecutorFactoryParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,
@@ -89,7 +89,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = DefaultJobExecutor(
+    executor = DefaultEntrypointExecutor(
         JobExecutorFactoryParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,
@@ -126,7 +126,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
 
 @pytest.mark.asyncio
 async def test_custom_threading_executor() -> None:
-    class ThreadingExecutor(JobExecutor):
+    class ThreadingExecutor(AbstractEntrypointExecutor):
         def __init__(self) -> None:
             self.requests_per_second = 10
             self.retry_timer = timedelta(seconds=5)
@@ -196,14 +196,14 @@ async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
     qm = QueueManager(connection=apgdriver)
     results = []
 
-    class CustomExecutor(JobExecutor):
+    class CustomExecutor(AbstractEntrypointExecutor):
         async def execute(self, job: Job, context: Context) -> None:
             if job.payload:
                 results.append(job.payload)
 
     @qm.entrypoint(
         name="custom_entrypoint",
-        executor_factory=lambda x: CustomExecutor(x),
+        executor_factory=CustomExecutor,
     )
     def entrypoint_function(job: Job) -> None:
         pass  # Not used since executor handles execution

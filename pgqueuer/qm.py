@@ -25,12 +25,6 @@ import anyio
 from . import buffers, db, executors, heartbeat, helpers, listeners, logconfig, models, queries, tm
 
 
-def default_executor_factory(
-    parameters: executors.JobExecutorFactoryParameters,
-) -> executors.JobExecutor:
-    return executors.DefaultJobExecutor(parameters)
-
-
 @dataclasses.dataclass
 class QueueManager:
     """
@@ -64,7 +58,7 @@ class QueueManager:
     queries: queries.Queries = dataclasses.field(init=False)
 
     # Per entrypoint
-    entrypoint_registry: dict[str, executors.JobExecutor] = dataclasses.field(
+    entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -117,7 +111,7 @@ class QueueManager:
     def register_executor(
         self,
         name: str,
-        executor: executors.JobExecutor,
+        executor: executors.AbstractEntrypointExecutor,
     ) -> None:
         """
         Register a job executor with a specific name.
@@ -148,11 +142,11 @@ class QueueManager:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[executors.JobExecutor] | None = None,
+        executor: type[executors.AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
             [executors.JobExecutorFactoryParameters],
-            executors.JobExecutor,
-        ] = default_executor_factory,
+            executors.AbstractEntrypointExecutor,
+        ] = executors.DefaultEntrypointExecutor,
     ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
         """
         Decorator to register an entrypoint for job processing.

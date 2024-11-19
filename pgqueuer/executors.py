@@ -66,7 +66,7 @@ class JobExecutorFactoryParameters:
 
 
 @dataclasses.dataclass
-class JobExecutor(ABC):
+class AbstractEntrypointExecutor(ABC):
     """
     Abstract base class for job executors.
 
@@ -87,7 +87,7 @@ class JobExecutor(ABC):
 
 
 @dataclasses.dataclass
-class DefaultJobExecutor(JobExecutor):
+class DefaultEntrypointExecutor(AbstractEntrypointExecutor):
     """
     Job executor that wraps an entrypoint function.
 
