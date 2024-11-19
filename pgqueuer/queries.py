@@ -219,7 +219,7 @@ class QueryBuilder:
         to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
     BEGIN
         -- Check operation type and set the emit flag accordingly
-        IF TG_OP = 'UPDATE' AND OLD IS DISTINCT FROM NEW THEN
+        IF TG_OP = 'UPDATE' THEN
             to_emit := true;
         ELSIF TG_OP = 'DELETE' THEN
             to_emit := true;
