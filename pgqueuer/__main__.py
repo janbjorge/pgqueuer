@@ -1,7 +1,7 @@
 import asyncio
 import contextlib
 
-from . import cli
+from pgqueuer import cli
 
 
 def main() -> None:

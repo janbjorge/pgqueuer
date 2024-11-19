@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import warnings
 from contextlib import suppress
 from datetime import timedelta
 from typing import Callable
@@ -9,6 +10,8 @@ from typing import Callable
 import croniter
 
 from . import db, executors, helpers, logconfig, models, queries, tm
+
+warnings.simplefilter("default", DeprecationWarning)
 
 
 @dataclasses.dataclass
@@ -55,7 +58,12 @@ class SchedulerManager:
         self,
         entrypoint: str,
         expression: str,
-        executor: type[executors.AbstractScheduleExecutor] = executors.ScheduleExecutor,
+        executor: type[executors.AbstractScheduleExecutor] | None = None,
+        executor_factory: Callable[
+            [executors.ScheduleExecutorFactoryParameters],
+            executors.AbstractScheduleExecutor,
+        ]
+        | None = None,
     ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
         """
         Register a new job with a cron schedule.
@@ -63,17 +71,31 @@ class SchedulerManager:
         Args:
             entrypoint (str): The entrypoint identifier for the job to be scheduled.
             expression (str): The cron expression defining the schedule.
-            executor (type[executors.AbstractScheduleExecutor]): The executor type that
-                will run the job.
+            executor (type[executors.AbstractScheduleExecutor] | None, optional):
+                Deprecated. The executor type that will run the job.
+                This parameter is deprecated and will be removed in a future version.
+                Please use 'executor_factory' instead for custom executor handling.
+            executor_factory (Callable[[ScheduleExecutorFactoryParameters],
+                executors.AbstractScheduleExecutor]): A factory function to
+                create the executor for the job.
 
         Returns:
-            Callable[[executors.AsyncCrontab], executors.AsyncCrontab]: A decorator
-                function that registers the provided function as a job.
+            Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
+                A decorator function that registers the provided function as a job.
 
         Raises:
             ValueError: If the provided cron expression is invalid.
             RuntimeError: If the entrypoint and expression are already registered.
         """
+
+        if executor is not None:
+            warnings.warn(
+                "The 'executor' parameter is deprecated and will be removed in a future version. "
+                "Please use 'executor_factory' instead for custom executor handling.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+
         if not croniter.croniter.is_valid(expression):
             raise ValueError(f"Invalid cron expression: {expression}")
 
@@ -85,10 +107,23 @@ class SchedulerManager:
             expression=expression,
         )
         if key in self.registry:
-            raise RuntimeError(f"{key} already in registry, name must be unique.")
+            raise RuntimeError(
+                f"{key} already in registry, tuple (name, expression) must be unique."
+            )
+
+        executor_factory = executor_factory or executors.ScheduleExecutor
 
         def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
-            self.registry[key] = executor(entrypoint, expression, func)
+            self.registry[key] = executor_factory(
+                executors.ScheduleExecutorFactoryParameters(
+                    connection=self.connection,
+                    shutdown=self.shutdown,
+                    queries=self.queries,
+                    entrypoint=entrypoint,
+                    expression=expression,
+                    func=func,
+                )
+            )
             return func
 
         return register
@@ -177,7 +212,7 @@ class SchedulerManager:
         task_manager.add(asyncio.create_task(heartbeat()))
 
         try:
-            await executor.func(schedule)
+            await executor.execute(schedule)
         except Exception:
             logconfig.logger.exception(
                 "Exception while processing entrypoint/expression: %s/%s",

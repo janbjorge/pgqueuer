@@ -21,7 +21,7 @@ import anyio
 import anyio.to_thread
 from croniter import croniter
 
-from . import helpers, models
+from . import db, helpers, models, queries
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -52,32 +52,45 @@ def is_async_callable(obj: object) -> bool:
     )
 
 
+######## Entrypoints ########
+
+
 @dataclasses.dataclass
-class JobExecutor(ABC):
+class EntrypointExecutorParameters:
+    channel: models.PGChannel
+    concurrency_limit: int
+    connection: db.Driver
+    func: Entrypoint
+    queries: queries.Queries
+    requests_per_second: float
+    retry_timer: timedelta
+    serialized_dispatch: bool
+    shutdown: asyncio.Event
+
+
+@dataclasses.dataclass
+class AbstractEntrypointExecutor(ABC):
     """
     Abstract base class for job executors.
 
     Users can subclass this to create custom job executors.
     """
 
-    func: Entrypoint
-    requests_per_second: float = float("inf")
-    retry_timer: timedelta = timedelta(seconds=0)
-    serialized_dispatch: bool = False
-    concurrency_limit: int = 0
+    parameters: EntrypointExecutorParameters
 
     @abstractmethod
-    async def execute(self, job: models.Job) -> None:
+    async def execute(self, job: models.Job, context: models.Context) -> None:
         """
         Execute the given job.
 
         Args:
             job (models.Job): The job to execute.
+            context (models.Context): The context for the job.
         """
 
 
 @dataclasses.dataclass
-class EntrypointExecutor(JobExecutor):
+class EntrypointExecutor(AbstractEntrypointExecutor):
     """
     Job executor that wraps an entrypoint function.
 
@@ -87,19 +100,33 @@ class EntrypointExecutor(JobExecutor):
     is_async: bool = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.is_async = is_async_callable(self.func)
+        self.is_async = is_async_callable(self.parameters.func)
 
-    async def execute(self, job: models.Job) -> None:
+    async def execute(self, job: models.Job, context: models.Context) -> None:
         """
         Execute the job using the wrapped function.
 
         Args:
             job (models.Job): The job to execute.
+            context (models.Context): The context for the job.
         """
         if self.is_async:
-            await cast(AsyncEntrypoint, self.func)(job)
+            await cast(AsyncEntrypoint, self.parameters.func)(job)
         else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.func), job)
+            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+
+
+######## Schedulers ########
+
+
+@dataclasses.dataclass
+class ScheduleExecutorFactoryParameters:
+    connection: db.Driver
+    entrypoint: str
+    expression: str
+    func: AsyncCrontab
+    queries: queries.Queries
+    shutdown: asyncio.Event
 
 
 @dataclasses.dataclass
@@ -111,9 +138,7 @@ class AbstractScheduleExecutor(ABC):
     Users should subclass this to create custom job executors, defining specific execution logic.
     """
 
-    name: str
-    expression: str
-    func: AsyncCrontab
+    parameters: ScheduleExecutorFactoryParameters
 
     @abstractmethod
     async def execute(self, schedule: models.Schedule) -> None:
@@ -132,7 +157,7 @@ class AbstractScheduleExecutor(ABC):
             datetime: The next scheduled datetime in UTC.
         """
         return datetime.fromtimestamp(
-            croniter(self.expression).get_next(),
+            croniter(self.parameters.expression).get_next(),
             timezone.utc,
         )
 
@@ -161,4 +186,4 @@ class ScheduleExecutor(AbstractScheduleExecutor):
 
         This method calls the provided asynchronous function when the job is triggered.
         """
-        await self.func(schedule)
+        await self.parameters.func(schedule)

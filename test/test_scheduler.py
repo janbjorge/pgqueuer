@@ -38,7 +38,7 @@ async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     itr = iter(scheduler.registry.keys())
     key = next(itr)
     assert key.entrypoint == "sample_task"
-    assert scheduler.registry[key].expression == "1 * * * *"
+    assert scheduler.registry[key].parameters.expression == "1 * * * *"
 
     scheduler.schedule("sample_task", "2 * * * *")(sample_task)
     assert len(scheduler.registry) == 2
@@ -46,7 +46,7 @@ async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     key = next(itr)
     key = next(itr)
     assert key.entrypoint == "sample_task"
-    assert scheduler.registry[key].expression == "2 * * * *"
+    assert scheduler.registry[key].parameters.expression == "2 * * * *"
 
 
 @pytest.mark.asyncio

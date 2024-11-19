@@ -14,12 +14,12 @@ from typing import Callable
 
 from .db import Driver
 from .executors import (
+    AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
     AsyncCrontab,
-    EntrypointExecutor,
+    EntrypointExecutorParameters,
     EntrypointTypeVar,
-    JobExecutor,
-    ScheduleExecutor,
+    ScheduleExecutorFactoryParameters,
 )
 from .models import PGChannel
 from .qm import QueueManager
@@ -91,7 +91,12 @@ class PgQueuer:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[JobExecutor] = EntrypointExecutor,
+        executor: type[AbstractEntrypointExecutor] | None = None,
+        executor_factory: Callable[
+            [EntrypointExecutorParameters],
+            AbstractEntrypointExecutor,
+        ]
+        | None = None,
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:
         return self.qm.entrypoint(
             name=name,
@@ -100,16 +105,23 @@ class PgQueuer:
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
             executor=executor,
+            executor_factory=executor_factory,
         )
 
     def schedule(
         self,
         entrypoint: str,
         expression: str,
-        executor: type[AbstractScheduleExecutor] = ScheduleExecutor,
+        executor: type[AbstractScheduleExecutor] | None = None,
+        executor_factory: Callable[
+            [ScheduleExecutorFactoryParameters],
+            AbstractScheduleExecutor,
+        ]
+        | None = None,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,
             expression=expression,
             executor=executor,
+            executor_factory=executor_factory,
         )
