@@ -10,7 +10,7 @@ import pytest
 from pgqueuer.db import Driver
 from pgqueuer.executors import (
     AbstractEntrypointExecutor,
-    DefaultEntrypointExecutor,
+    EntrypointExecutor,
     EntrypointExecutorParameters,
     is_async_callable,
 )
@@ -46,7 +46,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = DefaultEntrypointExecutor(
+    executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,
@@ -89,7 +89,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
         if job.payload:
             result.append(job.payload)
 
-    executor = DefaultEntrypointExecutor(
+    executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,

@@ -111,7 +111,7 @@ class SchedulerManager:
                 f"{key} already in registry, tuple (name, expression) must be unique."
             )
 
-        executor_factory = executor_factory or executors.DefaultScheduleExecutor
+        executor_factory = executor_factory or executors.ScheduleExecutor
 
         def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
             self.registry[key] = executor_factory(

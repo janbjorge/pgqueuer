@@ -202,7 +202,7 @@ class QueueManager:
         if not isinstance(serialized_dispatch, bool):
             raise ValueError("Serialized dispatch must be boolean")
 
-        executor_factory = executor_factory or executors.DefaultEntrypointExecutor
+        executor_factory = executor_factory or executors.EntrypointExecutor
 
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
             self.register_executor(
