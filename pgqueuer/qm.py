@@ -146,7 +146,7 @@ class QueueManager:
         serialized_dispatch: bool = False,
         executor: type[executors.AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
-            [executors.JobExecutorFactoryParameters],
+            [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
         ] = executors.DefaultEntrypointExecutor,
     ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
@@ -205,7 +205,7 @@ class QueueManager:
             self.register_executor(
                 name,
                 executor_factory(
-                    executors.JobExecutorFactoryParameters(
+                    executors.EntrypointExecutorParameters(
                         connection=self.connection,
                         channel=self.channel,
                         shutdown=self.shutdown,

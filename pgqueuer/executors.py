@@ -52,8 +52,11 @@ def is_async_callable(obj: object) -> bool:
     )
 
 
+######## Entrypoints ########
+
+
 @dataclasses.dataclass
-class JobExecutorFactoryParameters:
+class EntrypointExecutorParameters:
     channel: models.PGChannel
     concurrency_limit: int
     connection: db.Driver
@@ -73,7 +76,7 @@ class AbstractEntrypointExecutor(ABC):
     Users can subclass this to create custom job executors.
     """
 
-    parameters: JobExecutorFactoryParameters
+    parameters: EntrypointExecutorParameters
 
     @abstractmethod
     async def execute(self, job: models.Job, context: models.Context) -> None:
@@ -111,6 +114,9 @@ class DefaultEntrypointExecutor(AbstractEntrypointExecutor):
             await cast(AsyncEntrypoint, self.parameters.func)(job)
         else:
             await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+
+
+######## Schedulers ########
 
 
 @dataclasses.dataclass

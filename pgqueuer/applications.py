@@ -19,8 +19,8 @@ from .executors import (
     AsyncCrontab,
     DefaultEntrypointExecutor,
     DefaultScheduleExecutor,
+    EntrypointExecutorParameters,
     EntrypointTypeVar,
-    JobExecutorFactoryParameters,
     ScheduleExecutorFactoryParameters,
 )
 from .models import PGChannel
@@ -95,7 +95,7 @@ class PgQueuer:
         serialized_dispatch: bool = False,
         executor: type[AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
-            [JobExecutorFactoryParameters],
+            [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
         ] = DefaultEntrypointExecutor,
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:

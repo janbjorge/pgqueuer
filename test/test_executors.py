@@ -11,7 +11,7 @@ from pgqueuer.db import Driver
 from pgqueuer.executors import (
     AbstractEntrypointExecutor,
     DefaultEntrypointExecutor,
-    JobExecutorFactoryParameters,
+    EntrypointExecutorParameters,
     is_async_callable,
 )
 from pgqueuer.models import Context, Job, PGChannel
@@ -47,7 +47,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
             result.append(job.payload)
 
     executor = DefaultEntrypointExecutor(
-        JobExecutorFactoryParameters(
+        EntrypointExecutorParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,
             connection=apgdriver,
@@ -90,7 +90,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
             result.append(job.payload)
 
     executor = DefaultEntrypointExecutor(
-        JobExecutorFactoryParameters(
+        EntrypointExecutorParameters(
             channel=PGChannel("foo"),
             concurrency_limit=10,
             connection=apgdriver,
