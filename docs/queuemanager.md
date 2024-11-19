@@ -182,15 +182,15 @@ This mechanism helps maintain the integrity and consistency of the job queue, en
 
 ## Custom Job Executors
 
-Job Executors are responsible for executing jobs that have been dequeued from the job queue. The `QueueManager` provides a default job executor called `EntrypointExecutor`, but you can also create and register your own custom executors to extend its functionality.
+Executors are responsible for executing jobs that have been dequeued from the job queue. The `QueueManager` provides a default job executor called `DefaultEntrypointExecutor`, but you can also create and register your own custom executors to extend its functionality.
 
-### The `JobExecutor` Interface
+### The `Executor` Interface
 
-The `JobExecutor` is an abstract base class that defines the interface for any custom job executors. It contains the necessary methods and properties that your custom executor must implement. By subclassing `JobExecutor`, you can control how jobs are executed, modify concurrency behavior, add custom logging, or even interact with external systems as needed.
+The `AbstractEntrypointExecutor` is an abstract base class that defines the interface for any custom job executors. It contains the necessary methods and properties that your custom executor must implement. By subclassing `AbstractEntrypointExecutor`, you can control how jobs are executed, modify concurrency behavior, add custom logging, or even interact with external systems as needed.
 
 The key method that needs to be implemented is:
 
-- `async def execute(self, job: models.Job) -> None`: This method is called to execute the given job. Your implementation should handle all the logic associated with processing the job, including error handling and logging.
+- `async def execute(self, job: models.Job, context: models.Context) -> None`: This method is called to execute the given job. Your implementation should handle all the logic associated with processing the job, including error handling and logging.
 
 Below is an example of how you can create your own custom job executor.
 
@@ -204,18 +204,8 @@ from datetime import timedelta
 from pgqueuer.executors import JobExecutor
 from pgqueuer.models import Job
 
-class NotificationExecutor(JobExecutor):
-    def __init__(
-        self,
-        func,
-        requests_per_second: float = 2.0,
-        retry_timer: timedelta = timedelta(seconds=30),
-        serialized_dispatch: bool = True,
-        concurrency_limit: int = 5,
-    ):
-        super().__init__(func, requests_per_second, retry_timer, serialized_dispatch, concurrency_limit)
-
-    async def execute(self, job: Job) -> None:
+class NotificationExecutor(AbstractEntrypointExecutor):
+    async def execute(self, job: Job,  context: Context) -> None:
         # Extract notification type and message from job data
         notification_type, message = job.data.decode().split('|')
 
@@ -227,7 +217,7 @@ class NotificationExecutor(JobExecutor):
             await self.send_push_notification(message)
 
         # Execute the original job function if required
-        await self.func(job)
+        await self.parameters.func(job)
 
     async def send_email(self, message: str) -> None:
         print(f"Sending Email: {message}")
@@ -261,7 +251,7 @@ async def main() -> None:
     # Register an entrypoint for notifications with the custom executor
     @qm.entrypoint(
         "user_notification",
-        executor=NotificationExecutor,  # Use the custom NotificationExecutor
+        executor_factory=NotificationExecutor,  # Use the custom NotificationExecutor
     )
     async def notification_task(job: Job) -> None:
         print(f"Executing notification job with ID: {job.id}")
