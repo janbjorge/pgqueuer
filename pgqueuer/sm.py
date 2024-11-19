@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import warnings
 from contextlib import suppress
 from datetime import timedelta
 from typing import Callable
@@ -9,6 +10,8 @@ from typing import Callable
 import croniter
 
 from . import db, executors, helpers, logconfig, models, queries, tm
+
+warnings.simplefilter("default", DeprecationWarning)
 
 
 @dataclasses.dataclass
@@ -85,12 +88,11 @@ class SchedulerManager:
         """
 
         if executor is not None:
-            import warnings
-
             warnings.warn(
                 "The 'executor' parameter is deprecated and will be removed in a future version. "
                 "Please use 'executor_factory' instead for custom executor handling.",
                 DeprecationWarning,
+                stacklevel=3,
             )
 
         if not croniter.croniter.is_valid(expression):

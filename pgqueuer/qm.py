@@ -24,6 +24,8 @@ import anyio
 
 from . import buffers, db, executors, heartbeat, helpers, listeners, logconfig, models, queries, tm
 
+warnings.simplefilter("default", DeprecationWarning)
+
 
 @dataclasses.dataclass
 class QueueManager:
@@ -171,12 +173,11 @@ class QueueManager:
         """
 
         if executor is not None:
-            import warnings
-
             warnings.warn(
                 "The 'executor' parameter is deprecated and will be removed in a future version. "
                 "Please use 'executor_factory' instead for custom executor handling.",
                 DeprecationWarning,
+                stacklevel=3,
             )
 
         if name in self.entrypoint_registry:
