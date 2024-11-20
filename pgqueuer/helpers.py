@@ -13,10 +13,26 @@ import asyncio
 import contextlib
 import random
 from datetime import datetime, timedelta, timezone
+from typing import Callable, Generator
 
 from croniter import croniter
 
 from . import listeners, models
+
+
+@contextlib.contextmanager
+def timer() -> Generator[Callable[[], timedelta], None, None]:
+    """
+    Context manager to measure elapsed time.
+
+    Yields a callable that returns the elapsed time as a timedelta.
+    """
+    enter = datetime.now()
+    exit: None | datetime = None
+    try:
+        yield lambda: (exit or datetime.now()) - enter
+    finally:
+        exit = datetime.now()
 
 
 def utc_now() -> datetime:

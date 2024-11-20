@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import functools
+import random
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import (
@@ -21,7 +22,7 @@ import anyio
 import anyio.to_thread
 from croniter import croniter
 
-from . import db, helpers, models, queries
+from . import db, errors, helpers, models, queries
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -114,6 +115,50 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             await cast(AsyncEntrypoint, self.parameters.func)(job)
         else:
             await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+
+
+@dataclasses.dataclass
+class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
+    max_attempts: int | None = 5  # maximum retry attempts
+    max_delay: float = 10.0  # maximum delay for retry
+    max_time: timedelta | None = timedelta(minutes=5)  # maximum time used on retry
+    initial_delay: float = 0.1  # base delay for backoff
+    backoff_multiplier: float = 2.0  # base for exponential backoff
+    jitter: Callable[[], float] = lambda: random.uniform(0, 1)  # jitter callable
+
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        """
+        Execute the job with retry logic, using exponential backoff and jitter.
+
+        Args:
+            job (models.Job): The job to execute.
+            context (models.Context): The context for the job.
+
+        The function retries execution up to `max_attempts` times in case of failure,
+        applying exponential backoff with an initial delay (`initial_delay`),
+        up to a maximum delay (`max_delay`).
+        Jitter is added to the delay to avoid contention.
+        """
+
+        attempt = 0
+
+        with helpers.timer() as elapsed:
+            while True:
+                try:
+                    return await super().execute(job, context)
+                except Exception as e:
+                    attempt += 1
+                    if self.max_time and (elp := elapsed()) >= self.max_time:
+                        raise errors.MaxTimeExceeded(self.max_time, elp) from e
+                    if self.max_attempts and attempt >= self.max_attempts:
+                        raise errors.MaxRetriesExceeded(self.max_attempts) from e
+
+                    delay = (
+                        self.initial_delay * (self.backoff_multiplier**attempt) / 2
+                        + self.jitter() * self.initial_delay / 2
+                    )
+
+                    await asyncio.sleep(min(delay, self.max_delay))
 
 
 ######## Schedulers ########
