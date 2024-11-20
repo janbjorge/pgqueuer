@@ -280,9 +280,31 @@ jobs:
       - name: Run Mypy Type Check
         run: uv run mypy .
 
+
+  run-codespell:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Codespell Spellcheck
+        uses: codespell-project/actions-codespell@v2
+        with:
+          check_filenames: true
+          skip: '*.lock,*.json,.venv'
+
+  run-typos:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Typos Spellcheck
+        uses:  crate-ci/typos@master
+
   complete-pipeline:
     if: github.event_name != 'schedule'
-    needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
+    needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example, run-codespell, run-typos]
     runs-on: ubuntu-latest
     steps:
       - name: Confirm All Tests Completed
