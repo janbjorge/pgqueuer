@@ -130,14 +130,14 @@ def cli_parser() -> argparse.Namespace:
         "--requests-per-second",
         nargs="+",
         default=[float("inf"), float("inf")],
-        help="RPS for endporints given as a list, defautl is 'inf'.",
+        help="RPS for endporints given as a list, default is 'inf'.",
     )
     parser.add_argument(
         "-ci",
         "--concurrency-limit",
         nargs="+",
         default=[sys.maxsize, sys.maxsize],
-        help=f"Concurrency limit for endporints given as a list, defautl is '{sys.maxsize}'.",
+        help=f"Concurrency limit for endporints given as a list, default is '{sys.maxsize}'.",
     )
     parser.add_argument(
         "-o",

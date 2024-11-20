@@ -70,7 +70,7 @@ class PgQueuer:
         handle job processing and scheduling.
         """
 
-        # The task manager waits for all tasks for complite before
+        # The task manager waits for all tasks for compile before
         # exit.
         async with TaskManager() as tm:
             tm.add(
