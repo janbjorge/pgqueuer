@@ -64,11 +64,11 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
         "pgqueuer.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    exectued = False
+    executed = False
 
     async def sample_task(schedule: Schedule) -> None:
-        nonlocal exectued
-        exectued = True
+        nonlocal executed
+        executed = True
 
     scheduler.schedule("sample_task", "* * * * *")(sample_task)
 
@@ -79,7 +79,7 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
         ],
     )
 
-    assert exectued
+    assert executed
 
 
 @pytest.mark.asyncio
@@ -116,11 +116,11 @@ async def test_schedule_storage_and_retrieval(
     )
     expression = "* * * * *"
     entrypoint = "db_task"
-    recived: CronExpressionEntrypoint | None = None
+    received: CronExpressionEntrypoint | None = None
 
     async def db_task(schedule: Schedule) -> None:
-        nonlocal recived
-        recived = CronExpressionEntrypoint(
+        nonlocal received
+        received = CronExpressionEntrypoint(
             entrypoint=schedule.entrypoint,
             expression=schedule.expression,
         )
@@ -133,6 +133,6 @@ async def test_schedule_storage_and_retrieval(
         ],
     )
 
-    assert recived is not None
-    assert recived.entrypoint == entrypoint
-    assert recived.expression == expression
+    assert received is not None
+    assert received.entrypoint == entrypoint
+    assert received.expression == expression

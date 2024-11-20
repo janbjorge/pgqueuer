@@ -22,7 +22,7 @@ async def wait_until_empty_queue(q: Queries, pgqs: list[PgQueuer]) -> None:
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))
-async def test_pgqueuer_job_queing(apgdriver: db.Driver, N: int) -> None:
+async def test_pgqueuer_job_queuing(apgdriver: db.Driver, N: int) -> None:
     pgq = PgQueuer(apgdriver)
     seen = list[int]()
 
@@ -208,11 +208,11 @@ async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
         "pgqueuer.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
-    exectued = False
+    executed = False
 
     async def sample_task(schedule: Schedule) -> None:
-        nonlocal exectued
-        exectued = True
+        nonlocal executed
+        executed = True
 
     scheduler.schedule("sample_task", "* * * * *")(sample_task)
 
@@ -223,7 +223,7 @@ async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
         ],
     )
 
-    assert exectued
+    assert executed
 
 
 @pytest.mark.asyncio
@@ -260,11 +260,11 @@ async def test_schedule_storage_and_retrieval(
     )
     expression = "* * * * *"
     entrypoint = "db_task"
-    recived: CronExpressionEntrypoint | None = None
+    received: CronExpressionEntrypoint | None = None
 
     async def db_task(schedule: Schedule) -> None:
-        nonlocal recived
-        recived = CronExpressionEntrypoint(
+        nonlocal received
+        received = CronExpressionEntrypoint(
             entrypoint=schedule.entrypoint,
             expression=schedule.expression,
         )
@@ -277,6 +277,6 @@ async def test_schedule_storage_and_retrieval(
         ],
     )
 
-    assert recived is not None
-    assert recived.entrypoint == entrypoint
-    assert recived.expression == expression
+    assert received is not None
+    assert received.entrypoint == entrypoint
+    assert received.expression == expression

@@ -23,7 +23,7 @@ async def wait_until_empty_queue(
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))
-async def test_job_queing(
+async def test_job_queuing(
     apgdriver: db.Driver,
     N: int,
 ) -> None:

@@ -18,7 +18,7 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
 
 
 @pytest.fixture(scope="function", autouse=True)
-async def trucate_tables(apgdriver: Driver) -> None:
+async def truncate_tables(apgdriver: Driver) -> None:
     await asyncio.gather(
         Queries(apgdriver).clear_log(),
         Queries(apgdriver).clear_queue(),

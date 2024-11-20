@@ -52,7 +52,7 @@ async def main() -> PgQueuer:
     driver = AsyncpgDriver(connection)
     pgq = PgQueuer(driver)
 
-    # Entrypoint for jobs whos entrypoint is named 'fetch'.
+    # Entrypoint for jobs whose entrypoint is named 'fetch'.
     @pgq.entrypoint("fetch")
     async def process_message(job: Job) -> None:
         print(f"Processed message: {job!r}")
