@@ -691,7 +691,7 @@ class QueryBuilder:
         """
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
-    def create_notify_activity_query(self) -> str:
+    def create_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
     def create_insert_schedule_query(self) -> str:
@@ -1107,9 +1107,9 @@ class Queries:
             ).model_dump_json(),
         )
 
-    async def notify_activity(self, job_ids: list[models.JobId]) -> None:
+    async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
         await self.driver.execute(
-            self.qb.create_notify_activity_query(),
+            self.qb.create_update_heartbeat_query(),
             list(set(job_ids)),
         )
 

@@ -1,27 +1,37 @@
 import asyncio
+import uuid
 from collections import deque
-from datetime import datetime, timezone
-from typing import Dict, MutableMapping
+from datetime import datetime, timedelta, timezone
+from typing import MutableMapping
 
 from anyio import CancelScope
+from async_timeout import timeout
 
-from pgqueuer.listeners import PGNoticeEventListener, handle_event_type
+from pgqueuer import db
+from pgqueuer.listeners import (
+    PGNoticeEventListener,
+    handle_event_type,
+    initialize_notice_event_listener,
+)
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
     Context,
     EntrypointStatistics,
     JobId,
+    PGChannel,
     RequestsPerSecondEvent,
     TableChangedEvent,
 )
+from pgqueuer.queries import DBSettings, EntrypointExecutionParameter, Queries, add_prefix
 
 
 async def test_handle_table_changed_event() -> None:
     notice_event_queue = PGNoticeEventListener()
-    statistics: Dict[str, EntrypointStatistics] = {
+    statistics = {
         "entrypoint_1": EntrypointStatistics(
-            samples=deque(), concurrency_limiter=asyncio.Semaphore(5)
+            samples=deque(),
+            concurrency_limiter=asyncio.Semaphore(5),
         )
     }
     canceled: MutableMapping[JobId, Context] = {}
@@ -93,3 +103,124 @@ async def test_handle_cancellation_event() -> None:
     handle_event_type(event, notice_event_queue, statistics, canceled)
 
     assert cancellation_context.cancellation.cancel_called
+
+
+async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
+    evnets = list[AnyEvent]()
+    await initialize_notice_event_listener(
+        apgdriver,
+        PGChannel(DBSettings().channel),
+        evnets.append,
+    )
+
+    (job_id,) = await Queries(apgdriver).enqueue(
+        "test_emit_stable_changed_insert",
+        None,
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    (event,) = evnets
+
+    assert event.root.type == "table_changed_event"
+    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.operation == "insert"
+
+
+async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
+    evnets = list[AnyEvent]()
+    await initialize_notice_event_listener(
+        apgdriver,
+        PGChannel(DBSettings().channel),
+        evnets.append,
+    )
+
+    await Queries(apgdriver).enqueue(
+        "test_emit_stable_changed_update",
+        None,
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    (event,) = evnets
+
+    assert event.root.type == "table_changed_event"
+    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.operation == "insert"
+    evnets.clear()
+
+    await Queries(apgdriver).dequeue(
+        100,
+        {
+            "test_emit_stable_changed_update": EntrypointExecutionParameter(
+                timedelta(seconds=300), False, 0
+            )
+        },
+        uuid.uuid4(),
+    )
+    await asyncio.sleep(0.1)
+    assert len(evnets) == 0
+
+
+async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
+    evnets = list[AnyEvent]()
+    await initialize_notice_event_listener(
+        apgdriver,
+        PGChannel(DBSettings().channel),
+        evnets.append,
+    )
+
+    await Queries(apgdriver).enqueue(
+        "test_emits_truncate_table_truncate",
+        None,
+    )
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    evnets.clear()
+
+    await Queries(apgdriver).clear_queue()
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    (event,) = evnets
+
+    assert event.root.type == "table_changed_event"
+    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.operation == "truncate"
+    evnets.clear()
+
+
+async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
+    evnets = list[AnyEvent]()
+    await initialize_notice_event_listener(
+        apgdriver,
+        PGChannel(DBSettings().channel),
+        evnets.append,
+    )
+
+    (job_id,) = await Queries(apgdriver).enqueue(
+        "test_pgqueuer_heartbeat_event_trigger",
+        None,
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    (event,) = evnets
+    assert event.root.type == "table_changed_event"
+    assert event.root.table == add_prefix("pgqueuer")
+    evnets.clear()
+
+    await asyncio.gather(
+        *[Queries(apgdriver).update_heartbeat([job_id]) for _ in range(10)],
+    )
+    await asyncio.sleep(0.1)
+    assert len(evnets) == 0
