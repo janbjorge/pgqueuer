@@ -52,7 +52,11 @@ async def display_pg_channel(
         queue.put_nowait,
     )
     while True:
-        print(repr(await queue.get()))
+        print(
+            repr(
+                (await queue.get()).root,
+            ),
+        )
 
 
 async def fetch_and_display(
