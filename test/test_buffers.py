@@ -4,6 +4,7 @@ from datetime import timedelta
 from itertools import count
 
 import pytest
+from helpers import mocked_job
 
 from pgqueuer.buffers import JobStatusLogBuffer
 from pgqueuer.helpers import utc_now
@@ -14,16 +15,11 @@ def job_faker(
     cnt: count = count(),
     queue_manager_id: uuid.UUID = uuid.uuid4(),
 ) -> Job:
-    dt = utc_now()
-    return Job(
+    return mocked_job(
         id=next(cnt),
-        priority=0,
-        created=dt,
-        heartbeat=dt,
-        updated=dt,
-        execute_after=dt,
         status="picked",
         entrypoint="foo",
+        priority=0,
         payload=None,
         queue_manager_id=queue_manager_id,
     )
