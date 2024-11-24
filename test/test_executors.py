@@ -1,11 +1,11 @@
 import asyncio
 import functools
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from multiprocessing import Process, Queue as MPQueue
 
 import anyio
 import pytest
+from helpers import mocked_job
 
 from pgqueuer.db import Driver
 from pgqueuer.executors import (
@@ -59,19 +59,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
             func=sync_function,
         )
     )
-    now = datetime.now(timezone.utc)
-    job = Job(
-        id=1,
-        priority=1,
-        created=now,
-        heartbeat=now,
-        execute_after=now,
-        updated=now,
-        status="queued",
-        entrypoint="test",
-        payload=b"test_payload",
-        queue_manager_id=uuid.uuid4(),
-    )
+    job = mocked_job(payload=b"test_payload")
 
     await executor.execute(
         job,
@@ -102,25 +90,12 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
             func=async_function,
         )
     )
-    now = datetime.now(timezone.utc)
-    job = Job(
-        id=1,
-        priority=1,
-        created=now,
-        heartbeat=now,
-        execute_after=now,
-        updated=now,
-        status="queued",
-        entrypoint="test",
-        payload=b"test_payload",
-        queue_manager_id=uuid.uuid4(),
-    )
+    job = mocked_job(payload=b"test_payload")
 
     await executor.execute(
         job,
         Context(anyio.CancelScope()),
     )
-
     assert result == [b"test_payload"]
 
 
@@ -143,19 +118,7 @@ async def test_custom_threading_executor() -> None:
                 self.result.append(job.payload)
 
     executor = ThreadingExecutor()
-    now = datetime.now(timezone.utc)
-    job = Job(
-        id=1,
-        priority=1,
-        created=now,
-        heartbeat=now,
-        execute_after=now,
-        updated=now,
-        status="queued",
-        entrypoint="test",
-        payload=b"thread_payload",
-        queue_manager_id=uuid.uuid4(),
-    )
+    job = mocked_job(payload=b"thread_payload")
 
     await executor.execute(
         job,
@@ -168,19 +131,7 @@ async def test_custom_threading_executor() -> None:
 @pytest.mark.asyncio
 async def test_custom_multiprocessing_executor() -> None:
     executor = MultiprocessingExecutor()
-    now = datetime.now(timezone.utc)
-    job = Job(
-        id=1,
-        priority=1,
-        created=now,
-        heartbeat=now,
-        execute_after=now,
-        updated=now,
-        status="queued",
-        entrypoint="test",
-        payload=b"process_payload",
-        queue_manager_id=uuid.uuid4(),
-    )
+    job = mocked_job(payload=b"process_payload")
 
     await executor.execute(
         job,
