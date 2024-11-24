@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Dict, MutableMapping
+from typing import MutableMapping
 
 from anyio import CancelScope
 from async_timeout import timeout
@@ -28,9 +28,10 @@ from pgqueuer.queries import DBSettings, EntrypointExecutionParameter, Queries, 
 
 async def test_handle_table_changed_event() -> None:
     notice_event_queue = PGNoticeEventListener()
-    statistics: Dict[str, EntrypointStatistics] = {
+    statistics = {
         "entrypoint_1": EntrypointStatistics(
-            samples=deque(), concurrency_limiter=asyncio.Semaphore(5)
+            samples=deque(),
+            concurrency_limiter=asyncio.Semaphore(5),
         )
     }
     canceled: MutableMapping[JobId, Context] = {}
@@ -161,16 +162,8 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
         },
         uuid.uuid4(),
     )
-    async with timeout(1):
-        while len(evnets) < 1:
-            await asyncio.sleep(0)
-
-    (event,) = evnets
-
-    assert event.root.type == "table_changed_event"
-    assert event.root.table == add_prefix("pgqueuer")
-    assert event.root.operation == "update"
-    evnets.clear()
+    await asyncio.sleep(0.1)
+    assert len(evnets) == 0
 
 
 async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
@@ -212,7 +205,10 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    (job_id,) = await Queries(apgdriver).enqueue("test_pgqueuer_heartbeat_event_trigger", None)
+    (job_id,) = await Queries(apgdriver).enqueue(
+        "test_pgqueuer_heartbeat_event_trigger",
+        None,
+    )
 
     async with timeout(1):
         while len(evnets) < 1:
@@ -223,7 +219,8 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     assert event.root.table == add_prefix("pgqueuer")
     evnets.clear()
 
-    for _ in range(10):
-        await Queries(apgdriver).notify_activity([job_id])
-
+    await asyncio.gather(
+        *[Queries(apgdriver).update_heartbeat([job_id]) for _ in range(10)],
+    )
+    await asyncio.sleep(0.1)
     assert len(evnets) == 0

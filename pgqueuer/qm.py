@@ -363,7 +363,7 @@ class QueueManager:
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
                 timeout=heartbeat_buffer_timeout / 2,
-                callback=self.queries.notify_activity,
+                callback=self.queries.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
                 max_size=batch_size,
