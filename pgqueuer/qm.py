@@ -273,10 +273,10 @@ class QueueManager:
 
         while not self.shutdown.is_set():
             entrypoints = {
-                x: (
-                    self.entrypoint_registry[x].parameters.retry_timer,
-                    self.entrypoint_registry[x].parameters.serialized_dispatch,
-                    self.entrypoint_registry[x].parameters.concurrency_limit,
+                x: queries.EntrypointExecutionParameter(
+                    retry_after=self.entrypoint_registry[x].parameters.retry_timer,
+                    serialized=self.entrypoint_registry[x].parameters.serialized_dispatch,
+                    concurrency_limit=self.entrypoint_registry[x].parameters.concurrency_limit,
                 )
                 for x in self.entrypoints_below_capacity_limits()
             }

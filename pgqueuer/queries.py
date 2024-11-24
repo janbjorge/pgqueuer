@@ -21,6 +21,13 @@ from typing import Final, Generator, overload
 from . import db, helpers, models
 
 
+@dataclasses.dataclass
+class EntrypointExecutionParameter:
+    retry_after: timedelta
+    serialized: bool
+    concurrency_limit: int
+
+
 def add_prefix(string: str) -> str:
     """
     Append a prefix from environment variables to a given string.
@@ -782,7 +789,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, tuple[timedelta, bool, int]],
+        entrypoints: dict[str, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
     ) -> list[models.Job]:
         """
@@ -813,9 +820,9 @@ class Queries:
             self.qb.create_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
-            [t for t, _, _ in entrypoints.values()],
-            [s for _, s, _ in entrypoints.values()],
-            [c for _, _, c in entrypoints.values()],
+            [x.retry_after for x in entrypoints.values()],
+            [x.serialized for x in entrypoints.values()],
+            [x.concurrency_limit for x in entrypoints.values()],
             queue_manager_id,
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
