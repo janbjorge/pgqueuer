@@ -11,7 +11,7 @@ import pytest
 from pgqueuer.db import Driver
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import Queries
+from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 
 async def raises(lock: asyncio.Lock) -> None:
@@ -140,7 +140,7 @@ async def test_no_jobs_processed_when_locked(
     await enqueue(queries, size=n_tasks)
     picked_job = await queries.dequeue(
         1,
-        {"serialized_dispatch_true": (timedelta(seconds=30), True, 0)},
+        {"serialized_dispatch_true": EntrypointExecutionParameter(timedelta(seconds=30), True, 0)},
         queue_manager_id=uuid.uuid4(),
     )
     assert len(picked_job) == 1, "Failed to pick a job for locking"
