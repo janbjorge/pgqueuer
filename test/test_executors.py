@@ -8,12 +8,15 @@ import pytest
 from helpers import mocked_job
 
 from pgqueuer.db import Driver
+from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded
 from pgqueuer.executors import (
     AbstractEntrypointExecutor,
     EntrypointExecutor,
     EntrypointExecutorParameters,
+    RetryWithBackoffEntrypointExecutor,
     is_async_callable,
 )
+from pgqueuer.helpers import timer
 from pgqueuer.models import Context, Job, PGChannel
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -210,3 +213,117 @@ def test_is_async_callable_with_class_method() -> None:
     instance = MyClass()
     assert is_async_callable(instance.async_method) is True
     assert is_async_callable(instance.sync_method) is False
+
+
+async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Driver) -> None:
+    jobs = list[Job]()
+
+    async def raises(job: Job) -> None:
+        await asyncio.sleep(0.01)
+        jobs.append(job)
+        raise ValueError
+
+    parameters = EntrypointExecutorParameters(
+        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_attempts"),
+        concurrency_limit=10,
+        connection=apgdriver,
+        queries=Queries(apgdriver),
+        requests_per_second=float("+inf"),
+        retry_timer=timedelta(seconds=300),
+        serialized_dispatch=False,
+        shutdown=asyncio.Event(),
+        func=raises,
+    )
+    exc = RetryWithBackoffEntrypointExecutor(
+        parameters,
+        initial_delay=0,
+        jitter=lambda: 0,
+    )
+
+    exc.max_attempts = 5
+    exc.max_time = timedelta(seconds=300)
+    mj = mocked_job()
+    with pytest.raises(MaxRetriesExceeded):
+        await exc.execute(mj, Context(anyio.CancelScope()))
+    assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
+
+    exc.max_attempts = 10
+    exc.max_time = timedelta(seconds=300)
+    mj = mocked_job()
+    with pytest.raises(MaxRetriesExceeded):
+        await exc.execute(mj, Context(anyio.CancelScope()))
+    assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
+
+
+async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver) -> None:
+    jobs = list[Job]()
+
+    async def raises(job: Job) -> None:
+        await asyncio.sleep(0.01)
+        jobs.append(job)
+        raise ValueError
+
+    parameters = EntrypointExecutorParameters(
+        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_time"),
+        concurrency_limit=10,
+        connection=apgdriver,
+        queries=Queries(apgdriver),
+        requests_per_second=float("+inf"),
+        retry_timer=timedelta(seconds=300),
+        serialized_dispatch=False,
+        shutdown=asyncio.Event(),
+        func=raises,
+    )
+    exc = RetryWithBackoffEntrypointExecutor(
+        parameters,
+        initial_delay=0,
+        jitter=lambda: 0,
+    )
+
+    exc.max_attempts = 1000
+    exc.max_time = timedelta(seconds=0.1)
+    mj = mocked_job()
+    with timer() as elp, pytest.raises(MaxTimeExceeded):
+        await exc.execute(mj, Context(anyio.CancelScope()))
+    assert timedelta(seconds=1) > elp() > timedelta(seconds=0.1)
+
+    exc.max_attempts = 1000
+    exc.max_time = timedelta(seconds=0.1)
+    mj = mocked_job()
+    with timer() as elp, pytest.raises(MaxTimeExceeded):
+        await exc.execute(mj, Context(anyio.CancelScope()))
+    assert timedelta(seconds=1) > elp() > timedelta(seconds=0.1)
+
+
+async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driver) -> None:
+    N = 10
+    jobs = list[Job]()
+
+    async def raises(job: Job) -> None:
+        await asyncio.sleep(0.001)
+        jobs.append(job)
+        if len(jobs) > N:
+            return
+        raise ValueError
+
+    parameters = EntrypointExecutorParameters(
+        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_time"),
+        concurrency_limit=10,
+        connection=apgdriver,
+        queries=Queries(apgdriver),
+        requests_per_second=float("+inf"),
+        retry_timer=timedelta(seconds=300),
+        serialized_dispatch=False,
+        shutdown=asyncio.Event(),
+        func=raises,
+    )
+    exc = RetryWithBackoffEntrypointExecutor(
+        parameters,
+        initial_delay=0,
+        jitter=lambda: 0,
+    )
+
+    exc.max_attempts = 1000
+    exc.max_time = timedelta(seconds=0.1)
+    mj = mocked_job()
+    await exc.execute(mj, Context(anyio.CancelScope()))

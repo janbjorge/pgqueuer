@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import time
 from datetime import datetime, timedelta
 
 import pytest
@@ -6,6 +9,7 @@ from pgqueuer.helpers import (
     normalize_cron_expression,
     retry_timer_buffer_timeout,
     timeout_with_jitter,
+    timer,
     utc_now,
 )
 
@@ -91,3 +95,19 @@ def test_custom_jitter_range() -> None:
 )
 def test_normalize_cron_expression(expression: str, expected: str) -> None:
     assert normalize_cron_expression(expression) == expected
+
+
+def test_timer() -> None:
+    with timer() as elapsed:
+        t1 = elapsed()
+        time.sleep(0.01)
+        t2 = elapsed()
+        assert t2 > t1
+
+    assert elapsed() == elapsed()
+
+    with pytest.raises(ValueError):
+        with timer() as elapsed:
+            raise ValueError
+
+        assert elapsed() == elapsed()
