@@ -180,6 +180,32 @@ Using an asyncio.Event for the shutdown event ensures that the shutdown process 
 
 This mechanism helps maintain the integrity and consistency of the job queue, ensuring that all jobs in progress are finalized properly before the system shuts down, thereby preventing data corruption or incomplete tasks.
 
+## Retry with backoff executor
+
+The `RetryWithBackoffEntrypointExecutor` is a specialized executor that provides retry logic with exponential backoff and jitter for handling failures during job execution. This executor is suitable for scenarios where job failures are expected to be transient, and retrying with delays could lead to successful completion.
+
+### Setting Up the RetryWithBackoffEntrypointExecutor
+
+The `RetryWithBackoffEntrypointExecutor` is designed to retry jobs that fail during execution. It utilizes exponential backoff along with random jitter to avoid contention and reduce the risk of repeated failures.
+
+#### How It Works
+
+The executor attempts to execute the job and, in case of failure, retries up to a specified number of times (`max_attempts`). Between each retry, an exponential backoff delay is applied, starting with an `initial_delay` and multiplying by a `backoff_multiplier` for each subsequent attempt. To further reduce the chances of contention, a jitter is added to each retry delay.
+
+The retry logic also includes an overall `max_time` limit, beyond which retries are no longer attempted, regardless of the number of attempts left. This ensures that the job does not exceed a reasonable amount of time, preventing resource exhaustion.
+
+#### Key Features
+
+- **Max Attempts**: Controls how many times the job will be retried before giving up.
+- **Exponential Backoff**: The delay between retries grows exponentially, reducing the load on the system during repeated failures.
+- **Jitter**: A random component is added to the delay to avoid synchronization issues when multiple jobs are retrying concurrently.
+
+#### Use Cases
+
+- **Transient Failures**: Ideal for handling jobs that interact with external systems that may have occasional outages or temporary issues, such as network services or rate-limited APIs.
+- **Avoiding System Overload**: Exponential backoff combined with jitter helps to avoid overwhelming external services when multiple jobs fail simultaneously.
+- **Graceful Handling of Flaky Dependencies**: Suitable for retrying jobs when interacting with services that have unreliable performance or are prone to timeouts.
+
 ## Custom Job Executors
 
 Executors are responsible for executing jobs that have been dequeued from the job queue. The `QueueManager` provides a default job executor called `DefaultEntrypointExecutor`, but you can also create and register your own custom executors to extend its functionality.
@@ -193,32 +219,6 @@ The key method that needs to be implemented is:
 - `async def execute(self, job: models.Job, context: models.Context) -> None`: This method is called to execute the given job. Your implementation should handle all the logic associated with processing the job, including error handling and logging.
 
 Below is an example of how you can create your own custom job executor.
-
-# Retry with Backoff Executor: `RetryWithBackoffEntrypointExecutor`
-
-The `RetryWithBackoffEntrypointExecutor` is a specialized executor that provides retry logic with exponential backoff and jitter for handling failures during job execution. This executor is suitable for scenarios where job failures are expected to be transient, and retrying with delays could lead to successful completion.
-
-## Setting Up the RetryWithBackoffEntrypointExecutor
-
-The `RetryWithBackoffEntrypointExecutor` is designed to retry jobs that fail during execution. It utilizes exponential backoff along with random jitter to avoid contention and reduce the risk of repeated failures.
-
-### How It Works
-
-The executor attempts to execute the job and, in case of failure, retries up to a specified number of times (`max_attempts`). Between each retry, an exponential backoff delay is applied, starting with an `initial_delay` and multiplying by a `backoff_multiplier` for each subsequent attempt. To further reduce the chances of contention, a jitter is added to each retry delay.
-
-The retry logic also includes an overall `max_time` limit, beyond which retries are no longer attempted, regardless of the number of attempts left. This ensures that the job does not exceed a reasonable amount of time, preventing resource exhaustion.
-
-### Key Features
-
-- **Max Attempts**: Controls how many times the job will be retried before giving up.
-- **Exponential Backoff**: The delay between retries grows exponentially, reducing the load on the system during repeated failures.
-- **Jitter**: A random component is added to the delay to avoid synchronization issues when multiple jobs are retrying concurrently.
-
-### Use Cases
-
-- **Transient Failures**: Ideal for handling jobs that interact with external systems that may have occasional outages or temporary issues, such as network services or rate-limited APIs.
-- **Avoiding System Overload**: Exponential backoff combined with jitter helps to avoid overwhelming external services when multiple jobs fail simultaneously.
-- **Graceful Handling of Flaky Dependencies**: Suitable for retrying jobs when interacting with services that have unreliable performance or are prone to timeouts.
 
 ### Example: Creating a Custom Job Executor
 
