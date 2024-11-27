@@ -311,6 +311,16 @@ class QueueManager:
         Checks necessary columns and user-defined types. Raises RuntimeError if missing.
         """
 
+        for table in (
+            queries.add_prefix("pgqueuer"),
+            queries.add_prefix("pgqueuer_statistics"),
+        ):
+            if not (await self.queries.has_table(table)):
+                raise RuntimeError(
+                    f"The required table '{table}' is missing. "
+                    f"Please run 'pgq install' to set up the necessary tables."
+                )
+
         for table, column in (
             (self.queries.qb.settings.queue_table, "updated"),
             (self.queries.qb.settings.queue_table, "heartbeat"),
@@ -319,7 +329,8 @@ class QueueManager:
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
-                    f"The {table} table is missing the {column} column, please run 'pgq upgrade'"
+                    f"The required column '{column}' is missing in the '{table}' table. "
+                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
         for key, enum in (("canceled", self.queries.qb.settings.statistics_table_status_type),):
