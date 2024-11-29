@@ -10,6 +10,7 @@ import sys
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from itertools import count, groupby
+from statistics import mean, median
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel
@@ -17,9 +18,10 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer.cli import querier
 from pgqueuer.db import dsn
-from pgqueuer.models import Job
+from pgqueuer.listeners import initialize_notice_event_listener
+from pgqueuer.models import EVENT_TYPES, Job, PGChannel
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import Queries
+from pgqueuer.queries import DBSettings, Queries
 
 
 class BenchmarkResult(BaseModel):
@@ -146,6 +148,12 @@ def cli_parser() -> argparse.Namespace:
         default=None,
         help="Path to the output JSON file for benchmark metrics.",
     )
+    parser.add_argument(
+        "-i",
+        "--latency",
+        action="store_true",
+        help="Measure and display latency data for table changed events.",
+    )
     return parser.parse_args()
 
 
@@ -163,6 +171,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
+    latencies = list[tuple[EVENT_TYPES, timedelta]]()
     tqdm_format_dict = {}
 
     async def enqueue(shutdown: asyncio.Event) -> None:
@@ -222,17 +231,28 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         for p in pending:
             p.cancel()
 
-    def graceful_shutdown(signum: int, frame: object) -> None:
+    async def measure_latency() -> None:
+        connection = (await querier(args.driver, dsn())).driver
+        await initialize_notice_event_listener(
+            connection,
+            PGChannel(DBSettings().channel),
+            lambda x: latencies.append((x.root.type, x.root.latency)),
+        )
+        await shutdown.wait()
+
+    def graceful_shutdown() -> None:
         shutdown.set()
         for qm in qms:
             qm.shutdown.set()
 
-    signal.signal(signal.SIGINT, graceful_shutdown)  # Handle Ctrl-C
-    signal.signal(signal.SIGTERM, graceful_shutdown)  # Handle termination request
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGINT, graceful_shutdown)
+    loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
 
     await asyncio.gather(
         dequeue(qms),
         enqueue(shutdown),
+        measure_latency(),
         dequeue_shutdown_timer(qms, shutdown),
     )
 
@@ -256,6 +276,33 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
                 ).model_dump(mode="json"),
                 f,
             )
+
+    tce_latencies = [x for e, x in latencies if e == "table_changed_event"]
+    if tce_latencies and args.latency:
+        print("\n========== Benchmark Results ==========")
+        print(
+            "Number of Samples:   ",
+            f"{len(tce_latencies):>10}",
+        )
+        print(
+            "Min Latency:         ",
+            f"{min(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
+        )
+        print(
+            "Mean Latency:        ",
+            f"{mean(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
+        )
+        print(
+            "Median Latency:      ",
+            f"{median(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
+        )
+        print(
+            "Max Latency:         ",
+            f"{max(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
+        )
+        print("========================================\n")
+    elif args.latency:
+        print("No latency data collected.")
 
 
 if __name__ == "__main__":
