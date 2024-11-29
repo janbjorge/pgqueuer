@@ -60,6 +60,7 @@ dev = [
     "asyncpg",
     "fastapi",
     "httpx",
+    "hypothesis>=6.121.2",
     "icecream>=2.1.3",
     "mypy-extensions",
     "mypy",

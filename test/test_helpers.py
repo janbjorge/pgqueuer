@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import string
 import time
 import urllib
 from datetime import datetime, timedelta
-from unittest import mock
 
 import pytest
+from hypothesis import given, strategies
 
 from pgqueuer.db import dsn
 from pgqueuer.helpers import (
@@ -305,3 +306,49 @@ def test_dsn_long_password() -> None:
     )
     expected = f"postgresql://user:{expected_password}@localhost:5432/db"
     assert result == expected
+
+
+@given(
+    host=strategies.text(alphabet=string.ascii_letters + string.digits),
+    user=strategies.text(alphabet=string.ascii_letters + string.digits),
+    password=strategies.text(alphabet=string.ascii_letters + string.digits),
+    database=strategies.text(alphabet=string.ascii_letters + string.digits),
+    port=strategies.integers(min_value=1, max_value=2**16),
+)
+def test_old_vs_new_dsn(
+    host: str,
+    user: str,
+    password: str,
+    database: str,
+    port: str | int,
+) -> None:
+    def old_dsn(host: str, user: str, password: str, database: str, port: str) -> str:
+        return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+    def new_dsn(host: str, user: str, password: str, database: str, port: str | int) -> str:
+        # Safely encode user and password
+        user = urllib.parse.quote(user)
+        password = urllib.parse.quote(password)
+
+        # Construct netloc
+        netloc = f"{user}:{password}@{host}:{port}"
+
+        # Construct path
+        path = f"/{database}"
+
+        # Build the DSN using urlunparse
+        return urllib.parse.urlunparse(("postgresql", netloc, path, "", "", ""))
+
+    assert old_dsn(
+        host,
+        user,
+        password,
+        database,
+        str(port),
+    ) == new_dsn(
+        host,
+        user,
+        password,
+        database,
+        port,
+    )

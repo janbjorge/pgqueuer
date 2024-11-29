@@ -116,6 +116,15 @@ wheels = [
 ]
 
 [[package]]
+name = "attrs"
+version = "24.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fc/0f/aafca9af9315aee06a89ffde799a10a582fe8de76c563ee80bbcdc08b3fb/attrs-24.2.0.tar.gz", hash = "sha256:5cfb1b9148b5b086569baec03f20d7b6bf3bcacc9a42bebf87ffaaca362f6346", size = 792678 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/21/5b6702a7f963e95456c0de2d495f67bf5fd62840ac655dc451586d23d39a/attrs-24.2.0-py3-none-any.whl", hash = "sha256:81921eb96de3191c8258c199618104dd27ac608d9366f5e35d011eae1867ede2", size = 63001 },
+]
+
+[[package]]
 name = "babel"
 version = "2.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -298,6 +307,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/78/82/08f8c936781f67d9e6b9eeb8a0c8b4e406136ea4c3d1f89a5db71d42e0e6/httpx-0.27.2.tar.gz", hash = "sha256:f7c2be1d2f3c3c3160d441802406b206c2b76f5947b11115e6df10c6c65e66c2", size = 144189 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/56/95/9377bcb415797e44274b51d46e3249eba641711cf3348050f76ee7b15ffc/httpx-0.27.2-py3-none-any.whl", hash = "sha256:7bb2708e112d8fdd7829cd4243970f0c223274051cb35ee80c03301ee29a3df0", size = 76395 },
+]
+
+[[package]]
+name = "hypothesis"
+version = "6.121.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "attrs" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "sortedcontainers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ff/f1/b1a896cc31a5464e060a5648a4e0690be8bf3cdbb7e7377fd0848f91df96/hypothesis-6.121.2.tar.gz", hash = "sha256:4c95ed50ef76cd073a43efab2d4c2297f0b3c85aafb6c1134aac0719dab56428", size = 413233 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/e1/9cba781059bd1b06629d162ee6157e9247730aaafd89ec7f3e3eeadd8856/hypothesis-6.121.2-py3-none-any.whl", hash = "sha256:43edc07f9f4758807fc6cf10309dd6a376f3d6d886a5ef345ca49fe80ca3d394", size = 474503 },
 ]
 
 [[package]]
@@ -491,7 +514,7 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.17.1.dev6+g00bd74b.d20241124"
+version = "0.17.4.dev3+g2868ae7.d20241129"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -510,6 +533,7 @@ dev = [
     { name = "asyncpg-stubs" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "hypothesis" },
     { name = "icecream" },
     { name = "mypy" },
     { name = "mypy-extensions" },
@@ -542,6 +566,7 @@ requires-dist = [
     { name = "croniter", specifier = ">=5.0.1" },
     { name = "fastapi", marker = "extra == 'dev'" },
     { name = "httpx", marker = "extra == 'dev'" },
+    { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.121.2" },
     { name = "icecream", marker = "extra == 'dev'", specifier = ">=2.1.3" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "mypy-extensions", marker = "extra == 'dev'" },
@@ -845,6 +870,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/44/7b/af302bebf22c749c56c9c3e8ae13190b5b5db37a33d9068652e8f73b7089/snowballstemmer-2.2.0.tar.gz", hash = "sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1", size = 86699 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ed/dc/c02e01294f7265e63a7315fe086dd1df7dacb9f840a804da846b96d01b96/snowballstemmer-2.2.0-py2.py3-none-any.whl", hash = "sha256:c8e1716e83cc398ae16824e5572ae04e0d9fc2c6b985fb0f900f5f0c96ecba1a", size = 93002 },
+]
+
+[[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575 },
 ]
 
 [[package]]
