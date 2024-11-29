@@ -12,8 +12,10 @@ import asyncio
 import functools
 import os
 import re
+import urllib.parse
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
+from urllib.parse import urlunparse
 
 from typing_extensions import Self
 
@@ -29,7 +31,7 @@ def dsn(
     user: str = "",
     password: str = "",
     database: str = "",
-    port: str = "",
+    port: str | int = "",
 ) -> str:
     """
     Construct a PostgreSQL DSN (Data Source Name) from parameters or environment variables.
@@ -38,15 +40,47 @@ def dsn(
     is not specified, it attempts to retrieve it from environment variables (`PGHOST`, `PGUSER`,
     `PGPASSWORD`, `PGDATABASE`, `PGPORT`).
 
+    Raises:
+        ValueError: If any of the required parameters are missing or falsy.
+
     Returns:
         str: A PostgreSQL DSN string in the format 'postgresql://user:password@host:port/database'.
     """
+    # Retrieve parameters or environment variables
     host = host or os.getenv("PGHOST", "")
     user = user or os.getenv("PGUSER", "")
     password = password or os.getenv("PGPASSWORD", "")
     database = database or os.getenv("PGDATABASE", "")
     port = port or os.getenv("PGPORT", "")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+    # Check for missing or falsy parameters
+    missing_params = []
+    if not host:
+        missing_params.append("host")
+    if not user:
+        missing_params.append("user")
+    if not password:
+        missing_params.append("password")
+    if not database:
+        missing_params.append("database")
+    if not port:
+        missing_params.append("port")
+
+    if missing_params:
+        raise ValueError(f"Missing required parameters: {', '.join(missing_params)}")
+
+    # Safely encode user and password
+    user = urllib.parse.quote(user)
+    password = urllib.parse.quote(password)
+
+    # Construct netloc
+    netloc = f"{user}:{password}@{host}:{port}"
+
+    # Construct path
+    path = f"/{database}"
+
+    # Build the DSN using urlunparse
+    return urlunparse(("postgresql", netloc, path, "", "", ""))
 
 
 class Driver(Protocol):

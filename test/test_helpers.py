@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import time
+import urllib
 from datetime import datetime, timedelta
+from unittest import mock
 
 import pytest
 
+from pgqueuer.db import dsn
 from pgqueuer.helpers import (
     normalize_cron_expression,
     retry_timer_buffer_timeout,
@@ -111,3 +114,194 @@ def test_timer() -> None:
             raise ValueError
 
         assert elapsed() == elapsed()
+
+
+def test_dsn_all_parameters() -> None:
+    """Test that the DSN is correctly constructed when all parameters are provided."""
+    result = dsn(
+        host="localhost",
+        user="myuser",
+        password="mypassword",
+        database="mydb",
+        port="5432",
+    )
+    assert result == "postgresql://myuser:mypassword@localhost:5432/mydb"
+
+
+def test_dsn_missing_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that a ValueError is raised when parameters are missing."""
+    # Clear relevant environment variables
+    monkeypatch.delenv("PGHOST", raising=False)
+    monkeypatch.delenv("PGUSER", raising=False)
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    monkeypatch.delenv("PGDATABASE", raising=False)
+    monkeypatch.delenv("PGPORT", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        dsn()
+    assert "Missing required parameters" in str(exc_info.value)
+    assert "host" in str(exc_info.value)
+    assert "user" in str(exc_info.value)
+    assert "password" in str(exc_info.value)
+    assert "database" in str(exc_info.value)
+    assert "port" in str(exc_info.value)
+
+
+def test_dsn_special_characters() -> None:
+    """Test that special characters in user and password are encoded correctly."""
+    result = dsn(
+        host="localhost",
+        user="user@name",
+        password="p@ss:word",
+        database="mydb",
+        port="5432",
+    )
+    expected = "postgresql://user%40name:p%40ss%3Aword@localhost:5432/mydb"
+    assert result == expected
+
+
+def test_dsn_environment_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that environment variables are used when parameters are not provided."""
+    monkeypatch.setenv("PGHOST", "envhost")
+    monkeypatch.setenv("PGUSER", "envuser")
+    monkeypatch.setenv("PGPASSWORD", "envpassword")
+    monkeypatch.setenv("PGDATABASE", "envdb")
+    monkeypatch.setenv("PGPORT", "5432")
+
+    result = dsn()
+    assert result == "postgresql://envuser:envpassword@envhost:5432/envdb"
+
+
+def test_dsn_missing_env_variables(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that a ValueError is raised when environment variables are missing."""
+    monkeypatch.delenv("PGHOST", raising=False)
+    monkeypatch.delenv("PGUSER", raising=False)
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    monkeypatch.delenv("PGDATABASE", raising=False)
+    monkeypatch.delenv("PGPORT", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        dsn()
+    assert "Missing required parameters" in str(exc_info.value)
+
+
+def test_dsn_partial_parameters_and_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that parameters override environment variables when both are provided."""
+    monkeypatch.setenv("PGHOST", "envhost")
+    monkeypatch.setenv("PGUSER", "envuser")
+    monkeypatch.setenv("PGPASSWORD", "envpassword")
+    monkeypatch.setenv("PGDATABASE", "envdb")
+    monkeypatch.setenv("PGPORT", "5432")
+
+    result = dsn(
+        user="paramuser",
+        password="parampassword",
+    )
+    assert result == "postgresql://paramuser:parampassword@envhost:5432/envdb"
+
+
+def test_dsn_empty_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that a ValueError is raised when parameters are empty strings."""
+    # Clear relevant environment variables
+    monkeypatch.delenv("PGHOST", raising=False)
+    monkeypatch.delenv("PGUSER", raising=False)
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    monkeypatch.delenv("PGDATABASE", raising=False)
+    monkeypatch.delenv("PGPORT", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        dsn(
+            host="",
+            user="",
+            password="",
+            database="",
+            port="",
+        )
+    assert "Missing required parameters" in str(exc_info.value)
+
+
+def test_dsn_none_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that a ValueError is raised when parameters are None."""
+    # Clear relevant environment variables
+    monkeypatch.delenv("PGHOST", raising=False)
+    monkeypatch.delenv("PGUSER", raising=False)
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    monkeypatch.delenv("PGDATABASE", raising=False)
+    monkeypatch.delenv("PGPORT", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        dsn(
+            host="",
+            user="",
+            password="",
+            database="",
+            port="",
+        )
+    assert "Missing required parameters" in str(exc_info.value)
+
+
+def test_dsn_numeric_port() -> None:
+    """Test that the function handles numeric port values."""
+    result = dsn(
+        host="localhost",
+        user="myuser",
+        password="mypassword",
+        database="mydb",
+        port=5432,  # Port as an integer
+    )
+    assert result == "postgresql://myuser:mypassword@localhost:5432/mydb"
+
+
+def test_dsn_missing_single_parameter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that a ValueError is raised when a single parameter is missing."""
+    # Clear relevant environment variables
+    monkeypatch.delenv("PGDATABASE", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        dsn(
+            host="localhost",
+            user="myuser",
+            password="mypassword",
+            database="",  # Missing database
+            port="5432",
+        )
+    assert "Missing required parameters: database" in str(exc_info.value)
+
+
+def test_dsn_special_characters_in_host() -> None:
+    """Test that special characters in the host are handled correctly."""
+    result = dsn(
+        host="local_host",
+        user="user",
+        password="pass",
+        database="db",
+        port="5432",
+    )
+    assert result == "postgresql://user:pass@local_host:5432/db"
+
+
+def test_dsn_ipv6_host() -> None:
+    """Test that IPv6 addresses are handled correctly."""
+    result = dsn(
+        host="::1",
+        user="user",
+        password="pass",
+        database="db",
+        port="5432",
+    )
+    assert result == "postgresql://user:pass@::1:5432/db"
+
+
+def test_dsn_long_password() -> None:
+    """Test that long passwords are handled correctly."""
+    long_password = "p" * 1000  # Password of 1000 characters
+    expected_password = urllib.parse.quote(long_password)
+    result = dsn(
+        host="localhost",
+        user="user",
+        password=long_password,
+        database="db",
+        port="5432",
+    )
+    expected = f"postgresql://user:{expected_password}@localhost:5432/db"
+    assert result == expected
