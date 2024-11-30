@@ -10,7 +10,7 @@ packages = ["pgqueuer"]
 [project]
 name = "pgqueuer"
 description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
-authors = [{name = "janbjorge"}]
+authors = [{name = "JeyBee"}]
 license = {text = "MIT License"}
 dynamic = ["version"]
 requires-python = ">=3.10"
