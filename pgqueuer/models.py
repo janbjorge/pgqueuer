@@ -21,6 +21,7 @@ from pydantic import AwareDatetime, BaseModel, Field, RootModel
 from .types import (
     EVENT_TYPES,
     OPERATIONS,
+    STATUS,
     CronEntrypoint,
     CronExpression,
     JobId,
@@ -109,10 +110,6 @@ class AnyEvent(
 
 
 ###### Jobs ######
-STATUS = Literal[
-    "queued",
-    "picked",
-]
 
 
 class Job(BaseModel):
@@ -176,7 +173,7 @@ class EntrypointStatistics:
     concurrency_limiter: asyncio.Semaphore
 
 
-# Schedules
+###### Schedules ######
 
 
 class CronExpressionEntrypoint(NamedTuple):

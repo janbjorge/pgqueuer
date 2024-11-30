@@ -6,7 +6,7 @@ import pytest
 
 from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.models import CronExpressionEntrypoint, Schedule
-from pgqueuer.queries import DBSettings
+from pgqueuer.qb import DBSettings
 from pgqueuer.sm import SchedulerManager
 
 

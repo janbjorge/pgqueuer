@@ -20,8 +20,9 @@ from pgqueuer.cli import querier
 from pgqueuer.db import dsn
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import EVENT_TYPES, Job, PGChannel
+from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import DBSettings, Queries
+from pgqueuer.queries import Queries
 
 
 class BenchmarkResult(BaseModel):

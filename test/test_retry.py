@@ -6,13 +6,15 @@ from datetime import datetime, timedelta
 import async_timeout
 import pytest
 
-from pgqueuer import db, queries
-from pgqueuer.models import Job, JobId
+from pgqueuer import db
+from pgqueuer.models import Job
+from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
+from pgqueuer.types import JobId
 
 
 async def _inspect_queue_jobs(jids: list[JobId], driver: db.Driver) -> list[Job]:
-    sql = f"""SELECT * FROM {queries.DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
+    sql = f"""SELECT * FROM {DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
     return [Job.model_validate(x) for x in await driver.fetch(sql, jids)]
 
 

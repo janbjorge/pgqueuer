@@ -15,8 +15,14 @@ from pgqueuer.listeners import (
     handle_event_type,
     initialize_notice_event_listener,
 )
-from pgqueuer.models import PGChannel, TableChangedEvent
-from pgqueuer.queries import DBSettings, QueryBuilder
+from pgqueuer.models import TableChangedEvent
+from pgqueuer.qb import (
+    DBSettings,
+    QueryBuilderEnvironment,
+    QueryQueueBuilder,
+    # QuerySchedulerBuilder,
+)
+from pgqueuer.types import PGChannel
 
 
 @asynccontextmanager
@@ -100,7 +106,9 @@ async def test_notify(
         # Workaround by using asyncpg.
         async with driver() as ad:
             await ad.execute(
-                QueryBuilder(DBSettings(channel=channel)).create_notify_query(),
+                QueryQueueBuilder(
+                    DBSettings(channel=channel),
+                ).create_notify_query(),
                 payload,
             )
 
@@ -111,16 +119,16 @@ async def test_notify(
 @pytest.mark.parametrize(
     "query",
     (
-        QueryBuilder().create_delete_from_log_query,
-        QueryBuilder().create_delete_from_queue_query,
-        QueryBuilder().create_dequeue_query,
-        QueryBuilder().create_enqueue_query,
-        QueryBuilder().create_table_has_column_query,
-        QueryBuilder().create_log_job_query,
-        QueryBuilder().create_log_statistics_query,
-        QueryBuilder().create_queue_size_query,
-        QueryBuilder().create_truncate_log_query,
-        QueryBuilder().create_truncate_queue_query,
+        QueryQueueBuilder().create_delete_from_log_query,
+        QueryQueueBuilder().create_delete_from_queue_query,
+        QueryQueueBuilder().create_dequeue_query,
+        QueryQueueBuilder().create_enqueue_query,
+        QueryBuilderEnvironment().create_table_has_column_query,
+        QueryQueueBuilder().create_log_job_query,
+        QueryQueueBuilder().create_log_statistics_query,
+        QueryQueueBuilder().create_queue_size_query,
+        QueryQueueBuilder().create_truncate_log_query,
+        QueryQueueBuilder().create_truncate_queue_query,
     ),
 )
 async def test_valid_query_syntax(
@@ -173,7 +181,9 @@ async def test_event_listener(
         # Workaround by using asyncpg.
         async with driver() as dd:
             await dd.execute(
-                QueryBuilder(DBSettings(channel=channel)).create_notify_query(),
+                QueryQueueBuilder(
+                    DBSettings(channel=channel),
+                ).create_notify_query(),
                 payload.model_dump_json(),
             )
 

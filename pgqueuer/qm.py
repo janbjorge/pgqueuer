@@ -22,7 +22,19 @@ from typing import AsyncGenerator, Callable
 
 import anyio
 
-from . import buffers, db, executors, heartbeat, helpers, listeners, logconfig, models, queries, tm
+from . import (
+    buffers,
+    db,
+    executors,
+    heartbeat,
+    helpers,
+    listeners,
+    logconfig,
+    models,
+    qb,
+    queries,
+    tm,
+)
 
 warnings.simplefilter("default", DeprecationWarning)
 
@@ -50,7 +62,7 @@ class QueueManager:
 
     connection: db.Driver
     channel: models.PGChannel = dataclasses.field(
-        default=models.PGChannel(queries.DBSettings().channel),
+        default=models.PGChannel(qb.DBSettings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(
@@ -312,8 +324,8 @@ class QueueManager:
         """
 
         for table in (
-            queries.add_prefix("pgqueuer"),
-            queries.add_prefix("pgqueuer_statistics"),
+            qb.add_prefix("pgqueuer"),
+            qb.add_prefix("pgqueuer_statistics"),
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
@@ -322,10 +334,10 @@ class QueueManager:
                 )
 
         for table, column in (
-            (self.queries.qb.settings.queue_table, "updated"),
-            (self.queries.qb.settings.queue_table, "heartbeat"),
-            (self.queries.qb.settings.queue_table, "queue_manager_id"),
-            (self.queries.qb.settings.queue_table, "execute_after"),
+            (self.queries.qbe.settings.queue_table, "updated"),
+            (self.queries.qbe.settings.queue_table, "heartbeat"),
+            (self.queries.qbe.settings.queue_table, "queue_manager_id"),
+            (self.queries.qbe.settings.queue_table, "execute_after"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
@@ -333,7 +345,7 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
-        for key, enum in (("canceled", self.queries.qb.settings.statistics_table_status_type),):
+        for key, enum in (("canceled", self.queries.qbe.settings.statistics_table_status_type),):
             if not (await self.queries.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
                     f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"

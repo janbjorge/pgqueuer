@@ -22,8 +22,8 @@ from .executors import (
     ScheduleExecutorFactoryParameters,
 )
 from .models import PGChannel
+from .qb import DBSettings
 from .qm import QueueManager
-from .queries import DBSettings
 from .sm import SchedulerManager
 from .tm import TaskManager
 
