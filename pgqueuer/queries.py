@@ -16,7 +16,10 @@ import os
 import re
 import uuid
 from datetime import timedelta
-from typing import Final, Generator, overload
+from typing import Generator, overload
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from . import db, helpers, models
 
@@ -59,78 +62,60 @@ def add_prefix(string: str) -> str:
     return f"{env}{string}"
 
 
-@dataclasses.dataclass
-class DBSettings:
+class DBSettings(BaseSettings):
     """
     Configuration settings for database object names with optional prefixes.
 
-    This class holds the names of various database objects used by the job queue
-    system, such as tables, functions, triggers, and channels. It allows for
-    dynamic generation of these names, incorporating a prefix if specified via
-    environment variables. This aids in avoiding naming collisions and in
-    deploying multiple instances of the application using different namespaces.
+    This class contains the names of various database objects used by the job queue
+    system, such as tables, functions, triggers, channels, and scheduler tables. The
+    settings allow for the generation of object names with configurable prefixes,
+    which are set via environment variables. This is useful for avoiding naming
+    conflicts and supporting multiple instances with different namespaces.
 
     Attributes:
-        channel (Final[str]): The name of the PostgreSQL NOTIFY channel used for notifications.
-        function (Final[str]): The name of the trigger function invoked on table changes.
-        statistics_table (Final[str]): The name of the table that stores job processing statistics.
-        statistics_table_status_type (Final[str]): The name of the ENUM type for log statuses.
-        queue_status_type (Final[str]): The name of the ENUM type for queue job statuses.
-        queue_table (Final[str]): The name of the main queue table where jobs are stored.
-        trigger (Final[str]): The name of the trigger that calls the trigger function.
-    """
+        channel (models.PGChannel): The PostgreSQL NOTIFY channel used for queue notifications.
+        function (str): The name of the function triggered by changes to the queue table.
+        statistics_table (str): The table that logs job processing statistics.
+        statistics_table_status_type (str): The ENUM type for job log statuses in the statistics table.
+        queue_status_type (str): The ENUM type defining statuses for queue jobs.
+        queue_table (str): The main table where jobs are stored before processing.
+        trigger (str): The name of the trigger on the queue table, used to invoke the trigger function.
+        schedules_table (str): The table that stores the job scheduling information.
+    """  # noqa: E501
+
+    model_config = SettingsConfigDict(
+        env_prefix=add_prefix(""),
+        extra="ignore",
+    )
 
     # Channel name for PostgreSQL LISTEN/NOTIFY used to
     # receive notifications about changes in the queue.
-    channel: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("ch_pgqueuer"),
-        kw_only=True,
-    )
+    channel: models.PGChannel = Field(default=models.PGChannel(add_prefix("ch_pgqueuer")))
 
     # Name of the database function triggered by changes to the queue
     # table, used to notify subscribers.
-    function: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("fn_pgqueuer_changed"),
-        kw_only=True,
-    )
+    function: str = Field(default=add_prefix("fn_pgqueuer_changed"))
 
     # Name of the table that logs statistics about job processing,
     # e.g., processing times and outcomes.
-    statistics_table: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_statistics"),
-    )
+    statistics_table: str = Field(default=add_prefix("pgqueuer_statistics"))
 
     # Type of ENUM defining possible statuses for entries in the
     # statistics table, such as 'exception' or 'successful'.
-    statistics_table_status_type: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_statistics_status"),
-        kw_only=True,
-    )
+    statistics_table_status_type: str = Field(default=add_prefix("pgqueuer_statistics_status"))
 
     # Type of ENUM defining statuses for queue jobs, such as 'queued' or 'picked'.
-    queue_status_type: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_status"),
-        kw_only=True,
-    )
+    queue_status_type: str = Field(default=add_prefix("pgqueuer_status"))
 
     # Name of the main table where jobs are queued before being processed.
-    queue_table: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer"),
-        kw_only=True,
-    )
+    queue_table: str = Field(default=add_prefix("pgqueuer"))
 
     # Name of the trigger that invokes the function to notify changes, applied
     # after DML operations on the queue table.
-    trigger: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("tg_pgqueuer_changed"),
-        kw_only=True,
-    )
+    trigger: str = Field(default=add_prefix("tg_pgqueuer_changed"))
 
     # Name of scheduler table
-    schedules_table: Final[str] = dataclasses.field(
-        default_factory=lambda: add_prefix("pgqueuer_schedules"),
-        kw_only=True,
-    )
+    schedules_table: str = Field(default=add_prefix("pgqueuer_schedules"))
 
 
 @dataclasses.dataclass
