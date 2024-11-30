@@ -741,6 +741,12 @@ class QueryBuilder:
     def create_update_schedule_heartbeat(self) -> str:
         return f"""UPDATE {self.settings.schedules_table} SET heartbeat = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
 
+    def create_peak_schedule_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.schedules_table} ORDER BY last_run ASC"""
+
+    def create_delete_schedule_query(self) -> str:
+        return f"""DELETE FROM {self.settings.schedules_table} WHERE id = ANY($1) OR entrypoint = ANY($2)"""  # noqa: E501
+
 
 @dataclasses.dataclass
 class Queries:
@@ -1146,3 +1152,22 @@ class Queries:
 
     async def update_schedule_heartbeat(self, ids: set[models.ScheduleId]) -> None:
         await self.driver.execute(self.qb.create_update_schedule_heartbeat(), list(ids))
+
+    async def peak_schedule(self) -> list[models.Schedule]:
+        return [
+            models.Schedule.model_validate(dict(row))
+            for row in await self.driver.fetch(
+                self.qb.create_peak_schedule_query(),
+            )
+        ]
+
+    async def delete_schedule(
+        self,
+        ids: set[models.ScheduleId],
+        entrypoints: set[str],
+    ) -> None:
+        await self.driver.execute(
+            self.qb.create_delete_schedule_query(),
+            list(ids),
+            list(entrypoints),
+        )

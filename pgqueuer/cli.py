@@ -6,15 +6,12 @@ import os
 from datetime import timedelta
 from typing import Literal
 
-from tabulate import tabulate, tabulate_formats
+from tabulate import tabulate
 
 from . import db, listeners, models, queries, supervisor
 
 
-async def display_stats(
-    log_stats: list[models.LogStatistics],
-    tablefmt: str,
-) -> None:
+async def display_stats(log_stats: list[models.LogStatistics]) -> None:
     print(
         tabulate(
             [
@@ -36,7 +33,7 @@ async def display_stats(
                 "Status",
                 "Priority",
             ],
-            tablefmt=tablefmt,
+            tablefmt=os.environ.get(queries.add_prefix("TABLEFMT"), "pretty"),
         )
     )
 
@@ -59,16 +56,48 @@ async def display_pg_channel(
         )
 
 
+async def display_schedule(schedules: list[models.Schedule]) -> None:
+    print(
+        tabulate(
+            [
+                (
+                    x.id,
+                    x.expression,
+                    x.heartbeat.astimezone() if x.heartbeat else "",
+                    x.created.astimezone() if x.created else "",
+                    x.updated.astimezone() if x.updated else "",
+                    x.next_run.astimezone() if x.next_run else "",
+                    x.last_run.astimezone() if x.last_run else "",
+                    x.status,
+                    x.entrypoint,
+                )
+                for x in schedules
+            ],
+            headers=[
+                "id",
+                "expression",
+                "heartbeat",
+                "created",
+                "updated",
+                "next_run",
+                "last_run",
+                "status",
+                "entrypoint",
+            ],
+            tablefmt=os.environ.get(queries.add_prefix("TABLEFMT"), "pretty"),
+        )
+    )
+
+
 async def fetch_and_display(
     queries: queries.Queries,
     interval: timedelta | None,
     tail: int,
-    tablefmt: str,
 ) -> None:
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
-        await display_stats(await queries.log_statistics(tail), tablefmt)
+        await display_stats(await queries.log_statistics(tail))
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
@@ -228,15 +257,6 @@ def cliparser() -> argparse.Namespace:
         type=int,
         default=25,
     )
-    dashboardparser.add_argument(
-        "--table-format",
-        default="pretty",
-        help=(
-            "Specify the format of the table used to display statistics. "
-            "Options are provided by the tabulate library."
-        ),
-        choices=tabulate_formats,
-    )
 
     listen_parser = subparsers.add_parser(
         "listen",
@@ -281,6 +301,23 @@ def cliparser() -> argparse.Namespace:
             "Path to the QueueManager or Schedule factory function, "
             "e.g., 'myapp.create_queue_manager'."
         ),
+    )
+
+    schedule_parser = subparsers.add_parser(
+        "schedule",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        parents=[common_arguments],
+        help="Manage schedule in the PGQueuer system.",
+    )
+    schedule_parser.add_argument(
+        "-r",
+        "--remove",
+        help=(
+            "Remove specified schedule from the database. "
+            "If no arguments are provided, displays the contents of the schedule table."
+        ),
+        nargs="*",
+        default=[],
     )
 
     return parser.parse_args()
@@ -353,7 +390,6 @@ async def main() -> None:  # noqa: C901
                 await querier(parsed.driver, dsn),
                 parsed.interval,
                 parsed.tail,
-                parsed.table_format,
             )
         case "listen":
             await display_pg_channel(
@@ -365,4 +401,13 @@ async def main() -> None:  # noqa: C901
                 parsed.factory_fn,
                 dequeue_timeout=parsed.dequeue_timeout,
                 batch_size=parsed.batch_size,
+            )
+        case "schedule":
+            if parsed.remove:
+                await (await querier(parsed.driver, dsn)).delete_schedule(
+                    {models.ScheduleId(int(x)) for x in parsed.remove if x.isdigit()},
+                    {str(x) for x in parsed.remove if not x.isdigit()},
+                )
+            await display_schedule(
+                await (await querier(parsed.driver, dsn)).peak_schedule(),
             )
