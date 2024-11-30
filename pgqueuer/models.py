@@ -13,31 +13,22 @@ import dataclasses
 import uuid
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal, NamedTuple, NewType
+from typing import Annotated, Literal, NamedTuple
 
 import anyio
 from pydantic import AwareDatetime, BaseModel, Field, RootModel
 
-###### Events ######
-
-PGChannel = NewType(
-    "PGChannel",
-    str,
+from .types import (
+    EVENT_TYPES,
+    OPERATIONS,
+    CronEntrypoint,
+    CronExpression,
+    JobId,
+    PGChannel,
+    ScheduleId,
 )
 
-
-OPERATIONS = Literal[
-    "insert",
-    "update",
-    "delete",
-    "truncate",
-]
-
-EVENT_TYPES = Literal[
-    "table_changed_event",
-    "requests_per_second_event",
-    "cancellation_event",
-]
+###### Events ######
 
 
 class Event(BaseModel):
@@ -118,11 +109,6 @@ class AnyEvent(
 
 
 ###### Jobs ######
-JobId = NewType(
-    "JobId",
-    int,
-)
-
 STATUS = Literal[
     "queued",
     "picked",
@@ -191,9 +177,6 @@ class EntrypointStatistics:
 
 
 # Schedules
-CronEntrypoint = NewType("CronEntrypoint", str)
-CronExpression = NewType("CronExpression", str)
-ScheduleId = NewType("ScheduleId", int)
 
 
 class CronExpressionEntrypoint(NamedTuple):
