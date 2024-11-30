@@ -397,6 +397,7 @@ class QueueManager:
             )
 
             shutdown_task = asyncio.create_task(self.shutdown.wait())
+            event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
 
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(batch_size):
@@ -424,7 +425,7 @@ class QueueManager:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
-        if not event_task.done():
+        if event_task and not event_task.done():
             event_task.cancel()
 
         if not shutdown_task.done():
