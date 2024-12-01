@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import inspect
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable
 
@@ -20,9 +21,17 @@ from pgqueuer.qb import (
     DBSettings,
     QueryBuilderEnvironment,
     QueryQueueBuilder,
-    # QuerySchedulerBuilder,
+    QuerySchedulerBuilder,
 )
 from pgqueuer.types import PGChannel
+
+
+def get_user_defined_functions(klass: object) -> list[str]:
+    return [
+        name
+        for name, _ in inspect.getmembers(klass, inspect.isfunction)
+        if not name.startswith("__")
+    ]
 
 
 @asynccontextmanager
@@ -117,32 +126,45 @@ async def test_notify(
 
 @pytest.mark.parametrize("driver", drivers())
 @pytest.mark.parametrize(
-    "query",
+    "query, name",
     (
-        QueryQueueBuilder().create_delete_from_log_query,
-        QueryQueueBuilder().create_delete_from_queue_query,
-        QueryQueueBuilder().create_dequeue_query,
-        QueryQueueBuilder().create_enqueue_query,
-        QueryBuilderEnvironment().create_table_has_column_query,
-        QueryQueueBuilder().create_log_job_query,
-        QueryQueueBuilder().create_log_statistics_query,
-        QueryQueueBuilder().create_queue_size_query,
-        QueryQueueBuilder().create_truncate_log_query,
-        QueryQueueBuilder().create_truncate_queue_query,
+        [
+            (getattr(QueryQueueBuilder(), name), name)
+            for name in get_user_defined_functions(QueryQueueBuilder)
+        ]
+        + [
+            (getattr(QueryBuilderEnvironment(), name), name)
+            for name in get_user_defined_functions(QueryBuilderEnvironment)
+        ]
+        + [
+            (getattr(QuerySchedulerBuilder(), name), name)
+            for name in get_user_defined_functions(QuerySchedulerBuilder)
+        ]
     ),
 )
 async def test_valid_query_syntax(
     query: Callable[..., str],
+    name: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
+    if name == "create_install_query":
+        pytest.skip()
+
+    sql = query()
+    sql = sql if isinstance(sql, str) else f"\n{'-'*50}\n".join(x for x in sql)
+    assert isinstance(sql, str)
+
+    def rolledback(sql: str) -> str:
+        return f"BEGIN; {sql}; ROLLBACK;"
+
     async with driver() as d:
         if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
             with suppress(asyncpg.exceptions.UndefinedParameterError):
-                await d.execute(query())
+                await d.execute(rolledback(sql))
 
         elif isinstance(d, PsycopgDriver):
             try:
-                await d.execute(query())
+                await d.execute(rolledback(sql))
             except psycopg.errors.ProgrammingError as exc:
                 assert "query parameter missing" in str(exc)
         else:
