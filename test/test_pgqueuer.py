@@ -10,7 +10,8 @@ from pgqueuer import db
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.models import CronExpressionEntrypoint, Job, Schedule
-from pgqueuer.queries import DBSettings, Queries
+from pgqueuer.qb import DBSettings
+from pgqueuer.queries import Queries
 
 
 async def wait_until_empty_queue(q: Queries, pgqs: list[PgQueuer]) -> None:

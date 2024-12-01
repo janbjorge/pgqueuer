@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import inspect
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable
 
@@ -15,8 +16,22 @@ from pgqueuer.listeners import (
     handle_event_type,
     initialize_notice_event_listener,
 )
-from pgqueuer.models import PGChannel, TableChangedEvent
-from pgqueuer.queries import DBSettings, QueryBuilder
+from pgqueuer.models import TableChangedEvent
+from pgqueuer.qb import (
+    DBSettings,
+    QueryBuilderEnvironment,
+    QueryQueueBuilder,
+    QuerySchedulerBuilder,
+)
+from pgqueuer.types import PGChannel
+
+
+def get_user_defined_functions(klass: object) -> list[str]:
+    return [
+        name
+        for name, _ in inspect.getmembers(klass, inspect.isfunction)
+        if not name.startswith("__")
+    ]
 
 
 @asynccontextmanager
@@ -100,7 +115,9 @@ async def test_notify(
         # Workaround by using asyncpg.
         async with driver() as ad:
             await ad.execute(
-                QueryBuilder(DBSettings(channel=channel)).create_notify_query(),
+                QueryQueueBuilder(
+                    DBSettings(channel=channel),
+                ).create_notify_query(),
                 payload,
             )
 
@@ -109,32 +126,45 @@ async def test_notify(
 
 @pytest.mark.parametrize("driver", drivers())
 @pytest.mark.parametrize(
-    "query",
+    "query, name",
     (
-        QueryBuilder().create_delete_from_log_query,
-        QueryBuilder().create_delete_from_queue_query,
-        QueryBuilder().create_dequeue_query,
-        QueryBuilder().create_enqueue_query,
-        QueryBuilder().create_table_has_column_query,
-        QueryBuilder().create_log_job_query,
-        QueryBuilder().create_log_statistics_query,
-        QueryBuilder().create_queue_size_query,
-        QueryBuilder().create_truncate_log_query,
-        QueryBuilder().create_truncate_queue_query,
+        [
+            (getattr(QueryQueueBuilder(), name), name)
+            for name in get_user_defined_functions(QueryQueueBuilder)
+        ]
+        + [
+            (getattr(QueryBuilderEnvironment(), name), name)
+            for name in get_user_defined_functions(QueryBuilderEnvironment)
+        ]
+        + [
+            (getattr(QuerySchedulerBuilder(), name), name)
+            for name in get_user_defined_functions(QuerySchedulerBuilder)
+        ]
     ),
 )
 async def test_valid_query_syntax(
     query: Callable[..., str],
+    name: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
+    if name == "create_install_query":
+        pytest.skip()
+
+    sql = query()
+    sql = sql if isinstance(sql, str) else f"\n{'-'*50}\n".join(x for x in sql)
+    assert isinstance(sql, str)
+
+    def rolledback(sql: str) -> str:
+        return f"BEGIN; {sql}; ROLLBACK;"
+
     async with driver() as d:
         if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
             with suppress(asyncpg.exceptions.UndefinedParameterError):
-                await d.execute(query())
+                await d.execute(rolledback(sql))
 
         elif isinstance(d, PsycopgDriver):
             try:
-                await d.execute(query())
+                await d.execute(rolledback(sql))
             except psycopg.errors.ProgrammingError as exc:
                 assert "query parameter missing" in str(exc)
         else:
@@ -173,7 +203,9 @@ async def test_event_listener(
         # Workaround by using asyncpg.
         async with driver() as dd:
             await dd.execute(
-                QueryBuilder(DBSettings(channel=channel)).create_notify_query(),
+                QueryQueueBuilder(
+                    DBSettings(channel=channel),
+                ).create_notify_query(),
                 payload.model_dump_json(),
             )
 

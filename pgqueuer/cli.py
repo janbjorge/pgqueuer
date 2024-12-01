@@ -8,7 +8,7 @@ from typing import Literal
 
 from tabulate import tabulate
 
-from . import db, listeners, models, queries, supervisor
+from . import db, listeners, models, qb, queries, supervisor
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
@@ -33,7 +33,7 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                 "Status",
                 "Priority",
             ],
-            tablefmt=os.environ.get(queries.add_prefix("TABLEFMT"), "pretty"),
+            tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
         )
     )
 
@@ -84,7 +84,7 @@ async def display_schedule(schedules: list[models.Schedule]) -> None:
                 "status",
                 "entrypoint",
             ],
-            tablefmt=os.environ.get(queries.add_prefix("TABLEFMT"), "pretty"),
+            tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
         )
     )
 
@@ -267,7 +267,7 @@ def cliparser() -> argparse.Namespace:
     listen_parser.add_argument(
         "--channel",
         help="Specify the PostgreSQL NOTIFY channel to listen on for debug purposes.",
-        default=queries.DBSettings().channel,
+        default=qb.DBSettings().channel,
     )
 
     wm_parser = subparsers.add_parser(
@@ -374,15 +374,17 @@ async def main() -> None:  # noqa: C901
 
     match parsed.command:
         case "install":
-            print(queries.QueryBuilder().create_install_query())
+            print(queries.qb.QueryBuilderEnvironment().create_install_query())
             if not parsed.dry_run:
                 await (await querier(parsed.driver, dsn)).install()
         case "uninstall":
-            print(queries.QueryBuilder().create_uninstall_query())
+            print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
             if not parsed.dry_run:
                 await (await querier(parsed.driver, dsn)).uninstall()
         case "upgrade":
-            print(f"\n{'-'*50}\n".join(queries.QueryBuilder().create_upgrade_queries()))
+            print(
+                f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries())
+            )
             if not parsed.dry_run:
                 await (await querier(parsed.driver, dsn)).upgrade()
         case "dashboard":

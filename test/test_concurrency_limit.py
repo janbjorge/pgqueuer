@@ -9,9 +9,11 @@ import async_timeout
 import pytest
 
 from pgqueuer.db import Driver
-from pgqueuer.models import Job, JobId
+from pgqueuer.models import Job
+from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import DBSettings, Queries
+from pgqueuer.queries import Queries
+from pgqueuer.types import JobId
 
 
 async def _inspect_queue_jobs(jids: list[JobId], driver: Driver) -> list[Job]:

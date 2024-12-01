@@ -9,8 +9,9 @@ import icecream
 
 from pgqueuer.db import AsyncpgDriver, dsn
 from pgqueuer.models import Job
+from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import DBSettings, Queries
+from pgqueuer.queries import Queries
 
 
 async def probe(driver: AsyncpgDriver) -> None:

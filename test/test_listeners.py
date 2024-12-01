@@ -23,7 +23,8 @@ from pgqueuer.models import (
     RequestsPerSecondEvent,
     TableChangedEvent,
 )
-from pgqueuer.queries import DBSettings, EntrypointExecutionParameter, Queries, add_prefix
+from pgqueuer.qb import DBSettings, add_prefix
+from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 
 async def test_handle_table_changed_event() -> None:
