@@ -15,7 +15,7 @@ from pgqueuer.queries import Queries
 
 
 async def wait_until_empty_queue(q: Queries, pgqs: list[PgQueuer]) -> None:
-    while sum(x.count for x in await q.queue_size()) > 0:
+    while sum(x.count for x in await q.qq.queue_size()) > 0:
         await asyncio.sleep(0.01)
 
     for qm in pgqs:
@@ -32,7 +32,7 @@ async def test_pgqueuer_job_queuing(apgdriver: db.Driver, N: int) -> None:
         assert context.payload is not None
         seen.append(int(context.payload))
 
-    await pgq.qm.queries.enqueue(
+    await pgq.qm.queries.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -60,7 +60,7 @@ async def test_pgqueuer_job_fetch(apgdriver: db.Driver, N: int, concurrency: int
             assert context.payload is not None
             seen.append(int(context.payload))
 
-    await q.enqueue(
+    await q.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -93,7 +93,7 @@ async def test_pgqueuer_sync_entrypoint(
             assert context.payload is not None
             seen.append(int(context.payload))
 
-    await q.enqueue(
+    await q.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -115,11 +115,11 @@ async def test_pgqueuer_pick_local_entrypoints(apgdriver: db.Driver, N: int = 10
     async def to_be_picked(job: Job) -> None:
         pikced_by.append(job.entrypoint)
 
-    await q.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
-    await q.enqueue(["not_picked"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["not_picked"] * N, [None] * N, [0] * N)
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size() if x.entrypoint == "to_be_picked"):
+        while sum(x.count for x in await q.qq.queue_size() if x.entrypoint == "to_be_picked"):
             await asyncio.sleep(0.01)
         pgq.shutdown.set()
 
@@ -129,8 +129,8 @@ async def test_pgqueuer_pick_local_entrypoints(apgdriver: db.Driver, N: int = 10
     )
 
     assert pikced_by == ["to_be_picked"] * N
-    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
-    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
+    assert sum(s.count for s in await q.qq.queue_size() if s.entrypoint == "to_be_picked") == 0
+    assert sum(s.count for s in await q.qq.queue_size() if s.entrypoint == "not_picked") == N
 
 
 async def test_pgqueuer_pick_set_queue_manager_id(apgdriver: db.Driver, N: int = 100) -> None:
@@ -143,10 +143,10 @@ async def test_pgqueuer_pick_set_queue_manager_id(apgdriver: db.Driver, N: int =
         assert job.queue_manager_id is not None
         qmids.add(job.queue_manager_id)
 
-    await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size()):
+        while sum(x.count for x in await q.qq.queue_size()):
             await asyncio.sleep(0.01)
         pgq.shutdown.set()
 

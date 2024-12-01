@@ -73,7 +73,7 @@ async def producer(
     assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
     while not shutdown.is_set():
-        await queries.enqueue(
+        await queries.qq.enqueue(
             random.sample(entrypoints, k=batch_size),
             [f"{next(cnt)}".encode() for _ in range(batch_size)],
             [0] * batch_size,
@@ -167,8 +167,8 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    await (await querier(args.driver, dsn())).clear_log()
-    await (await querier(args.driver, dsn())).clear_queue()
+    await (await querier(args.driver, dsn())).qq.clear_log()
+    await (await querier(args.driver, dsn())).qq.clear_queue()
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
@@ -257,7 +257,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         dequeue_shutdown_timer(qms, shutdown),
     )
 
-    qsize = await (await querier(args.driver, dsn())).queue_size()
+    qsize = await (await querier(args.driver, dsn())).qq.queue_size()
     print("Queue size:")
     for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
         print(f"  {status} {sum(x.count for x in items)}")

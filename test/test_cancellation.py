@@ -26,17 +26,17 @@ async def test_cancellation_async(
         await event.wait()
         cancel_called_not_cancel_called.append(scope.cancel_called)
 
-    job_ids = await q.enqueue(
+    job_ids = await q.qq.enqueue(
         ["to_be_canceled"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
+        while sum(x.count for x in await q.qq.queue_size() if x.status == "picked") < N:
             await asyncio.sleep(0.01)
 
-        await q.mark_job_as_cancelled(job_ids)
+        await q.qq.mark_job_as_cancelled(job_ids)
         event.set()
 
         qm.shutdown.set()
@@ -49,7 +49,7 @@ async def test_cancellation_async(
     assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.qq.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -69,17 +69,17 @@ async def test_cancellation_sync(
         event.wait()
         cancel_called_not_cancel_called.append(scope.cancel_called)
 
-    job_ids = await q.enqueue(
+    job_ids = await q.qq.enqueue(
         ["to_be_canceled"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
+        while sum(x.count for x in await q.qq.queue_size() if x.status == "picked") < N:
             await asyncio.sleep(0)
 
-        await q.mark_job_as_cancelled(job_ids)
+        await q.qq.mark_job_as_cancelled(job_ids)
         event.set()
 
         qm.shutdown.set()
@@ -92,7 +92,7 @@ async def test_cancellation_sync(
     assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.qq.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -111,17 +111,17 @@ async def test_cancellation_async_context_manager(
             await event.wait()
             cancel_called_not_cancel_called.append(scope.cancel_called)
 
-    job_ids = await q.enqueue(
+    job_ids = await q.qq.enqueue(
         ["to_be_canceled"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size() if x.status == "picked") < N:
+        while sum(x.count for x in await q.qq.queue_size() if x.status == "picked") < N:
             await asyncio.sleep(0)
 
-        await q.mark_job_as_cancelled(job_ids)
+        await q.qq.mark_job_as_cancelled(job_ids)
         event.set()
 
         qm.shutdown.set()
@@ -134,7 +134,7 @@ async def test_cancellation_async_context_manager(
     assert sum(cancel_called_not_cancel_called) == 0
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+    assert sum(x.count for x in await q.qq.log_statistics(tail=None) if x.status == "canceled") == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))

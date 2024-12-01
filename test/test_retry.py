@@ -33,7 +33,7 @@ async def test_retry(
         jobids[context.id] += 1
         await e.wait()
 
-    await c.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
+    await c.queries.qq.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     async def stop_after() -> None:
         async with async_timeout.timeout(retry_timer.total_seconds() * 10):
@@ -66,7 +66,7 @@ async def test_no_retry_on_zero_timer(
         seen.add(context.heartbeat)
         await e.wait()
 
-    await c.queries.enqueue(["fetch"], [None], [0])
+    await c.queries.qq.enqueue(["fetch"], [None], [0])
 
     async def until_retry_updated() -> None:
         await asyncio.sleep(1)
@@ -94,7 +94,7 @@ async def test_heartbeat_updates(
         seen.append(context.heartbeat)
         await e.wait()
 
-    jids = await c.queries.enqueue(["fetch"], [None], [0])
+    jids = await c.queries.qq.enqueue(["fetch"], [None], [0])
     (before,) = await _inspect_queue_jobs(jids, apgdriver)
     after: None | Job = None
 
@@ -139,7 +139,7 @@ async def test_concurrent_retry_jobs(
         seen_job2[context.id] += 1
         await e2.wait()
 
-    await c.queries.enqueue(["fetch1", "fetch2"] * N, [None, None] * N, [0, 0] * N)
+    await c.queries.qq.enqueue(["fetch1", "fetch2"] * N, [None, None] * N, [0, 0] * N)
 
     async def until_retry_updated() -> None:
         while True:
@@ -192,7 +192,7 @@ async def test_varying_retry_timers(
         seen_long[context.id] += 1
         await e_long.wait()
 
-    await c.queries.enqueue(["fetch_short", "fetch_long"], [None, None], [0, 0])
+    await c.queries.qq.enqueue(["fetch_short", "fetch_long"], [None, None], [0, 0])
 
     async def until_retry_updated() -> None:
         while True:
@@ -239,7 +239,7 @@ async def test_retry_with_cancellation(
             raise asyncio.CancelledError("Simulated cancellation")
         await e.wait()
 
-    await c.queries.enqueue(["fetch"], [None], [0])
+    await c.queries.qq.enqueue(["fetch"], [None], [0])
 
     async def until_retry_updated() -> None:
         while len(seen) < N:

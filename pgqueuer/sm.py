@@ -135,20 +135,20 @@ class SchedulerManager:
         Continuously polls for jobs that need to be executed and dispatches them accordingly.
         Also waits for shutdown events and manages the scheduling loop.
         """
-        if not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
+        if not (await self.queries.eq.has_table(self.queries.eq.qbe.settings.schedules_table)):
             raise RuntimeError(
-                f"The {self.queries.qbe.settings.schedules_table} table is missing "
+                f"The {self.queries.eq.qbe.settings.schedules_table} table is missing "
                 "please run 'pgq upgrade'"
             )
 
-        await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
+        await self.queries.sq.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 
         async with (
             tm.TaskManager() as task_manager,
             self.connection,
         ):
             while not self.shutdown.is_set():
-                scheduled = await self.queries.fetch_schedule(
+                scheduled = await self.queries.sq.fetch_schedule(
                     {k: v.next_in() for k, v in self.registry.items()}
                 )
                 for schedule in scheduled:
@@ -206,7 +206,7 @@ class SchedulerManager:
 
         async def heartbeat() -> None:
             while not shutdown.is_set() and not self.shutdown.is_set():
-                await self.queries.update_schedule_heartbeat({schedule.id})
+                await self.queries.sq.update_schedule_heartbeat({schedule.id})
                 await asyncio.sleep(1)
 
         task_manager.add(asyncio.create_task(heartbeat()))
@@ -228,5 +228,5 @@ class SchedulerManager:
         finally:
             shutdown.set()
             await asyncio.shield(
-                self.queries.set_schedule_queued({schedule.id}),
+                self.queries.sq.set_schedule_queued({schedule.id}),
             )
