@@ -15,7 +15,7 @@ async def wait_until_empty_queue(
     q: Queries,
     qms: list[QueueManager],
 ) -> None:
-    while sum(x.count for x in await q.queue_size()) > 0:
+    while sum(x.count for x in await q.qq.queue_size()) > 0:
         await asyncio.sleep(0.01)
 
     for qm in qms:
@@ -35,7 +35,7 @@ async def test_job_queuing(
         assert context.payload is not None
         seen.append(int(context.payload))
 
-    await c.queries.enqueue(
+    await c.queries.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -67,7 +67,7 @@ async def test_job_fetch(
             assert context.payload is not None
             seen.append(int(context.payload))
 
-    await q.enqueue(
+    await q.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -100,7 +100,7 @@ async def test_sync_entrypoint(
             assert context.payload is not None
             seen.append(int(context.payload))
 
-    await q.enqueue(
+    await q.qq.enqueue(
         ["fetch"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -125,11 +125,11 @@ async def test_pick_local_entrypoints(
     async def to_be_picked(job: Job) -> None:
         pikced_by.append(job.entrypoint)
 
-    await q.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
-    await q.enqueue(["not_picked"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["not_picked"] * N, [None] * N, [0] * N)
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size() if x.entrypoint == "to_be_picked"):
+        while sum(x.count for x in await q.qq.queue_size() if x.entrypoint == "to_be_picked"):
             await asyncio.sleep(0.01)
         qm.shutdown.set()
 
@@ -139,8 +139,8 @@ async def test_pick_local_entrypoints(
     )
 
     assert pikced_by == ["to_be_picked"] * N
-    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "to_be_picked") == 0
-    assert sum(s.count for s in await q.queue_size() if s.entrypoint == "not_picked") == N
+    assert sum(s.count for s in await q.qq.queue_size() if s.entrypoint == "to_be_picked") == 0
+    assert sum(s.count for s in await q.qq.queue_size() if s.entrypoint == "not_picked") == N
 
 
 async def test_pick_set_queue_manager_id(
@@ -156,10 +156,10 @@ async def test_pick_set_queue_manager_id(
         assert job.queue_manager_id is not None
         qmids.add(job.queue_manager_id)
 
-    await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+    await q.qq.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     async def waiter() -> None:
-        while sum(x.count for x in await q.queue_size()):
+        while sum(x.count for x in await q.qq.queue_size()):
             await asyncio.sleep(0.01)
         qm.shutdown.set()
 

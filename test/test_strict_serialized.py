@@ -45,12 +45,12 @@ async def enqueue(
     size: int,
 ) -> None:
     assert size > 0
-    await queries.enqueue(
+    await queries.qq.enqueue(
         ["serialized_dispatch_true"] * size,
         [f"{n}".encode() for n in range(size)],
         [0] * size,
     )
-    await queries.enqueue(
+    await queries.qq.enqueue(
         ["serialized_dispatch_false"] * size,
         [f"{n}".encode() for n in range(size)],
         [0] * size,
@@ -138,7 +138,7 @@ async def test_no_jobs_processed_when_locked(
     # Set one job to picked state to simulate an ongoing process
     queries = Queries(apgdriver)
     await enqueue(queries, size=n_tasks)
-    picked_job = await queries.dequeue(
+    picked_job = await queries.qq.dequeue(
         1,
         {"serialized_dispatch_true": EntrypointExecutionParameter(timedelta(seconds=30), True, 0)},
         queue_manager_id=uuid.uuid4(),

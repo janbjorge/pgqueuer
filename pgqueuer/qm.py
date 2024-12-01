@@ -294,7 +294,7 @@ class QueueManager:
             }
 
             if not (
-                jobs := await self.queries.dequeue(
+                jobs := await self.queries.qq.dequeue(
                     batch_size=batch_size,
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
@@ -308,7 +308,7 @@ class QueueManager:
     async def flush_rps(self, events: list[str]) -> None:
         """Update rate-per-second statistics for the given entrypoints."""
         if events:
-            await self.queries.notify_debounce_event(
+            await self.queries.qq.notify_debounce_event(
                 {
                     k: v
                     for k, v in Counter(events).items()
@@ -327,26 +327,26 @@ class QueueManager:
             qb.add_prefix("pgqueuer"),
             qb.add_prefix("pgqueuer_statistics"),
         ):
-            if not (await self.queries.has_table(table)):
+            if not (await self.queries.eq.has_table(table)):
                 raise RuntimeError(
                     f"The required table '{table}' is missing. "
                     f"Please run 'pgq install' to set up the necessary tables."
                 )
 
         for table, column in (
-            (self.queries.qbe.settings.queue_table, "updated"),
-            (self.queries.qbe.settings.queue_table, "heartbeat"),
-            (self.queries.qbe.settings.queue_table, "queue_manager_id"),
-            (self.queries.qbe.settings.queue_table, "execute_after"),
+            (self.queries.eq.qbe.settings.queue_table, "updated"),
+            (self.queries.eq.qbe.settings.queue_table, "heartbeat"),
+            (self.queries.eq.qbe.settings.queue_table, "queue_manager_id"),
+            (self.queries.eq.qbe.settings.queue_table, "execute_after"),
         ):
-            if not (await self.queries.table_has_column(table, column)):
+            if not (await self.queries.eq.table_has_column(table, column)):
                 raise RuntimeError(
                     f"The required column '{column}' is missing in the '{table}' table. "
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
-        for key, enum in (("canceled", self.queries.qbe.settings.statistics_table_status_type),):
-            if not (await self.queries.has_user_defined_enum(key, enum)):
+        for key, enum in (("canceled", self.queries.eq.qbe.settings.statistics_table_status_type),):
+            if not (await self.queries.eq.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
                     f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
                 )
@@ -381,12 +381,12 @@ class QueueManager:
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 timeout=job_status_log_buffer_timeout,
-                callback=self.queries.log_jobs,
+                callback=self.queries.qq.log_jobs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
                 timeout=heartbeat_buffer_timeout / 2,
-                callback=self.queries.update_heartbeat,
+                callback=self.queries.qq.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
                 max_size=batch_size,

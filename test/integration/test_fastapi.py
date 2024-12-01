@@ -29,7 +29,7 @@ def client() -> Generator[TestClient, None, None]:
         driver: AsyncpgDriver = Depends(get_driver),
     ) -> dict:
         queries = Queries(driver)
-        ids = await queries.enqueue(entrypoint, payload.encode(), priority)
+        ids = await queries.qq.enqueue(entrypoint, payload.encode(), priority)
         return {"job-ids": ids}
 
     @app.get("/queue-size")
@@ -37,7 +37,7 @@ def client() -> Generator[TestClient, None, None]:
         driver: AsyncpgDriver = Depends(get_driver),
     ) -> dict:
         queries = Queries(driver)
-        size = await queries.queue_size()
+        size = await queries.qq.queue_size()
         return {"queue_size": size}
 
     with TestClient(app) as client:

@@ -52,7 +52,7 @@ async def enqueue(
     cnt: count = count(),
 ) -> None:
     assert size > 0
-    await queries.enqueue(
+    await queries.qq.enqueue(
         ["fetch"] * size,
         [f"{next(cnt)}".encode() for _ in range(size)],
         [0] * size,
@@ -99,7 +99,7 @@ async def test_concurrency_entrypoint_isolation(
 ) -> None:
     event = asyncio.Event()
     N = concurrency_limit * 1_000
-    await Queries(apgdriver).enqueue(
+    await Queries(apgdriver).qq.enqueue(
         ["fetch_1", "fetch_2"] * N,
         [None, None] * N,
         [0, 0] * N,

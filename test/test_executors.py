@@ -163,7 +163,7 @@ async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
         pass  # Not used since executor handles execution
 
     queries = Queries(apgdriver)
-    await queries.enqueue(entrypoint="custom_entrypoint", payload=b"test_data")
+    await queries.qq.enqueue(entrypoint="custom_entrypoint", payload=b"test_data")
 
     async def run_queue_manager() -> None:
         await qm.run(dequeue_timeout=timedelta(seconds=2), batch_size=1)

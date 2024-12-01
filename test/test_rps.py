@@ -32,7 +32,7 @@ async def enqueue(
     assert size > 0
     cnt = count()
     entrypoints = ["syncfetch", "asyncfetch"] * size
-    await queries.enqueue(
+    await queries.qq.enqueue(
         random.sample(entrypoints, k=size),
         [f"{next(cnt)}".encode() for _ in range(size)],
         [0] * size,

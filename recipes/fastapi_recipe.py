@@ -38,7 +38,7 @@ def create_app() -> FastAPI:
         pgq_queries: Queries = Depends(get_pgq_queries),
     ) -> Response:
         """Enqueue a job to reset a user's password, identified by user_name."""
-        await pgq_queries.enqueue(
+        await pgq_queries.qq.enqueue(
             "reset_email_by_user_name",
             payload=json.dumps({"user_name": user_name}).encode(),
         )

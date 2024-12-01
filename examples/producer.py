@@ -13,7 +13,7 @@ async def main(N: int) -> None:
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
     queries = Queries(driver)
-    await queries.enqueue(
+    await queries.qq.enqueue(
         ["fetch"] * N,
         [f"this is from me: {n}".encode() for n in range(1, N + 1)],
         [0] * N,

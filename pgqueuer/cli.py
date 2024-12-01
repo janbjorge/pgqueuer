@@ -97,7 +97,7 @@ async def fetch_and_display(
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
-        await display_stats(await queries.log_statistics(tail))
+        await display_stats(await queries.qq.log_statistics(tail))
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
@@ -376,17 +376,17 @@ async def main() -> None:  # noqa: C901
         case "install":
             print(queries.qb.QueryBuilderEnvironment().create_install_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).install()
+                await (await querier(parsed.driver, dsn)).eq.install()
         case "uninstall":
             print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).uninstall()
+                await (await querier(parsed.driver, dsn)).eq.uninstall()
         case "upgrade":
             print(
                 f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries())
             )
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).upgrade()
+                await (await querier(parsed.driver, dsn)).eq.upgrade()
         case "dashboard":
             await fetch_and_display(
                 await querier(parsed.driver, dsn),
@@ -406,10 +406,10 @@ async def main() -> None:  # noqa: C901
             )
         case "schedule":
             if parsed.remove:
-                await (await querier(parsed.driver, dsn)).delete_schedule(
+                await (await querier(parsed.driver, dsn)).sq.delete_schedule(
                     {models.ScheduleId(int(x)) for x in parsed.remove if x.isdigit()},
                     {str(x) for x in parsed.remove if not x.isdigit()},
                 )
             await display_schedule(
-                await (await querier(parsed.driver, dsn)).peak_schedule(),
+                await (await querier(parsed.driver, dsn)).sq.peak_schedule(),
             )

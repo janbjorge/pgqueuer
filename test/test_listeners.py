@@ -114,7 +114,7 @@ async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    (job_id,) = await Queries(apgdriver).enqueue(
+    (job_id,) = await Queries(apgdriver).qq.enqueue(
         "test_emit_stable_changed_insert",
         None,
     )
@@ -138,7 +138,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    await Queries(apgdriver).enqueue(
+    await Queries(apgdriver).qq.enqueue(
         "test_emit_stable_changed_update",
         None,
     )
@@ -154,7 +154,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
     assert event.root.operation == "insert"
     evnets.clear()
 
-    await Queries(apgdriver).dequeue(
+    await Queries(apgdriver).qq.dequeue(
         100,
         {
             "test_emit_stable_changed_update": EntrypointExecutionParameter(
@@ -175,7 +175,7 @@ async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    await Queries(apgdriver).enqueue(
+    await Queries(apgdriver).qq.enqueue(
         "test_emits_truncate_table_truncate",
         None,
     )
@@ -185,7 +185,7 @@ async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
 
     evnets.clear()
 
-    await Queries(apgdriver).clear_queue()
+    await Queries(apgdriver).qq.clear_queue()
     async with timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
@@ -206,7 +206,7 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    (job_id,) = await Queries(apgdriver).enqueue(
+    (job_id,) = await Queries(apgdriver).qq.enqueue(
         "test_pgqueuer_heartbeat_event_trigger",
         None,
     )
@@ -221,7 +221,7 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     evnets.clear()
 
     await asyncio.gather(
-        *[Queries(apgdriver).update_heartbeat([job_id]) for _ in range(10)],
+        *[Queries(apgdriver).qq.update_heartbeat([job_id]) for _ in range(10)],
     )
     await asyncio.sleep(0.1)
     assert len(evnets) == 0
