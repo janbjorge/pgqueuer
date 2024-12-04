@@ -16,8 +16,8 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel
 from tqdm.asyncio import tqdm
 
-from pgqueuer.cli import querier
-from pgqueuer.db import dsn
+from pgqueuer.cli import query_adapter
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver, dsn
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import EVENT_TYPES, Job, PGChannel
 from pgqueuer.qb import DBSettings
@@ -32,6 +32,16 @@ class BenchmarkResult(BaseModel):
     github_ref_name: str
     rate: float
     steps: int
+
+
+def driver_str(driver: Driver) -> Literal["apg", "apgpool", "psy"]:
+    if isinstance(driver, AsyncpgDriver):
+        return "apg"
+    if isinstance(driver, AsyncpgPoolDriver):
+        return "apgpool"
+    if isinstance(driver, PsycopgDriver):
+        return "psy"
+    raise NotImplementedError(driver)
 
 
 async def consumer(
@@ -167,8 +177,8 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    await (await querier(args.driver, dsn())).clear_log()
-    await (await querier(args.driver, dsn())).clear_queue()
+    await (await query_adapter(dsn())).clear_log()
+    await (await query_adapter(dsn())).clear_queue()
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
@@ -180,7 +190,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         producers = [
             producer(
                 shutdown,
-                await querier(args.driver, dsn()),
+                await query_adapter(dsn()),
                 int(args.enqueue_batch_size),
                 cnt,
             )
@@ -189,7 +199,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         await asyncio.gather(*producers)
 
     async def dequeue(qms: list[QueueManager]) -> None:
-        queries = [await querier(args.driver, dsn()) for _ in range(args.dequeue)]
+        queries = [await query_adapter(dsn()) for _ in range(args.dequeue)]
         for q in queries:
             qms.append(QueueManager(q.driver))
 
@@ -233,7 +243,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             p.cancel()
 
     async def measure_latency() -> None:
-        connection = (await querier(args.driver, dsn())).driver
+        connection = (await query_adapter(dsn())).driver
         await initialize_notice_event_listener(
             connection,
             PGChannel(DBSettings().channel),
@@ -257,7 +267,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         dequeue_shutdown_timer(qms, shutdown),
     )
 
-    qsize = await (await querier(args.driver, dsn())).queue_size()
+    qsize = await (await query_adapter(dsn())).queue_size()
     print("Queue size:")
     for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
         print(f"  {status} {sum(x.count for x in items)}")
@@ -268,7 +278,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         with open(args.output_json, "w") as f:
             json.dump(
                 BenchmarkResult(
-                    driver=args.driver,
+                    driver=driver_str((await query_adapter(dsn())).driver),
                     created_at=datetime.now(timezone.utc),
                     elapsed=tqdm_format_dict["elapsed"],
                     rate=tqdm_format_dict["rate"],

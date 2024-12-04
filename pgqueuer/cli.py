@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import os
 from datetime import timedelta
-from typing import Literal
 
 from tabulate import tabulate
 
@@ -117,13 +117,6 @@ def cliparser() -> argparse.Namespace:
             "This helps in avoiding conflicts if running multiple instances. "
             "(If set, additional config is required.)"
         ),
-    )
-
-    common_arguments.add_argument(
-        "--driver",
-        default="apg",
-        help="Specify the PostgreSQL driver to be used: asyncpg (apg) or psycopg (psy).",
-        choices=["apg", "psy"],
     )
 
     common_arguments.add_argument(
@@ -323,39 +316,34 @@ def cliparser() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def querier(
-    driver: Literal["psy", "apg", "apgpool"],
-    conninfo: str,
-) -> queries.Queries:
-    match driver:
-        case "apg":
-            import asyncpg
+async def query_adapter(conninfo: str) -> queries.Queries:
+    with contextlib.suppress(ImportError):
+        import asyncpg
 
-            return queries.Queries(
-                db.AsyncpgDriver(
-                    await asyncpg.connect(dsn=conninfo),
+        return queries.Queries(
+            db.AsyncpgDriver(
+                await asyncpg.connect(
+                    dsn=conninfo,
                 )
             )
-        case "apgpool":
-            import asyncpg
+        )
 
-            pool = await asyncpg.create_pool(dsn=conninfo)
-            assert pool is not None
-            return queries.Queries(db.AsyncpgPoolDriver(pool))
+    with contextlib.suppress(ImportError):
+        import psycopg
 
-        case "psy":
-            import psycopg
-
-            return queries.Queries(
-                db.PsycopgDriver(
-                    await psycopg.AsyncConnection.connect(
-                        conninfo=conninfo,
-                        autocommit=True,
-                    )
+        return queries.Queries(
+            db.PsycopgDriver(
+                await psycopg.AsyncConnection.connect(
+                    conninfo=conninfo,
+                    autocommit=True,
                 )
             )
+        )
 
-    raise NotImplementedError(driver)
+    raise RuntimeError(
+        "Neither asyncpg nor psycopg could be imported. Install "
+        "either 'asyncpg' or 'psycopg' to use the querier function."
+    )
 
 
 async def main() -> None:  # noqa: C901
@@ -376,26 +364,26 @@ async def main() -> None:  # noqa: C901
         case "install":
             print(queries.qb.QueryBuilderEnvironment().create_install_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).install()
+                await (await query_adapter(dsn)).install()
         case "uninstall":
             print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).uninstall()
+                await (await query_adapter(dsn)).uninstall()
         case "upgrade":
             print(
                 f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries())
             )
             if not parsed.dry_run:
-                await (await querier(parsed.driver, dsn)).upgrade()
+                await (await query_adapter(dsn)).upgrade()
         case "dashboard":
             await fetch_and_display(
-                await querier(parsed.driver, dsn),
+                await query_adapter(dsn),
                 parsed.interval,
                 parsed.tail,
             )
         case "listen":
             await display_pg_channel(
-                (await querier(parsed.driver, dsn)).driver,
+                (await query_adapter(dsn)).driver,
                 models.PGChannel(parsed.channel),
             )
         case "run":
@@ -406,10 +394,10 @@ async def main() -> None:  # noqa: C901
             )
         case "schedules":
             if parsed.remove:
-                await (await querier(parsed.driver, dsn)).delete_schedule(
+                await (await query_adapter(dsn)).delete_schedule(
                     {models.ScheduleId(int(x)) for x in parsed.remove if x.isdigit()},
                     {str(x) for x in parsed.remove if not x.isdigit()},
                 )
             await display_schedule(
-                await (await querier(parsed.driver, dsn)).peak_schedule(),
+                await (await query_adapter(dsn)).peak_schedule(),
             )
