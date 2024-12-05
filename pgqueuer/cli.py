@@ -304,10 +304,10 @@ def cliparser() -> argparse.Namespace:
     )
 
     schedule_parser = subparsers.add_parser(
-        "schedule",
+        "schedules",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         parents=[common_arguments],
-        help="Manage schedule in the PGQueuer system.",
+        help="Manage schedules in the PGQueuer system.",
     )
     schedule_parser.add_argument(
         "-r",
@@ -404,7 +404,7 @@ async def main() -> None:  # noqa: C901
                 dequeue_timeout=parsed.dequeue_timeout,
                 batch_size=parsed.batch_size,
             )
-        case "schedule":
+        case "schedules":
             if parsed.remove:
                 await (await querier(parsed.driver, dsn)).delete_schedule(
                     {models.ScheduleId(int(x)) for x in parsed.remove if x.isdigit()},
