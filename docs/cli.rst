@@ -17,6 +17,7 @@ Key Commands
 - ``dashboard``: Display a live dashboard showing job statistics.
 - ``listen``: Listen to PostgreSQL NOTIFY channels for debugging.
 - ``run``: Start a QueueManager that manages job queues and processes.
+- ``schedules``: Manage schedules within the PGQueuer system. You can display all schedules or remove specific ones by ID or name.
 
 Why Use the ``run`` Option
 --------------------------
