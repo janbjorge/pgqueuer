@@ -16,8 +16,7 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel
 from tqdm.asyncio import tqdm
 
-from pgqueuer.cli import querier
-from pgqueuer.db import dsn
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import EVENT_TYPES, Job, PGChannel
 from pgqueuer.qb import DBSettings
@@ -26,12 +25,43 @@ from pgqueuer.queries import Queries
 
 
 class BenchmarkResult(BaseModel):
+    """Benchmark metrics including driver info, elapsed time, and rate."""
+
     created_at: AwareDatetime
     driver: Literal["apg", "apgpool", "psy"]
     elapsed: timedelta
     github_ref_name: str
     rate: float
     steps: int
+
+
+async def make_queries(driver: Literal["psy", "apg", "apgpool"], conninfo: str) -> Queries:
+    """Create a Queries instance for the specified PostgreSQL driver."""
+    match driver:
+        case "apg":
+            import asyncpg
+
+            return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
+        case "apgpool":
+            import asyncpg
+
+            pool = await asyncpg.create_pool(dsn=conninfo)
+            assert pool is not None
+            return Queries(AsyncpgPoolDriver(pool))
+
+        case "psy":
+            import psycopg
+
+            return Queries(
+                PsycopgDriver(
+                    await psycopg.AsyncConnection.connect(
+                        conninfo=conninfo,
+                        autocommit=True,
+                    )
+                )
+            )
+
+    raise NotImplementedError(driver)
 
 
 async def consumer(
@@ -41,6 +71,7 @@ async def consumer(
     concurrency_limits: list[int],
     bar: tqdm,
 ) -> None:
+    """Process jobs from the queue with specified concurrency and rate limits."""
     assert len(entrypoint_rps) == 2
     async_rps, sync_rps = entrypoint_rps
     async_cl, sync_cl = concurrency_limits
@@ -70,6 +101,7 @@ async def producer(
     batch_size: int,
     cnt: count,
 ) -> None:
+    """Enqueue jobs continuously until a shutdown signal is received."""
     assert batch_size > 0
     entrypoints = ["syncfetch", "asyncfetch"] * batch_size
     while not shutdown.is_set():
@@ -81,6 +113,7 @@ async def producer(
 
 
 def cli_parser() -> argparse.Namespace:
+    """Parse command-line arguments for the benchmark tool."""
     parser = argparse.ArgumentParser(description="PGQueuer benchmark tool.")
 
     parser.add_argument(
@@ -159,6 +192,8 @@ def cli_parser() -> argparse.Namespace:
 
 
 async def main(args: argparse.Namespace) -> None:
+    """Run the benchmark, managing producers, consumers, and measuring latency."""
+
     print(f"""Settings:
 Timer:                  {args.timer.total_seconds()} seconds
 Dequeue:                {args.dequeue}
@@ -167,8 +202,8 @@ Enqueue:                {args.enqueue}
 Enqueue Batch Size:     {args.enqueue_batch_size}
 """)
 
-    await (await querier(args.driver, dsn())).clear_log()
-    await (await querier(args.driver, dsn())).clear_queue()
+    await (await make_queries(args.driver, dsn())).clear_log()
+    await (await make_queries(args.driver, dsn())).clear_queue()
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
@@ -176,11 +211,13 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     tqdm_format_dict = {}
 
     async def enqueue(shutdown: asyncio.Event) -> None:
+        """Start producer tasks to enqueue jobs continuously."""
+
         cnt = count()
         producers = [
             producer(
                 shutdown,
-                await querier(args.driver, dsn()),
+                await make_queries(args.driver, dsn()),
                 int(args.enqueue_batch_size),
                 cnt,
             )
@@ -189,7 +226,9 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         await asyncio.gather(*producers)
 
     async def dequeue(qms: list[QueueManager]) -> None:
-        queries = [await querier(args.driver, dsn()) for _ in range(args.dequeue)]
+        """Start consumer tasks to dequeue jobs and track progress."""
+
+        queries = [await make_queries(args.driver, dsn()) for _ in range(args.dequeue)]
         for q in queries:
             qms.append(QueueManager(q.driver))
 
@@ -216,6 +255,8 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         qms: list[QueueManager],
         shutdown: asyncio.Event,
     ) -> None:
+        """Shutdown consumers and producers after the timer expires."""
+
         _, pending = await asyncio.wait(
             (
                 asyncio.create_task(asyncio.sleep(args.timer.total_seconds())),
@@ -233,7 +274,8 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             p.cancel()
 
     async def measure_latency() -> None:
-        connection = (await querier(args.driver, dsn())).driver
+        """Measure latency for table change events and store results."""
+        connection = (await make_queries(args.driver, dsn())).driver
         await initialize_notice_event_listener(
             connection,
             PGChannel(DBSettings().channel),
@@ -242,6 +284,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         await shutdown.wait()
 
     def graceful_shutdown() -> None:
+        """Handle graceful shutdown of all tasks on signal interruption."""
         shutdown.set()
         for qm in qms:
             qm.shutdown.set()
@@ -257,7 +300,7 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         dequeue_shutdown_timer(qms, shutdown),
     )
 
-    qsize = await (await querier(args.driver, dsn())).queue_size()
+    qsize = await (await make_queries(args.driver, dsn())).queue_size()
     print("Queue size:")
     for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
         print(f"  {status} {sum(x.count for x in items)}")
