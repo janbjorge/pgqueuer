@@ -15,6 +15,7 @@ import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
+from pydantic import PostgresDsn
 from typing_extensions import Self
 
 from . import tm
@@ -46,7 +47,17 @@ def dsn(
     password = password or os.getenv("PGPASSWORD", "")
     database = database or os.getenv("PGDATABASE", "")
     port = port or os.getenv("PGPORT", "")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+    return str(
+        PostgresDsn.build(
+            scheme="postgresql",
+            username=user,
+            password=password,
+            host=host,
+            path=database,
+            port=int(port) if port else None,
+        )
+    )
 
 
 class Driver(Protocol):
