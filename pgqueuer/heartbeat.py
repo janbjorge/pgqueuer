@@ -38,7 +38,6 @@ class Heartbeat:
         Returns:
             Heartbeat: The Heartbeat instance itself.
         """
-        self.shutdown.set()  # Activate heartbeats
         if self.interval > timedelta(seconds=0):
             self.schedule_heartbeat()
         return self
@@ -54,10 +53,9 @@ class Heartbeat:
             exc_val: The exception value, if any.
             exc_tb: The traceback, if any.
         """
-        self.shutdown.clear()  # Deactivate heartbeats
+        self.shutdown.set()
         if self.handle:
             self.handle.cancel()
-        await self.buffer.flush()
 
     def schedule_heartbeat(self) -> None:
         """
@@ -73,7 +71,7 @@ class Heartbeat:
         """
         Send a heartbeat by adding a JobId to the buffer and scheduling the next heartbeat.
         """
-        if not self.shutdown.is_set():
+        if self.shutdown.is_set():
             return
 
         try:
@@ -81,5 +79,5 @@ class Heartbeat:
         except Exception as e:
             logconfig.logger.exception("Failed to send heartbeat: %s", e)
         finally:
-            if self.shutdown.is_set():
+            if not self.shutdown.is_set():
                 self.schedule_heartbeat()
