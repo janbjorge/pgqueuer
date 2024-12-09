@@ -1,4 +1,3 @@
-import asyncio
 import contextlib
 
 from pgqueuer import cli
@@ -6,7 +5,7 @@ from pgqueuer import cli
 
 def main() -> None:
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(cli.main())
+        cli.app(prog_name="pgqueuer")
 
 
 if __name__ == "__main__":
