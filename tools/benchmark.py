@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import os
@@ -9,10 +8,12 @@ import signal
 import sys
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 from itertools import count, groupby
-from statistics import mean, median
-from typing import Literal
+from pathlib import Path
+from statistics import median
 
+import typer
 from pydantic import AwareDatetime, BaseModel
 from tqdm.asyncio import tqdm
 
@@ -23,19 +24,83 @@ from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
+app = typer.Typer()
+
+
+class DriverEnum(str, Enum):
+    apg = "apg"
+    apgpool = "apgpool"
+    psy = "psy"
+
 
 class BenchmarkResult(BaseModel):
     """Benchmark metrics including driver info, elapsed time, and rate."""
 
     created_at: AwareDatetime
-    driver: Literal["apg", "apgpool", "psy"]
+    driver: DriverEnum
     elapsed: timedelta
     github_ref_name: str
     rate: float
     steps: int
+    median_latency: float
+
+    def pretty_print(self) -> None:
+        print("Benchmark result:")
+        max_key_length = max(len(key) for key in self.model_dump())
+        for field, value in self.model_dump().items():
+            if not field or not value:
+                continue
+            print(f"  {field:<{max_key_length}} : {value}")
 
 
-async def make_queries(driver: Literal["psy", "apg", "apgpool"], conninfo: str) -> Queries:
+class Settings(BaseModel):
+    driver: DriverEnum = typer.Option(
+        DriverEnum.apg,
+        help="Postgres driver to use.",
+    )
+    timer: timedelta = typer.Option(
+        30.0,
+        help="Run the benchmark for this number of seconds.",
+    )
+    dequeue: int = typer.Option(
+        5,
+        help="Number of concurrent dequeue tasks.",
+    )
+    dequeue_batch_size: int = typer.Option(
+        10,
+        help="Batch size for dequeue tasks.",
+    )
+    enqueue: int = typer.Option(
+        1,
+        help="Number of concurrent enqueue tasks.",
+    )
+    enqueue_batch_size: int = typer.Option(
+        10,
+        help="Batch size for enqueue tasks.",
+    )
+    requests_per_second: list[float] = typer.Option(
+        [float("inf"), float("inf")],
+        help="RPS for endpoints.",
+    )
+    concurrency_limit: list[int] = typer.Option(
+        [sys.maxsize, sys.maxsize],
+        help="Concurrency limit.",
+    )
+    output_json: Path | None = typer.Option(
+        None,
+        help="Output JSON file for benchmark metrics.",
+    )
+
+    def pretty_print(self) -> None:
+        print("Settings:")
+        max_key_length = max(len(key) for key in self.model_dump())
+        for field, value in self.model_dump().items():
+            if not field or not value:
+                continue
+            print(f"  {field:<{max_key_length}} : {value}")
+
+
+async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
     """Create a Queries instance for the specified PostgreSQL driver."""
     match driver:
         case "apg":
@@ -112,138 +177,43 @@ async def producer(
         )
 
 
-def cli_parser() -> argparse.Namespace:
-    """Parse command-line arguments for the benchmark tool."""
-    parser = argparse.ArgumentParser(description="PGQueuer benchmark tool.")
+async def benchmark(settings: Settings) -> None:
+    settings.pretty_print()
+    print("", flush=True)
 
-    parser.add_argument(
-        "-d",
-        "--driver",
-        default="apg",
-        help="Postgres driver to be used asyncpg (apg) or psycopg (psy).",
-        choices=["apg", "apgpool", "psy"],
-    )
-
-    parser.add_argument(
-        "-t",
-        "--timer",
-        type=lambda x: timedelta(seconds=float(x)),
-        default=timedelta(seconds=30),
-        help="Run the benchmark for a specified number of seconds. Default is 10.",
-    )
-
-    parser.add_argument(
-        "-dq",
-        "--dequeue",
-        type=int,
-        default=5,
-        help="Number of concurrent dequeue tasks. Default is 5.",
-    )
-    parser.add_argument(
-        "-dqbs",
-        "--dequeue-batch-size",
-        type=int,
-        default=10,
-        help="Batch size for dequeue tasks. Default is 10.",
-    )
-
-    parser.add_argument(
-        "-eq",
-        "--enqueue",
-        type=int,
-        default=1,
-        help="Number of concurrent enqueue tasks. Default is 1.",
-    )
-    parser.add_argument(
-        "-eqbs",
-        "--enqueue-batch-size",
-        type=int,
-        default=10,
-        help="Batch size for enqueue tasks. Default is 10.",
-    )
-    parser.add_argument(
-        "-rps",
-        "--requests-per-second",
-        nargs="+",
-        default=[float("inf"), float("inf")],
-        help="RPS for endporints given as a list, default is 'inf'.",
-    )
-    parser.add_argument(
-        "-ci",
-        "--concurrency-limit",
-        nargs="+",
-        default=[sys.maxsize, sys.maxsize],
-        help=f"Concurrency limit for endporints given as a list, default is '{sys.maxsize}'.",
-    )
-    parser.add_argument(
-        "-o",
-        "--output-json",
-        type=str,
-        default=None,
-        help="Path to the output JSON file for benchmark metrics.",
-    )
-    parser.add_argument(
-        "-i",
-        "--latency",
-        action="store_true",
-        help="Measure and display latency data for table changed events.",
-    )
-    return parser.parse_args()
-
-
-async def main(args: argparse.Namespace) -> None:
-    """Run the benchmark, managing producers, consumers, and measuring latency."""
-
-    print(f"""Settings:
-Timer:                  {args.timer.total_seconds()} seconds
-Dequeue:                {args.dequeue}
-Dequeue Batch Size:     {args.dequeue_batch_size}
-Enqueue:                {args.enqueue}
-Enqueue Batch Size:     {args.enqueue_batch_size}
-""")
-
-    await (await make_queries(args.driver, dsn())).clear_log()
-    await (await make_queries(args.driver, dsn())).clear_queue()
+    await (await make_queries(settings.driver, dsn())).clear_log()
+    await (await make_queries(settings.driver, dsn())).clear_queue()
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
     latencies = list[tuple[EVENT_TYPES, timedelta]]()
     tqdm_format_dict = {}
 
-    async def enqueue(shutdown: asyncio.Event) -> None:
-        """Start producer tasks to enqueue jobs continuously."""
-
+    async def enqueue_task(shutdown: asyncio.Event) -> None:
         cnt = count()
         producers = [
             producer(
                 shutdown,
-                await make_queries(args.driver, dsn()),
-                int(args.enqueue_batch_size),
+                await make_queries(settings.driver, dsn()),
+                settings.enqueue_batch_size,
                 cnt,
             )
-            for _ in range(args.enqueue)
+            for _ in range(settings.enqueue)
         ]
         await asyncio.gather(*producers)
 
-    async def dequeue(qms: list[QueueManager]) -> None:
-        """Start consumer tasks to dequeue jobs and track progress."""
-
-        queries = [await make_queries(args.driver, dsn()) for _ in range(args.dequeue)]
+    async def dequeue_task(qms: list[QueueManager]) -> None:
+        queries = [await make_queries(settings.driver, dsn()) for _ in range(settings.dequeue)]
         for q in queries:
             qms.append(QueueManager(q.driver))
 
-        with tqdm(
-            ascii=True,
-            unit=" job",
-            unit_scale=True,
-            file=sys.stdout,
-        ) as bar:
+        with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
             consumers = [
                 consumer(
                     qm=q,
-                    batch_size=int(args.dequeue_batch_size),
-                    entrypoint_rps=[float(x) for x in args.requests_per_second],
-                    concurrency_limits=[int(x) for x in args.concurrency_limit],
+                    batch_size=settings.dequeue_batch_size,
+                    entrypoint_rps=settings.requests_per_second,
+                    concurrency_limits=settings.concurrency_limit,
                     bar=bar,
                 )
                 for q in qms
@@ -251,31 +221,8 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
             await asyncio.gather(*consumers)
             tqdm_format_dict.update(bar.format_dict)
 
-    async def dequeue_shutdown_timer(
-        qms: list[QueueManager],
-        shutdown: asyncio.Event,
-    ) -> None:
-        """Shutdown consumers and producers after the timer expires."""
-
-        _, pending = await asyncio.wait(
-            (
-                asyncio.create_task(asyncio.sleep(args.timer.total_seconds())),
-                asyncio.create_task(shutdown.wait()),
-            ),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-        # Stop producers
-        shutdown.set()
-        # Stop consumers
-        for q in qms:
-            q.shutdown.set()
-
-        for p in pending:
-            p.cancel()
-
-    async def measure_latency() -> None:
-        """Measure latency for table change events and store results."""
-        connection = (await make_queries(args.driver, dsn())).driver
+    async def measure_latency_task() -> None:
+        connection = (await make_queries(settings.driver, dsn())).driver
         await initialize_notice_event_listener(
             connection,
             PGChannel(DBSettings().channel),
@@ -283,8 +230,21 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
         )
         await shutdown.wait()
 
+    async def shutdown_timer() -> None:
+        _, pending = await asyncio.wait(
+            (
+                asyncio.create_task(asyncio.sleep(settings.timer.total_seconds())),
+                asyncio.create_task(shutdown.wait()),
+            ),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        shutdown.set()
+        for q in qms:
+            q.shutdown.set()
+        for p in pending:
+            p.cancel()
+
     def graceful_shutdown() -> None:
-        """Handle graceful shutdown of all tasks on signal interruption."""
         shutdown.set()
         for qm in qms:
             qm.shutdown.set()
@@ -294,61 +254,92 @@ Enqueue Batch Size:     {args.enqueue_batch_size}
     loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
 
     await asyncio.gather(
-        dequeue(qms),
-        enqueue(shutdown),
-        measure_latency(),
-        dequeue_shutdown_timer(qms, shutdown),
+        dequeue_task(qms), enqueue_task(shutdown), measure_latency_task(), shutdown_timer()
     )
 
-    qsize = await (await make_queries(args.driver, dsn())).queue_size()
-    print("Queue size:")
-    for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
-        print(f"  {status} {sum(x.count for x in items)}")
-    if not qsize:
-        print("  0")
-
-    if tqdm_format_dict and args.output_json:
-        with open(args.output_json, "w") as f:
-            json.dump(
-                BenchmarkResult(
-                    driver=args.driver,
-                    created_at=datetime.now(timezone.utc),
-                    elapsed=tqdm_format_dict["elapsed"],
-                    rate=tqdm_format_dict["rate"],
-                    steps=tqdm_format_dict["n"],
-                    github_ref_name=os.environ.get("REF_NAME", ""),
-                ).model_dump(mode="json"),
-                f,
-            )
+    qsize = await (await make_queries(settings.driver, dsn())).queue_size()
+    if qsize:
+        print("Queue size:")
+        for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
+            print(f"  {status} {sum(x.count for x in items)}")
 
     tce_latencies = [x for e, x in latencies if e == "table_changed_event"]
-    if tce_latencies and args.latency:
-        print("\n========== Benchmark Results ==========")
-        print(
-            "Number of Samples:   ",
-            f"{len(tce_latencies):>10}",
-        )
-        print(
-            "Min Latency:         ",
-            f"{min(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
-        )
-        print(
-            "Mean Latency:        ",
-            f"{mean(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
-        )
-        print(
-            "Median Latency:      ",
-            f"{median(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
-        )
-        print(
-            "Max Latency:         ",
-            f"{max(x.total_seconds() for x in tce_latencies):>10.6f} seconds",
-        )
-        print("========================================\n")
-    elif args.latency:
-        print("No latency data collected.")
+    benchmark_result = BenchmarkResult(
+        driver=settings.driver,
+        created_at=datetime.now(timezone.utc),
+        elapsed=tqdm_format_dict["elapsed"],
+        rate=tqdm_format_dict["rate"],
+        steps=tqdm_format_dict["n"],
+        github_ref_name=os.environ.get("REF_NAME", ""),
+        median_latency=median(x.total_seconds() for x in tce_latencies),
+    )
+
+    if settings.output_json:
+        with open(settings.output_json, "w") as f:
+            json.dump(benchmark_result.model_dump(mode="json"), f)
+
+    print("", flush=True)
+    benchmark_result.pretty_print()
+
+
+@app.command()
+def main(
+    driver: DriverEnum = typer.Option(
+        DriverEnum.apg,
+        "-d",
+        "--driver",
+        help="Postgres driver to use.",
+    ),
+    timer: float = typer.Option(
+        30.0,
+        "-t",
+        "--time",
+        help="Run the benchmark for this number of seconds.",
+    ),
+    dequeue: int = typer.Option(
+        5,
+        help="Number of concurrent dequeue tasks.",
+    ),
+    dequeue_batch_size: int = typer.Option(
+        10,
+        help="Batch size for dequeue tasks.",
+    ),
+    enqueue: int = typer.Option(
+        1,
+        help="Number of concurrent enqueue tasks.",
+    ),
+    enqueue_batch_size: int = typer.Option(
+        10,
+        help="Batch size for enqueue tasks.",
+    ),
+    requests_per_second: list[float] = typer.Option(
+        [float("inf"), float("inf")],
+        help="RPS for endpoints.",
+    ),
+    concurrency_limit: list[int] = typer.Option(
+        [sys.maxsize, sys.maxsize],
+        help="Concurrency limit.",
+    ),
+    output_json: Path | None = typer.Option(
+        None,
+        help="Output JSON file for benchmark metrics.",
+    ),
+) -> None:
+    """Initialize settings and run the benchmark."""
+    settings = Settings(
+        driver=driver,
+        timer=timer,
+        dequeue=dequeue,
+        dequeue_batch_size=dequeue_batch_size,
+        enqueue=enqueue,
+        enqueue_batch_size=enqueue_batch_size,
+        requests_per_second=requests_per_second,
+        concurrency_limit=concurrency_limit,
+        output_json=output_json,
+    )
+    asyncio.run(benchmark(settings))
 
 
 if __name__ == "__main__":
     with suppress(KeyboardInterrupt):
-        asyncio.run(main(cli_parser()))
+        app()
