@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from tabulate import tabulate
 
-from . import db, listeners, models, qb, queries, supervisor
+from . import db, helpers, listeners, models, qb, queries, supervisor
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
@@ -174,6 +174,17 @@ def cliparser() -> argparse.Namespace:
         ),
         default=os.environ.get("PGPASSWORD"),
     )
+    common_arguments.add_argument(
+        "--pg-schema",
+        help=(
+            "Specify the PostgreSQL schema to use for PGQueuer objects, such as "
+            "tables and functions. This is useful for organizing database objects "
+            "or when running multiple PGQueuer instances in the same database. "
+            "Defaults to the PGSCHEMA environment variable if set. If omitted and no "
+            "environment variable is set, the default PostgreSQL schema 'public' will be used."
+        ),
+        default=os.environ.get("PGSCHEMA"),
+    )
 
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -185,7 +196,9 @@ def cliparser() -> argparse.Namespace:
     )
 
     subparsers = parser.add_subparsers(
-        dest="command", required=True, help="Available commands for managing pgqueuer."
+        dest="command",
+        required=True,
+        help="Available commands for managing pgqueuer.",
     )
 
     subparsers.add_parser(
@@ -359,6 +372,8 @@ async def main() -> None:  # noqa: C901
         user=parsed.pg_user,
         host=parsed.pg_host,
     )
+    if isinstance(schema := parsed.pg_schema, str):
+        dsn = helpers.add_schema_to_dsn(dsn, schema)
 
     match parsed.command:
         case "install":

@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from pgqueuer.helpers import (
+    add_schema_to_dsn,
     normalize_cron_expression,
     retry_timer_buffer_timeout,
     timeout_with_jitter,
@@ -111,3 +112,31 @@ def test_timer() -> None:
             raise ValueError
 
         assert elapsed() == elapsed()
+
+
+def test_add_schema_to_empty_dsn() -> None:
+    dsn = "postgresql://user:password@host:port/dbname"
+    schema = "myschema"
+    expected = "postgresql://user:password@host:port/dbname?options=-c+search_path%3Dmyschema"
+    assert add_schema_to_dsn(dsn, schema) == expected
+
+
+def test_add_schema_to_dsn_with_existing_query() -> None:
+    dsn = "postgresql://user:password@host:port/dbname?sslmode=require"
+    schema = "myschema"
+    expected = "postgresql://user:password@host:port/dbname?sslmode=require&options=-c+search_path%3Dmyschema"
+    assert add_schema_to_dsn(dsn, schema) == expected
+
+
+def test_raise_on_existing_search_path() -> None:
+    dsn = "postgresql://user:password@host:port/dbname?options=-c+search_path=otherschema"
+    schema = "myschema"
+    with pytest.raises(ValueError, match="search_path is already set in the options parameter."):
+        add_schema_to_dsn(dsn, schema)
+
+
+def test_preserve_other_options_and_add_search_path() -> None:
+    dsn = "postgresql://user:password@host:port/dbname?options=-c+other_option=foo"
+    schema = "myschema"
+    expected = "postgresql://user:password@host:port/dbname?options=-c+other_option%3Dfoo&options=-c+search_path%3Dmyschema"
+    assert add_schema_to_dsn(dsn, schema) == expected
