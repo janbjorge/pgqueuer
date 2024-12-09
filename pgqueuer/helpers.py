@@ -14,6 +14,7 @@ import contextlib
 import random
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from croniter import croniter
 
@@ -140,3 +141,31 @@ def normalize_cron_expression(expression: str) -> str:
         '0 * * * *'
     """
     return " ".join(croniter(expression).expressions)
+
+
+def add_schema_to_dsn(dsn: str, schema: str) -> str:
+    """
+    Add a search_path schema to a PostgreSQL DSN, raising if one already exists.
+
+    Args:
+        dsn (str): The PostgreSQL DSN (e.g., "postgresql://user:password@host:port/dbname").
+        schema (str): The schema to set as the search_path.
+
+    Returns:
+        str: The updated DSN with the schema included in the options parameter.
+
+    Raises:
+        ValueError: If a search_path already exists in the options.
+    """
+    parts = urlparse(dsn)
+    query = parse_qs(parts.query)
+    options = query.get("options", [])
+
+    # Check for an existing search_path
+    if any(opt.startswith("-c search_path=") for opt in options):
+        raise ValueError("search_path is already set in the options parameter.")
+
+    options.append(f"-c search_path={schema}")
+    query["options"] = options
+
+    return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
