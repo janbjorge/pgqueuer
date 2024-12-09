@@ -1,14 +1,82 @@
 from __future__ import annotations
 
-import argparse
 import asyncio
 import contextlib
 import os
+from dataclasses import dataclass
 from datetime import timedelta
 
+import typer
 from tabulate import tabulate
+from typer import Context
 
 from . import db, helpers, listeners, models, qb, queries, supervisor
+
+app = typer.Typer(
+    help=(
+        "PgQueuer CLI: Manage and monitor recurring schedules with PostgreSQL, "
+        "featuring dashboards, real-time tracking, and schema tools."
+    ),
+    epilog="Explore documentation and examples: https://github.com/janbjorge/pgqueuer",
+    no_args_is_help=True,
+)
+
+
+@dataclass
+class AppConfig:
+    """Application configuration for PGQueuer CLI."""
+
+    prefix: str = ""
+    pg_dsn: str = ""
+    pg_host: str = ""
+    pg_port: str = "5432"
+    pg_user: str = ""
+    pg_database: str = ""
+    pg_password: str = ""
+    pg_schema: str = ""
+
+    def setup_env(self) -> None:
+        if self.prefix:
+            os.environ["PGQUEUER_PREFIX"] = self.prefix
+
+    @property
+    def dsn(self) -> str:
+        dsn = self.pg_dsn or db.dsn(
+            database=self.pg_database,
+            password=self.pg_password,
+            port=self.pg_port,
+            user=self.pg_user,
+            host=self.pg_host,
+        )
+        if self.pg_schema is not None:
+            dsn = helpers.add_schema_to_dsn(dsn, self.pg_schema)
+        return dsn
+
+
+@app.callback()
+def main(
+    ctx: Context,
+    prefix: str = typer.Option("", help="Prefix for pgqueuer objects.", envvar="PGQUEUER_PREFIX"),
+    pg_dsn: str = typer.Option(None, help="Database DSN.", envvar="PGDSN"),
+    pg_host: str = typer.Option(None, help="Database host.", envvar="PGHOST"),
+    pg_port: str = typer.Option("5432", help="Database port.", envvar="PGPORT"),
+    pg_user: str = typer.Option(None, help="Database user.", envvar="PGUSER"),
+    pg_database: str = typer.Option(None, help="Database name.", envvar="PGDATABASE"),
+    pg_password: str = typer.Option(None, help="Database password.", envvar="PGPASSWORD"),
+    pg_schema: str = typer.Option(None, help="Database schema.", envvar="PGSCHEMA"),
+) -> None:
+    config = AppConfig(
+        prefix=prefix,
+        pg_dsn=pg_dsn,
+        pg_host=pg_host,
+        pg_port=pg_port,
+        pg_user=pg_user,
+        pg_database=pg_database,
+        pg_password=pg_password,
+        pg_schema=pg_schema,
+    )
+    config.setup_env()
+    ctx.obj = config
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
@@ -49,11 +117,7 @@ async def display_pg_channel(
         queue.put_nowait,
     )
     while True:
-        print(
-            repr(
-                (await queue.get()).root,
-            ),
-        )
+        print(repr((await queue.get()).root))
 
 
 async def display_schedule(schedules: list[models.Schedule]) -> None:
@@ -90,329 +154,143 @@ async def display_schedule(schedules: list[models.Schedule]) -> None:
 
 
 async def fetch_and_display(
-    queries: queries.Queries,
+    queries_obj: queries.Queries,
     interval: timedelta | None,
     tail: int,
 ) -> None:
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
-        await display_stats(await queries.log_statistics(tail))
+        await display_stats(await queries_obj.log_statistics(tail))
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
-
-
-def cliparser() -> argparse.Namespace:
-    common_arguments = argparse.ArgumentParser(
-        add_help=False,
-        prog="pgqueuer",
-    )
-
-    common_arguments.add_argument(
-        "--prefix",
-        default="",
-        help=(
-            "Specify a prefix for all pgqueuer tables, functions, etc. "
-            "This helps in avoiding conflicts if running multiple instances. "
-            "(If set, additional config is required.)"
-        ),
-    )
-
-    common_arguments.add_argument(
-        "--pg-dsn",
-        help=(
-            "Provide the connection string in the libpq URI format, including host, port, user, "
-            "database, password, passfile, and SSL options. Must be properly quoted; "
-            "IPv6 addresses must be in brackets. Example: postgres://user:pass@host:port/database. "
-            "Defaults to the PGDSN environment variable if set."
-        ),
-        default=os.environ.get("PGDSN"),
-    )
-
-    common_arguments.add_argument(
-        "--pg-host",
-        help=(
-            "Specify the database host address, which can be an IP or domain name. "
-            "Defaults to the PGHOST environment variable if set."
-        ),
-        default=os.environ.get("PGHOST"),
-    )
-
-    common_arguments.add_argument(
-        "--pg-port",
-        help=(
-            "Specify the port number for the server host. "
-            "Defaults to the PGPORT environment variable or 5432 if not set."
-        ),
-        default=os.environ.get("PGPORT", "5432"),
-    )
-
-    common_arguments.add_argument(
-        "--pg-user",
-        help=(
-            "Specify the database role for authentication. "
-            "Defaults to the PGUSER environment variable if set."
-        ),
-        default=os.environ.get("PGUSER"),
-    )
-
-    common_arguments.add_argument(
-        "--pg-database",
-        help=(
-            "Specify the name of the database to connect to. "
-            "Defaults to the PGDATABASE environment variable if set."
-        ),
-        default=os.environ.get("PGDATABASE"),
-    )
-
-    common_arguments.add_argument(
-        "--pg-password",
-        help=(
-            "Specify the password for authentication. "
-            "Defaults to the PGPASSWORD environment variable if set."
-        ),
-        default=os.environ.get("PGPASSWORD"),
-    )
-    common_arguments.add_argument(
-        "--pg-schema",
-        help=(
-            "Specify the PostgreSQL schema to use for PGQueuer objects, such as "
-            "tables and functions. This is useful for organizing database objects "
-            "or when running multiple PGQueuer instances in the same database. "
-            "Defaults to the PGSCHEMA environment variable if set. If omitted and no "
-            "environment variable is set, the default PostgreSQL schema 'public' will be used."
-        ),
-        default=os.environ.get("PGSCHEMA"),
-    )
-
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        prog="pgqueuer",
-        description=(
-            "PGQueuer command-line interface for managing the "
-            "PostgreSQL-backed job queue system."
-        ),
-    )
-
-    subparsers = parser.add_subparsers(
-        dest="command",
-        required=True,
-        help="Available commands for managing pgqueuer.",
-    )
-
-    subparsers.add_parser(
-        "install",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Install the necessary database schema for PGQueuer.",
-    ).add_argument(
-        "--dry-run",
-        action="store_true",
-        help=(
-            "Print the SQL statements that would be executed without actually "
-            "applying any changes to the database."
-        ),
-    )
-
-    subparsers.add_parser(
-        "uninstall",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Remove the PGQueuer schema from the database.",
-    ).add_argument(
-        "--dry-run",
-        action="store_true",
-        help=(
-            "Print the SQL statements that would be executed without "
-            "actually applying any changes to the database."
-        ),
-    )
-
-    subparsers.add_parser(
-        "upgrade",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Apply upgrades to the existing PGQueuer database schema.",
-    ).add_argument(
-        "--dry-run",
-        action="store_true",
-        help=(
-            "Print the SQL statements that would be executed without "
-            "actually applying any changes to the database."
-        ),
-    )
-
-    dashboardparser = subparsers.add_parser(
-        "dashboard",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Display a live dashboard showing job statistics.",
-    )
-    dashboardparser.add_argument(
-        "-i",
-        "--interval",
-        help="Set the refresh interval in seconds for updating the dashboard display.",
-        default=None,
-        type=lambda x: timedelta(seconds=float(x)),
-    )
-    dashboardparser.add_argument(
-        "-n",
-        "--tail",
-        help="Specify the number of the most recent log entries to display on the dashboard.",
-        type=int,
-        default=25,
-    )
-
-    listen_parser = subparsers.add_parser(
-        "listen",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Listen to a PostgreSQL NOTIFY channel for debug purposes.",
-    )
-    listen_parser.add_argument(
-        "--channel",
-        help="Specify the PostgreSQL NOTIFY channel to listen on for debug purposes.",
-        default=qb.DBSettings().channel,
-    )
-
-    wm_parser = subparsers.add_parser(
-        "run",
-        description="Run a QueueManager from a factory function.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Start a QueueManager to manage job queues and process jobs.",
-    )
-    wm_parser.add_argument(
-        "--dequeue-timeout",
-        help=(
-            "Specify the timeout (in seconds) to wait to dequeue jobs. "
-            "This determines how long the QueueManager will wait for new jobs before retrying."
-        ),
-        type=lambda s: timedelta(seconds=float(s)),
-        default=timedelta(seconds=30.0),
-    )
-    wm_parser.add_argument(
-        "--batch-size",
-        help=(
-            "Specify the number of jobs to dequeue in each batch. "
-            "A larger batch size can increase throughput but may require more memory."
-        ),
-        type=int,
-        default=10,
-    )
-    wm_parser.add_argument(
-        "factory_fn",
-        help=(
-            "Path to the QueueManager or Schedule factory function, "
-            "e.g., 'myapp.create_queue_manager'."
-        ),
-    )
-
-    schedule_parser = subparsers.add_parser(
-        "schedules",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        parents=[common_arguments],
-        help="Manage schedules in the PGQueuer system.",
-    )
-    schedule_parser.add_argument(
-        "-r",
-        "--remove",
-        help=(
-            "Remove specified schedule from the database. "
-            "If no arguments are provided, displays the contents of the schedule table."
-        ),
-        nargs="*",
-        default=[],
-    )
-
-    return parser.parse_args()
 
 
 async def query_adapter(conninfo: str) -> queries.Queries:
     with contextlib.suppress(ImportError):
         import asyncpg
 
-        return queries.Queries(
-            db.AsyncpgDriver(
-                await asyncpg.connect(
-                    dsn=conninfo,
-                )
-            )
-        )
-
+        return queries.Queries(db.AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
     with contextlib.suppress(ImportError):
         import psycopg
 
         return queries.Queries(
             db.PsycopgDriver(
-                await psycopg.AsyncConnection.connect(
-                    conninfo=conninfo,
-                    autocommit=True,
-                )
+                await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
             )
         )
-
-    raise RuntimeError(
-        "Neither asyncpg nor psycopg could be imported. Install "
-        "either 'asyncpg' or 'psycopg' to use the querier function."
-    )
+    raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
 
-async def main() -> None:  # noqa: C901
-    parsed = cliparser()
+@app.command(help="Install the necessary database schema for PGQueuer.")
+def install(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
+    config: AppConfig = ctx.obj
+    print(queries.qb.QueryBuilderEnvironment().create_install_query())
 
-    if "PGQUEUER_PREFIX" not in os.environ and isinstance(prefix := parsed.prefix, str) and prefix:
-        os.environ["PGQUEUER_PREFIX"] = prefix
+    async def run() -> None:
+        await (await query_adapter(config.dsn)).install()
 
-    dsn = parsed.pg_dsn or db.dsn(
-        database=parsed.pg_database,
-        password=parsed.pg_password,
-        port=parsed.pg_port,
-        user=parsed.pg_user,
-        host=parsed.pg_host,
-    )
-    if isinstance(schema := parsed.pg_schema, str):
-        dsn = helpers.add_schema_to_dsn(dsn, schema)
+    if not dry_run:
+        asyncio.run(run())
 
-    match parsed.command:
-        case "install":
-            print(queries.qb.QueryBuilderEnvironment().create_install_query())
-            if not parsed.dry_run:
-                await (await query_adapter(dsn)).install()
-        case "uninstall":
-            print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
-            if not parsed.dry_run:
-                await (await query_adapter(dsn)).uninstall()
-        case "upgrade":
-            print(
-                f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries())
-            )
-            if not parsed.dry_run:
-                await (await query_adapter(dsn)).upgrade()
-        case "dashboard":
-            await fetch_and_display(
-                await query_adapter(dsn),
-                parsed.interval,
-                parsed.tail,
-            )
-        case "listen":
-            await display_pg_channel(
-                (await query_adapter(dsn)).driver,
-                models.PGChannel(parsed.channel),
-            )
-        case "run":
-            await supervisor.runit(
-                parsed.factory_fn,
-                dequeue_timeout=parsed.dequeue_timeout,
-                batch_size=parsed.batch_size,
-            )
-        case "schedules":
-            if parsed.remove:
-                await (await query_adapter(dsn)).delete_schedule(
-                    {models.ScheduleId(int(x)) for x in parsed.remove if x.isdigit()},
-                    {str(x) for x in parsed.remove if not x.isdigit()},
-                )
-            await display_schedule(
-                await (await query_adapter(dsn)).peak_schedule(),
-            )
+
+@app.command(help="Remove the PGQueuer schema from the database.")
+def uninstall(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
+    config: AppConfig = ctx.obj
+    print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
+
+    async def run() -> None:
+        if not dry_run:
+            await (await query_adapter(config.dsn)).uninstall()
+
+    asyncio.run(run())
+
+
+@app.command(help="Apply upgrades to the existing PGQueuer database schema.")
+def upgrade(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
+    config: AppConfig = ctx.obj
+    print(f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries()))
+
+    async def run() -> None:
+        if not dry_run:
+            await (await query_adapter(config.dsn)).upgrade()
+
+    asyncio.run(run())
+
+
+@app.command(help="Display a live dashboard showing job statistics.")
+def dashboard(
+    ctx: Context,
+    interval: float | None = typer.Option(None, "-i", "--interval"),
+    tail: int = typer.Option(25, "-n", "--tail"),
+) -> None:
+    config: AppConfig = ctx.obj
+    interval_td = timedelta(seconds=interval) if interval is not None else None
+
+    async def run() -> None:
+        await fetch_and_display(await query_adapter(config.dsn), interval_td, tail)
+
+    asyncio.run(run())
+
+
+@app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
+def listen(
+    ctx: Context,
+    channel: str = typer.Option(qb.DBSettings().channel, "--channel"),
+) -> None:
+    config: AppConfig = ctx.obj
+
+    async def run() -> None:
+        await display_pg_channel(
+            (await query_adapter(config.dsn)).driver, models.PGChannel(channel)
+        )
+
+    asyncio.run(run())
+
+
+@app.command(help="Start a QueueManager to manage and process jobs.")
+def run(
+    factory_fn: str = typer.Argument(...),
+    dequeue_timeout: float = typer.Option(30.0, "--dequeue-timeout"),
+    batch_size: int = typer.Option(10, "--batch-size"),
+) -> None:
+    async def run_async() -> None:
+        await supervisor.runit(
+            factory_fn,
+            dequeue_timeout=timedelta(seconds=dequeue_timeout),
+            batch_size=batch_size,
+        )
+
+    asyncio.run(run_async())
+
+
+@app.command(help="Manage schedules in the PGQueuer system.")
+def schedules(
+    ctx: Context,
+    remove: list[str] = typer.Option([], "-r", "--remove"),
+) -> None:
+    config: AppConfig = ctx.obj
+
+    async def run_async() -> None:
+        q = await query_adapter(config.dsn)
+        if remove:
+            schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
+            schedule_names = {x for x in remove if not x.isdigit()}
+            await q.delete_schedule(schedule_ids, schedule_names)
+        await display_schedule(await q.peak_schedule())
+
+    asyncio.run(run_async())
+
+
+if __name__ == "__main__":
+    app(prog_name="pgqueuer")
