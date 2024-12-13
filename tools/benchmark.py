@@ -15,12 +15,13 @@ from statistics import median
 
 import typer
 from pydantic import AwareDatetime, BaseModel
+from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.listeners import initialize_notice_event_listener
 from pgqueuer.models import EVENT_TYPES, Job, PGChannel
-from pgqueuer.qb import DBSettings
+from pgqueuer.qb import DBSettings, add_prefix
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
@@ -45,12 +46,22 @@ class BenchmarkResult(BaseModel):
     median_latency: float
 
     def pretty_print(self) -> None:
-        print("Benchmark result:")
-        max_key_length = max(len(key) for key in self.model_dump())
-        for field, value in self.model_dump().items():
-            if not field or not value:
-                continue
-            print(f"  {field:<{max_key_length}} : {value}")
+        print(
+            tabulate(
+                [
+                    ["Created At", self.created_at],
+                    ["Driver", self.driver],
+                    ["Elapsed Time", self.elapsed],
+                    ["GitHub Ref Name", self.github_ref_name],
+                    ["Rate", f"{self.rate:.2f}"],
+                    ["Steps", self.steps],
+                    ["Median Latency", f"{self.median_latency:.2f}s"],
+                ],
+                headers=["Field", "Value"],
+                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                colalign=("left", "left"),
+            )
+        )
 
 
 class Settings(BaseModel):
@@ -92,12 +103,24 @@ class Settings(BaseModel):
     )
 
     def pretty_print(self) -> None:
-        print("Settings:")
-        max_key_length = max(len(key) for key in self.model_dump())
-        for field, value in self.model_dump().items():
-            if not field or not value:
-                continue
-            print(f"  {field:<{max_key_length}} : {value}")
+        print(
+            tabulate(
+                [
+                    ["Driver", self.driver],
+                    ["Timer (s)", self.timer.total_seconds()],
+                    ["Dequeue Tasks", self.dequeue],
+                    ["Dequeue Batch Size", self.dequeue_batch_size],
+                    ["Enqueue Tasks", self.enqueue],
+                    ["Enqueue Batch Size", self.enqueue_batch_size],
+                    ["Requests Per Second", self.requests_per_second],
+                    ["Concurrency Limit", self.concurrency_limit],
+                    ["Output JSON", self.output_json or "None"],
+                ],
+                headers=["Field", "Value"],
+                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                colalign=("left", "left"),
+            )
+        )
 
 
 async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
@@ -179,7 +202,6 @@ async def producer(
 
 async def benchmark(settings: Settings) -> None:
     settings.pretty_print()
-    print("", flush=True)
 
     await (await make_queries(settings.driver, dsn())).clear_log()
     await (await make_queries(settings.driver, dsn())).clear_queue()
@@ -278,7 +300,6 @@ async def benchmark(settings: Settings) -> None:
         with open(settings.output_json, "w") as f:
             json.dump(benchmark_result.model_dump(mode="json"), f)
 
-    print("", flush=True)
     benchmark_result.pretty_print()
 
 
