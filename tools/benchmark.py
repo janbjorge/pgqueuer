@@ -9,7 +9,7 @@ import sys
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from itertools import count, groupby
+from itertools import count
 from pathlib import Path
 from statistics import median
 
@@ -34,6 +34,20 @@ class DriverEnum(str, Enum):
     psy = "psy"
 
 
+class Latency(BaseModel):
+    min: timedelta
+    median: timedelta
+    max: timedelta
+
+    @staticmethod
+    def from_samples(arr: list[float]) -> Latency:
+        return Latency(
+            min=timedelta(seconds=min(arr)),
+            median=timedelta(seconds=median(arr)),
+            max=timedelta(seconds=max(arr)),
+        )
+
+
 class BenchmarkResult(BaseModel):
     """Benchmark metrics including driver info, elapsed time, and rate."""
 
@@ -41,9 +55,10 @@ class BenchmarkResult(BaseModel):
     driver: DriverEnum
     elapsed: timedelta
     github_ref_name: str
+    latency: Latency
+    queued: int
     rate: float
     steps: int
-    median_latency: float
 
     def pretty_print(self) -> None:
         print(
@@ -55,7 +70,7 @@ class BenchmarkResult(BaseModel):
                     ["GitHub Ref Name", self.github_ref_name],
                     ["Rate", f"{self.rate:.2f}"],
                     ["Steps", self.steps],
-                    ["Median Latency", f"{self.median_latency:.2f}s"],
+                    ["Median Latency", f"{self.latency.median}"],
                 ],
                 headers=["Field", "Value"],
                 tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
@@ -280,20 +295,17 @@ async def benchmark(settings: Settings) -> None:
     )
 
     qsize = await (await make_queries(settings.driver, dsn())).queue_size()
-    if qsize:
-        print("Queue size:")
-        for status, items in groupby(sorted(qsize, key=lambda x: x.status), key=lambda x: x.status):
-            print(f"  {status} {sum(x.count for x in items)}")
 
     tce_latencies = [x for e, x in latencies if e == "table_changed_event"]
     benchmark_result = BenchmarkResult(
-        driver=settings.driver,
         created_at=datetime.now(timezone.utc),
+        driver=settings.driver,
         elapsed=tqdm_format_dict["elapsed"],
+        github_ref_name=os.environ.get("REF_NAME", ""),
+        latency=Latency.from_samples([x.total_seconds() for x in tce_latencies]),
+        queued=sum(x.count for x in qsize),
         rate=tqdm_format_dict["rate"],
         steps=tqdm_format_dict["n"],
-        github_ref_name=os.environ.get("REF_NAME", ""),
-        median_latency=median(x.total_seconds() for x in tce_latencies),
     )
 
     if settings.output_json:
