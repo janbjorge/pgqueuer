@@ -174,7 +174,7 @@ The QueueManager offers several configurable parameters to optimize job processi
 
 To enhance the efficiency of job handling, the `QueueManager` uses a job buffer. This buffer is a temporary storage area for jobs before they are processed, minimizing database access and enabling the system to handle bursts of jobs more effectively.
 
-### Why use a Signal Handler?
+## Why use a Signal Handler?
 
 Using an asyncio.Event for the shutdown event ensures that the shutdown process integrates smoothly with the asynchronous nature of QueueManager. When the application receives a termination signal (e.g., SIGINT or SIGTERM), the signal handler sets the shutdown event, which allows the main loop to detect this and stop processing new jobs while completing the current ones.
 
