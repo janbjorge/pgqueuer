@@ -364,7 +364,13 @@ class PsycopgDriver(Driver):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        assert self._connection.autocommit
+        if not self._connection.autocommit:
+            raise RuntimeError(
+                f"Database connection({self._connection}) must have autocommit enabled. This is "
+                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
+                "configured with autocommit=True."
+            )
+
         async with self._lock:
             await self._connection.execute(f"LISTEN {channel};")
 
