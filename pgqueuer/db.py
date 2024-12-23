@@ -13,11 +13,12 @@ import functools
 import os
 import re
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Dict, Protocol, Set
 
 from typing_extensions import Self
 
-from . import tm
+from . import logconfig, tm
+import contextlib
 
 if TYPE_CHECKING:
     import asyncpg
@@ -147,7 +148,61 @@ class Driver(Protocol):
         raise NotImplementedError
 
 
-class AsyncpgDriver(Driver):
+class AsyncpgReconnectionMixin:
+    """Mixin class to handle PostgreSQL NOTIFY connection reconnection for asyncpg drivers."""
+
+    def __init__(self) -> None:
+        self._notify_channel: str
+        self._notify_callback: Callable[[str | bytes | bytearray], None]
+        self._reconnection_task: asyncio.Task | None = None
+        # TODO: make these user configurable
+        self._reconnection_delay = timedelta(seconds=1)
+        self._max_reconnection_delay = timedelta(seconds=30)
+
+    def _setup_termination_listener(self, connection: asyncpg.Connection) -> None:
+        """Set up a termination listener for the given connection."""
+
+        def on_connection_lost(conn: Any) -> None:
+            logconfig.logger.warning("Listener connection lost")
+            if self._reconnection_task is None or self._reconnection_task.done():
+                self._reconnection_task = asyncio.create_task(
+                    self._handle_connection_loss(), name="pgqueuer_reconnection"
+                )
+
+        connection.add_termination_listener(on_connection_lost)
+
+    async def _handle_connection_loss(self) -> None:
+        """Handle connection loss by attempting to reconnect and restore listeners."""
+        current_delay = self._reconnection_delay
+        attempt = 0
+
+        while not self.shutdown.is_set():
+            attempt += 1
+            try:
+                logconfig.logger.info(f"Trying to reconnect listener (attempt {attempt})...")
+                await self._reconnect()
+                await self.add_listener(self._notify_channel, self._notify_callback)
+                logconfig.logger.info("Successfully restored listener, resuming operation")
+                return
+
+            except Exception as e:
+                logconfig.logger.error(
+                    f"Failed to reconnect on attempt {attempt} due to error: {e}; "
+                    f"waiting {current_delay} before trying again..."
+                )
+
+                await asyncio.sleep(current_delay.total_seconds())
+                # Exponential backoff with max delay
+                current_delay = min(current_delay * 2, self._max_reconnection_delay)
+
+    async def _reconnect(self) -> None:
+        """
+        Reconnect to the database. Must be implemented by concrete driver classes.
+        """
+        raise NotImplementedError
+
+
+class AsyncpgDriver(AsyncpgReconnectionMixin, Driver):
     """
     AsyncPG implementation of the `Driver` protocol.
 
@@ -156,14 +211,23 @@ class AsyncpgDriver(Driver):
     It ensures thread safety using an asyncio.Lock.
     """
 
-    def __init__(
-        self,
-        connection: asyncpg.Connection,
-    ) -> None:
+    def __init__(self, connection: asyncpg.Connection, dsn: str | None = None) -> None:
         """Initialize the driver with an AsyncPG connection."""
+        AsyncpgReconnectionMixin.__init__(self)
         self._shutdown = asyncio.Event()
         self._connection = connection
+        logconfig.logger.info(connection.get_settings())
+        self._dsn = dsn
         self._lock = asyncio.Lock()
+
+    async def _reconnect(self) -> None:
+        """Reconnect the lost connection."""
+        if self._dsn is None:
+            raise Exception("Connection was lost, but cannot be recovered without setting 'dsn'!")
+
+        import asyncpg
+
+        self._connection = await asyncpg.connect(self._dsn)
 
     async def fetch(
         self,
@@ -187,10 +251,13 @@ class AsyncpgDriver(Driver):
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
         async with self._lock:
+            self._setup_termination_listener(self._connection)
             await self._connection.add_listener(
                 channel,
                 lambda *x: callback(x[-1]),
             )
+            self._notify_channel = channel
+            self._notify_callback = callback
 
     @property
     def shutdown(self) -> asyncio.Event:
@@ -206,7 +273,7 @@ class AsyncpgDriver(Driver):
     async def __aexit__(self, *_: object) -> None: ...
 
 
-class AsyncpgPoolDriver(Driver):
+class AsyncpgPoolDriver(AsyncpgReconnectionMixin, Driver):
     """
     Implements the Driver protocol using AsyncPGPool for PostgreSQL database operations.
 
@@ -222,6 +289,8 @@ class AsyncpgPoolDriver(Driver):
         """
         Initialize the AsyncpgPoolDriver with a connection pool.
         """
+        Driver.__init__(self)
+        AsyncpgReconnectionMixin.__init__(self)
         self._shutdown = asyncio.Event()
         self._pool = pool
         self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
@@ -230,6 +299,10 @@ class AsyncpgPoolDriver(Driver):
             raise RuntimeError(
                 "Pool max size must be greater than 2 to ensure connections are available."
             )
+
+    async def _reconnect(self) -> None:
+        """Reset listener connection to be ready to set up again"""
+        self._listener_connection = None
 
     async def fetch(
         self,
@@ -254,11 +327,14 @@ class AsyncpgPoolDriver(Driver):
         async with self._lock:
             if self._listener_connection is None:
                 self._listener_connection = await self._pool.acquire()
+                self._setup_termination_listener(self._listener_connection)
 
             await self._listener_connection.add_listener(
                 channel,
                 lambda *x: callback(x[-1]),
             )
+            self._notify_channel = channel
+            self._notify_callback = callback
 
     @property
     def shutdown(self) -> asyncio.Event:
