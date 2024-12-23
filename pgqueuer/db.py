@@ -216,7 +216,6 @@ class AsyncpgDriver(AsyncpgReconnectionMixin, Driver):
         AsyncpgReconnectionMixin.__init__(self)
         self._shutdown = asyncio.Event()
         self._connection = connection
-        logconfig.logger.info(connection.get_settings())
         self._dsn = dsn
         self._lock = asyncio.Lock()
 
@@ -289,7 +288,6 @@ class AsyncpgPoolDriver(AsyncpgReconnectionMixin, Driver):
         """
         Initialize the AsyncpgPoolDriver with a connection pool.
         """
-        Driver.__init__(self)
         AsyncpgReconnectionMixin.__init__(self)
         self._shutdown = asyncio.Event()
         self._pool = pool
