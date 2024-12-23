@@ -13,12 +13,11 @@ import functools
 import os
 import re
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Callable, Dict, Protocol, Set
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from typing_extensions import Self
 
 from . import logconfig, tm
-import contextlib
 
 if TYPE_CHECKING:
     import asyncpg
