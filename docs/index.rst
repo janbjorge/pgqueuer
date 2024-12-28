@@ -61,10 +61,6 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    database_initialization
    pgqueuer
    driver
-   queuemanager
-   scheduler
-   limits
-   heartbeat
    dashboard
    benchmark
    prometheus-metrics-service
