@@ -25,7 +25,6 @@ from .models import PGChannel
 from .qb import DBSettings
 from .qm import QueueManager
 from .sm import SchedulerManager
-from .tm import TaskManager
 
 
 @dataclasses.dataclass
@@ -72,16 +71,15 @@ class PgQueuer:
 
         # The task manager waits for all tasks for compile before
         # exit.
-        async with TaskManager() as tm:
-            tm.add(
-                asyncio.create_task(
-                    self.qm.run(
-                        batch_size=batch_size,
-                        dequeue_timeout=dequeue_timeout,
-                    )
+        await asyncio.gather(
+            asyncio.create_task(
+                self.qm.run(
+                    batch_size=batch_size,
+                    dequeue_timeout=dequeue_timeout,
                 )
-            )
-            tm.add(asyncio.create_task(self.sm.run()))
+            ),
+            asyncio.create_task(self.sm.run()),
+        )
 
     def entrypoint(
         self,

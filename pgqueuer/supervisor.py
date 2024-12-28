@@ -1,6 +1,5 @@
 """
 This module provides functionality to dynamically load and run queue management components.
-
 It includes the ability to load a factory function for creating instances of
 QueueManager, Scheduler and PgQueuer, manage their lifecycle, and handle graceful shutdowns.
 The module is designed to support asynchronous queue processing and scheduling
@@ -16,17 +15,18 @@ import signal
 import sys
 import warnings
 from datetime import timedelta
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, TypeAlias
 
-from . import applications, qm, sm
+from . import applications, logconfig, qm, sm
+
+QueueManagerFactory: TypeAlias = Callable[[], Awaitable[qm.QueueManager]]
+SchedulerManagerFactory: TypeAlias = Callable[[], Awaitable[sm.SchedulerManager]]
+PgQueuerFactory: TypeAlias = Callable[[], Awaitable[applications.PgQueuer]]
+
+FactoryType: TypeAlias = QueueManagerFactory | SchedulerManagerFactory | PgQueuerFactory
 
 
-def load_manager_factory(
-    factory_path: str,
-) -> Callable[
-    [],
-    Awaitable[qm.QueueManager | sm.SchedulerManager | applications.PgQueuer],
-]:
+def load_manager_factory(factory_path: str) -> FactoryType:
     """
     Load factory function from a given module path or factory-style path.
 
@@ -34,8 +34,7 @@ def load_manager_factory(
         factory_path (str): Module path to the factory function or factory-style path.
 
     Returns:
-        Callable: Async callable returning a QueueManager,
-            SchedulerManager, or PgQueuer instance.
+        A callable that creates an instance of QueueManager, SchedulerManager, or PgQueuer.
     """
     sys.path.insert(0, os.getcwd())
 
@@ -59,46 +58,134 @@ def load_manager_factory(
 
 
 async def runit(
-    factory_fn: str,
+    factory: str | FactoryType,
     dequeue_timeout: timedelta,
     batch_size: int,
+    restart_delay: timedelta,
+    restart_on_failure: bool,
+    shutdown: asyncio.Event,
 ) -> None:
     """
-    Run QueueManager, SchedulerManager, or PgQueuer using the factory function.
+    Run and supervise a queue management instance with restart logic.
 
     Args:
-        factory_fn (str): Module path to the factory function.
-        dequeue_timeout (timedelta): Timeout for dequeuing jobs.
-        batch_size (int): Number of jobs per batch.
-        retry_timer (timedelta | None): Retry timer for stalled jobs.
+        factory: Factory function or path to create an instance.
+        dequeue_timeout: Timeout duration for dequeuing jobs.
+        batch_size: Number of jobs to process in each batch.
+        restart_delay: Delay before restarting on failure.
+        restart_on_failure: Whether to restart after a failure.
+
+    Raises:
+        ValueError: If restart_delay is negative.
     """
-    instance = await load_manager_factory(factory_fn)()
+    if restart_delay < timedelta(seconds=0):
+        raise ValueError(
+            f"'restart_delay' must be >= {timedelta(seconds=0)!r}. Got {restart_delay!r}"
+        )
+
+    factory_fn = load_manager_factory(factory) if isinstance(factory, str) else factory
+    setup_signal_handlers(shutdown)
+
+    while not shutdown.is_set():
+        try:
+            instance = await factory_fn()
+            if isinstance(instance, qm.QueueManager | sm.SchedulerManager):
+                instance.shutdown = shutdown
+            elif isinstance(instance, applications.PgQueuer):
+                instance.shutdown = shutdown
+                instance.qm.shutdown = shutdown
+                instance.sm.shutdown = shutdown
+            else:
+                raise NotImplementedError(
+                    f"Unsupported instance type: {type(instance).__name__}. This instance is "
+                    "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
+                )
+
+        except Exception as exc:
+            if not restart_on_failure:
+                raise
+            await await_shutdown_or_timeout(shutdown, restart_delay, exc)
+            continue
+
+        try:
+            await run_instance(instance, dequeue_timeout, batch_size)
+        except Exception as exc:
+            if not restart_on_failure:
+                raise
+            await await_shutdown_or_timeout(shutdown, restart_delay, exc)
+        else:
+            break
+
+
+def setup_signal_handlers(shutdown: asyncio.Event) -> None:
+    """
+    Setup signal handlers for clean shutdown on SIGINT or SIGTERM.
+
+    Args:
+        shutdown: Event to signal shutdown.
+    """
 
     def set_shutdown(signum: int) -> None:
-        """
-        Handle shutdown signals.
-
-        Args:
-            signum (int): Signal number received.
-        """
-        print(f"Received signal {signum}, shutting down...", flush=True)
-        instance.shutdown.set()
+        logconfig.logger.info("Signal %d received, shutting down.", signum)
+        shutdown.set()
 
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGINT, lambda: set_shutdown(signal.SIGINT))
     loop.add_signal_handler(signal.SIGTERM, lambda: set_shutdown(signal.SIGTERM))
 
+
+async def run_instance(
+    instance: qm.QueueManager | sm.SchedulerManager | applications.PgQueuer,
+    dequeue_timeout: timedelta,
+    batch_size: int,
+) -> None:
+    """
+    Run a queue management instance.
+
+    Args:
+        instance: The instance to run (QueueManager, SchedulerManager, or PgQueuer).
+        dequeue_timeout: Timeout duration for dequeuing jobs.
+        batch_size: Number of jobs to process per batch.
+
+    Raises:
+        NotImplementedError: If the instance type is unsupported.
+    """
+    logconfig.logger.debug("Running: %s", type(instance).__name__)
     if isinstance(instance, qm.QueueManager):
-        await instance.run(
-            dequeue_timeout=dequeue_timeout,
-            batch_size=batch_size,
-        )
+        await instance.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
     elif isinstance(instance, sm.SchedulerManager):
         await instance.run()
     elif isinstance(instance, applications.PgQueuer):
-        await instance.run(
-            dequeue_timeout=dequeue_timeout,
-            batch_size=batch_size,
-        )
+        await instance.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
     else:
-        raise NotImplementedError(instance)
+        raise NotImplementedError(f"Unsupported instance type: {type(instance)}")
+
+
+async def await_shutdown_or_timeout(
+    shutdown: asyncio.Event,
+    restart_delay: timedelta,
+    exc: BaseException,
+) -> None:
+    """
+    Wait for a shutdown event or timeout after an exception.
+
+    Args:
+        shutdown: Event indicating shutdown.
+        restart_delay: Delay duration before restarting.
+        exc: The exception that triggered the wait.
+    """
+    logconfig.logger.exception("Exception occurred", exc_info=exc)
+    sleep_task = asyncio.create_task(asyncio.sleep(restart_delay.total_seconds()))
+    shutdown_task = asyncio.create_task(shutdown.wait())
+
+    logconfig.logger.warning("Waiting %s seconds before retrying.", restart_delay.total_seconds())
+
+    await asyncio.wait((sleep_task, shutdown_task), return_when=asyncio.FIRST_COMPLETED)
+
+    if not shutdown_task.done():
+        shutdown_task.cancel()
+    if not sleep_task.done():
+        sleep_task.cancel()
+
+    if not shutdown.is_set():
+        logconfig.logger.info("Attempting to restart...")

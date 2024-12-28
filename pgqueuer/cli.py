@@ -19,6 +19,7 @@ app = typer.Typer(
     ),
     epilog="Explore documentation and examples: https://github.com/janbjorge/pgqueuer",
     no_args_is_help=True,
+    pretty_exceptions_show_locals=False,
 )
 
 
@@ -263,15 +264,19 @@ def run(
     factory_fn: str = typer.Argument(...),
     dequeue_timeout: float = typer.Option(30.0, "--dequeue-timeout"),
     batch_size: int = typer.Option(10, "--batch-size"),
+    restart_delay: float = typer.Option(5.0, "--restart-delay"),
+    restart_on_failure: bool = typer.Option(False, "--restart-on-failure"),
 ) -> None:
-    async def run_async() -> None:
-        await supervisor.runit(
+    asyncio.run(
+        supervisor.runit(
             factory_fn,
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
+            restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
+            restart_on_failure=restart_on_failure,
+            shutdown=asyncio.Event(),
         )
-
-    asyncio.run(run_async())
+    )
 
 
 @app.command(help="Manage schedules in the PGQueuer system.")
