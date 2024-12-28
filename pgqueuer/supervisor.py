@@ -14,6 +14,7 @@ import importlib
 import os
 import signal
 import sys
+import warnings
 from datetime import timedelta
 from typing import Awaitable, Callable
 
@@ -27,17 +28,32 @@ def load_manager_factory(
     Awaitable[qm.QueueManager | sm.SchedulerManager | applications.PgQueuer],
 ]:
     """
-    Load factory function from a given module path.
+    Load factory function from a given module path or factory-style path.
 
     Args:
-        factory_path (str): Module path to the factory function.
+        factory_path (str): Module path to the factory function or factory-style path.
 
     Returns:
         Callable: Async callable returning a QueueManager,
             SchedulerManager, or PgQueuer instance.
     """
     sys.path.insert(0, os.getcwd())
-    module_name, factory_name = factory_path.rsplit(".", 1)
+
+    if ":" in factory_path:
+        module_name, factory_name = factory_path.split(":", 1)
+    else:
+        # Backward compatibility for module.function style
+        warnings.warn(
+            (
+                "The use of 'module.function' syntax for specifying the factory path is "
+                "deprecated and will be removed in a future version. Please use "
+                "'module:factory' syntax instead."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        module_name, factory_name = factory_path.rsplit(".", 1)
+
     module = importlib.import_module(module_name)
     return getattr(module, factory_name)
 
