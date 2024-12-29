@@ -78,10 +78,9 @@ async def runit(
     Raises:
         ValueError: If restart_delay is negative.
     """
-    if restart_delay < timedelta(seconds=0):
-        raise ValueError(
-            f"'restart_delay' must be >= {timedelta(seconds=0)!r}. Got {restart_delay!r}"
-        )
+    t0 = timedelta(seconds=0)
+    if restart_delay < t0:
+        raise ValueError(f"'restart_delay' must be >= {t0}. Got {restart_delay!r}")
 
     factory_fn = load_manager_factory(factory) if isinstance(factory, str) else factory
     setup_signal_handlers(shutdown)
