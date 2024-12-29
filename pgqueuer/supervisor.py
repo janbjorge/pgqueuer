@@ -88,6 +88,8 @@ async def runit(
     while not shutdown.is_set():
         try:
             instance = await factory_fn()
+            logconfig.logger.info("Instance created: %s", type(instance).__name__)
+
             if isinstance(instance, qm.QueueManager | sm.SchedulerManager):
                 instance.shutdown = shutdown
             elif isinstance(instance, applications.PgQueuer):
@@ -103,7 +105,11 @@ async def runit(
         except Exception as exc:
             if not restart_on_failure:
                 raise
-            await await_shutdown_or_timeout(shutdown, restart_delay, exc)
+            logconfig.logger.exception(
+                "Error creating or configuring instance.",
+                exc_info=exc,
+            )
+            await await_shutdown_or_timeout(shutdown, restart_delay)
             continue
 
         try:
@@ -111,9 +117,13 @@ async def runit(
         except Exception as exc:
             if not restart_on_failure:
                 raise
-            await await_shutdown_or_timeout(shutdown, restart_delay, exc)
-        else:
-            break
+            logconfig.logger.exception(
+                "Error during instance execution.",
+                exc_info=exc,
+            )
+
+        if not shutdown.is_set():
+            await await_shutdown_or_timeout(shutdown, restart_delay)
 
 
 def setup_signal_handlers(shutdown: asyncio.Event) -> None:
@@ -129,8 +139,8 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
         shutdown.set()
 
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, lambda: set_shutdown(signal.SIGINT))
-    loop.add_signal_handler(signal.SIGTERM, lambda: set_shutdown(signal.SIGTERM))
+    loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
+    loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
 
 
 async def run_instance(
@@ -163,7 +173,6 @@ async def run_instance(
 async def await_shutdown_or_timeout(
     shutdown: asyncio.Event,
     restart_delay: timedelta,
-    exc: BaseException,
 ) -> None:
     """
     Wait for a shutdown event or timeout after an exception.
@@ -173,18 +182,19 @@ async def await_shutdown_or_timeout(
         restart_delay: Delay duration before restarting.
         exc: The exception that triggered the wait.
     """
-    logconfig.logger.exception("Exception occurred", exc_info=exc)
-    sleep_task = asyncio.create_task(asyncio.sleep(restart_delay.total_seconds()))
-    shutdown_task = asyncio.create_task(shutdown.wait())
 
-    logconfig.logger.warning("Waiting %s seconds before retrying.", restart_delay.total_seconds())
+    logconfig.logger.info("Waiting %r before restarting.", restart_delay)
 
-    await asyncio.wait((sleep_task, shutdown_task), return_when=asyncio.FIRST_COMPLETED)
+    _, pending = await asyncio.wait(
+        (
+            asyncio.create_task(asyncio.sleep(restart_delay.total_seconds())),
+            asyncio.create_task(shutdown.wait()),
+        ),
+        return_when=asyncio.FIRST_COMPLETED,
+    )
 
-    if not shutdown_task.done():
-        shutdown_task.cancel()
-    if not sleep_task.done():
-        sleep_task.cancel()
+    for not_done in pending:
+        not_done.cancel()
 
     if not shutdown.is_set():
         logconfig.logger.info("Attempting to restart...")
