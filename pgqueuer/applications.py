@@ -73,6 +73,7 @@ class PgQueuer:
         # The task manager waits for all tasks for compile before
         # exit.
         async with TaskManager() as tm:
+            # Start queue manager
             tm.add(
                 asyncio.create_task(
                     self.qm.run(
@@ -81,6 +82,7 @@ class PgQueuer:
                     )
                 )
             )
+            # Start scheduler manager
             tm.add(asyncio.create_task(self.sm.run()))
 
     def entrypoint(
