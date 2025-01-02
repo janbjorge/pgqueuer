@@ -18,11 +18,10 @@ jobs:
         os: [ubuntu-latest]
 
     env:
+      PGUSER: pgquser
+      PGDATABASE: pgqdb
+      PGPASSWORD: pgqpw
       PGHOST: localhost
-      PGUSER: testuser
-      PGPASSWORD: testpassword
-      PGDATABASE: testdb
-      PGPORT: 5432
 
     name: Run PGQueuer Example
     runs-on: ${{ matrix.os }}
@@ -45,7 +44,7 @@ jobs:
 
       - name: Build PostgreSQL Docker image
         run: |
-          docker compose up -d pgq
+          docker compose up --build -d db populate
           sleep 5
 
       - name: Run Example with SIGINT
@@ -71,11 +70,10 @@ jobs:
         pgdriver: ["apg", "apgpool", "psy"]
 
     env:
+      PGUSER: pgquser
+      PGDATABASE: pgqdb
+      PGPASSWORD: pgqpw
       PGHOST: localhost
-      PGUSER: testuser
-      PGPASSWORD: testpassword
-      PGDATABASE: testdb
-      PGPORT: 5432
 
     name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
@@ -95,7 +93,8 @@ jobs:
 
       - name: Build PostgreSQL Docker image
         run: |
-          docker compose up -d pgq
+          docker compose up --build -d db
+          docker compose up --build populate
 
       - name: Install PGQueuer
         run: uv sync --all-extras --dev
@@ -202,11 +201,10 @@ jobs:
         os: [ubuntu-latest]
 
     env:
+      PGUSER: pgquser
+      PGDATABASE: pgqdb
+      PGPASSWORD: pgqpw
       PGHOST: localhost
-      PGUSER: testuser
-      PGPASSWORD: testpassword
-      PGDATABASE: testdb
-      PGPORT: 5432
 
     name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
@@ -225,7 +223,9 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Build PostgreSQL Docker Image
-        run: POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d pgq
+        run: |
+          POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up --build -d db
+          POSTGRES_VERSION=${{ matrix.postgres-version }} docker compose up populate
 
       - name: Install PGQueuer
         run: uv sync --all-extras --dev

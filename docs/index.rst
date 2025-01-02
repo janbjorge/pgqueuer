@@ -62,5 +62,6 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    pgqueuer
    driver
    dashboard
+   development
    benchmark
    prometheus-metrics-service
