@@ -5,6 +5,7 @@ import contextlib
 import os
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Awaitable, Callable
 
 import typer
 from tabulate import tabulate
@@ -231,12 +232,12 @@ def upgrade(
     asyncio.run(run())
 
 
-def create_default_queries_factory(ctx: Context):
+def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[queries.Queries]]:
     """
     This is the default implementation of a factory that returns an instance of Queries.
     """
 
-    async def factory():
+    async def factory() -> queries.Queries:
         config: AppConfig = ctx.obj
         return await query_adapter(config.dsn)
 
