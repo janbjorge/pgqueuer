@@ -40,7 +40,7 @@ def load_factory(factory_path: str) -> Any:
 
 @asynccontextmanager
 async def run_factory(
-    factory_result: Awaitable[T] | AbstractAsyncContextManager[T],
+    factory_result: Awaitable[T] | AbstractContextManager[T] | AbstractAsyncContextManager[T],
 ) -> AsyncGenerator[T, None]:
     """
     Converts the result of a factory function in a async context manager
