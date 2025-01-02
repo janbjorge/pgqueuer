@@ -13,7 +13,7 @@ import signal
 from datetime import timedelta
 from typing import Awaitable, Callable, TypeAlias
 
-from pgqueuer.factories import load_factory
+from pgqueuer.factories import load_factory, run_factory
 
 from . import applications, logconfig, qm, sm
 
@@ -66,44 +66,43 @@ async def runit(
     setup_signal_handlers(shutdown)
 
     while not shutdown.is_set():
-        try:
-            instance = await factory_fn()
-            logconfig.logger.info("Instance created: %s", type(instance).__name__)
+        async with run_factory(factory_fn()) as instance:
+            try:
+                logconfig.logger.info("Instance created: %s", type(instance).__name__)
 
-            if isinstance(instance, qm.QueueManager | sm.SchedulerManager):
-                instance.shutdown = shutdown
-            elif isinstance(instance, applications.PgQueuer):
-                instance.shutdown = shutdown
-                instance.qm.shutdown = shutdown
-                instance.sm.shutdown = shutdown
-            else:
-                raise NotImplementedError(
-                    f"Unsupported instance type: {type(instance).__name__}. This instance is "
-                    "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
+                if isinstance(instance, qm.QueueManager | sm.SchedulerManager):
+                    instance.shutdown = shutdown
+                elif isinstance(instance, applications.PgQueuer):
+                    instance.shutdown = shutdown
+                    instance.qm.shutdown = shutdown
+                    instance.sm.shutdown = shutdown
+                else:
+                    raise NotImplementedError(
+                        f"Unsupported instance type: {type(instance).__name__}. This instance is "
+                        "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
+                    )
+            except Exception as exc:
+                if not restart_on_failure:
+                    raise
+                logconfig.logger.exception(
+                    "Error creating or configuring instance.",
+                    exc_info=exc,
+                )
+                await await_shutdown_or_timeout(shutdown, restart_delay)
+                continue
+
+            try:
+                await run_instance(instance, dequeue_timeout, batch_size)
+            except Exception as exc:
+                if not restart_on_failure:
+                    raise
+                logconfig.logger.exception(
+                    "Error during instance execution.",
+                    exc_info=exc,
                 )
 
-        except Exception as exc:
-            if not restart_on_failure:
-                raise
-            logconfig.logger.exception(
-                "Error creating or configuring instance.",
-                exc_info=exc,
-            )
-            await await_shutdown_or_timeout(shutdown, restart_delay)
-            continue
-
-        try:
-            await run_instance(instance, dequeue_timeout, batch_size)
-        except Exception as exc:
-            if not restart_on_failure:
-                raise
-            logconfig.logger.exception(
-                "Error during instance execution.",
-                exc_info=exc,
-            )
-
-        if not shutdown.is_set():
-            await await_shutdown_or_timeout(shutdown, restart_delay)
+            if not shutdown.is_set():
+                await await_shutdown_or_timeout(shutdown, restart_delay)
 
 
 def setup_signal_handlers(shutdown: asyncio.Event) -> None:
