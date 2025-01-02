@@ -5,10 +5,13 @@ import contextlib
 import os
 from dataclasses import dataclass
 from datetime import timedelta
+from typing import Awaitable, Callable
 
 import typer
 from tabulate import tabulate
 from typer import Context
+
+from pgqueuer.factories import load_factory, run_factory
 
 from . import db, helpers, listeners, models, qb, queries, supervisor
 
@@ -229,17 +232,35 @@ def upgrade(
     asyncio.run(run())
 
 
+def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[queries.Queries]]:
+    """
+    This is the default implementation of a factory that returns an instance of Queries.
+    """
+
+    async def factory() -> queries.Queries:
+        config: AppConfig = ctx.obj
+        return await query_adapter(config.dsn)
+
+    return factory
+
+
 @app.command(help="Display a live dashboard showing job statistics.")
 def dashboard(
     ctx: Context,
+    factory_fn_ref: str | None = typer.Option(
+        None, "--factory", help="A reference to a function that returns an instance of Queries"
+    ),
     interval: float | None = typer.Option(None, "-i", "--interval"),
     tail: int = typer.Option(25, "-n", "--tail"),
 ) -> None:
-    config: AppConfig = ctx.obj
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        await fetch_and_display(await query_adapter(config.dsn), interval_td, tail)
+        factory_fn = (
+            load_factory(factory_fn_ref) if factory_fn_ref else create_default_queries_factory(ctx)
+        )
+        async with run_factory(factory_fn()) as queries:
+            await fetch_and_display(queries, interval_td, tail)
 
     asyncio.run(run())
 
