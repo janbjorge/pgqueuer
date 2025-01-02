@@ -9,13 +9,11 @@ using configurable factory paths.
 from __future__ import annotations
 
 import asyncio
-import importlib
-import os
 import signal
-import sys
-import warnings
 from datetime import timedelta
 from typing import Awaitable, Callable, TypeAlias
+
+from pgqueuer.factories import load_factory
 
 from . import applications, logconfig, qm, sm
 
@@ -36,25 +34,7 @@ def load_manager_factory(factory_path: str) -> FactoryType:
     Returns:
         A callable that creates an instance of QueueManager, SchedulerManager, or PgQueuer.
     """
-    sys.path.insert(0, os.getcwd())
-
-    if ":" in factory_path:
-        module_name, factory_name = factory_path.split(":", 1)
-    else:
-        # Backward compatibility for module.function style
-        warnings.warn(
-            (
-                "The use of 'module.function' syntax for specifying the factory path is "
-                "deprecated and will be removed in a future version. Please use "
-                "'module:factory' syntax instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        module_name, factory_name = factory_path.rsplit(".", 1)
-
-    module = importlib.import_module(module_name)
-    return getattr(module, factory_name)
+    return load_factory(factory_path)
 
 
 async def runit(
