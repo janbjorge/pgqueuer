@@ -5,6 +5,8 @@ import warnings
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, TypeVar
 
+T = TypeVar("T")
+
 
 def load_factory(factory_path: str) -> Any:
     """
@@ -34,9 +36,6 @@ def load_factory(factory_path: str) -> Any:
 
     module = importlib.import_module(module_name)
     return getattr(module, factory_name)
-
-
-T = TypeVar("T")
 
 
 @asynccontextmanager
