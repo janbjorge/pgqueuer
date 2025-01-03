@@ -3,12 +3,12 @@ import os
 import sys
 import warnings
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
-from typing import Any, AsyncGenerator, Awaitable, TypeVar
+from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar
 
 T = TypeVar("T")
 
 
-def load_factory(factory_path: str) -> Any:
+def load_factory(factory_path: str) -> Callable[..., Any]:
     """
     Load factory function from a given module path or factory-style path.
 

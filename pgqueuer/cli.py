@@ -12,9 +12,7 @@ import uvloop
 from tabulate import tabulate
 from typer import Context
 
-from pgqueuer.factories import load_factory, run_factory
-
-from . import db, helpers, listeners, models, qb, queries, supervisor
+from . import db, factories, helpers, listeners, models, qb, queries, supervisor
 
 app = typer.Typer(
     help=(
@@ -258,9 +256,11 @@ def dashboard(
 
     async def run() -> None:
         factory_fn = (
-            load_factory(factory_fn_ref) if factory_fn_ref else create_default_queries_factory(ctx)
+            factories.load_factory(factory_fn_ref)
+            if factory_fn_ref
+            else create_default_queries_factory(ctx)
         )
-        async with run_factory(factory_fn()) as queries:
+        async with factories.run_factory(factory_fn()) as queries:
             await fetch_and_display(queries, interval_td, tail)
 
     uvloop.run(run())
@@ -291,7 +291,7 @@ def run(
 ) -> None:
     uvloop.run(
         supervisor.runit(
-            supervisor.load_manager_factory(factory_fn),
+            factories.load_factory(factory_fn),
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
             restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
