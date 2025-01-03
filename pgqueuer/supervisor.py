@@ -17,14 +17,11 @@ from pgqueuer.factories import load_factory
 
 from . import applications, logconfig, qm, sm
 
-QueueManagerFactory: TypeAlias = Callable[[], Awaitable[qm.QueueManager]]
-SchedulerManagerFactory: TypeAlias = Callable[[], Awaitable[sm.SchedulerManager]]
-PgQueuerFactory: TypeAlias = Callable[[], Awaitable[applications.PgQueuer]]
-
-FactoryType: TypeAlias = QueueManagerFactory | SchedulerManagerFactory | PgQueuerFactory
+Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.QueueManager
+ManagerFactory: TypeAlias = Callable[[], Awaitable[Manager]]
 
 
-def load_manager_factory(factory_path: str) -> FactoryType:
+def load_manager_factory(factory_path: str) -> ManagerFactory:
     """
     Load factory function from a given module path or factory-style path.
 
@@ -38,7 +35,7 @@ def load_manager_factory(factory_path: str) -> FactoryType:
 
 
 async def runit(
-    factory: str | FactoryType,
+    factory: ManagerFactory,
     dequeue_timeout: timedelta,
     batch_size: int,
     restart_delay: timedelta,
@@ -62,23 +59,22 @@ async def runit(
     if restart_delay < t0:
         raise ValueError(f"'restart_delay' must be >= {t0}. Got {restart_delay!r}")
 
-    factory_fn = load_manager_factory(factory) if isinstance(factory, str) else factory
     setup_signal_handlers(shutdown)
 
     while not shutdown.is_set():
         try:
-            instance = await factory_fn()
-            logconfig.logger.info("Instance created: %s", type(instance).__name__)
+            manager = await factory()
+            logconfig.logger.info("Instance created: %s", type(manager).__name__)
 
-            if isinstance(instance, qm.QueueManager | sm.SchedulerManager):
-                instance.shutdown = shutdown
-            elif isinstance(instance, applications.PgQueuer):
-                instance.shutdown = shutdown
-                instance.qm.shutdown = shutdown
-                instance.sm.shutdown = shutdown
+            if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
+                manager.shutdown = shutdown
+            elif isinstance(manager, applications.PgQueuer):
+                manager.shutdown = shutdown
+                manager.qm.shutdown = shutdown
+                manager.sm.shutdown = shutdown
             else:
                 raise NotImplementedError(
-                    f"Unsupported instance type: {type(instance).__name__}. This instance is "
+                    f"Unsupported instance type: {type(manager).__name__}. This instance is "
                     "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
                 )
 
@@ -93,7 +89,7 @@ async def runit(
             continue
 
         try:
-            await run_instance(instance, dequeue_timeout, batch_size)
+            await run_manager(manager, dequeue_timeout, batch_size)
         except Exception as exc:
             if not restart_on_failure:
                 raise
@@ -123,8 +119,8 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
     loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
 
 
-async def run_instance(
-    instance: qm.QueueManager | sm.SchedulerManager | applications.PgQueuer,
+async def run_manager(
+    mananger: Manager,
     dequeue_timeout: timedelta,
     batch_size: int,
 ) -> None:
@@ -139,15 +135,15 @@ async def run_instance(
     Raises:
         NotImplementedError: If the instance type is unsupported.
     """
-    logconfig.logger.debug("Running: %s", type(instance).__name__)
-    if isinstance(instance, qm.QueueManager):
-        await instance.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
-    elif isinstance(instance, sm.SchedulerManager):
-        await instance.run()
-    elif isinstance(instance, applications.PgQueuer):
-        await instance.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
+    logconfig.logger.debug("Running: %s", type(mananger).__name__)
+    if isinstance(mananger, qm.QueueManager):
+        await mananger.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
+    elif isinstance(mananger, sm.SchedulerManager):
+        await mananger.run()
+    elif isinstance(mananger, applications.PgQueuer):
+        await mananger.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
     else:
-        raise NotImplementedError(f"Unsupported instance type: {type(instance)}")
+        raise NotImplementedError(f"Unsupported instance type: {type(mananger)}")
 
 
 async def await_shutdown_or_timeout(

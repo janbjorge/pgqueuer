@@ -291,7 +291,7 @@ def run(
 ) -> None:
     uvloop.run(
         supervisor.runit(
-            factory_fn,
+            supervisor.load_manager_factory(factory_fn),
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
             restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
