@@ -5,6 +5,8 @@ import warnings
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, TypeVar
 
+from . import logconfig
+
 T = TypeVar("T")
 
 
@@ -48,12 +50,15 @@ async def run_factory(
 
     # Check if it's an async context manager
     if isinstance(factory_result, AbstractAsyncContextManager):
+        logconfig.logger.debug("factory is an async context manager. running.")
         async with factory_result as value:
             yield value
     # Check if it's a synchronous context manager
     elif isinstance(factory_result, AbstractContextManager):
+        logconfig.logger.debug("factory is an context manager. running.")
         with factory_result as value:
             yield value
     # Otherwise, assume it's an awaitable and return the result
     else:
+        logconfig.logger.debug("factory is an coroutine. running.")
         yield await factory_result

@@ -82,9 +82,12 @@ async def runit(
                         "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
                     )
 
-                logconfig.logger.debug("running instance: %s", type(instance).__name__)
                 try:
+                    logconfig.logger.debug("running instance: %s", type(instance).__name__)
                     await run_instance(instance, dequeue_timeout, batch_size)
+                    logconfig.logger.debug(
+                        "instance %s finished running. cleaning up", type(instance).__name__
+                    )
                 except Exception as exc:
                     if not restart_on_failure:
                         raise

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import AsyncGenerator
 
 import asyncpg
 
@@ -24,3 +26,11 @@ async def main() -> PgQueuer:
         print(f"Executed every minute {schedule!r} {datetime.now()!r}")
 
     return pgq
+
+
+@asynccontextmanager
+async def context() -> AsyncGenerator[PgQueuer]:
+    # startup
+    pgq = await main()
+    yield pgq
+    # teardown
