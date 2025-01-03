@@ -14,6 +14,7 @@ from pathlib import Path
 from statistics import median
 
 import typer
+import uvloop
 from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
@@ -370,7 +371,7 @@ def main(
         concurrency_limit=concurrency_limit,
         output_json=output_json,
     )
-    asyncio.run(benchmark(settings))
+    uvloop.run(benchmark(settings))
 
 
 if __name__ == "__main__":

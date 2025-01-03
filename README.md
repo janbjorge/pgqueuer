@@ -76,10 +76,10 @@ pgq run examples.consumer.main
 ```python
 from __future__ import annotations
 
-import asyncio
 import sys
 
 import asyncpg
+import uvloop
 
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
@@ -98,7 +98,7 @@ async def main(N: int) -> None:
 
 if __name__ == "__main__":
     N = 1_000 if len(sys.argv) == 1 else int(sys.argv[1])
-    asyncio.run(main(N))
+    uvloop.run(main(N))
 ```
 
 Run the producer:
