@@ -3,9 +3,15 @@ from typing import AsyncGenerator
 
 import asyncpg
 import pytest
+import uvloop
 
 from pgqueuer.db import AsyncpgDriver, Driver, dsn
 from pgqueuer.queries import Queries
+
+
+@pytest.fixture(scope="session", autouse=True)
+def event_loop_policy() -> uvloop.EventLoopPolicy:
+    return uvloop.EventLoopPolicy()
 
 
 @pytest.fixture(scope="function")

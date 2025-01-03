@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Awaitable, Callable
 
 import typer
+import uvloop
 from tabulate import tabulate
 from typer import Context
 
@@ -199,7 +200,7 @@ def install(
         await (await query_adapter(config.dsn)).install()
 
     if not dry_run:
-        asyncio.run(run())
+        uvloop.run(run())
 
 
 @app.command(help="Remove the PGQueuer schema from the database.")
@@ -214,7 +215,7 @@ def uninstall(
         if not dry_run:
             await (await query_adapter(config.dsn)).uninstall()
 
-    asyncio.run(run())
+    uvloop.run(run())
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
@@ -229,7 +230,7 @@ def upgrade(
         if not dry_run:
             await (await query_adapter(config.dsn)).upgrade()
 
-    asyncio.run(run())
+    uvloop.run(run())
 
 
 def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[queries.Queries]]:
@@ -262,7 +263,7 @@ def dashboard(
         async with run_factory(factory_fn()) as queries:
             await fetch_and_display(queries, interval_td, tail)
 
-    asyncio.run(run())
+    uvloop.run(run())
 
 
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
@@ -277,7 +278,7 @@ def listen(
             (await query_adapter(config.dsn)).driver, models.PGChannel(channel)
         )
 
-    asyncio.run(run())
+    uvloop.run(run())
 
 
 @app.command(help="Start a QueueManager to manage and process jobs.")
@@ -288,7 +289,7 @@ def run(
     restart_delay: float = typer.Option(5.0, "--restart-delay"),
     restart_on_failure: bool = typer.Option(False, "--restart-on-failure"),
 ) -> None:
-    asyncio.run(
+    uvloop.run(
         supervisor.runit(
             factory_fn,
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
@@ -315,7 +316,7 @@ def schedules(
             await q.delete_schedule(schedule_ids, schedule_names)
         await display_schedule(await q.peak_schedule())
 
-    asyncio.run(run_async())
+    uvloop.run(run_async())
 
 
 if __name__ == "__main__":
