@@ -305,10 +305,10 @@ class QueueManager:
             for job in jobs:
                 yield job
 
-    async def flush_rps(self, events: list[str]) -> None:
+    async def update_rps_stats(self, events: list[str]) -> None:
         """Update rate-per-second statistics for the given entrypoints."""
         if events:
-            await self.queries.notify_debounce_event(
+            await self.queries.notify_entrypoint_rps(
                 {
                     k: v
                     for k, v in Counter(events).items()
@@ -391,7 +391,7 @@ class QueueManager:
             buffers.RequestsPerSecondBuffer(
                 max_size=batch_size,
                 timeout=timedelta(seconds=0.01),
-                callback=self.flush_rps,
+                callback=self.update_rps_stats,
             ) as rpsbuff,
             tm.TaskManager() as task_manager,
             self.connection,
