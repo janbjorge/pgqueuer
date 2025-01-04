@@ -363,7 +363,7 @@ class Queries:
             )
         ]
 
-    async def notify_debounce_event(self, entrypoint_count: dict[str, int]) -> None:
+    async def notify_entrypoint_rps(self, entrypoint_count: dict[str, int]) -> None:
         """
         Send a requests-per-second event notification for an entrypoint.
 
@@ -375,15 +375,16 @@ class Queries:
             entrypoint (str): The entrypoint for which the event is being sent.
             quantity (int): The number of requests per second to report.
         """
-        await self.driver.execute(
-            self.qbq.create_notify_query(),
-            models.RequestsPerSecondEvent(
-                channel=self.qbq.settings.channel,
-                entrypoint_count=entrypoint_count,
-                sent_at=helpers.utc_now(),
-                type="requests_per_second_event",
-            ).model_dump_json(),
-        )
+        if entrypoint_count:
+            await self.driver.execute(
+                self.qbq.create_notify_query(),
+                models.RequestsPerSecondEvent(
+                    channel=self.qbq.settings.channel,
+                    entrypoint_count=entrypoint_count,
+                    sent_at=helpers.utc_now(),
+                    type="requests_per_second_event",
+                ).model_dump_json(),
+            )
 
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """
