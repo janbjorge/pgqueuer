@@ -20,6 +20,9 @@ build:
 up:
 	docker compose -f $(COMPOSE_FILE) up -d db
 
+db:
+	docker compose -f $(COMPOSE_FILE) up db populate
+
 populate:
 	docker compose -f $(COMPOSE_FILE) run --rm populate
 
