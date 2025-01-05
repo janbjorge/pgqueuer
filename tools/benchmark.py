@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from statistics import median
 
 import typer
 import uvloop
@@ -20,9 +19,8 @@ from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
-from pgqueuer.listeners import initialize_notice_event_listener
-from pgqueuer.models import EVENT_TYPES, Job, PGChannel
-from pgqueuer.qb import DBSettings, add_prefix
+from pgqueuer.models import Job
+from pgqueuer.qb import add_prefix
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
@@ -35,20 +33,6 @@ class DriverEnum(str, Enum):
     psy = "psy"
 
 
-class Latency(BaseModel):
-    min: timedelta
-    median: timedelta
-    max: timedelta
-
-    @staticmethod
-    def from_samples(arr: list[float]) -> Latency:
-        return Latency(
-            min=timedelta(seconds=min(arr)),
-            median=timedelta(seconds=median(arr)),
-            max=timedelta(seconds=max(arr)),
-        )
-
-
 class BenchmarkResult(BaseModel):
     """Benchmark metrics including driver info, elapsed time, and rate."""
 
@@ -56,7 +40,6 @@ class BenchmarkResult(BaseModel):
     driver: DriverEnum
     elapsed: timedelta
     github_ref_name: str
-    latency: Latency
     queued: int
     rate: float
     steps: int
@@ -71,7 +54,6 @@ class BenchmarkResult(BaseModel):
                     ["GitHub Ref Name", self.github_ref_name],
                     ["Rate", f"{self.rate:.2f}"],
                     ["Steps", self.steps],
-                    ["Median Latency", f"{self.latency.median}"],
                 ],
                 headers=["Field", "Value"],
                 tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
@@ -224,7 +206,6 @@ async def benchmark(settings: Settings) -> None:
 
     shutdown = asyncio.Event()
     qms = list[QueueManager]()
-    latencies = list[tuple[EVENT_TYPES, timedelta]]()
     tqdm_format_dict = {}
 
     async def enqueue_task(shutdown: asyncio.Event) -> None:
@@ -259,15 +240,6 @@ async def benchmark(settings: Settings) -> None:
             await asyncio.gather(*consumers)
             tqdm_format_dict.update(bar.format_dict)
 
-    async def measure_latency_task() -> None:
-        connection = (await make_queries(settings.driver, dsn())).driver
-        await initialize_notice_event_listener(
-            connection,
-            PGChannel(DBSettings().channel),
-            lambda x: latencies.append((x.root.type, x.root.latency)),
-        )
-        await shutdown.wait()
-
     async def shutdown_timer() -> None:
         _, pending = await asyncio.wait(
             (
@@ -292,18 +264,18 @@ async def benchmark(settings: Settings) -> None:
     loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
 
     await asyncio.gather(
-        dequeue_task(qms), enqueue_task(shutdown), measure_latency_task(), shutdown_timer()
+        dequeue_task(qms),
+        enqueue_task(shutdown),
+        shutdown_timer(),
     )
 
     qsize = await (await make_queries(settings.driver, dsn())).queue_size()
 
-    tce_latencies = [x for e, x in latencies if e == "table_changed_event"]
     benchmark_result = BenchmarkResult(
         created_at=datetime.now(timezone.utc),
         driver=settings.driver,
         elapsed=tqdm_format_dict["elapsed"],
         github_ref_name=os.environ.get("REF_NAME", ""),
-        latency=Latency.from_samples([x.total_seconds() for x in tce_latencies]),
         queued=sum(x.count for x in qsize),
         rate=tqdm_format_dict["rate"],
         steps=tqdm_format_dict["n"],
