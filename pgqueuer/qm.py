@@ -379,7 +379,7 @@ class QueueManager:
 
         async with (
             buffers.JobStatusLogBuffer(
-                max_size=batch_size,
+                max_size=batch_size * 10,
                 timeout=job_status_log_buffer_timeout,
                 callback=self.queries.log_jobs,
             ) as jbuff,
@@ -389,7 +389,7 @@ class QueueManager:
                 callback=self.queries.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
-                max_size=batch_size,
+                max_size=batch_size * 10,
                 timeout=timedelta(seconds=0.01),
                 callback=self.update_rps_stats,
             ) as rpsbuff,

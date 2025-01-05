@@ -83,7 +83,7 @@ class TimedOverflowBuffer(Generic[T]):
         pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
             if helpers.utc_now() > self.next_flush and not self.lock.locked():
-                await self.flush()
+                self.tm.add(asyncio.create_task(self.flush()))
 
             sleep_task = asyncio.create_task(
                 asyncio.sleep(
@@ -123,10 +123,7 @@ class TimedOverflowBuffer(Generic[T]):
         ):
             self.tm.add(asyncio.create_task(self.flush()))
 
-    async def pop_until(
-        self,
-        until: timedelta = timedelta(seconds=0.01),
-    ) -> AsyncGenerator[T, None]:
+    async def pop_until(self) -> AsyncGenerator[T, None]:
         """
         Yield items from the buffer until conditions are met.
 
@@ -138,8 +135,7 @@ class TimedOverflowBuffer(Generic[T]):
         Yields:
             AsyncGenerator[T, None]: An asynchronous generator yielding items.
         """
-        deadline = helpers.utc_now() + until
-        while not self.events.empty() and helpers.utc_now() < deadline:
+        while not self.events.empty():
             yield await self.events.get()
 
     async def flush(self) -> None:
