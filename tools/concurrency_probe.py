@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 import asyncpg
 import icecream
+
 try:
     from uvloop import run as asyncio_run
 except ImportError:

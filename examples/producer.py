@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 
 import asyncpg
+
 try:
     from uvloop import run as asyncio_run
 except ImportError:
