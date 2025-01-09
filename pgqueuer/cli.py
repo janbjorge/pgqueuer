@@ -8,7 +8,6 @@ from datetime import timedelta
 from typing import Awaitable, Callable
 
 import typer
-
 from tabulate import tabulate
 from typer import Context
 
