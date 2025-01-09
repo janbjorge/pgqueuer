@@ -54,7 +54,7 @@ jobs:
         run: |
           uv python install ${{ matrix.python-version }}
           uv venv --python ${{ matrix.python-version }}
-          uv pip install '.[dev]'
+          uv sync --group asyncpg --frozen
 
       - name: Build PostgreSQL Docker image
         run: |

@@ -29,7 +29,7 @@ dependencies = [
     { name = "sniffio" },
     { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f6/40/318e58f669b1a9e00f5c4453910682e2d9dd594334539c7b7817dabb765f/anyio-4.7.0.tar.gz", hash = "sha256:2f834749c602966b7d456a7567cafcb309f96482b5081d14ac93ccd457f9dd48", size = 177076 }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/73/199a98fc2dae33535d6b8e8e6ec01f8c1d76c9adb096c6b7d64823038cde/anyio-4.8.0.tar.gz", hash = "sha256:1d9fe889df5212298c0c0723fa20479d1b94883a2df44bd3897aa91083316f7a", size = 181126 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/eb/e7f063ad1fec6b3178a3cd82d1a3c4de82cccf283fc42746168188e1cdd5/anyio-4.8.0-py3-none-any.whl", hash = "sha256:b5011f270ab5eb0abf13385f851315585cc37ef330dd88e27ec3d34d651fd47a", size = 96041 },
 ]
@@ -519,7 +519,7 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.18.6.dev3+ge527122.d20250109"
+version = "0.18.7.dev1+g8f95bc0.d20250109"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -535,6 +535,11 @@ dependencies = [
 asyncpg = [
     { name = "asyncpg" },
 ]
+psycopg = [
+    { name = "psycopg" },
+]
+
+[package.dev-dependencies]
 dev = [
     { name = "async-timeout" },
     { name = "asyncpg" },
@@ -559,41 +564,44 @@ docs = [
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
 ]
-psycopg = [
-    { name = "psycopg" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.0" },
-    { name = "async-timeout", marker = "extra == 'dev'", specifier = ">=4.0.3" },
     { name = "asyncpg", marker = "extra == 'asyncpg'", specifier = ">=0.30.0" },
-    { name = "asyncpg", marker = "extra == 'dev'" },
-    { name = "asyncpg-stubs", marker = "extra == 'dev'" },
     { name = "croniter", specifier = ">=5.0.1" },
-    { name = "fastapi", marker = "extra == 'dev'" },
-    { name = "httpx", marker = "extra == 'dev'" },
-    { name = "icecream", marker = "extra == 'dev'", specifier = ">=2.1.3" },
-    { name = "mypy", marker = "extra == 'dev'" },
-    { name = "mypy-extensions", marker = "extra == 'dev'" },
-    { name = "myst-parser", marker = "extra == 'docs'" },
-    { name = "psycopg", marker = "extra == 'dev'", specifier = ">=3.2.0" },
     { name = "psycopg", marker = "extra == 'psycopg'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.1" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.14.0" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "sphinx", marker = "extra == 'docs'" },
-    { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
     { name = "tabulate", specifier = ">=0.9.0" },
-    { name = "tqdm", marker = "extra == 'dev'" },
     { name = "typer", specifier = ">=0.15.1" },
-    { name = "types-croniter", marker = "extra == 'dev'" },
-    { name = "types-tabulate", marker = "extra == 'dev'" },
-    { name = "uvicorn", marker = "extra == 'dev'" },
     { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.21.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "async-timeout", specifier = ">=4.0.3" },
+    { name = "asyncpg" },
+    { name = "asyncpg-stubs" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "icecream", specifier = ">=2.1.3" },
+    { name = "mypy" },
+    { name = "mypy-extensions" },
+    { name = "psycopg", specifier = ">=3.2.0" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-mock", specifier = ">=3.14.0" },
+    { name = "ruff" },
+    { name = "tqdm" },
+    { name = "types-croniter" },
+    { name = "types-tabulate" },
+    { name = "uvicorn" },
+]
+docs = [
+    { name = "myst-parser" },
+    { name = "sphinx" },
+    { name = "sphinx-rtd-theme" },
 ]
 
 [[package]]
