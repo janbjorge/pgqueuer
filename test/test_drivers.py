@@ -151,7 +151,7 @@ async def test_valid_query_syntax(
         pytest.skip()
 
     sql = query()
-    sql = sql if isinstance(sql, str) else f"\n{'-'*50}\n".join(x for x in sql)
+    sql = sql if isinstance(sql, str) else f"\n{'-' * 50}\n".join(x for x in sql)
     assert isinstance(sql, str)
 
     def rolledback(sql: str) -> str:
