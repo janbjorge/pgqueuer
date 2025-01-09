@@ -69,12 +69,12 @@ def test_load_factory_with_module_dot_function(monkeypatch: pytest.MonkeyPatch) 
         # Assertions
         assert factory is mock_factory, "The loaded factory should match the mock factory."
         assert len(w) == 1, "A single warning should have been raised."
-        assert issubclass(
-            w[0].category, DeprecationWarning
-        ), "The warning should be a DeprecationWarning."
-        assert (
-            "deprecated" in str(w[0].message).lower()
-        ), "The warning message should mention deprecation."
+        assert issubclass(w[0].category, DeprecationWarning), (
+            "The warning should be a DeprecationWarning."
+        )
+        assert "deprecated" in str(w[0].message).lower(), (
+            "The warning message should mention deprecation."
+        )
 
 
 def test_load_factory_nonexistent_module(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -149,9 +149,9 @@ def test_load_factory_sys_path_modified(monkeypatch: pytest.MonkeyPatch) -> None
         load_factory(factory_path)
 
         # Assertions
-        assert (
-            sys.path[0] == "/fake/dir"
-        ), "The current working directory should be inserted at sys.path[0]."
+        assert sys.path[0] == "/fake/dir", (
+            "The current working directory should be inserted at sys.path[0]."
+        )
     finally:
         # Restore sys.path to its original state
         sys.path = original_sys_path
@@ -173,9 +173,9 @@ async def test_run_factory_with_async_context_manager() -> None:
     async_cm: AsyncCM = AsyncCM()
 
     async with run_factory(async_cm) as value:
-        assert (
-            value == "async_cm_value"
-        ), "The async context manager should yield the correct value."
+        assert value == "async_cm_value", (
+            "The async context manager should yield the correct value."
+        )
 
 
 async def test_run_factory_with_sync_context_manager(monkeypatch: pytest.MonkeyPatch) -> None:

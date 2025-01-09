@@ -160,9 +160,9 @@ async def test_no_jobs_processed_when_locked(
     serialized_dispatch_true = list(
         chain.from_iterable(x["serialized_dispatch_true"] for x in consumed)
     )
-    assert (
-        len(serialized_dispatch_true) == 0
-    ), "Jobs should not have been processed while lock is acquired"
+    assert len(serialized_dispatch_true) == 0, (
+        "Jobs should not have been processed while lock is acquired"
+    )
 
 
 @pytest.mark.parametrize("n_consumers", (1, 2, 4))

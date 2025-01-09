@@ -227,7 +227,7 @@ def upgrade(
     dry_run: bool = typer.Option(False, help="Print SQL only."),
 ) -> None:
     config: AppConfig = ctx.obj
-    print(f"\n{'-'*50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries()))
+    print(f"\n{'-' * 50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries()))
 
     async def run() -> None:
         if not dry_run:
