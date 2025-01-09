@@ -7,7 +7,7 @@ on:
 jobs:
   publish-pypi-package:
     name: Publish Python distribution to PyPI.
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     environment:
       name: release
@@ -37,7 +37,7 @@ jobs:
   publish-docker-image:
     needs: [publish-pypi-package]
     name: Publish docker image
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
