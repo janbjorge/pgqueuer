@@ -9,14 +9,16 @@ from typing import Awaitable, Callable
 
 import typer
 
-try:
-    from uvloop import run as asyncio_run
-except ImportError:
-    from asyncio import run as asyncio_run
 from tabulate import tabulate
 from typer import Context
 
 from . import db, factories, helpers, listeners, models, qb, queries, supervisor
+
+try:
+    from uvloop import run as asyncio_run
+except ImportError:
+    from asyncio import run as asyncio_run  # type: ignore[assignment]
+
 
 app = typer.Typer(
     help=(
@@ -235,7 +237,9 @@ def upgrade(
     asyncio_run(run())
 
 
-def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[queries.Queries]]:
+def create_default_queries_factory(
+    ctx: Context,
+) -> Callable[..., Awaitable[queries.Queries]]:
     """
     This is the default implementation of a factory that returns an instance of Queries.
     """
@@ -251,7 +255,9 @@ def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[quer
 def dashboard(
     ctx: Context,
     factory_fn_ref: str | None = typer.Option(
-        None, "--factory", help="A reference to a function that returns an instance of Queries"
+        None,
+        "--factory",
+        help="A reference to a function that returns an instance of Queries",
     ),
     interval: float | None = typer.Option(None, "-i", "--interval"),
     tail: int = typer.Option(25, "-n", "--tail"),

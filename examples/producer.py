@@ -3,11 +3,7 @@ from __future__ import annotations
 import sys
 
 import asyncpg
-
-try:
-    from uvloop import run as asyncio_run
-except ImportError:
-    from asyncio import run as asyncio_run
+import uvloop
 
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
@@ -26,4 +22,4 @@ async def main(N: int) -> None:
 
 if __name__ == "__main__":
     N = 1_000 if len(sys.argv) == 1 else int(sys.argv[1])
-    asyncio_run(main(N))
+    uvloop.run(main(N))

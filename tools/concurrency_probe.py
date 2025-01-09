@@ -10,7 +10,7 @@ import icecream
 try:
     from uvloop import run as asyncio_run
 except ImportError:
-    from asyncio import run as asyncio_run
+    from asyncio import run as asyncio_run  # type: ignore[assignment]
 
 from pgqueuer.db import AsyncpgDriver, dsn
 from pgqueuer.models import Job
