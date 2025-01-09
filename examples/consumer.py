@@ -31,11 +31,28 @@ async def create_pgqueuer() -> PgQueuer:
 
 @asynccontextmanager
 async def main() -> AsyncGenerator[PgQueuer, None]:
-    # setup
+    """
+    A context manager for setting up and tearing down the PgQueuer instance.
+
+    This function manages the lifecycle of the PgQueuer instance, ensuring proper setup and teardown
+    when used in an asynchronous context. It includes the following steps:
+
+    Setup:
+        - Logs the start of the setup process.
+        - Creates and configures a PgQueuer instance by connecting to the database and initializing
+          entrypoints and schedules.
+
+    Teardown:
+        - Logs the start of the teardown process.
+        - Ensures cleanup actions for the PgQueuer instance, releasing resources like database
+          connections.
+
+    Yields:
+        PgQueuer: The configured instance ready for processing jobs and schedules.
+    """
     logger.info("setup")
     try:
         pgq = await create_pgqueuer()
         yield pgq
     finally:
-        # teardown
         logger.info("teardown")
