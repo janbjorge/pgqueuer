@@ -6,7 +6,11 @@ from datetime import datetime, timedelta
 
 import asyncpg
 import icecream
-import uvloop
+
+try:
+    from uvloop import run as asyncio_run
+except ImportError:
+    from asyncio import run as asyncio_run  # type: ignore[assignment]
 
 from pgqueuer.db import AsyncpgDriver, dsn
 from pgqueuer.models import Job
@@ -66,4 +70,4 @@ async def main() -> None:
 
 if __name__ == "__main__":
     with suppress(asyncio.CancelledError, KeyboardInterrupt):
-        uvloop.run(main())
+        asyncio_run(main())
