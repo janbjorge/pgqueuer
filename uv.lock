@@ -519,7 +519,7 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.18.5.dev8+ge6a9f7c.d20250103"
+version = "0.18.6.dev2+gb7a6a62.d20250109"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -528,7 +528,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "tabulate" },
     { name = "typer" },
-    { name = "uvloop" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
 ]
 
 [package.optional-dependencies]
@@ -593,7 +593,7 @@ requires-dist = [
     { name = "types-croniter", marker = "extra == 'dev'" },
     { name = "types-tabulate", marker = "extra == 'dev'" },
     { name = "uvicorn", marker = "extra == 'dev'" },
-    { name = "uvloop", specifier = ">=0.21.0" },
+    { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.21.0" },
 ]
 
 [[package]]

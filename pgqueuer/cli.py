@@ -8,7 +8,10 @@ from datetime import timedelta
 from typing import Awaitable, Callable
 
 import typer
-import uvloop
+try:
+    from uvloop import run as asyncio_run
+except ImportError:
+    from asyncio import run as asyncio_run
 from tabulate import tabulate
 from typer import Context
 
@@ -198,7 +201,7 @@ def install(
         await (await query_adapter(config.dsn)).install()
 
     if not dry_run:
-        uvloop.run(run())
+        asyncio_run(run())
 
 
 @app.command(help="Remove the PGQueuer schema from the database.")
@@ -213,7 +216,7 @@ def uninstall(
         if not dry_run:
             await (await query_adapter(config.dsn)).uninstall()
 
-    uvloop.run(run())
+    asyncio_run(run())
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
@@ -228,7 +231,7 @@ def upgrade(
         if not dry_run:
             await (await query_adapter(config.dsn)).upgrade()
 
-    uvloop.run(run())
+    asyncio_run(run())
 
 
 def create_default_queries_factory(ctx: Context) -> Callable[..., Awaitable[queries.Queries]]:
@@ -263,7 +266,7 @@ def dashboard(
         async with factories.run_factory(factory_fn()) as queries:
             await fetch_and_display(queries, interval_td, tail)
 
-    uvloop.run(run())
+    asyncio_run(run())
 
 
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
@@ -278,7 +281,7 @@ def listen(
             (await query_adapter(config.dsn)).driver, models.PGChannel(channel)
         )
 
-    uvloop.run(run())
+    asyncio_run(run())
 
 
 @app.command(help="Start a QueueManager to manage and process jobs.")
@@ -289,7 +292,7 @@ def run(
     restart_delay: float = typer.Option(5.0, "--restart-delay"),
     restart_on_failure: bool = typer.Option(False, "--restart-on-failure"),
 ) -> None:
-    uvloop.run(
+    asyncio_run(
         supervisor.runit(
             factories.load_factory(factory_fn),
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
@@ -316,7 +319,7 @@ def schedules(
             await q.delete_schedule(schedule_ids, schedule_names)
         await display_schedule(await q.peak_schedule())
 
-    uvloop.run(run_async())
+    asyncio_run(run_async())
 
 
 if __name__ == "__main__":
