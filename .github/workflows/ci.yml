@@ -32,9 +32,11 @@ jobs:
       postgres:
         image: postgres:${{ matrix.postgres-version }}
         env:
-          POSTGRES_USER: pgquser
-          POSTGRES_DB: pgqdb
-          POSTGRES_PASSWORD: pgqpw
+          POSTGRES_USER: ${{ env.PGUSER }}
+          POSTGRES_DB: ${{ env.PGDATABASE }}
+          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -52,27 +54,22 @@ jobs:
 
       - name: Set up Python
         run: |
-          uv python install ${{ matrix.python-version }}
-          uv venv --python ${{ matrix.python-version }}
-          uv sync --group asyncpg --frozen
+          uv sync --group asyncpg --frozen --python ${{ matrix.python-version }}
+          uv run --frozen pgq install
 
-      - name: Build PostgreSQL Docker image
+      - name: Test pgq CLI Command
         run: |
-          docker compose run --build populate
+            source .venv/bin/activate
+            pgq --help
 
       - name: Run Example with SIGINT
         run: |
           source .venv/bin/activate
           PYTHONUNBUFFERED=1 pgq run examples.consumer:main &
           pid=$!
-          sleep 10
+          sleep 5
           kill -SIGINT $pid
           wait $pid
-
-      - name: Test pgq CLI Command
-        run: |
-            source .venv/bin/activate
-            pgq --help
 
   run-benchmark:
     strategy:
@@ -97,9 +94,11 @@ jobs:
       postgres:
         image: postgres:${{ matrix.postgres-version }}
         env:
-          POSTGRES_USER: pgquser
-          POSTGRES_DB: pgqdb
-          POSTGRES_PASSWORD: pgqpw
+          POSTGRES_USER: ${{ env.PGUSER }}
+          POSTGRES_DB: ${{ env.PGDATABASE }}
+          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -118,12 +117,10 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Build PostgreSQL Docker image
-        run: |
-          docker compose run --build populate
-
       - name: Install PGQueuer
-        run: uv sync --all-extras --dev
+        run: |
+          uv sync --all-extras --dev
+          uv run --frozen pgq install
 
       - name: Set ISO Timestamp
         id: timestamp
@@ -240,9 +237,11 @@ jobs:
       postgres:
         image: postgres:${{ matrix.postgres-version }}
         env:
-          POSTGRES_USER: pgquser
-          POSTGRES_DB: pgqdb
-          POSTGRES_PASSWORD: pgqpw
+          POSTGRES_USER: ${{ env.PGUSER }}
+          POSTGRES_DB: ${{ env.PGDATABASE }}
+          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+        ports:
+          - 5432:5432
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -261,12 +260,10 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
 
-      - name: Build PostgreSQL Docker Image
-        run: |
-          docker compose run --build populate
-
       - name: Install PGQueuer
-        run: uv sync --all-extras --dev
+        run: |
+          uv sync --dev --frozen
+          uv run --frozen pgq install
 
       - name: Run Full Test Suite
         run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 uv run pytest -v
