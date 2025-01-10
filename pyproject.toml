@@ -57,6 +57,8 @@ pgq = "pgqueuer.__main__:main"
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.30.0"]
 psycopg = ["psycopg>=3.2.0"]
+
+[dependency-groups]
 dev = [
     "async-timeout>=4.0.3",
     "asyncpg-stubs",
@@ -120,4 +122,4 @@ warn_unused_ignores = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function" 
+asyncio_default_fixture_loop_scope = "function"
