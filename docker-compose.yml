@@ -27,7 +27,7 @@ services:
         condition: service_healthy
     build: .
     working_dir: /app
-    command: /bin/sh -c "uv run pgq install || exit 0"
+    command: /bin/sh -c "uv run --frozen pgq install || exit 0"
     restart: "no"
 
   test:
@@ -41,5 +41,19 @@ services:
         condition: service_completed_successfully
     build: .
     working_dir: /app
-    command: uv -n run pytest
+    command: uv -n run --frozen pytest
+    restart: "no"
+
+  benchmark:
+    environment:
+      PGUSER: pgquser
+      PGDATABASE: pgqdb
+      PGPASSWORD: pgqpw
+      PGHOST: db
+    depends_on:
+      populate:
+        condition: service_completed_successfully
+    build: .
+    working_dir: /app
+    command: uv -n run --frozen tools/benchmark.py
     restart: "no"

@@ -69,10 +69,11 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Lock,
     )
-    delay_multiplier: float = dataclasses.field(
+    backoff: helpers.ExponentialBackoff = dataclasses.field(
         init=False,
-        default=1,
+        default_factory=helpers.ExponentialBackoff,
     )
+
     tm: tm.TaskManager = dataclasses.field(
         init=False,
         default_factory=tm.TaskManager,
@@ -83,14 +84,11 @@ class TimedOverflowBuffer(Generic[T]):
         pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
             if helpers.utc_now() > self.next_flush and not self.lock.locked():
-                await self.flush()
+                self.tm.add(asyncio.create_task(self.flush()))
 
             sleep_task = asyncio.create_task(
                 asyncio.sleep(
-                    helpers.timeout_with_jitter(
-                        self.timeout,
-                        self.delay_multiplier,
-                    ).total_seconds()
+                    helpers.timeout_with_jitter(self.timeout).total_seconds(),
                 )
             )
 
@@ -153,10 +151,7 @@ class TimedOverflowBuffer(Generic[T]):
         a retry. This helps in handling transient errors without losing items.
         """
 
-        if helpers.utc_now() < self.next_flush:
-            return
-
-        if self.lock.locked():
+        if self.lock.locked() or helpers.utc_now() < self.next_flush:
             return
 
         async with self.lock:
@@ -167,22 +162,24 @@ class TimedOverflowBuffer(Generic[T]):
 
             try:
                 await self.callback(items)
-            except Exception:
-                self.delay_multiplier = min(256, self.delay_multiplier * 2)
-                logconfig.logger.exception(
-                    "Unable to flush: %s, using delay multiplier: %d",
+            except Exception as e:
+                delay = self.backoff.next_delay()
+                logconfig.logger.warning(
+                    "Unable to flush(%s): %s, retry in: %r",
                     self.callback.__name__,
-                    self.delay_multiplier,
+                    str(e),
+                    delay,
                 )
                 # Re-add the items to the queue for retry
                 for item in items:
                     self.events.put_nowait(item)
-            else:
-                self.delay_multiplier = 1
-            finally:
-                self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(
-                    self.timeout, self.delay_multiplier
+                await asyncio.sleep(
+                    helpers.timeout_with_jitter(delay).total_seconds(),
                 )
+            else:
+                self.backoff.reset()
+            finally:
+                self.next_flush = helpers.utc_now() + self.timeout
 
     async def __aenter__(self) -> Self:
         """
