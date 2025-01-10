@@ -52,6 +52,9 @@ class TimedOverflowBuffer(Generic[T]):
     max_size: int
     timeout: timedelta
     callback: Callable[[list[T]], Awaitable[None]]
+    backoff: helpers.ExponentialBackoff = dataclasses.field(
+        default_factory=helpers.ExponentialBackoff,
+    )
 
     next_flush: datetime = dataclasses.field(
         init=False,
@@ -69,11 +72,6 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Lock,
     )
-    backoff: helpers.ExponentialBackoff = dataclasses.field(
-        init=False,
-        default_factory=helpers.ExponentialBackoff,
-    )
-
     tm: tm.TaskManager = dataclasses.field(
         init=False,
         default_factory=tm.TaskManager,

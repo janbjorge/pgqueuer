@@ -34,8 +34,8 @@ class ExponentialBackoff:
         current_delay (float): The current delay in the backoff sequence.
     """
 
-    start_delay: timedelta = field(default=timedelta(seconds=1))
-    multiplier: float = field(default=1.05)
+    start_delay: timedelta = field(default=timedelta(seconds=0.01))
+    multiplier: float = field(default=2)
     max_limit: timedelta = field(default=timedelta(seconds=10))
     current_delay: timedelta = field(init=False)
 
