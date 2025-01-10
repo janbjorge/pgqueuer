@@ -29,6 +29,9 @@ populate:
 test:
 	docker compose -f $(COMPOSE_FILE) run --rm test
 
+benchmark:
+	docker compose -f $(COMPOSE_FILE) run --rm benchmark
+
 down:
 	docker compose -f $(COMPOSE_FILE) down
 

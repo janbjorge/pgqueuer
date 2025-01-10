@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from pgqueuer.helpers import (
+    ExponentialBackoff,
     add_schema_to_dsn,
     normalize_cron_expression,
     retry_timer_buffer_timeout,
@@ -58,32 +59,29 @@ def test_heartbeat_buffer_timeout_custom_default() -> None:
 
 def test_delay_within_jitter_range() -> None:
     base_timeout = timedelta(seconds=10)
-    delay_multiplier = 2.0
     jitter_span = (0.8, 1.2)
 
     # Call the function multiple times to check the jitter range
     for _ in range(100):
-        delay = timeout_with_jitter(base_timeout, delay_multiplier, jitter_span)
-        base_delay = base_timeout.total_seconds() * delay_multiplier
+        delay = timeout_with_jitter(base_timeout, jitter_span)
+        base_delay = base_timeout.total_seconds()
         assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
 
 
 def test_delay_is_timedelta() -> None:
     base_timeout = timedelta(seconds=5)
-    delay_multiplier = 1.5
-    delay = timeout_with_jitter(base_timeout, delay_multiplier)
+    delay = timeout_with_jitter(base_timeout)
     assert isinstance(delay, timedelta)
 
 
 def test_custom_jitter_range() -> None:
     base_timeout = timedelta(seconds=8)
-    delay_multiplier = 1.0
     jitter_span = (0.5, 1.5)
 
     # Call the function multiple times to check the custom jitter range
     for _ in range(100):
-        delay = timeout_with_jitter(base_timeout, delay_multiplier, jitter_span)
-        base_delay = base_timeout.total_seconds() * delay_multiplier
+        delay = timeout_with_jitter(base_timeout, jitter_span)
+        base_delay = base_timeout.total_seconds()
         assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
 
 
@@ -140,3 +138,51 @@ def test_preserve_other_options_and_add_search_path() -> None:
     schema = "myschema"
     expected = "postgresql://user:password@host:port/dbname?options=-c+other_option%3Dfoo&options=-c+search_path%3Dmyschema"
     assert add_schema_to_dsn(dsn, schema) == expected
+
+
+def test_exponential_backoff_initial_delay() -> None:
+    backoff = ExponentialBackoff(
+        start_delay=timedelta(1),
+        multiplier=2,
+        max_limit=timedelta(10),
+    )
+    assert backoff.current_delay == timedelta(1)
+
+
+def test_exponential_backoff_next_delay() -> None:
+    backoff = ExponentialBackoff(
+        start_delay=timedelta(1),
+        multiplier=2,
+        max_limit=timedelta(10),
+    )
+    assert backoff.next_delay() == timedelta(2)
+    assert backoff.next_delay() == timedelta(4)
+    assert backoff.next_delay() == timedelta(8)
+    assert backoff.next_delay() == timedelta(10)  # Capped at max_limit
+    assert backoff.next_delay() == timedelta(10)  # Capped at max_limit
+
+
+def test_exponential_backoff_max_limit() -> None:
+    backoff = ExponentialBackoff(
+        start_delay=timedelta(3),
+        multiplier=3,
+        max_limit=timedelta(20),
+    )
+    backoff.next_delay()
+    assert backoff.current_delay == timedelta(9)
+    backoff.next_delay()
+    assert backoff.current_delay == timedelta(20)  # Capped at max_limit
+    assert backoff.current_delay == timedelta(20)  # Capped at max_limit
+
+
+def test_exponential_backoff_reset() -> None:
+    backoff = ExponentialBackoff(
+        start_delay=timedelta(5),
+        multiplier=2,
+        max_limit=timedelta(50),
+    )
+    backoff.next_delay()
+    backoff.next_delay()
+    assert backoff.current_delay == timedelta(20)
+    backoff.reset()
+    assert backoff.current_delay == timedelta(5)

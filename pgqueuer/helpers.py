@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -19,6 +20,46 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from croniter import croniter
 
 from . import listeners, models
+
+
+@dataclass
+class ExponentialBackoff:
+    """
+    A utility class for calculating exponential backoff delays.
+
+    Attributes:
+        start_delay (float): The starting delay for the backoff.
+        multiplier (float): The factor by which the delay increases on each step.
+        max_limit (float): The maximum allowed delay in the backoff sequence.
+        current_delay (float): The current delay in the backoff sequence.
+    """
+
+    start_delay: timedelta = field(default=timedelta(seconds=1))
+    multiplier: float = field(default=1.05)
+    max_limit: timedelta = field(default=timedelta(seconds=10))
+    current_delay: timedelta = field(init=False)
+
+    def __post_init__(self) -> None:
+        """
+        Initialize the delay to the starting delay value.
+        """
+        self.current_delay = self.start_delay
+
+    def next_delay(self) -> timedelta:
+        """
+        Calculate and return the next delay in the backoff sequence.
+
+        Returns:
+            float: The updated delay value, capped at max_limit.
+        """
+        self.current_delay = min(self.current_delay * self.multiplier, self.max_limit)
+        return self.current_delay
+
+    def reset(self) -> None:
+        """
+        Reset the delay to the starting delay value.
+        """
+        self.current_delay = self.start_delay
 
 
 @contextlib.contextmanager
@@ -107,7 +148,6 @@ def retry_timer_buffer_timeout(
 
 def timeout_with_jitter(
     timeout: timedelta,
-    delay_multiplier: float,
     jitter_span: tuple[float, float] = (0.8, 1.2),
 ) -> timedelta:
     """
@@ -115,7 +155,6 @@ def timeout_with_jitter(
 
     Args:
         base_timeout (timedelta): The base timeout as a timedelta object.
-        delay_multiplier (float): The multiplier to scale the base timeout.
         jitter_span (tuple[float, float]): A tuple representing the lower and upper
             bounds of the jitter range.
 
@@ -123,8 +162,7 @@ def timeout_with_jitter(
         float: The calculated delay with jitter applied, in seconds.
         The jitter will be in the specified range of the base delay.
     """
-    jitter = random.uniform(*jitter_span)
-    return timedelta(seconds=timeout.total_seconds() * delay_multiplier * jitter)
+    return timeout * random.uniform(*jitter_span)
 
 
 def normalize_cron_expression(expression: str) -> str:
