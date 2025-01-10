@@ -16,6 +16,7 @@ import sys
 import uuid
 import warnings
 from collections import Counter, deque
+from contextlib import nullcontext
 from datetime import timedelta
 from math import isfinite
 from typing import AsyncGenerator, Callable
@@ -143,9 +144,9 @@ class QueueManager:
         self.entrypoint_registry[name] = executor
         self.entrypoint_statistics[name] = models.EntrypointStatistics(
             samples=deque(maxlen=1_000),
-            concurrency_limiter=asyncio.Semaphore(
-                executor.parameters.concurrency_limit or sys.maxsize
-            ),
+            concurrency_limiter=asyncio.Semaphore(executor.parameters.concurrency_limit)
+            if executor.parameters.concurrency_limit > 0
+            else nullcontext(),
         )
 
     def entrypoint(
@@ -266,12 +267,28 @@ class QueueManager:
         Returns:
             set[str]: A set of entrypoint names that are below capacity.
         """
+
+        def below_capacity_limit(
+            entrypoint: str,
+            executor: executors.AbstractEntrypointExecutor,
+        ) -> bool:
+            below_rps_limit = (
+                self.observed_requests_per_second(entrypoint)
+                < executor.parameters.requests_per_second
+            )
+            below_concurrency_limit = not (
+                isinstance(
+                    c_limiter := self.entrypoint_statistics[entrypoint].concurrency_limiter,
+                    asyncio.Semaphore,
+                )
+                and c_limiter.locked()
+            )
+            return below_rps_limit and below_concurrency_limit
+
         return {
             entrypoint
             for entrypoint, executor in self.entrypoint_registry.items()
-            if self.observed_requests_per_second(entrypoint)
-            < executor.parameters.requests_per_second
-            and not self.entrypoint_statistics[entrypoint].concurrency_limiter.locked()
+            if below_capacity_limit(entrypoint, executor)
         }
 
     async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[models.Job, None]:
