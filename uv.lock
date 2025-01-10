@@ -519,7 +519,7 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.18.7.dev1+g8f95bc0.d20250109"
+version = "0.18.7.dev2+g051ada6.d20250110"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
