@@ -163,7 +163,7 @@ class TimedOverflowBuffer(Generic[T]):
             except Exception as e:
                 delay = self.backoff.next_delay()
                 logconfig.logger.warning(
-                    "Unable to flush(%s): %s, retry in: %r",
+                    "Unable to flush(%s): %s\nRetry in: %r",
                     self.callback.__name__,
                     str(e),
                     delay,

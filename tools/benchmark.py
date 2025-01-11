@@ -18,10 +18,10 @@ from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
+from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
-from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
 app = typer.Typer()
@@ -151,7 +151,7 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
 
 
 async def consumer(
-    qm: QueueManager,
+    pgq: PgQueuer,
     batch_size: int,
     entrypoint_rps: list[float],
     concurrency_limits: list[int],
@@ -162,7 +162,7 @@ async def consumer(
     async_rps, sync_rps = entrypoint_rps
     async_cl, sync_cl = concurrency_limits
 
-    @qm.entrypoint(
+    @pgq.entrypoint(
         "asyncfetch",
         requests_per_second=async_rps,
         concurrency_limit=async_cl,
@@ -170,7 +170,7 @@ async def consumer(
     async def asyncfetch(job: Job) -> None:
         bar.update()
 
-    @qm.entrypoint(
+    @pgq.entrypoint(
         "syncfetch",
         requests_per_second=sync_rps,
         concurrency_limit=sync_cl,
@@ -178,7 +178,7 @@ async def consumer(
     def syncfetch(job: Job) -> None:
         bar.update()
 
-    await qm.run(batch_size=batch_size)
+    await pgq.run(batch_size=batch_size)
 
 
 async def producer(
@@ -205,7 +205,7 @@ async def benchmark(settings: Settings) -> None:
     await (await make_queries(settings.driver, dsn())).clear_queue()
 
     shutdown = asyncio.Event()
-    qms = list[QueueManager]()
+    pgqs = list[PgQueuer]()
     tqdm_format_dict = {}
 
     async def enqueue_task(shutdown: asyncio.Event) -> None:
@@ -221,21 +221,21 @@ async def benchmark(settings: Settings) -> None:
         ]
         await asyncio.gather(*producers)
 
-    async def dequeue_task(qms: list[QueueManager]) -> None:
+    async def dequeue_task(pgqs: list[PgQueuer]) -> None:
         queries = [await make_queries(settings.driver, dsn()) for _ in range(settings.dequeue)]
         for q in queries:
-            qms.append(QueueManager(q.driver))
+            pgqs.append(PgQueuer(q.driver))
 
         with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
             consumers = [
                 consumer(
-                    qm=q,
+                    pgq=pgq,
                     batch_size=settings.dequeue_batch_size,
                     entrypoint_rps=settings.requests_per_second,
                     concurrency_limits=settings.concurrency_limit,
                     bar=bar,
                 )
-                for q in qms
+                for pgq in pgqs
             ]
             await asyncio.gather(*consumers)
             tqdm_format_dict.update(bar.format_dict)
@@ -249,14 +249,14 @@ async def benchmark(settings: Settings) -> None:
             return_when=asyncio.FIRST_COMPLETED,
         )
         shutdown.set()
-        for q in qms:
+        for q in pgqs:
             q.shutdown.set()
         for p in pending:
             p.cancel()
 
     def graceful_shutdown() -> None:
         shutdown.set()
-        for qm in qms:
+        for qm in pgqs:
             qm.shutdown.set()
 
     loop = asyncio.get_event_loop()
@@ -264,7 +264,7 @@ async def benchmark(settings: Settings) -> None:
     loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
 
     await asyncio.gather(
-        dequeue_task(qms),
+        dequeue_task(pgqs),
         enqueue_task(shutdown),
         shutdown_timer(),
     )
@@ -323,7 +323,7 @@ def main(
         help="RPS for endpoints.",
     ),
     concurrency_limit: list[int] = typer.Option(
-        [sys.maxsize, sys.maxsize],
+        [0, 0],
         help="Concurrency limit.",
     ),
     output_json: Path | None = typer.Option(
