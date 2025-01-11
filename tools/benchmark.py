@@ -54,6 +54,7 @@ class BenchmarkResult(BaseModel):
                     ["GitHub Ref Name", self.github_ref_name],
                     ["Rate", f"{self.rate:.2f}"],
                     ["Steps", self.steps],
+                    ["Queued", self.queued],
                 ],
                 headers=["Field", "Value"],
                 tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),

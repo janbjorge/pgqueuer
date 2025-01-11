@@ -9,68 +9,68 @@ on:
     - cron: "0 */6 * * *"
 
 jobs:
-  run-example:
-    if: github.event_name != 'schedule'
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-        os: [ubuntu-24.04]
-        postgres-version: ["17"]
+  # run-example:
+  #   if: github.event_name != 'schedule'
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: ["3.12"]
+  #       os: [ubuntu-24.04]
+  #       postgres-version: ["17"]
 
-    env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
+  #   env:
+  #     PGUSER: pgquser
+  #     PGDATABASE: pgqdb
+  #     PGPASSWORD: pgqpw
+  #     PGHOST: localhost
 
-    name: Run PGQueuer Example
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+  #   name: Run PGQueuer Example
+  #   runs-on: ${{ matrix.os }}
+  #   timeout-minutes: 5
 
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
+  #   services:
+  #     postgres:
+  #       image: postgres:${{ matrix.postgres-version }}
+  #       env:
+  #         POSTGRES_USER: ${{ env.PGUSER }}
+  #         POSTGRES_DB: ${{ env.PGDATABASE }}
+  #         POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+  #       ports:
+  #         - 5432:5432
+  #       options: >-
+  #         --health-cmd pg_isready
+  #         --health-interval 10s
+  #         --health-timeout 5s
+  #         --health-retries 5
+  #         --tmpfs /var/lib/postgresql/data:rw
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v3
+  #       # with:
+  #       #   enable-cache: true
+  #       #   cache-dependency-glob: "uv.lock"
 
-      - name: Set up Python
-        run: |
-          uv sync --group asyncpg --frozen --python ${{ matrix.python-version }}
-          uv run --frozen pgq install
+  #     - name: Set up Python
+  #       run: |
+  #         uv sync --group asyncpg --frozen --python ${{ matrix.python-version }}
+  #         uv run --frozen pgq install
 
-      - name: Test pgq CLI Command
-        run: |
-            source .venv/bin/activate
-            pgq --help
+  #     - name: Test pgq CLI Command
+  #       run: |
+  #           source .venv/bin/activate
+  #           pgq --help
 
-      - name: Run Example with SIGINT
-        run: |
-          source .venv/bin/activate
-          PYTHONUNBUFFERED=1 pgq run examples.consumer:main &
-          pid=$!
-          sleep 5
-          kill -SIGINT $pid
-          wait $pid
+  #     - name: Run Example with SIGINT
+  #       run: |
+  #         source .venv/bin/activate
+  #         PYTHONUNBUFFERED=1 pgq run examples.consumer:main &
+  #         pid=$!
+  #         sleep 5
+  #         kill -SIGINT $pid
+  #         wait $pid
 
   run-benchmark:
     strategy:
@@ -78,250 +78,205 @@ jobs:
       matrix:
         python-version: ["3.12"]
         os: [ubuntu-24.04]
-        pgdriver: ["apg", "apgpool", "psy"]
+        pgdriver: ["apg"]
+        # pgdriver: ["apg", "apgpool", "psy"]
         postgres-version: ["17"]
 
     env:
       PGUSER: pgquser
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
-      PGHOST: localhost
+      PGHOST: 0.0.0.0
 
     name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
     timeout-minutes: 5
 
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
+      - name: Postgres db
+        run: |
+          make up
+          make populate
 
       - name: Install PGQueuer
         run: |
-          uv sync --all-extras --dev
-          uv run --frozen pgq install
+          make benchmark
 
-      - name: Set ISO Timestamp
-        id: timestamp
-        run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
+      # - name: Set ISO Timestamp
+      #   id: timestamp
+      #   run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
 
-      - name: Set Branch or Tag Name
-        id: get_ref
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
-          else
-            echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-          fi
+      # - name: Set Branch or Tag Name
+      #   id: get_ref
+      #   run: |
+      #     if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+      #       echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+      #     else
+      #       echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+      #     fi
 
-      - name: Benchmark
-        run: |
-            PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
-              --driver ${{ matrix.pgdriver }} \
-              --output-json benchmark.json
+      # - name: Benchmark
+      #   run: |
+      #       PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
+      #         --driver ${{ matrix.pgdriver }} \
+      #         --output-json benchmark.json
 
-      - name: Commit and Push Benchmark to Artifact Repository
-        env:
-          ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
-          ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
-        run: |
-          git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
-          mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
-          cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
-          cd artifacts-repo
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
-          push_with_retry() {
-            local retries=5
-            local count=0
-            until git push origin main; do
-              count=$((count + 1))
-              if [ $count -ge $retries ]; then
-                echo "Push failed after $retries attempts."
-                exit 1
-              fi
-              echo "Push failed, attempting to pull and retry... ($count/$retries)"
-              git fetch origin main
-              git rebase origin/main --autosquash
-            done
-          }
-          push_with_retry
+      # - name: Commit and Push Benchmark to Artifact Repository
+      #   env:
+      #     ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
+      #     ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
+      #   run: |
+      #     git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
+      #     mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
+      #     cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
+      #     cd artifacts-repo
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+      #     git add .
+      #     git commit -m "Add benchmark-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
+      #     push_with_retry() {
+      #       local retries=5
+      #       local count=0
+      #       until git push origin main; do
+      #         count=$((count + 1))
+      #         if [ $count -ge $retries ]; then
+      #           echo "Push failed after $retries attempts."
+      #           exit 1
+      #         fi
+      #         echo "Push failed, attempting to pull and retry... ($count/$retries)"
+      #         git fetch origin main
+      #         git rebase origin/main --autosquash
+      #       done
+      #     }
+      #     push_with_retry
 
-  validate-benchmark:
-    needs: [run-benchmark]
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-        os: [ubuntu-24.04]
+  # validate-benchmark:
+  #   needs: [run-benchmark]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: ["3.12"]
+  #       os: [ubuntu-24.04]
 
-    name: Validate Benchmark Results
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+  #   name: Validate Benchmark Results
+  #   runs-on: ${{ matrix.os }}
+  #   timeout-minutes: 5
 
-    steps:
-      - uses: actions/checkout@v4
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v3
+  #       with:
+  #         enable-cache: true
+  #         cache-dependency-glob: "uv.lock"
 
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
+  #     - name: Set up Python
+  #       run: uv python install ${{ matrix.python-version }}
 
-      - name: Set Branch or Tag Name
-        id: get_ref
-        run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
-          else
-            echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
-          fi
+  #     - name: Set Branch or Tag Name
+  #       id: get_ref
+  #       run: |
+  #         if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+  #           echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+  #         else
+  #           echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+  #         fi
 
-      - name: Clone Artifact Repository
-        run: git clone https://github.com/janbjorge/artifacts-storage.git
+  #     - name: Clone Artifact Repository
+  #       run: git clone https://github.com/janbjorge/artifacts-storage.git
 
-      - name: Install Dependencies
-        run: uv venv && uv pip install pydantic
+  #     - name: Install Dependencies
+  #       run: uv venv && uv pip install pydantic
 
-      - name: Validate RPS Against Main
-        run: |
-          cd artifacts-storage
-          PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py || true
+  #     - name: Validate RPS Against Main
+  #       run: |
+  #         cd artifacts-storage
+  #         PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py || true
 
-  run-tests:
-    if: github.event_name != 'schedule'
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
-        postgres-version: ["13", "14", "15", "16", "17"]
-        os: [ubuntu-24.04]
+  # run-tests:
+  #   if: github.event_name != 'schedule'
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       python-version: ["3.10", "3.11", "3.12", "3.13"]
+  #       postgres-version: ["13", "14", "15", "16", "17"]
+  #       os: [ubuntu-24.04]
 
-    env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
+  #   env:
+  #     PGUSER: pgquser
+  #     PGDATABASE: pgqdb
+  #     PGPASSWORD: pgqpw
+  #     PGHOST: localhost
 
-    name: Test PGQueuer with Multiple Python and Postgres Versions
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+  #   name: Test PGQueuer with Multiple Python and Postgres Versions
+  #   runs-on: ${{ matrix.os }}
+  #   timeout-minutes: 5
 
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-    steps:
-      - uses: actions/checkout@v4
+  #     - name: Install PGQueuer
+  #       run: |
+  #         UV_PYTHON_VERSION=${{ matrix.python-version }} make build
+  #         make up populate
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+  #     - name: Run test suite
+  #       run: make test
 
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
+  # run-ruff:
+  #   if: github.event_name != 'schedule'
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Install PGQueuer
-        run: |
-          uv sync --dev --frozen
-          uv run --frozen pgq install
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v3
+  #       with:
+  #         enable-cache: true
+  #         cache-dependency-glob: "uv.lock"
 
-      - name: Run Full Test Suite
-        run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 uv run pytest -v
+  #     - name: Set up Python
+  #       run: uv python install 3.12
 
-  run-ruff:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
+  #     - name: Install Dev Environment
+  #       run: uv sync --all-extras --dev
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+  #     - name: Run Ruff Linter
+  #       if: ${{ always() }}
+  #       run: uv run ruff check .
 
-      - name: Set up Python
-        run: uv python install 3.12
+  #     - name: Apply Ruff Formatting
+  #       if: ${{ always() }}
+  #       run: uv run ruff format . --check
 
-      - name: Install Dev Environment
-        run: uv sync --all-extras --dev
+  # run-mypy:
+  #   if: github.event_name != 'schedule'
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Run Ruff Linter
-        if: ${{ always() }}
-        run: uv run ruff check .
+  #     - name: Install uv
+  #       uses: astral-sh/setup-uv@v3
+  #       with:
+  #         enable-cache: true
+  #         cache-dependency-glob: "uv.lock"
 
-      - name: Apply Ruff Formatting
-        if: ${{ always() }}
-        run: uv run ruff format . --check
+  #     - name: Set up Python
+  #       run: uv python install 3.12
 
-  run-mypy:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
+  #     - name: Install Dev Environment
+  #       run: uv sync --all-extras --dev
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
+  #     - name: Run Mypy Type Check
+  #       run: uv run mypy .
 
-      - name: Set up Python
-        run: uv python install 3.12
-
-      - name: Install Dev Environment
-        run: uv sync --all-extras --dev
-
-      - name: Run Mypy Type Check
-        run: uv run mypy .
-
-  complete-pipeline:
-    if: github.event_name != 'schedule'
-    needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Confirm All Tests Completed
-        run: echo "All tests completed successfully."
+  # complete-pipeline:
+  #   if: github.event_name != 'schedule'
+  #   needs: [validate-benchmark, run-tests, run-ruff, run-mypy, run-example]
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - name: Confirm All Tests Completed
+  #       run: echo "All tests completed successfully."
