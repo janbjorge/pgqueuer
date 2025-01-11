@@ -12,6 +12,7 @@ import asyncio
 import dataclasses
 import uuid
 from collections import deque
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal, NamedTuple
 
@@ -170,7 +171,7 @@ class Context:
 @dataclasses.dataclass
 class EntrypointStatistics:
     samples: deque[tuple[int, datetime]]
-    concurrency_limiter: asyncio.Semaphore
+    concurrency_limiter: asyncio.Semaphore | nullcontext
 
 
 ###### Schedules ######

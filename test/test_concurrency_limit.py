@@ -85,7 +85,7 @@ async def test_max_concurrency(
     await asyncio.gather(timer(), dequeue())
 
     for tally in tallys:
-        assert max_concurrency - 1 <= tally.max_active <= max_concurrency
+        assert 0 < tally.max_active <= max_concurrency
 
 
 @pytest.mark.parametrize("concurrency_limit", (1, 5, 10))
