@@ -22,7 +22,7 @@ jobs:
       PGUSER: pgquser
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
-      PGHOST: localhost
+      PGHOST: 0.0.0.0
 
     name: Run PGQueuer Example
     runs-on: ${{ matrix.os }}
@@ -85,7 +85,7 @@ jobs:
       PGUSER: pgquser
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
-      PGHOST: localhost
+      PGHOST: 0.0.0.0
 
     name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
@@ -229,7 +229,7 @@ jobs:
       PGUSER: pgquser
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
-      PGHOST: localhost
+      PGHOST: 0.0.0.0
 
     name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
