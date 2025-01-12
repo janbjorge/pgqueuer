@@ -272,9 +272,11 @@ class AsyncpgPoolDriver(Driver):
         return self
 
     async def __aexit__(self, *_: object) -> None:
-        if self._listener_connection is not None:
-            await self._listener_connection.reset()
-            await self._pool.release(self._listener_connection)
+        async with self._lock:
+            if self._listener_connection is not None:
+                await self._listener_connection.reset()
+                await self._pool.release(self._listener_connection)
+                self._listener_connection = None
 
 
 @functools.cache
