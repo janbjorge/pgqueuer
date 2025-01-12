@@ -277,7 +277,7 @@ async def benchmark(settings: Settings) -> None:
         elapsed=tqdm_format_dict["elapsed"],
         github_ref_name=os.environ.get("REF_NAME", ""),
         queued=sum(x.count for x in qsize),
-        rate=tqdm_format_dict["rate"],
+        rate=float(tqdm_format_dict["n"]) / float(tqdm_format_dict["elapsed"]),
         steps=tqdm_format_dict["n"],
     )
 
