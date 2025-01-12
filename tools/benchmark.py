@@ -54,6 +54,7 @@ class BenchmarkResult(BaseModel):
                     ["GitHub Ref Name", self.github_ref_name],
                     ["Rate", f"{self.rate:.2f}"],
                     ["Steps", self.steps],
+                    ["Queued", self.queued],
                 ],
                 headers=["Field", "Value"],
                 tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
@@ -277,7 +278,7 @@ async def benchmark(settings: Settings) -> None:
         elapsed=tqdm_format_dict["elapsed"],
         github_ref_name=os.environ.get("REF_NAME", ""),
         queued=sum(x.count for x in qsize),
-        rate=tqdm_format_dict["rate"],
+        rate=float(tqdm_format_dict["n"]) / float(tqdm_format_dict["elapsed"]),
         steps=tqdm_format_dict["n"],
     )
 

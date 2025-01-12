@@ -16,7 +16,7 @@ jobs:
       matrix:
         python-version: ["3.12"]
         os: [ubuntu-24.04]
-        postgres-version: ["17"]
+        postgres-version: ["16"]
 
     env:
       PGUSER: pgquser
@@ -79,7 +79,7 @@ jobs:
         python-version: ["3.12"]
         os: [ubuntu-24.04]
         pgdriver: ["apg", "apgpool", "psy"]
-        postgres-version: ["17"]
+        postgres-version: ["16"]
 
     env:
       PGUSER: pgquser
