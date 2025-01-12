@@ -190,7 +190,7 @@ async def producer(
 ) -> None:
     """Enqueue jobs continuously until a shutdown signal is received."""
     assert batch_size > 0
-    entrypoints = ["syncfetch", "asyncfetch"] * batch_size
+    entrypoints = ["asyncfetch", "asyncfetch"] * batch_size
     while not shutdown.is_set():
         await queries.enqueue(
             random.sample(entrypoints, k=batch_size),
@@ -208,6 +208,13 @@ async def benchmark(settings: Settings) -> None:
     shutdown = asyncio.Event()
     pgqs = list[PgQueuer]()
     tqdm_format_dict = {}
+
+    async def stats() -> None:
+        import icecream
+
+        while not shutdown.is_set():
+            icecream.ic(len(asyncio.all_tasks()))
+            await asyncio.sleep(1)
 
     async def enqueue_task(shutdown: asyncio.Event) -> None:
         cnt = count()
@@ -268,6 +275,7 @@ async def benchmark(settings: Settings) -> None:
         dequeue_task(pgqs),
         enqueue_task(shutdown),
         shutdown_timer(),
+        # stats(),
     )
 
     qsize = await (await make_queries(settings.driver, dsn())).queue_size()

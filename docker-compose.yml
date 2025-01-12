@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:${POSTGRES_VERSION:-17}
+    image: postgres:${POSTGRES_VERSION:-16}
     environment:
       POSTGRES_USER: pgquser
       POSTGRES_DB: pgqdb
@@ -42,9 +42,6 @@ services:
       PYTHONASYNCIODEBUG: 1
       PYTHONDEBUG: 1
       PYTHONFAULTHANDLER: 1
-    depends_on:
-      populate:
-        condition: service_completed_successfully
     build:
       context: .
       args:
@@ -59,9 +56,6 @@ services:
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
       PGHOST: db
-    depends_on:
-      populate:
-        condition: service_completed_successfully
     build:
       context: .
       args:
