@@ -131,6 +131,24 @@ class Job(BaseModel):
     queue_manager_id: uuid.UUID | None
 
 
+###### Log ######
+
+
+class Log(BaseModel):
+    """
+    Represents a job with attributes such as ID, priority,
+    creation time, status, entrypoint, and optional payload.
+    """
+
+    created: AwareDatetime
+    job_id: JobId
+    time_in_queue: timedelta | None
+    status: str
+    priority: int
+    entrypoint: str
+    aggregated: bool
+
+
 ###### Statistics ######
 STATUS_LOG = Literal[
     "canceled",

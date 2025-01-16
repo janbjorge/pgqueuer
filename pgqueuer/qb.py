@@ -694,6 +694,12 @@ class QueryQueueBuilder:
     def create_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
+    def create_clear_log_query(self) -> str:
+        return f"TRUNCATE {self.settings.queue_table_log}"
+
+    def create_fetch_log_query(self) -> str:
+        return f"SELECT * FROM {self.settings.queue_table_log}"
+
 
 @dataclasses.dataclass
 class QuerySchedulerBuilder:
