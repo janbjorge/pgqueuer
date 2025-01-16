@@ -10,14 +10,14 @@ Drivers simplify and standardize database interactions by:
 - Abstracting PostgreSQL-specific features to streamline queue operations.
 - Providing a consistent interface for executing queries, reducing complexity for users.
 
-
 ## Assumptions for Using a Driver
 To ensure smooth integration with PGQueuer, the following requirements must be met:
 
 ### Checklist of Requirements for Database Connections
 
-1. **Autocommit Mode**: 
-   - The database connection must be set to autocommit mode. For psycopg, explicitly enable it using `connection.autocommit = True`.
+1. **Autocommit Mode**:
+   - The database connection must operate in autocommit mode. For psycopg, explicitly enable it using `connection.autocommit = True`.
+   - For asyncpg, autocommit is the default behavior unless a transaction is explicitly started, so no additional configuration is needed.
 
 2. **PostgreSQL Compatibility**:
    - The driver must support PostgreSQL-specific features and extensions used by PGQueuer.
@@ -25,7 +25,7 @@ To ensure smooth integration with PGQueuer, the following requirements must be m
 3. **Asynchronous Operations** (if applicable):
    - Drivers should support asyncio-compatible operations if required for the application setup.
 
-3. **Default Isolation Level**:
+4. **Default Isolation Level**:
    - Connections should maintain the default PostgreSQL isolation level unless explicitly modified.
 
 ## Implementation Notes
