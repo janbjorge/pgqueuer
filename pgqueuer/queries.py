@@ -473,3 +473,14 @@ class Queries:
         await self.driver.execute(
             self.qbs.create_truncate_schedule_query(),
         )
+
+    async def clear_log(self) -> None:
+        await self.driver.execute(
+            self.qbq.create_clear_log_query(),
+        )
+
+    async def queue_log(self) -> list[models.Log]:
+        return [
+            models.Log.model_validate(x)
+            for x in await self.driver.fetch(self.qbq.create_fetch_log_query())
+        ]
