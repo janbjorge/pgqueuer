@@ -126,8 +126,8 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
     )
 
     # maximum delay for retry
-    max_delay: float = dataclasses.field(
-        default=10.0,
+    max_delay: float | timedelta = dataclasses.field(
+        default=timedelta(seconds=10),
     )
 
     # maximum time used on retry
@@ -181,7 +181,12 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
                         if self.max_attempts and attempt >= self.max_attempts:
                             raise errors.MaxRetriesExceeded(self.max_attempts) from e
 
-                        await asyncio.sleep(min(self.exponential_delay(attempt), self.max_delay))
+                        max_delay = (
+                            self.max_delay
+                            if isinstance(self.max_delay, float | int)
+                            else self.max_delay.total_seconds()
+                        )
+                        await asyncio.sleep(min(self.exponential_delay(attempt), max_delay))
         except (
             TimeoutError,
             asyncio.exceptions.TimeoutError,
