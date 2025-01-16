@@ -20,6 +20,7 @@ from typing import (
 
 import anyio
 import anyio.to_thread
+import async_timeout
 from croniter import croniter
 
 from . import db, errors, helpers, models, queries
@@ -119,12 +120,40 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
 
 @dataclasses.dataclass
 class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
-    max_attempts: int | None = 5  # maximum retry attempts
-    max_delay: float = 10.0  # maximum delay for retry
-    max_time: timedelta | None = timedelta(minutes=5)  # maximum time used on retry
-    initial_delay: float = 0.1  # base delay for backoff
-    backoff_multiplier: float = 2.0  # base for exponential backoff
-    jitter: Callable[[], float] = lambda: random.uniform(0, 1)  # jitter callable
+    # maximum retry attempts
+    max_attempts: int | None = dataclasses.field(
+        default=5,
+    )
+
+    # maximum delay for retry
+    max_delay: float = dataclasses.field(
+        default=10.0,
+    )
+
+    # maximum time used on retry
+    max_time: timedelta | None = dataclasses.field(
+        default=timedelta(minutes=5),
+    )
+
+    # base delay for backoff
+    initial_delay: float = dataclasses.field(
+        default=0.1,
+    )
+
+    # base for exponential backoff
+    backoff_multiplier: float = dataclasses.field(
+        default=2.0,
+    )
+
+    # jitter callable
+    jitter: Callable[[], float] = dataclasses.field(
+        default=lambda: random.uniform(0, 1),
+    )
+
+    def exponential_delay(self, attempt: int) -> float:
+        delay = self.initial_delay * (self.backoff_multiplier**attempt) / 2
+        jitter = self.jitter() * self.initial_delay / 2
+        return delay + jitter
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
@@ -141,24 +170,24 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
         """
 
         attempt = 0
+        deadline = None if self.max_time is None else self.max_time.total_seconds()
+        try:
+            async with async_timeout.timeout(deadline):
+                while True:
+                    try:
+                        return await super().execute(job, context)
+                    except Exception as e:
+                        attempt += 1
+                        if self.max_attempts and attempt >= self.max_attempts:
+                            raise errors.MaxRetriesExceeded(self.max_attempts) from e
 
-        with helpers.timer() as elapsed:
-            while True:
-                try:
-                    return await super().execute(job, context)
-                except Exception as e:
-                    attempt += 1
-                    if self.max_time and (elp := elapsed()) >= self.max_time:
-                        raise errors.MaxTimeExceeded(self.max_time, elp) from e
-                    if self.max_attempts and attempt >= self.max_attempts:
-                        raise errors.MaxRetriesExceeded(self.max_attempts) from e
-
-                    delay = (
-                        self.initial_delay * (self.backoff_multiplier**attempt) / 2
-                        + self.jitter() * self.initial_delay / 2
-                    )
-
-                    await asyncio.sleep(min(delay, self.max_delay))
+                        await asyncio.sleep(min(self.exponential_delay(attempt), self.max_delay))
+        except (
+            TimeoutError,
+            asyncio.exceptions.TimeoutError,
+            asyncio.TimeoutError,
+        ) as e:
+            raise errors.MaxTimeExceeded(self.max_time) from e
 
 
 ######## Schedulers ########
