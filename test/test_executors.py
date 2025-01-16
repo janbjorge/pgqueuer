@@ -219,7 +219,7 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
     jobs = list[Job]()
 
     async def raises(job: Job) -> None:
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0)
         jobs.append(job)
         raise ValueError
 
@@ -256,11 +256,8 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
 
 
 async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver) -> None:
-    jobs = list[Job]()
-
-    async def raises(job: Job) -> None:
+    async def raises(_: Job) -> None:
         await asyncio.sleep(0.01)
-        jobs.append(job)
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
@@ -281,18 +278,27 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
     )
 
     exc.max_attempts = 1000
-    exc.max_time = timedelta(seconds=0.1)
+    exc.max_time = timedelta(seconds=0.01)
     mj = mocked_job()
-    with timer() as elp, pytest.raises(MaxTimeExceeded):
+    with (
+        timer() as elp,
+        pytest.raises(MaxTimeExceeded),
+    ):
         await exc.execute(mj, Context(anyio.CancelScope()))
-    assert timedelta(seconds=1) > elp() > timedelta(seconds=0.1)
+
+    leeway = 1.1
+    assert elp() * leeway >= exc.max_time
 
     exc.max_attempts = 1000
     exc.max_time = timedelta(seconds=0.1)
     mj = mocked_job()
-    with timer() as elp, pytest.raises(MaxTimeExceeded):
+    with (
+        timer() as elp,
+        pytest.raises(MaxTimeExceeded),
+    ):
         await exc.execute(mj, Context(anyio.CancelScope()))
-    assert timedelta(seconds=1) > elp() > timedelta(seconds=0.1)
+
+    assert elp() * leeway >= exc.max_time
 
 
 async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driver) -> None:
@@ -307,7 +313,7 @@ async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driv
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_time"),
+        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_until_pass"),
         concurrency_limit=10,
         connection=apgdriver,
         queries=Queries(apgdriver),

@@ -519,10 +519,11 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.18.7"
+version = "0.18.8.dev2+gb8ec67f.d20250116"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
+    { name = "async-timeout" },
     { name = "croniter" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -568,6 +569,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.0" },
+    { name = "async-timeout", specifier = ">=5.0.1" },
     { name = "asyncpg", marker = "extra == 'asyncpg'", specifier = ">=0.30.0" },
     { name = "croniter", specifier = ">=5.0.1" },
     { name = "psycopg", marker = "extra == 'psycopg'", specifier = ">=3.2.0" },
