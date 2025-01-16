@@ -314,7 +314,7 @@ class Queries:
             [s for _, s in job_status],
         )
 
-    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Remove entries from the statistics (log) table.
 
@@ -328,11 +328,11 @@ class Queries:
         """
         await (
             self.driver.execute(
-                self.qbq.create_delete_from_log_query(),
+                self.qbq.create_delete_from_log_statistics_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
             if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_log_query())
+            else self.driver.execute(self.qbq.create_truncate_log_statistics_query())
         )
 
     async def log_statistics(
