@@ -254,14 +254,13 @@ class Queries:
         Args:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter jobs for deletion.
         """
-        await (
-            self.driver.execute(
+        if entrypoint:
+            await self.driver.execute(
                 self.qbq.create_delete_from_queue_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_queue_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_queue_query())
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
@@ -310,8 +309,8 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.create_log_job_query(),
-            [j.id for j, _ in job_status],
-            [s for _, s in job_status],
+            [job.id for job, _ in job_status],
+            [status for _, status in job_status],
         )
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
@@ -326,14 +325,33 @@ class Queries:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter log
                 entries for deletion.
         """
-        await (
-            self.driver.execute(
+        if entrypoint:
+            await self.driver.execute(
                 self.qbq.create_delete_from_log_statistics_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_log_statistics_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_log_statistics_query())
+
+    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """
+        Remove entries from the queue log table.
+
+        Deletes log entries from the log table. If entrypoints are provided,
+        only entries matching those entrypoints are removed; otherwise, the entire
+        log is cleared.
+
+        Args:
+            entrypoint (str | list[str] | None): The entrypoint(s) to filter log
+                entries for deletion.
+        """
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.create_delete_log_query(),
+                [entrypoint] if isinstance(entrypoint, str) else entrypoint,
+            )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_log_query())
 
     async def log_statistics(
         self,
@@ -472,11 +490,6 @@ class Queries:
     async def clear_schedule(self) -> None:
         await self.driver.execute(
             self.qbs.create_truncate_schedule_query(),
-        )
-
-    async def clear_log(self) -> None:
-        await self.driver.execute(
-            self.qbq.create_clear_log_query(),
         )
 
     async def queue_log(self) -> list[models.Log]:
