@@ -697,8 +697,11 @@ class QueryQueueBuilder:
     def create_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
-    def create_clear_log_query(self) -> str:
+    def create_truncate_log_query(self) -> str:
         return f"TRUNCATE {self.settings.queue_table_log}"
+
+    def create_delete_log_query(self) -> str:
+        return f"DELETE FROM {self.settings.queue_table_log} WHERE entrypoint = ANY($1)"
 
     def create_fetch_log_query(self) -> str:
         return f"SELECT * FROM {self.settings.queue_table_log}"
@@ -772,4 +775,4 @@ class QuerySchedulerBuilder:
         return f"""DELETE FROM {self.settings.schedules_table} WHERE id = ANY($1) OR entrypoint = ANY($2)"""  # noqa: E501
 
     def create_truncate_schedule_query(self) -> str:
-        return f"TRUNCATE {self.settings.schedules_table}"
+        return f"""TRUNCATE {self.settings.schedules_table}"""
