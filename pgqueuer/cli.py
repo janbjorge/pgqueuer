@@ -95,7 +95,6 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                     stat.created.astimezone(),
                     stat.count,
                     stat.entrypoint,
-                    stat.time_in_queue,
                     stat.status,
                     stat.priority,
                 )
@@ -105,7 +104,6 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                 "Created",
                 "Count",
                 "Entrypoint",
-                "Time in Queue (HH:MM:SS)",
                 "Status",
                 "Priority",
             ],
