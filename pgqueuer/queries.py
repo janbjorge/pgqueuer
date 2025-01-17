@@ -294,7 +294,7 @@ class Queries:
 
     async def log_jobs(
         self,
-        job_status: list[tuple[models.Job, models.STATUS_LOG]],
+        job_status: list[tuple[models.Job, models.JOB_STATUS]],
     ) -> None:
         """
         Move completed or failed jobs from the queue to the log table.
@@ -372,6 +372,8 @@ class Queries:
         Returns:
             list[models.LogStatistics]: A list of log statistics entries.
         """
+
+        await self.driver.execute(self.qbq.aggregate_logs_into_statistics())
         return [
             models.LogStatistics.model_validate(dict(x))
             for x in await self.driver.fetch(
@@ -450,8 +452,8 @@ class Queries:
             models.Schedule.model_validate(dict(row))
             for row in await self.driver.fetch(
                 self.qbs.create_fetch_schedule_query(),
-                [s for _, s in entrypoints],
-                [n for n, _ in entrypoints],
+                [x.expression for x in entrypoints],
+                [x.entrypoint for x in entrypoints],
                 list(entrypoints.values()),
             )
         ]

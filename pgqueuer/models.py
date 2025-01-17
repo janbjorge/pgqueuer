@@ -21,8 +21,8 @@ from pydantic import AwareDatetime, BaseModel, Field, RootModel
 
 from .types import (
     EVENT_TYPES,
+    JOB_STATUS,
     OPERATIONS,
-    STATUS,
     CronEntrypoint,
     CronExpression,
     JobId,
@@ -125,7 +125,7 @@ class Job(BaseModel):
     updated: AwareDatetime
     heartbeat: AwareDatetime
     execute_after: AwareDatetime
-    status: STATUS
+    status: JOB_STATUS
     entrypoint: str
     payload: bytes | None
     queue_manager_id: uuid.UUID | None
@@ -142,7 +142,6 @@ class Log(BaseModel):
 
     created: AwareDatetime
     job_id: JobId
-    time_in_queue: timedelta | None
     status: str
     priority: int
     entrypoint: str
@@ -150,13 +149,6 @@ class Log(BaseModel):
 
 
 ###### Statistics ######
-STATUS_LOG = Literal[
-    "canceled",
-    "exception",
-    "successful",
-]
-
-
 class QueueStatistics(BaseModel):
     """
     Represents the number of jobs per entrypoint and priority in the queue.
@@ -165,7 +157,7 @@ class QueueStatistics(BaseModel):
     count: int
     entrypoint: str
     priority: int
-    status: STATUS
+    status: JOB_STATUS
 
 
 class LogStatistics(BaseModel):
@@ -177,8 +169,7 @@ class LogStatistics(BaseModel):
     created: AwareDatetime
     entrypoint: str
     priority: int
-    status: STATUS_LOG
-    time_in_queue: timedelta
+    status: JOB_STATUS
 
 
 @dataclasses.dataclass
@@ -208,5 +199,5 @@ class Schedule(BaseModel):
     updated: AwareDatetime
     next_run: AwareDatetime
     last_run: AwareDatetime | None = None
-    status: STATUS
+    status: JOB_STATUS
     entrypoint: CronEntrypoint
