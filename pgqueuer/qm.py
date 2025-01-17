@@ -341,8 +341,9 @@ class QueueManager:
         """
 
         for table in (
-            qb.add_prefix("pgqueuer"),
-            qb.add_prefix("pgqueuer_statistics"),
+            self.queries.qbe.settings.queue_table,
+            self.queries.qbe.settings.statistics_table,
+            self.queries.qbe.settings.queue_table_log,
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
@@ -360,12 +361,6 @@ class QueueManager:
                 raise RuntimeError(
                     f"The required column '{column}' is missing in the '{table}' table. "
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
-                )
-
-        for key, enum in (("canceled", self.queries.qbe.settings.statistics_table_status_type),):
-            if not (await self.queries.has_user_defined_enum(key, enum)):
-                raise RuntimeError(
-                    f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
                 )
 
     async def run(

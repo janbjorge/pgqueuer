@@ -4,12 +4,27 @@ from typing import Literal, NewType
 
 ###### Events ######
 PGChannel = NewType("PGChannel", str)
-OPERATIONS = Literal["insert", "update", "delete", "truncate"]
-STATUS = Literal["queued", "picked"]
-EVENT_TYPES = Literal["table_changed_event", "requests_per_second_event", "cancellation_event"]
+OPERATIONS = Literal[
+    "insert",
+    "update",
+    "delete",
+    "truncate",
+]
+EVENT_TYPES = Literal[
+    "table_changed_event",
+    "requests_per_second_event",
+    "cancellation_event",
+]
 
 
 ###### Jobs ######
+JOB_STATUS = Literal[
+    "queued",
+    "picked",
+    "successful",
+    "exception",
+    "canceled",
+]
 JobId = NewType("JobId", int)
 
 

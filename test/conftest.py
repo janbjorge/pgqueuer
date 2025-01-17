@@ -29,4 +29,5 @@ async def truncate_tables(apgdriver: Driver) -> None:
         Queries(apgdriver).clear_log(),
         Queries(apgdriver).clear_queue(),
         Queries(apgdriver).clear_schedule(),
+        Queries(apgdriver).clear_statistics_log(),
     )

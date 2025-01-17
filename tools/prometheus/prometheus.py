@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from itertools import groupby
-from statistics import mean, median
 from typing import AsyncGenerator, Callable, Generator, Iterable, TypeAlias
 
 import asyncpg
@@ -82,20 +81,6 @@ def aggregated_log_statistics(
             labels={"aggregation": "sum", "entrypoini": entrypoint, "status": status},
             value=sum(x.count for x in items),
         )
-
-    aggregations: tuple[tuple[ReduceFn, str], ...] = (
-        (min, "min"),
-        (max, "max"),
-        (mean, "mean"),
-        (median, "median"),
-    )
-    for fn, name in aggregations:
-        for entrypoint, status, items in aggregated_log_statistics:
-            yield prometheus_format(
-                metric_name="pgqueuer_logs_time_in_queue_seconds",
-                labels={"aggregation": name, "entrypoint": entrypoint, "status": status},
-                value=round(fn(x.time_in_queue.total_seconds() for x in items), 3),
-            )
 
 
 def aggregated_statistics(

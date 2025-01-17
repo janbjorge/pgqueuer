@@ -32,7 +32,7 @@ async def probe(driver: AsyncpgDriver) -> None:
 async def producer(driver: AsyncpgDriver) -> None:
     queries = Queries(driver)
     await queries.clear_queue()
-    await queries.clear_log()
+    await queries.clear_statistics_log()
     for i in range(100):
         for j in range(1, 10):
             await queries.enqueue(f"fetch_{j}", str(i).encode())

@@ -254,14 +254,13 @@ class Queries:
         Args:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter jobs for deletion.
         """
-        await (
-            self.driver.execute(
+        if entrypoint:
+            await self.driver.execute(
                 self.qbq.create_delete_from_queue_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_queue_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_queue_query())
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
@@ -295,7 +294,7 @@ class Queries:
 
     async def log_jobs(
         self,
-        job_status: list[tuple[models.Job, models.STATUS_LOG]],
+        job_status: list[tuple[models.Job, models.JOB_STATUS]],
     ) -> None:
         """
         Move completed or failed jobs from the queue to the log table.
@@ -310,11 +309,11 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.create_log_job_query(),
-            [j.id for j, _ in job_status],
-            [s for _, s in job_status],
+            [job.id for job, _ in job_status],
+            [status for _, status in job_status],
         )
 
-    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Remove entries from the statistics (log) table.
 
@@ -326,14 +325,33 @@ class Queries:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter log
                 entries for deletion.
         """
-        await (
-            self.driver.execute(
-                self.qbq.create_delete_from_log_query(),
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.create_delete_from_log_statistics_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_log_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_log_statistics_query())
+
+    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """
+        Remove entries from the queue log table.
+
+        Deletes log entries from the log table. If entrypoints are provided,
+        only entries matching those entrypoints are removed; otherwise, the entire
+        log is cleared.
+
+        Args:
+            entrypoint (str | list[str] | None): The entrypoint(s) to filter log
+                entries for deletion.
+        """
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.create_delete_log_query(),
+                [entrypoint] if isinstance(entrypoint, str) else entrypoint,
+            )
+        else:
+            await self.driver.execute(self.qbq.create_truncate_log_query())
 
     async def log_statistics(
         self,
@@ -354,6 +372,8 @@ class Queries:
         Returns:
             list[models.LogStatistics]: A list of log statistics entries.
         """
+
+        await self.driver.execute(self.qbq.aggregate_logs_into_statistics())
         return [
             models.LogStatistics.model_validate(dict(x))
             for x in await self.driver.fetch(
@@ -432,8 +452,8 @@ class Queries:
             models.Schedule.model_validate(dict(row))
             for row in await self.driver.fetch(
                 self.qbs.create_fetch_schedule_query(),
-                [s for _, s in entrypoints],
-                [n for n, _ in entrypoints],
+                [x.expression for x in entrypoints],
+                [x.entrypoint for x in entrypoints],
                 list(entrypoints.values()),
             )
         ]
@@ -473,3 +493,9 @@ class Queries:
         await self.driver.execute(
             self.qbs.create_truncate_schedule_query(),
         )
+
+    async def queue_log(self) -> list[models.Log]:
+        return [
+            models.Log.model_validate(x)
+            for x in await self.driver.fetch(self.qbq.create_fetch_log_query())
+        ]
