@@ -362,7 +362,7 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
-        for key, enum in (("canceled", self.queries.qbe.settings.statistics_table_status_type),):
+        for key, enum in (("canceled", self.queries.qbe.settings.queue_status_type),):
             if not (await self.queries.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
                     f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
