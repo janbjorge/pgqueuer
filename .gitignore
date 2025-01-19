@@ -161,3 +161,4 @@ cython_debug/
 
 # PGQueuer
 pgqueuer/_version.py
+pgqueuer/_version.py
