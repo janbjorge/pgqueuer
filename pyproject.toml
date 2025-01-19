@@ -6,6 +6,9 @@ requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
 packages = ["pgqueuer"]
 
 [tool.setuptools_scm]
+write_to = "pgqueuer/_version.py"
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
 
 [project]
 name = "pgqueuer"
