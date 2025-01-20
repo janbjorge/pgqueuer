@@ -32,28 +32,47 @@ class TimedOverflowBuffer(Generic[T]):
     """
     Accumulates items, flushing them based on timeouts or buffer capacity.
 
-    The `TimedOverflowBuffer` class collects items in a buffer. It flushes the
-    buffer when either the maximum number of items (`max_size`) is reached or a specified
-    timeout (`timeout`) has elapsed since the last flush. The flush operation involves
-    invoking the provided asynchronous callable with the accumulated items.
+    The `TimedOverflowBuffer` class collects items in a buffer and flushes them
+    when either the maximum number of items (`max_size`) is reached or a specified
+    timeout (`timeout`) has elapsed since the last flush. Flushing involves invoking
+    an asynchronous callback with the accumulated items.
+
+    The class includes mechanisms for retrying failed flush operations and ensures
+    a graceful shutdown by attempting to flush remaining items before exit.
 
     Attributes:
-        max_size (int): The maximum number of items to buffer before flushing.
-        timeout (timedelta): The maximum duration to wait before flushing the buffer,
-            regardless of size.
-        callback (Callable[[list[T]], Awaitable[None]]): The asynchronous
-            callable used to flush items, such as logging to a database.
-        shutdown (asyncio.Event): An event to signal when the buffer should stop monitoring
-            (e.g., during shutdown).
+        max_size (int): The maximum number of items to buffer before triggering a flush.
+        timeout (timedelta): The maximum duration to wait before automatically flushing
+            the buffer, regardless of size.
+        callback (Callable[[list[T]], Awaitable[None]]): The asynchronous callable invoked
+            during a flush operation to process the buffered items.
+        retry_backoff (helpers.ExponentialBackoff): A backoff strategy used to retry
+            failed flush operations during normal operation.
+        shutdown_backoff (helpers.ExponentialBackoff): A backoff strategy used during
+            shutdown to ensure all items are flushed before the process exits.
+        next_flush (datetime): The scheduled time for the next flush operation.
+        shutdown (asyncio.Event): An event that signals when the buffer should stop
+            operations, such as during shutdown.
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
-        flush_handle (Optional[asyncio.TimerHandle]): Handle for the scheduled flush callback.
+        lock (asyncio.Lock): A lock to prevent concurrent flush operations.
+        tm (tm.TaskManager): A task manager for managing background tasks associated
+            with the buffer's operations.
     """
 
     max_size: int
     timeout: timedelta
     callback: Callable[[list[T]], Awaitable[None]]
-    backoff: helpers.ExponentialBackoff = dataclasses.field(
-        default_factory=helpers.ExponentialBackoff,
+    retry_backoff: helpers.ExponentialBackoff = dataclasses.field(
+        default_factory=lambda: helpers.ExponentialBackoff(
+            start_delay=timedelta(seconds=0.01),
+            max_limit=timedelta(seconds=10),
+        ),
+    )
+    shutdown_backoff: helpers.ExponentialBackoff = dataclasses.field(
+        default_factory=lambda: helpers.ExponentialBackoff(
+            start_delay=timedelta(milliseconds=1),
+            max_limit=timedelta(milliseconds=100),
+        )
     )
 
     next_flush: datetime = dataclasses.field(
@@ -161,7 +180,7 @@ class TimedOverflowBuffer(Generic[T]):
             try:
                 await self.callback(items)
             except Exception as e:
-                delay = self.backoff.next_delay()
+                delay = self.retry_backoff.next_delay()
                 logconfig.logger.warning(
                     "Unable to flush(%s): %s\nRetry in: %r",
                     self.callback.__name__,
@@ -175,7 +194,7 @@ class TimedOverflowBuffer(Generic[T]):
                     helpers.timeout_with_jitter(delay).total_seconds(),
                 )
             else:
-                self.backoff.reset()
+                self.retry_backoff.reset()
             finally:
                 self.next_flush = helpers.utc_now() + self.timeout
 
@@ -196,13 +215,33 @@ class TimedOverflowBuffer(Generic[T]):
         """
         Exit the asynchronous context manager, ensuring all items are flushed.
 
-        Cancels any scheduled flush operation and flushes any remaining items in the buffer.
+        This method is called when exiting an `async with` block. It ensures the buffer
+        performs any final flush operations for the accumulated items before shutdown.
+        The following steps are executed:
+
+        1. Signals the buffer to stop periodic operations by setting the `shutdown` event.
+        2. Waits for all ongoing tasks managed by the buffer to complete.
+        3. Attempts to flush any remaining items in the buffer using the `shutdown_backoff`
+           strategy to handle transient failures, such as temporary database outages.
+        4. Stops retrying after the maximum backoff limit (`shutdown_backoff.max_limit`)
+           is reached. This ensures that the application does not hang indefinitely
+           during situations like prolonged database downtime or critical errors.
+
+        Note:
+            This mechanism ensures that the application attempts to process all items
+            gracefully before shutting down. However, if the flush operation repeatedly
+            fails (e.g., due to a database outage), the method will eventually give up
+            to prevent blocking the application indefinitely.
         """
 
         self.shutdown.set()
         await self.tm.gather_tasks()
-        while not self.events.empty():
+
+        while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_limit:
             await self.flush()
+            if self.events.empty():
+                break
+            await asyncio.sleep(self.shutdown_backoff.next_delay().total_seconds())
 
 
 class JobStatusLogBuffer(TimedOverflowBuffer[tuple[models.Job, models.STATUS_LOG]]):
