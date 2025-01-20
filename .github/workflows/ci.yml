@@ -214,7 +214,7 @@ jobs:
       - name: Validate RPS Against Main
         run: |
           cd artifacts-storage
-          PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py || true
+          PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py
 
   run-tests:
     if: github.event_name != 'schedule'
