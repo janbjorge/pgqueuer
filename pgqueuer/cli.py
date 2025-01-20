@@ -328,5 +328,30 @@ def schedules(
     asyncio_run(run_async())
 
 
+@app.command(help="Manually enqueue a job into the PGQueuer system.")
+def queue(
+    ctx: Context,
+    entrypoint: str = typer.Argument(
+        ...,
+        help="The entry point of the job to be executed.",
+    ),
+    payload: None | str = typer.Argument(
+        None,
+        help="Optional payload for the job. Can be any serialized data (e.g., JSON or a string)",
+    ),
+) -> None:
+    config: AppConfig = ctx.obj
+
+    async def run_async() -> None:
+        await (await query_adapter(config.dsn)).enqueue(
+            entrypoint,
+            None if payload is None else payload.encode(),
+            priority=0,
+            execute_after=timedelta(seconds=0),
+        )
+
+    asyncio_run(run_async())
+
+
 if __name__ == "__main__":
     app(prog_name="pgqueuer")
