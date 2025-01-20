@@ -8,7 +8,7 @@ from helpers import mocked_job
 
 from pgqueuer.buffers import JobStatusLogBuffer
 from pgqueuer.helpers import utc_now
-from pgqueuer.models import Job
+from pgqueuer.models import STATUS_LOG, Job
 
 
 def job_faker(
@@ -307,3 +307,19 @@ async def test_job_buffer_callback_called_correctly(max_size: int) -> None:
             await buffer.add(item)  # type: ignore[arg-type]
 
     assert received_items == items
+
+
+async def test_job_buffer_callback_exception_during_teardown() -> None:
+    N = 10
+    items: list[tuple[Job, STATUS_LOG]] = [(job_faker(), "successful") for _ in range(N)]
+
+    async def helper(_: object) -> None:
+        raise ValueError
+
+    async with JobStatusLogBuffer(
+        max_size=N**2,
+        timeout=timedelta(seconds=100),
+        callback=helper,
+    ) as buffer:
+        for item in items:
+            await buffer.add(item)
