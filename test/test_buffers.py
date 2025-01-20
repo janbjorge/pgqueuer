@@ -317,9 +317,12 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
         raise ValueError
 
     async with JobStatusLogBuffer(
-        max_size=N**2,
-        timeout=timedelta(seconds=100),
+        max_size=N**2,  # max size must be gt. N.
+        timeout=timedelta(seconds=60),  # must be gt. run time of 'for loop' in the with block.
         callback=helper,
     ) as buffer:
         for item in items:
             await buffer.add(item)
+
+    # Was uanble to flush at exit, buffer should have all elements.
+    assert buffer.events.qsize() == N
