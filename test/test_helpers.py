@@ -144,7 +144,7 @@ def test_exponential_backoff_initial_delay() -> None:
     backoff = ExponentialBackoff(
         start_delay=timedelta(1),
         multiplier=2,
-        max_limit=timedelta(10),
+        max_delay=timedelta(10),
     )
     assert backoff.current_delay == timedelta(1)
 
@@ -153,7 +153,7 @@ def test_exponential_backoff_next_delay() -> None:
     backoff = ExponentialBackoff(
         start_delay=timedelta(1),
         multiplier=2,
-        max_limit=timedelta(10),
+        max_delay=timedelta(10),
     )
     assert backoff.next_delay() == timedelta(2)
     assert backoff.next_delay() == timedelta(4)
@@ -166,7 +166,7 @@ def test_exponential_backoff_max_limit() -> None:
     backoff = ExponentialBackoff(
         start_delay=timedelta(3),
         multiplier=3,
-        max_limit=timedelta(20),
+        max_delay=timedelta(20),
     )
     backoff.next_delay()
     assert backoff.current_delay == timedelta(9)
@@ -179,7 +179,7 @@ def test_exponential_backoff_reset() -> None:
     backoff = ExponentialBackoff(
         start_delay=timedelta(5),
         multiplier=2,
-        max_limit=timedelta(50),
+        max_delay=timedelta(50),
     )
     backoff.next_delay()
     backoff.next_delay()

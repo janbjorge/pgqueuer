@@ -65,13 +65,13 @@ class TimedOverflowBuffer(Generic[T]):
     retry_backoff: helpers.ExponentialBackoff = dataclasses.field(
         default_factory=lambda: helpers.ExponentialBackoff(
             start_delay=timedelta(seconds=0.01),
-            max_limit=timedelta(seconds=10),
+            max_delay=timedelta(seconds=10),
         ),
     )
     shutdown_backoff: helpers.ExponentialBackoff = dataclasses.field(
         default_factory=lambda: helpers.ExponentialBackoff(
             start_delay=timedelta(milliseconds=1),
-            max_limit=timedelta(milliseconds=100),
+            max_delay=timedelta(milliseconds=100),
         )
     )
 
@@ -237,7 +237,7 @@ class TimedOverflowBuffer(Generic[T]):
         self.shutdown.set()
         await self.tm.gather_tasks()
 
-        while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_limit:
+        while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_delay:
             await self.flush()
             if self.events.empty():
                 break

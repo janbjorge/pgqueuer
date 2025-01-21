@@ -30,19 +30,21 @@ class ExponentialBackoff:
     Attributes:
         start_delay (float): The starting delay for the backoff.
         multiplier (float): The factor by which the delay increases on each step.
-        max_limit (float): The maximum allowed delay in the backoff sequence.
+        max_delay (timedelta): The maximum sleep duration allowed in the backoff sequence.
         current_delay (float): The current delay in the backoff sequence.
     """
 
     start_delay: timedelta = field(default=timedelta(seconds=0.01))
     multiplier: float = field(default=2)
-    max_limit: timedelta = field(default=timedelta(seconds=10))
+    max_delay: timedelta = field(default=timedelta(seconds=10))
     current_delay: timedelta = field(init=False)
 
     def __post_init__(self) -> None:
         """
         Initialize the delay to the starting delay value.
         """
+        if self.multiplier <= 1:
+            raise ValueError(f"Multiplier must be greater than 1, but got {self.multiplier}.")
         self.current_delay = self.start_delay
 
     def next_delay(self) -> timedelta:
@@ -52,7 +54,7 @@ class ExponentialBackoff:
         Returns:
             float: The updated delay value, capped at max_limit.
         """
-        self.current_delay = min(self.current_delay * self.multiplier, self.max_limit)
+        self.current_delay = min(self.current_delay * self.multiplier, self.max_delay)
         return self.current_delay
 
     def reset(self) -> None:
