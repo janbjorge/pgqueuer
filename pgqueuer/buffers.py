@@ -102,6 +102,7 @@ class TimedOverflowBuffer(Generic[T]):
         while not self.shutdown.is_set():
             if helpers.utc_now() > self.next_flush and not self.lock.locked():
                 self.tm.add(asyncio.create_task(self.flush()))
+                self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(self.timeout)
 
             sleep_task = asyncio.create_task(
                 asyncio.sleep(
@@ -168,7 +169,7 @@ class TimedOverflowBuffer(Generic[T]):
         a retry. This helps in handling transient errors without losing items.
         """
 
-        if self.lock.locked() or helpers.utc_now() < self.next_flush:
+        if self.lock.locked():
             return
 
         async with self.lock:
@@ -190,13 +191,15 @@ class TimedOverflowBuffer(Generic[T]):
                 # Re-add the items to the queue for retry
                 for item in items:
                     self.events.put_nowait(item)
+
                 await asyncio.sleep(
-                    helpers.timeout_with_jitter(delay).total_seconds(),
+                    0
+                    if self.shutdown.is_set()
+                    else helpers.timeout_with_jitter(delay).total_seconds()
                 )
+
             else:
                 self.retry_backoff.reset()
-            finally:
-                self.next_flush = helpers.utc_now() + self.timeout
 
     async def __aenter__(self) -> Self:
         """
