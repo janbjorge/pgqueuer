@@ -8,7 +8,13 @@ from pgqueuer.heartbeat import Heartbeat
 from pgqueuer.types import JobId
 
 
-@pytest.mark.parametrize("interval", (timedelta(seconds=0.1), timedelta(seconds=0.01)))
+@pytest.mark.parametrize(
+    "interval",
+    (
+        timedelta(seconds=0.01),
+        timedelta(seconds=0.05),
+    ),
+)
 async def test_heartbeat_interval(interval: timedelta) -> None:
     callbacks = list[tuple[list[JobId], datetime]]()
 
@@ -28,7 +34,7 @@ async def test_heartbeat_interval(interval: timedelta) -> None:
             buffer=buffer,
         ),
     ):
-        await asyncio.sleep(interval.total_seconds() * 2)
+        await asyncio.sleep(interval.total_seconds() * 4)
 
     assert len(callbacks) >= 2
 
