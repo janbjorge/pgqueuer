@@ -100,7 +100,7 @@ class TimedOverflowBuffer(Generic[T]):
         shutdown = asyncio.create_task(self.shutdown.wait())
         pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
-            if helpers.utc_now() > self.next_flush and not self.lock.locked():
+            if not self.lock.locked() and helpers.utc_now() > self.next_flush:
                 self.tm.add(asyncio.create_task(self.flush()))
                 self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(self.timeout)
 
@@ -134,8 +134,8 @@ class TimedOverflowBuffer(Generic[T]):
 
         if (
             self.events.qsize() >= self.max_size
-            and helpers.utc_now() > self.next_flush
             and not self.lock.locked()
+            and helpers.utc_now() > self.next_flush
         ):
             self.tm.add(asyncio.create_task(self.flush()))
 
