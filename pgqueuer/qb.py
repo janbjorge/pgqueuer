@@ -92,6 +92,7 @@ class DBSettings(BaseSettings):
 
     # Type of ENUM defining possible statuses for entries in the
     # statistics table, such as 'exception' or 'successful'.
+    # TODO: Remove in future release
     statistics_table_status_type: str = Field(default=add_prefix("pgqueuer_statistics_status"))
 
     # Type of ENUM defining statuses for queue jobs, such as 'queued' or 'picked'.
@@ -135,7 +136,7 @@ class QueryBuilderEnvironment:
             str: A string containing the SQL commands to install the schema.
         """
 
-        return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked');
+        return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled');
     CREATE TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
@@ -155,14 +156,13 @@ class QueryBuilderEnvironment:
     CREATE INDEX {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id)
         WHERE queue_manager_id IS NOT NULL;
 
-    CREATE TYPE {self.settings.statistics_table_status_type} AS ENUM ('exception', 'successful', 'canceled');
     CREATE TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
         count BIGINT NOT NULL,
         priority INT NOT NULL,
         time_in_queue INTERVAL NOT NULL,
-        status {self.settings.statistics_table_status_type} NOT NULL,
+        status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL
     );
     CREATE UNIQUE INDEX {self.settings.statistics_table}_unique_count ON {self.settings.statistics_table} (
@@ -243,14 +243,14 @@ class QueryBuilderEnvironment:
         Returns:
             str: A string containing the SQL commands to uninstall the schema.
         """
-        return f"""DROP TRIGGER {self.settings.trigger} ON {self.settings.queue_table};
-    DROP FUNCTION {self.settings.function};
-    DROP TABLE {self.settings.queue_table};
-    DROP TABLE {self.settings.statistics_table};
-    DROP TABLE {self.settings.schedules_table};
-    DROP TYPE {self.settings.queue_status_type};
-    DROP TYPE {self.settings.statistics_table_status_type};
-    """
+        return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
+    DROP FUNCTION   IF EXISTS   {self.settings.function};
+    DROP TABLE      IF EXISTS   {self.settings.queue_table};
+    DROP TABLE      IF EXISTS   {self.settings.statistics_table};
+    DROP TABLE      IF EXISTS   {self.settings.schedules_table};
+    DROP TYPE       IF EXISTS   {self.settings.queue_status_type};
+    DROP TYPE       IF EXISTS   {self.settings.statistics_table_status_type};
+    """  # noqa
 
     def create_upgrade_queries(self) -> Generator[str, None, None]:
         """
@@ -305,7 +305,7 @@ class QueryBuilderEnvironment:
 
     END;
     $$ LANGUAGE plpgsql;"""
-        yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
+        # yield f"ALTER TYPE {self.settings.statistics_table_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
@@ -323,6 +323,10 @@ class QueryBuilderEnvironment:
         UNIQUE (expression, entrypoint)
     );"""
         yield f"""ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
+        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'successful';"  # noqa: E501
+        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'exception';"  # noqa: E501
+        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.statistics_table} ALTER COLUMN status TYPE {self.settings.queue_status_type};"  # noqa
 
     def create_table_has_column_query(self) -> str:
         """
@@ -577,7 +581,7 @@ class QueryQueueBuilder:
     ), job_status AS (
         SELECT
             UNNEST($1::integer[]) AS id,
-            UNNEST($2::{self.settings.statistics_table_status_type}[]) AS status
+            UNNEST($2::{self.settings.queue_status_type}[]) AS status
     ), grouped_data AS (
         SELECT
             priority,
