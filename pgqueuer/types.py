@@ -19,15 +19,8 @@ EVENT_TYPES = Literal[
 
 
 ###### Jobs ######
-JOB_STATUS = Literal[
-    "queued",
-    "picked",
-    "successful",
-    "exception",
-    "canceled",
-]
 JobId = NewType("JobId", int)
-STATUS = Literal[
+JOB_STATUS = Literal[
     "queued",
     "picked",
     "successful",

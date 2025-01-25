@@ -23,6 +23,7 @@ from .types import (
     EVENT_TYPES,
     JOB_STATUS,
     OPERATIONS,
+    Channel,
     CronEntrypoint,
     CronExpression,
     JobId,
