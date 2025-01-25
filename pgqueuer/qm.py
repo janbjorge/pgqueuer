@@ -62,8 +62,8 @@ class QueueManager:
     """
 
     connection: db.Driver
-    channel: models.PGChannel = dataclasses.field(
-        default=models.PGChannel(qb.DBSettings().channel),
+    channel: models.Channel = dataclasses.field(
+        default=models.Channel(qb.DBSettings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(

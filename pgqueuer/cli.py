@@ -116,7 +116,7 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
 
 async def display_pg_channel(
     connection: db.Driver,
-    channel: models.PGChannel,
+    channel: models.Channel,
 ) -> None:
     queue = asyncio.Queue[models.AnyEvent]()
     await listeners.initialize_notice_event_listener(
@@ -283,9 +283,7 @@ def listen(
     config: AppConfig = ctx.obj
 
     async def run() -> None:
-        await display_pg_channel(
-            (await query_adapter(config.dsn)).driver, models.PGChannel(channel)
-        )
+        await display_pg_channel((await query_adapter(config.dsn)).driver, models.Channel(channel))
 
     asyncio_run(run())
 

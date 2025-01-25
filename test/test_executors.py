@@ -17,7 +17,7 @@ from pgqueuer.executors import (
     is_async_callable,
 )
 from pgqueuer.helpers import timer
-from pgqueuer.models import Context, Job, PGChannel
+from pgqueuer.models import Channel, Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
@@ -51,7 +51,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=PGChannel("foo"),
+            channel=Channel("foo"),
             concurrency_limit=10,
             connection=apgdriver,
             queries=Queries(apgdriver),
@@ -82,7 +82,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=PGChannel("foo"),
+            channel=Channel("foo"),
             concurrency_limit=10,
             connection=apgdriver,
             queries=Queries(apgdriver),
@@ -224,7 +224,7 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_attempts"),
+        channel=Channel("test_retry_with_backoff_entrypoint_executor_max_attempts"),
         concurrency_limit=10,
         connection=apgdriver,
         queries=Queries(apgdriver),
@@ -261,7 +261,7 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_max_time"),
+        channel=Channel("test_retry_with_backoff_entrypoint_executor_max_time"),
         concurrency_limit=10,
         connection=apgdriver,
         queries=Queries(apgdriver),
@@ -313,7 +313,7 @@ async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driv
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=PGChannel("test_retry_with_backoff_entrypoint_executor_until_pass"),
+        channel=Channel("test_retry_with_backoff_entrypoint_executor_until_pass"),
         concurrency_limit=10,
         connection=apgdriver,
         queries=Queries(apgdriver),

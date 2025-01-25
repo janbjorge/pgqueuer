@@ -59,7 +59,7 @@ def is_async_callable(obj: object) -> bool:
 
 @dataclasses.dataclass
 class EntrypointExecutorParameters:
-    channel: models.PGChannel
+    channel: models.Channel
     concurrency_limit: int
     connection: db.Driver
     func: Entrypoint

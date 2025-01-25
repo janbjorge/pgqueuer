@@ -21,7 +21,7 @@ from .executors import (
     EntrypointTypeVar,
     ScheduleExecutorFactoryParameters,
 )
-from .models import PGChannel
+from .models import Channel
 from .qb import DBSettings
 from .qm import QueueManager
 from .sm import SchedulerManager
@@ -38,8 +38,8 @@ class PgQueuer:
     """
 
     connection: Driver
-    channel: PGChannel = dataclasses.field(
-        default=PGChannel(DBSettings().channel),
+    channel: Channel = dataclasses.field(
+        default=Channel(DBSettings().channel),
     )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
