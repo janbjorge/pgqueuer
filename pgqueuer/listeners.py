@@ -45,7 +45,7 @@ def handle_event_type(
 
 async def initialize_notice_event_listener(
     connection: db.Driver,
-    channel: models.PGChannel,
+    channel: models.Channel,
     event_handler: Callable[[models.AnyEvent], None],
 ) -> None:
     """

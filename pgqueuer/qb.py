@@ -18,7 +18,7 @@ from typing import Generator
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from pgqueuer.models import PGChannel
+from pgqueuer.models import Channel
 
 
 def add_prefix(string: str) -> str:
@@ -80,7 +80,7 @@ class DBSettings(BaseSettings):
 
     # Channel name for PostgreSQL LISTEN/NOTIFY used to
     # receive notifications about changes in the queue.
-    channel: PGChannel = Field(default=PGChannel(add_prefix("ch_pgqueuer")))
+    channel: Channel = Field(default=Channel(add_prefix("ch_pgqueuer")))
 
     # Name of the database function triggered by changes to the queue
     # table, used to notify subscribers.

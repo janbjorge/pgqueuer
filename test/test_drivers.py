@@ -23,7 +23,7 @@ from pgqueuer.qb import (
     QueryQueueBuilder,
     QuerySchedulerBuilder,
 )
-from pgqueuer.types import PGChannel
+from pgqueuer.types import Channel
 
 
 def get_user_defined_functions(klass: object) -> list[str]:
@@ -177,7 +177,7 @@ async def test_event_listener(
 ) -> None:
     async with driver() as d:
         name = d.__class__.__name__.lower()
-        channel = PGChannel(f"test_event_listener_{name}")
+        channel = Channel(f"test_event_listener_{name}")
         payload = TableChangedEvent(
             channel=channel,
             operation="update",

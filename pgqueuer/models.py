@@ -23,10 +23,10 @@ from .types import (
     EVENT_TYPES,
     OPERATIONS,
     STATUS,
+    Channel,
     CronEntrypoint,
     CronExpression,
     JobId,
-    PGChannel,
     ScheduleId,
 )
 
@@ -44,7 +44,7 @@ class Event(BaseModel):
         received_at: The timestamp when the event was received.
     """
 
-    channel: PGChannel
+    channel: Channel
     sent_at: AwareDatetime
     type: EVENT_TYPES
     received_at: AwareDatetime = Field(

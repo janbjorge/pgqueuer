@@ -16,10 +16,10 @@ from pgqueuer.listeners import (
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
+    Channel,
     Context,
     EntrypointStatistics,
     JobId,
-    PGChannel,
     RequestsPerSecondEvent,
     TableChangedEvent,
 )
@@ -110,7 +110,7 @@ async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
     evnets = list[AnyEvent]()
     await initialize_notice_event_listener(
         apgdriver,
-        PGChannel(DBSettings().channel),
+        Channel(DBSettings().channel),
         evnets.append,
     )
 
@@ -134,7 +134,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
     evnets = list[AnyEvent]()
     await initialize_notice_event_listener(
         apgdriver,
-        PGChannel(DBSettings().channel),
+        Channel(DBSettings().channel),
         evnets.append,
     )
 
@@ -171,7 +171,7 @@ async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
     evnets = list[AnyEvent]()
     await initialize_notice_event_listener(
         apgdriver,
-        PGChannel(DBSettings().channel),
+        Channel(DBSettings().channel),
         evnets.append,
     )
 
@@ -202,7 +202,7 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     evnets = list[AnyEvent]()
     await initialize_notice_event_listener(
         apgdriver,
-        PGChannel(DBSettings().channel),
+        Channel(DBSettings().channel),
         evnets.append,
     )
 
