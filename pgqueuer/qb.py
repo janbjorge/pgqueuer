@@ -92,7 +92,7 @@ class DBSettings(BaseSettings):
     # Name of the main table where jobs are queued before being processed.
     queue_table: str = Field(default=add_prefix("pgqueuer"))
 
-    # Name of the main table where jobs are queued before being processed.
+    # Name of the pgqueuer log table (log of `queue_table`).
     queue_table_log: str = Field(default=add_prefix("pgqueuer_log"))
 
     # Name of the trigger that invokes the function to notify changes, applied
@@ -152,11 +152,13 @@ class QueryBuilderEnvironment:
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         job_id BIGINT NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
-        priority BIGINT NOT NULL,
+        priority INT NOT NULL,
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
     CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
+    CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
+    CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
 
     CREATE UNLOGGED TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
@@ -333,10 +335,13 @@ class QueryBuilderEnvironment:
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         job_id BIGINT NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
-        priority BIGINT NOT NULL,
+        priority INT NOT NULL,
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );"""
+        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"""  # noqa
+        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"""  # noqa
+        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"""  # noqa
 
     def build_table_has_column_query(self) -> str:
         """
