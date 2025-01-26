@@ -73,7 +73,7 @@ class Queries:
 
         This method should be called during the initial setup of the application.
         """
-        await self.driver.execute(self.qbe.create_install_query())
+        await self.driver.execute(self.qbe.build_install_query())
 
     async def uninstall(self) -> None:
         """
@@ -86,7 +86,7 @@ class Queries:
         Use this method with caution, as it will delete all data and schema
         related to the job queue system.
         """
-        await self.driver.execute(self.qbe.create_uninstall_query())
+        await self.driver.execute(self.qbe.build_uninstall_query())
 
     async def upgrade(self) -> None:
         """
@@ -99,7 +99,7 @@ class Queries:
         This method should be called when updating the application to a new version
         that requires schema changes.
         """
-        await self.driver.execute("\n\n".join(self.qbe.create_upgrade_queries()))
+        await self.driver.execute("\n\n".join(self.qbe.build_upgrade_queries()))
 
     async def table_has_column(self, table: str, column: str) -> bool:
         """
@@ -109,7 +109,7 @@ class Queries:
             bool: True if the column exists, False otherwise.
         """
         rows = await self.driver.fetch(
-            self.qbe.create_table_has_column_query(),
+            self.qbe.build_table_has_column_query(),
             table,
             column,
         )
@@ -119,12 +119,12 @@ class Queries:
 
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
-        rows = await self.driver.fetch(self.qbe.create_user_types_query())
+        rows = await self.driver.fetch(self.qbe.build_user_types_query())
         return (key, enum) in {(row["enumlabel"], row["typname"]) for row in rows}
 
     async def has_table(self, table: str) -> bool:
         rows = await self.driver.fetch(
-            self.qbe.create_has_table_query(),
+            self.qbe.build_has_table_query(),
             table,
         )
         assert len(rows) == 1
@@ -162,7 +162,7 @@ class Queries:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
         rows = await self.driver.fetch(
-            self.qbq.create_dequeue_query(),
+            self.qbq.build_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
             [x.retry_after for x in entrypoints.values()],
@@ -236,7 +236,7 @@ class Queries:
         return [
             models.JobId(row["id"])
             for row in await self.driver.fetch(
-                self.qbq.create_enqueue_query(),
+                self.qbq.build_enqueue_query(),
                 normed_priority,
                 normed_entrypoint,
                 normed_payload,
@@ -254,14 +254,13 @@ class Queries:
         Args:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter jobs for deletion.
         """
-        await (
-            self.driver.execute(
-                self.qbq.create_delete_from_queue_query(),
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.build_delete_from_queue_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_queue_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.build_truncate_queue_query())
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         """
@@ -274,7 +273,7 @@ class Queries:
             ids (list[models.JobId]): The IDs of the jobs to cancel.
         """
         await asyncio.gather(
-            self.driver.execute(self.qbq.create_log_job_query(), ids, ["canceled"] * len(ids)),
+            self.driver.execute(self.qbq.build_log_job_query(), ids, ["canceled"] * len(ids)),
             self.notify_job_cancellation(ids),
         )
 
@@ -290,12 +289,12 @@ class Queries:
         """
         return [
             models.QueueStatistics.model_validate(dict(x))
-            for x in await self.driver.fetch(self.qbq.create_queue_size_query())
+            for x in await self.driver.fetch(self.qbq.build_queue_size_query())
         ]
 
     async def log_jobs(
         self,
-        job_status: list[tuple[models.Job, models.STATUS_LOG]],
+        job_status: list[tuple[models.Job, models.JOB_STATUS]],
     ) -> None:
         """
         Move completed or failed jobs from the queue to the log table.
@@ -309,12 +308,12 @@ class Queries:
                 ('successful', 'exception', or 'canceled').
         """
         await self.driver.execute(
-            self.qbq.create_log_job_query(),
-            [j.id for j, _ in job_status],
-            [s for _, s in job_status],
+            self.qbq.build_log_job_query(),
+            [job.id for job, _ in job_status],
+            [status for _, status in job_status],
         )
 
-    async def clear_log(self, entrypoint: str | list[str] | None = None) -> None:
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Remove entries from the statistics (log) table.
 
@@ -326,14 +325,33 @@ class Queries:
             entrypoint (str | list[str] | None): The entrypoint(s) to filter log
                 entries for deletion.
         """
-        await (
-            self.driver.execute(
-                self.qbq.create_delete_from_log_query(),
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.build_delete_from_log_statistics_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
             )
-            if entrypoint
-            else self.driver.execute(self.qbq.create_truncate_log_query())
-        )
+        else:
+            await self.driver.execute(self.qbq.build_truncate_log_statistics_query())
+
+    async def clear_queue_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """
+        Remove entries from the queue log table.
+
+        Deletes log entries from the log table. If entrypoints are provided,
+        only entries matching those entrypoints are removed; otherwise, the entire
+        log is cleared.
+
+        Args:
+            entrypoint (str | list[str] | None): The entrypoint(s) to filter log
+                entries for deletion.
+        """
+        if entrypoint:
+            await self.driver.execute(
+                self.qbq.build_delete_log_query(),
+                [entrypoint] if isinstance(entrypoint, str) else entrypoint,
+            )
+        else:
+            await self.driver.execute(self.qbq.build_truncate_log_query())
 
     async def log_statistics(
         self,
@@ -354,10 +372,12 @@ class Queries:
         Returns:
             list[models.LogStatistics]: A list of log statistics entries.
         """
+
+        await self.driver.execute(self.qbq.build_aggregate_log_data_to_statistics_query())
         return [
             models.LogStatistics.model_validate(dict(x))
             for x in await self.driver.fetch(
-                self.qbq.create_log_statistics_query(),
+                self.qbq.build_log_statistics_query(),
                 tail,
                 None if last is None else last.total_seconds(),
             )
@@ -377,7 +397,7 @@ class Queries:
         """
         if entrypoint_count:
             await self.driver.execute(
-                self.qbq.create_notify_query(),
+                self.qbq.build_notify_query(),
                 models.RequestsPerSecondEvent(
                     channel=self.qbq.settings.channel,
                     entrypoint_count=entrypoint_count,
@@ -398,7 +418,7 @@ class Queries:
             ids (list[models.JobId]): The IDs of the jobs that have been cancelled.
         """
         await self.driver.execute(
-            self.qbq.create_notify_query(),
+            self.qbq.build_notify_query(),
             models.CancellationEvent(
                 channel=self.qbq.settings.channel,
                 ids=ids,
@@ -409,7 +429,7 @@ class Queries:
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
         await self.driver.execute(
-            self.qbq.create_update_heartbeat_query(),
+            self.qbq.build_update_heartbeat_query(),
             list(set(job_ids)),
         )
 
@@ -418,7 +438,7 @@ class Queries:
         schedules: dict[models.CronExpressionEntrypoint, timedelta],
     ) -> None:
         await self.driver.execute(
-            self.qbs.create_insert_schedule_query(),
+            self.qbs.build_insert_schedule_query(),
             [k.expression for k in schedules],
             [k.entrypoint for k in schedules],
             list(schedules.values()),
@@ -431,22 +451,22 @@ class Queries:
         return [
             models.Schedule.model_validate(dict(row))
             for row in await self.driver.fetch(
-                self.qbs.create_fetch_schedule_query(),
-                [s for _, s in entrypoints],
-                [n for n, _ in entrypoints],
+                self.qbs.build_fetch_schedule_query(),
+                [x.expression for x in entrypoints],
+                [x.entrypoint for x in entrypoints],
                 list(entrypoints.values()),
             )
         ]
 
     async def set_schedule_queued(self, ids: set[models.ScheduleId]) -> None:
         await self.driver.execute(
-            self.qbs.create_set_schedule_queued_query(),
+            self.qbs.build_set_schedule_queued_query(),
             list(ids),
         )
 
     async def update_schedule_heartbeat(self, ids: set[models.ScheduleId]) -> None:
         await self.driver.execute(
-            self.qbs.create_update_schedule_heartbeat(),
+            self.qbs.build_update_schedule_heartbeat(),
             list(ids),
         )
 
@@ -454,7 +474,7 @@ class Queries:
         return [
             models.Schedule.model_validate(dict(row))
             for row in await self.driver.fetch(
-                self.qbs.create_peak_schedule_query(),
+                self.qbs.build_peak_schedule_query(),
             )
         ]
 
@@ -464,12 +484,18 @@ class Queries:
         entrypoints: set[str],
     ) -> None:
         await self.driver.execute(
-            self.qbs.create_delete_schedule_query(),
+            self.qbs.build_delete_schedule_query(),
             list(ids),
             list(entrypoints),
         )
 
     async def clear_schedule(self) -> None:
         await self.driver.execute(
-            self.qbs.create_truncate_schedule_query(),
+            self.qbs.build_truncate_schedule_query(),
         )
+
+    async def queue_log(self) -> list[models.Log]:
+        return [
+            models.Log.model_validate(x)
+            for x in await self.driver.fetch(self.qbq.build_fetch_log_query())
+        ]

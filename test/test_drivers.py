@@ -117,7 +117,7 @@ async def test_notify(
             await ad.execute(
                 QueryQueueBuilder(
                     DBSettings(channel=channel),
-                ).create_notify_query(),
+                ).build_notify_query(),
                 payload,
             )
 
@@ -147,7 +147,7 @@ async def test_valid_query_syntax(
     name: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
-    if name == "create_install_query":
+    if name == "build_install_query":
         pytest.skip()
 
     sql = query()
@@ -203,9 +203,7 @@ async def test_event_listener(
         # Workaround by using asyncpg.
         async with driver() as dd:
             await dd.execute(
-                QueryQueueBuilder(
-                    DBSettings(channel=channel),
-                ).create_notify_query(),
+                QueryQueueBuilder(DBSettings(channel=channel)).build_notify_query(),
                 payload.model_dump_json(),
             )
 

@@ -11,12 +11,13 @@ EVENT_TYPES = Literal["table_changed_event", "requests_per_second_event", "cance
 
 ###### Jobs ######
 JobId = NewType("JobId", int)
-STATUS = Literal[
+JOB_STATUS = Literal[
     "queued",
     "picked",
     "successful",
-    "exception",
     "canceled",
+    "deleted",
+    "exception",
 ]
 
 

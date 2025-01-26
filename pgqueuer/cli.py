@@ -95,7 +95,6 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                     stat.created.astimezone(),
                     stat.count,
                     stat.entrypoint,
-                    stat.time_in_queue,
                     stat.status,
                     stat.priority,
                 )
@@ -105,7 +104,6 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                 "Created",
                 "Count",
                 "Entrypoint",
-                "Time in Queue (HH:MM:SS)",
                 "Status",
                 "Priority",
             ],
@@ -197,7 +195,7 @@ def install(
     dry_run: bool = typer.Option(False, help="Print SQL only."),
 ) -> None:
     config: AppConfig = ctx.obj
-    print(queries.qb.QueryBuilderEnvironment().create_install_query())
+    print(queries.qb.QueryBuilderEnvironment().build_install_query())
 
     async def run() -> None:
         await (await query_adapter(config.dsn)).install()
@@ -212,7 +210,7 @@ def uninstall(
     dry_run: bool = typer.Option(False, help="Print SQL only."),
 ) -> None:
     config: AppConfig = ctx.obj
-    print(queries.qb.QueryBuilderEnvironment().create_uninstall_query())
+    print(queries.qb.QueryBuilderEnvironment().build_uninstall_query())
 
     async def run() -> None:
         if not dry_run:
@@ -227,7 +225,7 @@ def upgrade(
     dry_run: bool = typer.Option(False, help="Print SQL only."),
 ) -> None:
     config: AppConfig = ctx.obj
-    print(f"\n{'-' * 50}\n".join(queries.qb.QueryBuilderEnvironment().create_upgrade_queries()))
+    print(f"\n{'-' * 50}\n".join(queries.qb.QueryBuilderEnvironment().build_upgrade_queries()))
 
     async def run() -> None:
         if not dry_run:

@@ -49,7 +49,8 @@ async def test_cancellation_async(
     assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+
+    assert sum(x.status == "canceled" for x in await q.queue_log()) == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -92,7 +93,7 @@ async def test_cancellation_sync(
     assert sum(cancel_called_not_cancel_called) == N
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+    assert sum(x.status == "canceled" for x in await q.queue_log()) == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -134,7 +135,7 @@ async def test_cancellation_async_context_manager(
     assert sum(cancel_called_not_cancel_called) == 0
 
     # Logged as canceled
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "canceled") == N
+    assert sum(x.status == "canceled" for x in await q.queue_log()) == N
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))

@@ -221,7 +221,7 @@ async def run_dequeuers(
 
 async def benchmark(settings: Settings) -> None:
     settings.pretty_print()
-    await (await make_queries(settings.driver, dsn())).clear_log()
+    await (await make_queries(settings.driver, dsn())).clear_statistics_log()
     await (await make_queries(settings.driver, dsn())).clear_queue()
 
     shutdown = asyncio.Event()

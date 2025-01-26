@@ -341,8 +341,9 @@ class QueueManager:
         """
 
         for table in (
-            qb.add_prefix("pgqueuer"),
-            qb.add_prefix("pgqueuer_statistics"),
+            self.queries.qbe.settings.queue_table,
+            self.queries.qbe.settings.statistics_table,
+            self.queries.qbe.settings.queue_table_log,
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
