@@ -142,7 +142,7 @@ class Log(BaseModel):
 
     created: AwareDatetime
     job_id: JobId
-    status: str
+    status: JOB_STATUS
     priority: int
     entrypoint: str
     aggregated: bool

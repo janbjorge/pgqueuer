@@ -5,17 +5,8 @@ from typing import Literal, NewType
 ###### Events ######
 Channel = NewType("Channel", str)
 PGChannel = Channel  # TODO: Depricate
-OPERATIONS = Literal[
-    "insert",
-    "update",
-    "delete",
-    "truncate",
-]
-EVENT_TYPES = Literal[
-    "table_changed_event",
-    "requests_per_second_event",
-    "cancellation_event",
-]
+OPERATIONS = Literal["insert", "update", "delete", "truncate"]
+EVENT_TYPES = Literal["table_changed_event", "requests_per_second_event", "cancellation_event"]
 
 
 ###### Jobs ######
@@ -24,8 +15,9 @@ JOB_STATUS = Literal[
     "queued",
     "picked",
     "successful",
-    "exception",
     "canceled",
+    "deleted",
+    "exception",
 ]
 
 

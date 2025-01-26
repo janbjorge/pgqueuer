@@ -156,11 +156,11 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
-    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} (aggregated) WHERE not aggregated;
+    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
 
     CREATE UNLOGGED TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
-        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('ms', NOW() at time zone 'UTC'),
+        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
         count BIGINT NOT NULL,
         priority INT NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
@@ -168,7 +168,7 @@ class QueryBuilderEnvironment:
     );
     CREATE UNIQUE INDEX {self.settings.statistics_table}_unique_count ON {self.settings.statistics_table} (
         priority,
-        DATE_TRUNC('ms', created at time zone 'UTC'),
+        DATE_TRUNC('sec', created at time zone 'UTC'),
         status,
         entrypoint
     );
@@ -182,7 +182,7 @@ class QueryBuilderEnvironment:
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         last_run TIMESTAMP WITH TIME ZONE,
-        status TEXT DEFAULT 'queued',
+        status {self.settings.queue_status_type} DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );
 
@@ -319,7 +319,7 @@ class QueryBuilderEnvironment:
         updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         last_run TIMESTAMP WITH TIME ZONE,
-        status TEXT DEFAULT 'queued',
+        status {self.settings.queue_status_type} DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );"""
         yield f"""ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
@@ -717,10 +717,10 @@ class QueryQueueBuilder:
                 priority,
                 status,
                 COUNT(*) AS count,
-                date_trunc('ms', created) AS created
+                date_trunc('sec', created) AS created
             FROM {self.settings.queue_table_log}
             WHERE NOT aggregated
-            GROUP BY entrypoint, priority, status, date_trunc('ms', created)
+            GROUP BY entrypoint, priority, status, date_trunc('sec', created)
         ),
         updated_logs AS (
             UPDATE {self.settings.queue_table_log}
@@ -736,8 +736,12 @@ class QueryQueueBuilder:
             priority,
             status
         FROM log_aggregation
-        ON CONFLICT (priority, date_trunc('ms', created AT TIME ZONE 'UTC'), status, entrypoint) DO UPDATE
-        SET
+        ON CONFLICT (
+            priority,
+            date_trunc('sec', created AT TIME ZONE 'UTC'),
+            status,
+            entrypoint
+        ) DO UPDATE SET
             count = {self.settings.statistics_table}.count + EXCLUDED.count
         """  # noqa
 
