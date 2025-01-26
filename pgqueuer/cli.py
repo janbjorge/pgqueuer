@@ -173,18 +173,30 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
-async def query_adapter(conninfo: str) -> queries.Queries:
+async def query_adapter(
+    conninfo: str,
+    settings: qb.DBSettings,
+) -> queries.Queries:
     with contextlib.suppress(ImportError):
         import asyncpg
 
-        return queries.Queries(db.AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
+        return queries.Queries(
+            db.AsyncpgDriver(await asyncpg.connect(dsn=conninfo)),
+            qbe=qb.QueryBuilderEnvironment(settings),
+            qbq=qb.QueryQueueBuilder(settings),
+            qbs=qb.QuerySchedulerBuilder(settings),
+        )
+
     with contextlib.suppress(ImportError):
         import psycopg
 
         return queries.Queries(
             db.PsycopgDriver(
                 await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
-            )
+            ),
+            qbe=qb.QueryBuilderEnvironment(settings),
+            qbq=qb.QueryQueueBuilder(settings),
+            qbs=qb.QuerySchedulerBuilder(settings),
         )
     raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
@@ -193,12 +205,25 @@ async def query_adapter(conninfo: str) -> queries.Queries:
 def install(
     ctx: Context,
     dry_run: bool = typer.Option(False, help="Print SQL only."),
+    durability: qb.Durability = typer.Option(
+        qb.Durability.durable.value,
+        "--durability",
+        "-d",
+        help=(
+            "Durability level for tables: 'volatile' (all unlogged), "
+            "'balanced' (main table logged, others unlogged), 'durable' (all logged)."
+        ),
+    ),
 ) -> None:
     config: AppConfig = ctx.obj
-    print(queries.qb.QueryBuilderEnvironment().build_install_query())
+    print(
+        queries.qb.QueryBuilderEnvironment(
+            qb.DBSettings(durability=durability)
+        ).build_install_query()
+    )
 
     async def run() -> None:
-        await (await query_adapter(config.dsn)).install()
+        await (await query_adapter(config.dsn, qb.DBSettings(durability=durability))).install()
 
     if not dry_run:
         asyncio_run(run())
@@ -213,25 +238,34 @@ def uninstall(
     print(queries.qb.QueryBuilderEnvironment().build_uninstall_query())
 
     async def run() -> None:
-        if not dry_run:
-            await (await query_adapter(config.dsn)).uninstall()
+        await (await query_adapter(config.dsn, qb.DBSettings())).uninstall()
 
-    asyncio_run(run())
+    if not dry_run:
+        asyncio_run(run())
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
 def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(False, help="Print SQL only."),
+    durability: qb.Durability = typer.Option(
+        qb.Durability.durable.value,
+        "--durability",
+        "-d",
+        help=(
+            "Durability level for tables: 'volatile' (all unlogged), "
+            "'balanced' (main table logged, others unlogged), 'durable' (all logged)."
+        ),
+    ),
 ) -> None:
     config: AppConfig = ctx.obj
     print(f"\n{'-' * 50}\n".join(queries.qb.QueryBuilderEnvironment().build_upgrade_queries()))
 
     async def run() -> None:
-        if not dry_run:
-            await (await query_adapter(config.dsn)).upgrade()
+        await (await query_adapter(config.dsn, qb.DBSettings(durability=durability))).upgrade()
 
-    asyncio_run(run())
+    if not dry_run:
+        asyncio_run(run())
 
 
 def create_default_queries_factory(
@@ -243,7 +277,7 @@ def create_default_queries_factory(
 
     async def factory() -> queries.Queries:
         config: AppConfig = ctx.obj
-        return await query_adapter(config.dsn)
+        return await query_adapter(config.dsn, qb.DBSettings())
 
     return factory
 
@@ -281,7 +315,10 @@ def listen(
     config: AppConfig = ctx.obj
 
     async def run() -> None:
-        await display_pg_channel((await query_adapter(config.dsn)).driver, models.Channel(channel))
+        await display_pg_channel(
+            (await query_adapter(config.dsn, qb.DBSettings())).driver,
+            models.Channel(channel),
+        )
 
     asyncio_run(run())
 
@@ -314,7 +351,7 @@ def schedules(
     config: AppConfig = ctx.obj
 
     async def run_async() -> None:
-        q = await query_adapter(config.dsn)
+        q = await query_adapter(config.dsn, qb.DBSettings())
         if remove:
             schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
             schedule_names = {x for x in remove if not x.isdigit()}
@@ -339,7 +376,7 @@ def queue(
     config: AppConfig = ctx.obj
 
     async def run_async() -> None:
-        await (await query_adapter(config.dsn)).enqueue(
+        await (await query_adapter(config.dsn, qb.DBSettings())).enqueue(
             entrypoint,
             None if payload is None else payload.encode(),
             priority=0,
@@ -347,6 +384,47 @@ def queue(
         )
 
     asyncio_run(run_async())
+
+
+@app.command(help="Alter the logging durability mode for PGQueuer tables.")
+def alter_durability(
+    ctx: Context,
+    durability: qb.Durability = typer.Argument(
+        ...,
+        help=(
+            "The durability mode to set: 'volatile' (all unlogged), "
+            "'balanced' (main table logged, others unlogged), 'durable' (all logged)."
+        ),
+    ),
+    dry_run: bool = typer.Option(False, help="Print SQL commands without executing them."),
+) -> None:
+    """
+    Command to alter the durability level of the tables in PGQueuer without data loss.
+
+    Args:
+        ctx: Context object with configuration information.
+        durability: The desired durability level ('volatile', 'balanced', or 'durable').
+        dry_run: Whether to print SQL commands without executing them.
+    """
+    config: AppConfig = ctx.obj
+    print(
+        "\n".join(
+            queries.qb.QueryBuilderEnvironment(
+                qb.DBSettings(durability=durability)
+            ).build_alter_durability_query()
+        )
+    )
+
+    async def run() -> None:
+        await (
+            await query_adapter(
+                config.dsn,
+                qb.DBSettings(durability=durability),
+            )
+        ).alter_durability()
+
+    if not dry_run:
+        asyncio_run(run())
 
 
 if __name__ == "__main__":

@@ -101,6 +101,12 @@ class Queries:
         """
         await self.driver.execute("\n\n".join(self.qbe.build_upgrade_queries()))
 
+    async def alter_durability(self) -> None:
+        """
+        Alter the durability level of the tables in PGQueuer without data loss
+        """
+        await self.driver.execute("\n\n".join(self.qbe.build_alter_durability_query()))
+
     async def table_has_column(self, table: str, column: str) -> bool:
         """
         Check if the column exists in table.
