@@ -114,7 +114,7 @@ class QueryBuilderEnvironment:
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-    def create_install_query(self) -> str:
+    def build_install_query(self) -> str:
         """
         Generate SQL statements to install the job queue schema.
 
@@ -232,7 +232,7 @@ class QueryBuilderEnvironment:
     EXECUTE FUNCTION {self.settings.function}();
         """  # noqa: E501
 
-    def create_uninstall_query(self) -> str:
+    def build_uninstall_query(self) -> str:
         """
         Generate SQL statements to uninstall the job queue schema.
 
@@ -253,7 +253,7 @@ class QueryBuilderEnvironment:
     DROP TYPE       IF EXISTS   {self.settings.statistics_table_status_type};
     """  # noqa
 
-    def create_upgrade_queries(self) -> Generator[str, None, None]:
+    def build_upgrade_queries(self) -> Generator[str, None, None]:
         """
         Generate SQL queries required to upgrade the existing schema.
 
@@ -338,7 +338,7 @@ class QueryBuilderEnvironment:
         aggregated BOOLEAN DEFAULT FALSE
     );"""
 
-    def create_table_has_column_query(self) -> str:
+    def build_table_has_column_query(self) -> str:
         """
         A query to check if a specific column exists in a table.
 
@@ -353,7 +353,7 @@ class QueryBuilderEnvironment:
             AND column_name = $2
         );"""
 
-    def create_has_table_query(self) -> str:
+    def build_has_table_query(self) -> str:
         """
         A query to check if a specific table exists in a table.
 
@@ -367,7 +367,7 @@ class QueryBuilderEnvironment:
             AND table_name = $1
         );"""
 
-    def create_user_types_query(self) -> str:
+    def build_user_types_query(self) -> str:
         """
         A query to list user-defined ENUM types and their labels.
 
@@ -400,7 +400,7 @@ class QueryQueueBuilder:
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-    def create_dequeue_query(self) -> str:
+    def build_dequeue_query(self) -> str:
         """
         Generate SQL query to retrieve and update the next jobs from the queue.
 
@@ -499,7 +499,7 @@ class QueryQueueBuilder:
     SELECT * FROM updated ORDER BY priority DESC, id ASC;
     """  # noqa
 
-    def create_enqueue_query(self) -> str:
+    def build_enqueue_query(self) -> str:
         """
         Generate SQL query to insert new jobs into the queue.
 
@@ -530,7 +530,7 @@ class QueryQueueBuilder:
         RETURNING job_id AS id
         """
 
-    def create_delete_from_queue_query(self) -> str:
+    def build_delete_from_queue_query(self) -> str:
         """
         Generate SQL query to delete jobs from the queue based on entrypoints.
 
@@ -551,7 +551,7 @@ class QueryQueueBuilder:
         FROM deleted
         """
 
-    def create_truncate_queue_query(self) -> str:
+    def build_truncate_queue_query(self) -> str:
         """
         Generate SQL query to truncate the entire queue table.
 
@@ -565,7 +565,7 @@ class QueryQueueBuilder:
 
         return f"TRUNCATE {self.settings.queue_table}"
 
-    def create_queue_size_query(self) -> str:
+    def build_queue_size_query(self) -> str:
         """
         Generate SQL query to count the number of jobs in the queue.
 
@@ -588,7 +588,7 @@ class QueryQueueBuilder:
     ORDER BY count, entrypoint, priority, status
     """
 
-    def create_log_job_query(self) -> str:
+    def build_log_job_query(self) -> str:
         """
         Generate SQL query to move jobs from the queue to the log table.
 
@@ -628,7 +628,7 @@ class QueryQueueBuilder:
         SELECT id, status, entrypoint, priority FROM merged
         """
 
-    def create_truncate_log_statistics_query(self) -> str:
+    def build_truncate_log_statistics_query(self) -> str:
         """
         Generate SQL query to truncate the statistics (log) table.
 
@@ -640,7 +640,7 @@ class QueryQueueBuilder:
         """
         return f"""TRUNCATE {self.settings.statistics_table}"""
 
-    def create_delete_from_log_statistics_query(self) -> str:
+    def build_delete_from_log_statistics_query(self) -> str:
         """
         Generate SQL query to delete entries from the log table based on entrypoints.
 
@@ -653,7 +653,7 @@ class QueryQueueBuilder:
         """
         return f"""DELETE FROM {self.settings.statistics_table} WHERE entrypoint = ANY($1)"""
 
-    def create_log_statistics_query(self) -> str:
+    def build_log_statistics_query(self) -> str:
         """
         Generate SQL query to retrieve job processing statistics.
 
@@ -677,7 +677,7 @@ class QueryQueueBuilder:
     LIMIT $1
     """
 
-    def create_notify_query(self) -> str:
+    def build_notify_query(self) -> str:
         """
         Generate SQL query to send a notification via PostgreSQL NOTIFY.
 
@@ -690,19 +690,19 @@ class QueryQueueBuilder:
         """
         return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
 
-    def create_update_heartbeat_query(self) -> str:
+    def build_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 
-    def create_truncate_log_query(self) -> str:
+    def build_truncate_log_query(self) -> str:
         return f"TRUNCATE {self.settings.queue_table_log}"
 
-    def create_delete_log_query(self) -> str:
+    def build_delete_log_query(self) -> str:
         return f"DELETE FROM {self.settings.queue_table_log} WHERE entrypoint = ANY($1)"
 
-    def create_fetch_log_query(self) -> str:
+    def build_fetch_log_query(self) -> str:
         return f"SELECT * FROM {self.settings.queue_table_log}"
 
-    def aggregate_logs_into_statistics(self) -> str:
+    def build_aggregate_log_data_to_statistics_query(self) -> str:
         """
         Generate SQL query to aggregate data from the log table and insert
         it into the statistics table, respecting the unique constraint and
@@ -760,7 +760,7 @@ class QuerySchedulerBuilder:
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-    def create_insert_schedule_query(self) -> str:
+    def build_insert_schedule_query(self) -> str:
         return f"""WITH params AS (
         SELECT UNNEST($1::text[])       AS expression,
                UNNEST($2::text[])       AS entrypoint,
@@ -770,7 +770,7 @@ class QuerySchedulerBuilder:
         SELECT expression, date_trunc('seconds', NOW() + delay), entrypoint FROM params
         ON CONFLICT (entrypoint, expression) DO NOTHING"""
 
-    def create_fetch_schedule_query(self) -> str:
+    def build_fetch_schedule_query(self) -> str:
         return f"""WITH params AS (
         SELECT UNNEST($1::text[])       AS expression,
                UNNEST($2::text[])       AS entrypoint,
@@ -801,17 +801,17 @@ class QuerySchedulerBuilder:
     WHERE (entrypoint, expression) IN (SELECT entrypoint, expression FROM picked_jobs)
     RETURNING *;"""  # noqa: E501
 
-    def create_set_schedule_queued_query(self) -> str:
+    def build_set_schedule_queued_query(self) -> str:
         return f"""UPDATE {self.settings.schedules_table} SET status = 'queued', last_run = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
 
-    def create_update_schedule_heartbeat(self) -> str:
+    def build_update_schedule_heartbeat(self) -> str:
         return f"""UPDATE {self.settings.schedules_table} SET heartbeat = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
 
-    def create_peak_schedule_query(self) -> str:
+    def build_peak_schedule_query(self) -> str:
         return f"""SELECT * FROM {self.settings.schedules_table} ORDER BY last_run ASC"""
 
-    def create_delete_schedule_query(self) -> str:
+    def build_delete_schedule_query(self) -> str:
         return f"""DELETE FROM {self.settings.schedules_table} WHERE id = ANY($1) OR entrypoint = ANY($2)"""  # noqa: E501
 
-    def create_truncate_schedule_query(self) -> str:
+    def build_truncate_schedule_query(self) -> str:
         return f"""TRUNCATE {self.settings.schedules_table}"""
