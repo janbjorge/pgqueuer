@@ -1,7 +1,12 @@
 CLI Module for PGQueuer
 =======================
 
-The pgq CLI provides a command-line interface for managing various aspects of the PGQueuer system. The CLI can be invoked via the alias `pgq` or the traditional method `python3 -m pgqueuer`. Both methods are fully supported and provide identical functionality. The CLI offers several commands to install, uninstall, upgrade, and manage the job queue system. Additionally, it allows for real-time monitoring through a dashboard and specific PostgreSQL NOTIFY channels.
+The pgq CLI provides a command-line interface for managing various aspects of the PGQueuer system. The CLI can be invoked via the alias `pgq` or the traditional method `python3 -m pgqueuer`. Both methods are fully supported and provide identical functionality.
+
+Functionality
+-------------
+
+The CLI offers several commands to install, uninstall, upgrade, and manage the job queue system. Additionally, it allows for real-time monitoring through a dashboard and specific PostgreSQL NOTIFY channels.
 
 Key Commands
 ------------
@@ -9,7 +14,7 @@ Key Commands
 - ``install``: Set up the necessary database schema for PGQueuer.
     - Supports the ``--durability`` option to define the durability level for tables. Possible values are:
         - ``volatile``: All tables are unlogged, prioritizing maximum performance over durability.
-        - ``balanced``: Critical tables (e.g., `pgqueuer` and `pgqueuer_schedules``) are logged, while auxiliary tables are unlogged for improved performance.
+        - ``balanced``: Critical tables (e.g., `pgqueuer` and `pgqueuer_schedules`) are logged, while auxiliary tables are unlogged for improved performance.
         - ``durable``: All tables are logged to ensure maximum durability.
         - **Default**: ``durable``.
 
@@ -32,13 +37,24 @@ Key Commands
 
 - ``alter-durability``: Change the durability level of existing PGQueuer tables without data loss.
     - Arguments:
-        - ``durability`` (required): The desired durability mode (`volatile`, `balanced`, or `durable``).
+        - ``durability`` (required): The desired durability mode (`volatile`, `balanced`, or `durable`).
         - ``--dry-run`` (optional): Print SQL commands without executing them.
 
     Example:
 
     ```bash
     pgq alter-durability durable
+    ```
+
+- ``queue``: Manually enqueue a job into the PGQueuer system.
+    - Arguments:
+        - ``entrypoint`` (required): The entry point of the job to be executed.
+        - ``payload`` (optional): A serialized string or JSON payload for the job.
+
+    Example:
+
+    ```bash
+    pgq queue my_module.my_function '{"key": "value"}'
     ```
 
 - ``dashboard``: Display a live dashboard showing job statistics.
@@ -48,7 +64,6 @@ Key Commands
 - ``run``: Start a QueueManager that manages job queues and processes.
 
 - ``schedules``: Manage schedules within the PGQueuer system. You can display all schedules or remove specific ones by ID or name.
-
 
 Why Use the ``run`` Option
 --------------------------
@@ -73,7 +88,6 @@ To use the CLI, invoke it with the desired command and options. You can use eith
 This command initializes the QueueManager using the factory function provided, setting up signal handling automatically to manage job processing interruptions gracefully.
 
 The new `pgq` alias makes it more convenient to work with the CLI, while maintaining full compatibility with the traditional approach for those who prefer it.
-
 
 Durability Explained
 --------------------
