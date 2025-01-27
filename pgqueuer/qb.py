@@ -13,12 +13,109 @@ from __future__ import annotations
 import dataclasses
 import os
 import re
-from typing import Generator
+from enum import Enum
+from typing import Generator, Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pgqueuer.models import Channel
+
+
+@dataclasses.dataclass(frozen=True)
+class DurabilityPolicy:
+    """
+    Defines the logging configuration for PGQueuer database tables.
+
+    Attributes:
+        pgqueuer (Literal['', 'UNLOGGED']):
+            Logging configuration for the `pgqueuer` table.
+            - '' (empty string): The table is logged.
+            - 'UNLOGGED': The table is unlogged for performance optimization.
+
+        pgqueuer_log (Literal['', 'UNLOGGED']):
+            Logging configuration for the `pgqueuer_log` table.
+            - '' (empty string): The table is logged.
+            - 'UNLOGGED': The table is unlogged for performance optimization.
+
+        pgqueuer_statistics (Literal['', 'UNLOGGED']):
+            Logging configuration for the `pgqueuer_statistics` table.
+            - '' (empty string): The table is logged.
+            - 'UNLOGGED': The table is unlogged for performance optimization.
+
+        pgqueuer_schedules (Literal['', 'UNLOGGED']):
+            Logging configuration for the `pgqueuer_schedules` table.
+            Matches the configuration of the `pgqueuer` table.
+            - '' (empty string): The table is logged.
+            - 'UNLOGGED': The table is unlogged for performance optimization.
+    """
+
+    queue_table: Literal["", "UNLOGGED"]
+    queue_log_table: Literal["", "UNLOGGED"]
+    statistics_table: Literal["", "UNLOGGED"]
+    schedules_table: Literal["", "UNLOGGED"]
+
+
+class Durability(Enum):
+    """
+    Represents the durability levels for PGQueuer table installations.
+
+    Each durability level corresponds to a specific `DurabilityPolicy` instance that defines
+    the logging configuration for all database tables.
+
+    Levels:
+        - `volatile`: All tables are unlogged, prioritizing maximum performance
+          over data durability. Suitable for temporary or ephemeral queue data where
+          data loss in the event of a crash is acceptable.
+
+        - `balanced`: The `pgqueuer` and `pgqueuer_schedules` tables are logged, ensuring durability
+          for critical data, while auxiliary tables (`pgqueuer_log` and `pgqueuer_statistics`) are
+          unlogged to optimize performance.
+
+        - `durable`: All tables are logged, ensuring maximum data durability and safety.
+          This is ideal for production environments where data integrity is critical.
+    """
+
+    volatile = "volatile"
+    balanced = "balanced"
+    durable = "durable"
+
+    @property
+    def config(self) -> DurabilityPolicy:
+        """
+        Returns the `DurabilityPolicy` associated with the durability level.
+
+        Returns:
+            DurabilityPolicy: A configuration object specifying the logging mode for each table.
+
+        Logging Modes:
+            - '' (empty string): Indicates the table is logged.
+            - 'UNLOGGED': Indicates the table is unlogged for performance optimization.
+        """
+        match self:
+            case Durability.volatile:
+                return DurabilityPolicy(
+                    queue_table="UNLOGGED",
+                    queue_log_table="UNLOGGED",
+                    statistics_table="UNLOGGED",
+                    schedules_table="UNLOGGED",  # Matches `pgqueuer`
+                )
+            case Durability.balanced:
+                return DurabilityPolicy(
+                    queue_table="",
+                    queue_log_table="UNLOGGED",
+                    statistics_table="UNLOGGED",
+                    schedules_table="",  # Matches `pgqueuer`
+                )
+            case Durability.durable:
+                return DurabilityPolicy(
+                    queue_table="",
+                    queue_log_table="",
+                    statistics_table="",
+                    schedules_table="",  # Matches `pgqueuer`
+                )
+            case _:
+                raise ValueError(f"Unknown durability level: {self}")
 
 
 def add_prefix(string: str) -> str:
@@ -102,6 +199,9 @@ class DBSettings(BaseSettings):
     # Name of scheduler table
     schedules_table: str = Field(default=add_prefix("pgqueuer_schedules"))
 
+    # Specifies the durability policy for the database schema.
+    durability: Durability = Field(default=Durability.durable)
+
 
 @dataclasses.dataclass
 class QueryBuilderEnvironment:
@@ -126,9 +226,10 @@ class QueryBuilderEnvironment:
         Returns:
             str: A string containing the SQL commands to install the schema.
         """
+        durability_policy = self.settings.durability.config
 
         return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted');
-    CREATE TABLE {self.settings.queue_table} (
+    CREATE {durability_policy.queue_table} TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
         queue_manager_id UUID,
@@ -147,7 +248,7 @@ class QueryBuilderEnvironment:
     CREATE INDEX {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id)
         WHERE queue_manager_id IS NOT NULL;
 
-    CREATE UNLOGGED TABLE {self.settings.queue_table_log} (
+    CREATE {durability_policy.queue_log_table} TABLE {self.settings.queue_table_log} (
         id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         job_id BIGINT NOT NULL,
@@ -160,7 +261,7 @@ class QueryBuilderEnvironment:
     CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
     CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
 
-    CREATE UNLOGGED TABLE {self.settings.statistics_table} (
+    CREATE {durability_policy.statistics_table} TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
         count BIGINT NOT NULL,
@@ -175,7 +276,7 @@ class QueryBuilderEnvironment:
         entrypoint
     );
 
-    CREATE TABLE {self.settings.schedules_table} (
+    CREATE {durability_policy.schedules_table} TABLE {self.settings.schedules_table} (
         id SERIAL PRIMARY KEY,
         expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
         entrypoint TEXT NOT NULL,
@@ -386,6 +487,13 @@ class QueryBuilderEnvironment:
         return """SELECT enumlabel, typname
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
+
+    def build_alter_durability_query(self) -> Generator[str, None, None]:
+        durability = self.settings.durability.config
+        yield f"""ALTER TABLE {self.settings.queue_table} SET {"LOGGED" if durability.queue_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.settings.queue_table_log} SET {"LOGGED" if durability.queue_log_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.settings.statistics_table} SET {"LOGGED" if durability.statistics_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.settings.schedules_table} SET {"LOGGED" if durability.schedules_table == "" else "UNLOGGED"};"""  # noqa
 
 
 @dataclasses.dataclass
