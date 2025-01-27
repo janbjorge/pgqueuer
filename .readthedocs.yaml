@@ -5,10 +5,22 @@ build:
   tools:
     python: "3.12"
 
+  jobs:
+    create_environment:
+      # Install UV and set it up
+      - asdf plugin add uv || true
+      - asdf install uv latest
+      - asdf global uv latest
+      - uv venv  # Initialize UV virtual environment
+
+    install:
+      # Use UV to install docs dependencies directly
+      - uv pip install .[docs]
+
+    build:
+      html:
+        # Use UV to build the docs
+        - uv run sphinx-build -T -b html docs $READTHEDOCS_OUTPUT/html
+
 sphinx:
   configuration: docs/conf.py
-
-python:
-  install:
-    - method: pip
-      path: .[docs]
