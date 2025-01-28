@@ -65,16 +65,50 @@ class AppConfig:
 @app.callback()
 def main(
     ctx: Context,
-    prefix: str = typer.Option("", help="Prefix for pgqueuer objects.", envvar="PGQUEUER_PREFIX"),
-    pg_dsn: str = typer.Option(None, help="Database DSN.", envvar="PGDSN"),
-    pg_host: str = typer.Option(None, help="Database host.", envvar="PGHOST"),
-    pg_port: str = typer.Option("5432", help="Database port.", envvar="PGPORT"),
-    pg_user: str = typer.Option(None, help="Database user.", envvar="PGUSER"),
-    pg_database: str = typer.Option(None, help="Database name.", envvar="PGDATABASE"),
-    pg_password: str = typer.Option(None, help="Database password.", envvar="PGPASSWORD"),
-    pg_schema: str = typer.Option(None, help="Database schema.", envvar="PGSCHEMA"),
+    prefix: str = typer.Option(
+        "",
+        help="Prefix for pgqueuer objects.",
+        envvar="PGQUEUER_PREFIX",
+    ),
+    pg_dsn: str = typer.Option(
+        None,
+        help="Database DSN.",
+        envvar="PGDSN",
+    ),
+    pg_host: str = typer.Option(
+        None,
+        help="Database host.",
+        envvar="PGHOST",
+    ),
+    pg_port: str = typer.Option(
+        "5432",
+        help="Database port.",
+        envvar="PGPORT",
+    ),
+    pg_user: str = typer.Option(
+        None,
+        help="Database user.",
+        envvar="PGUSER",
+    ),
+    pg_database: str = typer.Option(
+        None,
+        help="Database name.",
+        envvar="PGDATABASE",
+    ),
+    pg_password: str = typer.Option(
+        None,
+        help="Database password.",
+        envvar="PGPASSWORD",
+    ),
+    pg_schema: str = typer.Option(
+        None,
+        help="Database schema.",
+        envvar="PGSCHEMA",
+    ),
     factory_fn_ref: str | None = typer.Option(
-        None, "--factory", help="A reference to a function that returns an instance of Queries"
+        None,
+        "--factory",
+        help="A reference to a function that returns an instance of Queries",
     ),
 ) -> None:
     """Main Typer callback to set up shared configuration."""
@@ -94,7 +128,8 @@ def main(
 
 
 def create_default_queries_factory(
-    config: AppConfig, settings: qb.DBSettings
+    config: AppConfig,
+    settings: qb.DBSettings,
 ) -> Callable[..., Awaitable[queries.Queries]]:
     """
     This is the default implementation of a factory that returns an instance of Queries.
@@ -130,7 +165,7 @@ def create_default_queries_factory(
 @contextlib.asynccontextmanager
 async def yield_queries(
     ctx: Context,
-    settings: qb.DBSettings = qb.DBSettings(),
+    settings: qb.DBSettings,
 ) -> AsyncGenerator[queries.Queries, None]:
     """
     Async context manager that yields a Queries instance from either a user-supplied
@@ -149,7 +184,13 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
     print(
         tabulate(
             [
-                (stat.created.astimezone(), stat.count, stat.entrypoint, stat.status, stat.priority)
+                (
+                    stat.created.astimezone(),
+                    stat.count,
+                    stat.entrypoint,
+                    stat.status,
+                    stat.priority,
+                )
                 for stat in log_stats
             ],
             headers=["Created", "Count", "Entrypoint", "Status", "Priority"],
@@ -158,9 +199,16 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
     )
 
 
-async def display_pg_channel(connection: db.Driver, channel: models.Channel) -> None:
+async def display_pg_channel(
+    connection: db.Driver,
+    channel: models.Channel,
+) -> None:
     queue = asyncio.Queue[models.AnyEvent]()
-    await listeners.initialize_notice_event_listener(connection, channel, queue.put_nowait)
+    await listeners.initialize_notice_event_listener(
+        connection,
+        channel,
+        queue.put_nowait,
+    )
     while True:
         event = await queue.get()
         print(repr(event.root))
@@ -199,7 +247,11 @@ async def display_schedule(schedules: list[models.Schedule]) -> None:
     )
 
 
-async def fetch_and_display(q: queries.Queries, interval: timedelta | None, tail: int) -> None:
+async def fetch_and_display(
+    q: queries.Queries,
+    interval: timedelta | None,
+    tail: int,
+) -> None:
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
@@ -231,11 +283,14 @@ def install(
 
 
 @app.command(help="Remove the PGQueuer schema from the database.")
-def uninstall(ctx: Context, dry_run: bool = typer.Option(False, help="Print SQL only.")) -> None:
+def uninstall(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
     print(qb.QueryBuilderEnvironment().build_uninstall_query())
 
     async def run() -> None:
-        async with yield_queries(ctx) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await q.uninstall()
 
     if not dry_run:
@@ -247,7 +302,10 @@ def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(False, help="Print SQL only."),
     durability: qb.Durability = typer.Option(
-        qb.Durability.durable.value, "--durability", "-d", help="Durability level for tables."
+        qb.Durability.durable.value,
+        "--durability",
+        "-d",
+        help="Durability level for tables.",
     ),
 ) -> None:
     print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
@@ -269,7 +327,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await fetch_and_display(q, interval_td, tail)
 
     asyncio_run(run())
@@ -281,7 +339,7 @@ def listen(
     channel: str = typer.Option(qb.DBSettings().channel, "--channel"),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await display_pg_channel(q.driver, models.Channel(channel))
 
     asyncio_run(run())
@@ -289,18 +347,29 @@ def listen(
 
 @app.command(help="Start a QueueManager to manage and process jobs.")
 def run(
-    factory_fn: str = typer.Argument(..., help="Path to a function returning a Queries instance."),
+    factory_fn: str = typer.Argument(
+        ...,
+        help="Path to a function returning a Queries instance.",
+    ),
     dequeue_timeout: float = typer.Option(
-        30.0, "--dequeue-timeout", help="Max seconds to wait for new jobs."
+        30.0,
+        "--dequeue-timeout",
+        help="Max seconds to wait for new jobs.",
     ),
     batch_size: int = typer.Option(
-        10, "--batch-size", help="Number of jobs to pull from the queue at once."
+        10,
+        "--batch-size",
+        help="Number of jobs to pull from the queue at once.",
     ),
     restart_delay: float = typer.Option(
-        5.0, "--restart-delay", help="Delay between restarts if --restart-on-failure."
+        5.0,
+        "--restart-delay",
+        help="Delay between restarts if --restart-on-failure.",
     ),
     restart_on_failure: bool = typer.Option(
-        False, "--restart-on-failure", help="Restart the manager if it fails."
+        False,
+        "--restart-on-failure",
+        help="Restart the manager if it fails.",
     ),
 ) -> None:
     """
@@ -321,10 +390,15 @@ def run(
 @app.command(help="Manage schedules in the PGQueuer system.")
 def schedules(
     ctx: Context,
-    remove: list[str] = typer.Option([], "-r", "--remove", help="Remove schedules by ID or name."),
+    remove: list[str] = typer.Option(
+        [],
+        "-r",
+        "--remove",
+        help="Remove schedules by ID or name.",
+    ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             if remove:
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {x for x in remove if not x.isdigit()}
@@ -337,13 +411,17 @@ def schedules(
 @app.command(help="Manually enqueue a job into the PGQueuer system.")
 def queue(
     ctx: Context,
-    entrypoint: str = typer.Argument(..., help="The entry point of the job to be executed."),
+    entrypoint: str = typer.Argument(
+        ...,
+        help="The entry point of the job to be executed.",
+    ),
     payload: str | None = typer.Argument(
-        None, help="Optional payload for the job, can be any serialized data."
+        None,
+        help="Optional payload for the job, can be any serialized data.",
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -364,7 +442,10 @@ def alter_durability(
             "'balanced' (main table logged, others unlogged), 'durable' (all logged)."
         ),
     ),
-    dry_run: bool = typer.Option(False, help="Print SQL commands without executing them."),
+    dry_run: bool = typer.Option(
+        False,
+        help="Print SQL commands without executing them.",
+    ),
 ) -> None:
     """
     Command to alter the durability level of the tables in PGQueuer without data loss.
