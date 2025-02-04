@@ -10,16 +10,32 @@ from __future__ import annotations
 
 import logging
 import logging.config
-import os
 import sys
 from datetime import datetime
 from typing import Final
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class LoggingSetting(BaseSettings):
+    log_level: str = Field(
+        "INFO",
+        alias="PGQUEUER_LOG_LEVEL",
+    )
+    disable_logging: bool = Field(
+        False,
+        alias="PGQUEUER_DISABLE_LOGGING",
+    )
+
+
+settings: Final[LoggingSetting] = LoggingSetting()
 
 
 class ISOFormatter(logging.Formatter):
     """Formatter that outputs log timestamps in ISO 8601 format with timezone information."""
 
-    def formatTime(self, record, datefmt=None):
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
         """Return the creation time of the record as an ISO 8601 formatted string with timezone.
 
         Args:
@@ -35,7 +51,7 @@ class ISOFormatter(logging.Formatter):
 class MaxLevelFilter(logging.Filter):
     """Filter that only allows log records up to a specified maximum logging level."""
 
-    def __init__(self, max_level):
+    def __init__(self, max_level: int):
         """Initialize the filter.
 
         Args:
@@ -44,7 +60,7 @@ class MaxLevelFilter(logging.Filter):
         super().__init__()
         self.max_level = max_level
 
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
         """Determine if the specified record is to be logged.
 
         Args:
@@ -88,12 +104,12 @@ LOGGING_CONFIG: Final = {
     },
     "root": {
         "handlers": ["stdout", "stderr"],
-        "level": "DEBUG",
+        "level": settings.log_level.upper(),
     },
 }
 
 
 logger: Final = logging.getLogger("pgqueuer")
 logger.addHandler(logging.NullHandler())
-if "PGQUEUER_DISABLE_LOGGING" not in os.environ:
+if not settings.disable_logging:
     logging.config.dictConfig(LOGGING_CONFIG)
