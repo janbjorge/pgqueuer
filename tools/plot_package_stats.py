@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
 import httpx
@@ -65,7 +65,7 @@ def plot_downloads(data: PackageStats) -> None:
             date - timedelta(days=1), 0
         )
 
-    totals = defaultdict[str, int](int)
+    totals = Counter[str]()
     for vers_counts in downloads.values():
         for version, count in vers_counts.items():
             totals[version] += count
@@ -107,8 +107,17 @@ def plot_downloads(data: PackageStats) -> None:
         col=2,
     )
 
+    def sort_key(v: str) -> tuple[int, ...]:
+        return tuple(map(int, v.split(".")))
+
+    xy = [(x, y) for x, y in sorted(totals.items(), key=lambda i: sort_key(i[0]))]
+
     fig.add_trace(
-        go.Bar(x=[f"v{v}" for v in totals], y=list(totals.values()), name="Total Downloads"),
+        go.Bar(
+            x=[f"v{x}" for x, _ in xy],
+            y=[y for _, y in xy],
+            name="Total Downloads",
+        ),
         row=2,
         col=1,
     )
