@@ -343,13 +343,18 @@ class QueueManager:
         for table in (
             self.queries.qbe.settings.queue_table,
             self.queries.qbe.settings.statistics_table,
-            self.queries.qbe.settings.queue_table_log,
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
                     f"The required table '{table}' is missing. "
                     f"Please run 'pgq install' to set up the necessary tables."
                 )
+
+        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
+            raise RuntimeError(
+                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
+                "please run 'pgq upgrade'"
+            )
 
         for table, column in (
             (self.queries.qbe.settings.queue_table, "updated"),
