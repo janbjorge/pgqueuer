@@ -77,9 +77,11 @@ def setup_fancy_logger(level: LogLevel) -> None:
                     "stream": sys.stderr,
                 },
             },
-            "root": {
-                "handlers": ["stdout", "stderr"],
-                "level": level.name,
+            "loggers": {
+                "pgqueuer": {
+                    "handlers": ["stdout", "stderr"],
+                    "level": level.name,
+                }
             },
         }
     )
