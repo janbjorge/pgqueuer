@@ -8,7 +8,19 @@ import logging
 import logging.config
 import sys
 from datetime import datetime
+from enum import Enum
 from typing import Final
+
+
+class LogLevel(Enum):
+    CRITICAL = "CRITICAL"
+    FATAL = "FATAL"
+    ERROR = "ERROR"
+    WARN = "WARN"
+    WARNING = "WARNING"
+    INFO = "INFO"
+    DEBUG = "DEBUG"
+    NOTSET = "NOTSET"
 
 
 class ISOFormatter(logging.Formatter):
@@ -29,7 +41,7 @@ class MaxLevelFilter(logging.Filter):
         return record.levelno <= self.max_level
 
 
-def setup_fancy_logger(level: str) -> None:
+def setup_fancy_logger(level: LogLevel) -> None:
     """
     Update the 'pgqueuer' logger's level dynamically.
     """
@@ -67,7 +79,7 @@ def setup_fancy_logger(level: str) -> None:
             },
             "root": {
                 "handlers": ["stdout", "stderr"],
-                "level": level.upper(),
+                "level": level.name,
             },
         }
     )

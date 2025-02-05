@@ -391,8 +391,8 @@ def run(
         "--restart-on-failure",
         help="Restart the manager if it fails.",
     ),
-    log_level: str = typer.Option(
-        "INFO",
+    log_level: logconfig.LogLevel | None = typer.Option(
+        None,
         "--log-level",
         help="Set pgqueuer log level.",
     ),
@@ -400,7 +400,9 @@ def run(
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
     """
-    logconfig.setup_fancy_logger(log_level)
+    if log_level:
+        logconfig.setup_fancy_logger(log_level)
+
     asyncio_run(
         supervisor.runit(
             factories.load_factory(factory_fn),
