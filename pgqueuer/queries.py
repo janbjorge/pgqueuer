@@ -99,7 +99,12 @@ class Queries:
         This method should be called when updating the application to a new version
         that requires schema changes.
         """
-        await self.driver.execute("\n\n".join(self.qbe.build_upgrade_queries()))
+
+        # This is a workaround until issue #311 is resolved.
+        for query in self.qbe.build_upgrade_queries():
+            await self.driver.execute(query)
+
+        # await self.driver.execute("\n\n".join(self.qbe.build_upgrade_queries()))
 
     async def alter_durability(self) -> None:
         """
