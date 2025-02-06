@@ -317,7 +317,7 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
+    # print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
@@ -391,8 +391,8 @@ def run(
         "--restart-on-failure",
         help="Restart the manager if it fails.",
     ),
-    log_level: logconfig.LogLevel = typer.Option(
-        logconfig.LogLevel.INFO.name,
+    log_level: logconfig.LogLevel | None = typer.Option(
+        None,
         "--log-level",
         help="Set pgqueuer log level.",
     ),
@@ -400,7 +400,8 @@ def run(
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
     """
-    logconfig.setup_fancy_logger(log_level)
+    if log_level:
+        logconfig.setup_fancy_logger(log_level)
 
     asyncio_run(
         supervisor.runit(
