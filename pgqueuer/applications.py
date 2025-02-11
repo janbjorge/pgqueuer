@@ -62,6 +62,7 @@ class PgQueuer:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
+        burst_mode: bool = False,
     ) -> None:
         """
         Run both QueueManager and SchedulerManager concurrently.
@@ -79,6 +80,7 @@ class PgQueuer:
                     self.qm.run(
                         batch_size=batch_size,
                         dequeue_timeout=dequeue_timeout,
+                        brust_mode=burst_mode,
                     )
                 )
             )

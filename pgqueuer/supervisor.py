@@ -76,6 +76,7 @@ async def runit(
     restart_delay: timedelta,
     restart_on_failure: bool,
     shutdown: asyncio.Event,
+    burst_mode: bool,
 ) -> None:
     """
     Supervise and manage the lifecycle of a queue management instance.
@@ -100,7 +101,7 @@ async def runit(
         try:
             async with factories.run_factory(factory()) as manager:
                 setup_shutdown_handlers(manager, shutdown)
-                await run_manager(manager, dequeue_timeout, batch_size)
+                await run_manager(manager, dequeue_timeout, batch_size, burst_mode)
         except Exception as exc:
             if not restart_on_failure:
                 raise
@@ -117,6 +118,7 @@ async def run_manager(
     mananger: Manager,
     dequeue_timeout: timedelta,
     batch_size: int,
+    burst_mode: bool,
 ) -> None:
     """
     Run a queue management instance.
@@ -131,11 +133,19 @@ async def run_manager(
     """
     logconfig.logger.debug("Running: %s", type(mananger).__name__)
     if isinstance(mananger, qm.QueueManager):
-        await mananger.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
+        await mananger.run(
+            dequeue_timeout=dequeue_timeout,
+            batch_size=batch_size,
+            burst_mode=burst_mode,
+        )
     elif isinstance(mananger, sm.SchedulerManager):
         await mananger.run()
     elif isinstance(mananger, applications.PgQueuer):
-        await mananger.run(dequeue_timeout=dequeue_timeout, batch_size=batch_size)
+        await mananger.run(
+            dequeue_timeout=dequeue_timeout,
+            batch_size=batch_size,
+            burst_mode=burst_mode,
+        )
     else:
         raise NotImplementedError(f"Unsupported instance type: {type(mananger)}")
 
