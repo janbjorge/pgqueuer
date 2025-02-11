@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Literal, NewType
+
+
+###### Queue ######
+class QueueExecutionMode(Enum):
+    continuous = "continuous"  # Normal queue processing with a continuous worker loop
+    drain = "drain"  # Process all jobs until empty, then shut down
+
 
 ###### Events ######
 Channel = NewType("Channel", str)

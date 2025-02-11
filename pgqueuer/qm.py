@@ -35,6 +35,7 @@ from . import (
     qb,
     queries,
     tm,
+    types,
 )
 
 warnings.simplefilter("default", DeprecationWarning)
@@ -378,7 +379,7 @@ class QueueManager:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
-        burst_mode: bool = False,
+        mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -451,12 +452,12 @@ class QueueManager:
                         )
                     )
 
-                # Run until the queue is empty and then shutdown.
-                if burst_mode:
-                    self.shutdown.set()
-
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
+
+                # Run until the queue is empty and then shutdown.
+                if mode is types.QueueExecutionMode.drain:
+                    self.shutdown.set()
 
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,

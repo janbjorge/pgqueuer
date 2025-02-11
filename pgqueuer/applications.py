@@ -26,6 +26,7 @@ from .qb import DBSettings
 from .qm import QueueManager
 from .sm import SchedulerManager
 from .tm import TaskManager
+from .types import QueueExecutionMode
 
 
 @dataclasses.dataclass
@@ -62,7 +63,7 @@ class PgQueuer:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
-        burst_mode: bool = False,
+        mode: QueueExecutionMode = QueueExecutionMode.continuous,
     ) -> None:
         """
         Run both QueueManager and SchedulerManager concurrently.
@@ -80,7 +81,7 @@ class PgQueuer:
                     self.qm.run(
                         batch_size=batch_size,
                         dequeue_timeout=dequeue_timeout,
-                        brust_mode=burst_mode,
+                        mode=mode,
                     )
                 )
             )

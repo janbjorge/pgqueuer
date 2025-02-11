@@ -10,6 +10,7 @@ import async_timeout
 import pytest
 
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager, supervisor
+from pgqueuer.types import QueueExecutionMode
 
 
 @pytest.fixture(scope="function")
@@ -102,6 +103,7 @@ async def test_runit_normal_operation(
             restart_delay=timedelta(seconds=2),
             restart_on_failure=False,
             shutdown=shutdown_event,
+            mode=QueueExecutionMode.continuous,
         )
     )
 
@@ -145,6 +147,7 @@ async def test_runit_restart_on_failure(
             restart_delay=timedelta(seconds=0.05),
             restart_on_failure=True,
             shutdown=shutdown_event,
+            mode=QueueExecutionMode.continuous,
         )
     )
 
@@ -182,6 +185,7 @@ async def test_runit_no_restart_on_failure(
             restart_delay=timedelta(seconds=2),
             restart_on_failure=False,
             shutdown=shutdown_event,
+            mode=QueueExecutionMode.continuous,
         )
 
 
@@ -194,6 +198,7 @@ async def test_runit_negative_restart_delay(shutdown_event: asyncio.Event) -> No
             restart_delay=timedelta(seconds=-1),
             restart_on_failure=True,
             shutdown=shutdown_event,
+            mode=QueueExecutionMode.continuous,
         )
 
 
@@ -206,4 +211,5 @@ async def test_run_manager_invalid_manager() -> None:
             InvalidManager(),  # type: ignore
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
+            mode=QueueExecutionMode.continuous,
         )

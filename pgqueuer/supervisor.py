@@ -13,7 +13,7 @@ import signal
 from datetime import timedelta
 from typing import AsyncContextManager, Awaitable, Callable, ContextManager, TypeAlias
 
-from . import applications, factories, logconfig, qm, sm
+from . import applications, factories, logconfig, qm, sm, types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
 ManagerFactory: TypeAlias = Callable[
@@ -76,7 +76,7 @@ async def runit(
     restart_delay: timedelta,
     restart_on_failure: bool,
     shutdown: asyncio.Event,
-    burst_mode: bool,
+    mode: types.QueueExecutionMode,
 ) -> None:
     """
     Supervise and manage the lifecycle of a queue management instance.
@@ -101,7 +101,7 @@ async def runit(
         try:
             async with factories.run_factory(factory()) as manager:
                 setup_shutdown_handlers(manager, shutdown)
-                await run_manager(manager, dequeue_timeout, batch_size, burst_mode)
+                await run_manager(manager, dequeue_timeout, batch_size, mode)
         except Exception as exc:
             if not restart_on_failure:
                 raise
@@ -118,7 +118,7 @@ async def run_manager(
     mananger: Manager,
     dequeue_timeout: timedelta,
     batch_size: int,
-    burst_mode: bool,
+    mode: types.QueueExecutionMode,
 ) -> None:
     """
     Run a queue management instance.
@@ -136,7 +136,7 @@ async def run_manager(
         await mananger.run(
             dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
-            burst_mode=burst_mode,
+            mode=mode,
         )
     elif isinstance(mananger, sm.SchedulerManager):
         await mananger.run()
@@ -144,7 +144,7 @@ async def run_manager(
         await mananger.run(
             dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
-            burst_mode=burst_mode,
+            mode=mode,
         )
     else:
         raise NotImplementedError(f"Unsupported instance type: {type(mananger)}")
