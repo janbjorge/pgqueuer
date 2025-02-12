@@ -100,6 +100,20 @@ This design minimizes disruptions and ensures job integrity.
     # Using the traditional approach
     python3 -m pgqueuer run <module+factory-function>
 
+### Queue Execution Modes
+
+The `run` command supports two execution modes:
+
+- **Continuous (default)**: Keeps processing jobs indefinitely, waiting for new ones as they arrive.
+- **Drain**: Processes all available jobs and shuts down once the queue is empty.
+
+**Example**:
+```sh
+pgq run my_module.my_factory --mode drain
+```
+
+Use **continuous** for long-running workers and **drain** for batch processing.
+
 Durability Explained
 --------------------
 
