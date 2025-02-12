@@ -3,12 +3,14 @@ import time
 import uuid
 from datetime import timedelta
 
+import async_timeout
 import pytest
 
 from pgqueuer import db
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
+from pgqueuer.types import QueueExecutionMode
 
 
 async def wait_until_empty_queue(
@@ -169,3 +171,24 @@ async def test_pick_set_queue_manager_id(
     )
 
     assert len(qmids) == 1
+
+
+@pytest.mark.parametrize("N", (1, 10, 100))
+async def test_drain_mode(
+    apgdriver: db.Driver,
+    N: int,
+) -> None:
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
+    jobs = list[Job]()
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        jobs.append(job)
+
+    await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+
+    async with async_timeout.timeout(10):
+        await qm.run(mode=QueueExecutionMode.drain)
+
+    assert len(jobs) == N

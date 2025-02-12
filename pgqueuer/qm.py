@@ -37,6 +37,7 @@ from . import (
     qb,
     queries,
     tm,
+    types,
 )
 
 warnings.simplefilter("default", DeprecationWarning)
@@ -400,6 +401,7 @@ class QueueManager:
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
+        mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -410,6 +412,8 @@ class QueueManager:
         Args:
             dequeue_timeout (timedelta): Timeout duration for waiting to dequeue jobs.
             batch_size (int): Number of jobs to retrieve in each batch.
+            burst_mode (bool): Whether to run in burst mode, fetch until
+                queue is empty then shutdown.
 
         Raises:
             RuntimeError: If required database columns or types are missing.
@@ -472,6 +476,10 @@ class QueueManager:
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
+
+                # Run until the queue is empty and then shutdown.
+                if mode is types.QueueExecutionMode.drain:
+                    self.shutdown.set()
 
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,
