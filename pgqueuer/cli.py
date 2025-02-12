@@ -12,7 +12,7 @@ from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator
 
-from . import db, factories, helpers, listeners, logconfig, models, qb, queries, supervisor
+from . import db, factories, helpers, listeners, logconfig, models, qb, queries, supervisor, types
 
 try:
     from uvloop import run as asyncio_run
@@ -365,7 +365,7 @@ def listen(
     asyncio_run(run())
 
 
-@app.command(help="Start a QueueManager to manage and process jobs.")
+@app.command(help="Start a PGQueuer.")
 def run(
     factory_fn: str = typer.Argument(
         ...,
@@ -396,6 +396,11 @@ def run(
         "--log-level",
         help="Set pgqueuer log level.",
     ),
+    mode: types.QueueExecutionMode = typer.Option(
+        types.QueueExecutionMode.continuous.name,
+        "--mode",
+        help="Queue execution mode.",
+    ),
 ) -> None:
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
@@ -410,6 +415,7 @@ def run(
             restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
             restart_on_failure=restart_on_failure,
             shutdown=asyncio.Event(),
+            mode=mode,
         )
     )
 
