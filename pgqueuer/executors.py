@@ -113,13 +113,10 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             context (models.Context): The context for the job.
         """
 
-        try:
-            if self.is_async:
-                await cast(AsyncEntrypoint, self.parameters.func)(job)
-            else:
-                await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
-        except Exception:
-            ...
+        if self.is_async:
+            await cast(AsyncEntrypoint, self.parameters.func)(job)
+        else:
+            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
 
 
 @dataclasses.dataclass
