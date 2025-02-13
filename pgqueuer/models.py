@@ -132,17 +132,18 @@ class Job(BaseModel):
     attempts: int = 1
 
 
-class UpdateJobStatus(BaseModel):
+@dataclasses.dataclass
+class UpdateJobStatus:
     """
     Represents a request to update the job status.
     If retryable is set to False the job is considered "terminal"
-    and will not be retried.
+    and will not be retried, and moved to the stats table.
     """
 
     job_id: JobId
     status: JOB_STATUS
     retryable: bool = False
-    reschedule_for: datetime | None = None
+    reschedule_for: AwareDatetime | None = None
 
 
 ###### Log ######

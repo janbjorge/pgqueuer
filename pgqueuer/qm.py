@@ -347,6 +347,10 @@ class QueueManager:
             else:
                 terminal.append((event.job_id, event.status))
 
+        # failure state: if either of the following tasks fails the failed task's jobs
+        # will remain in 'picked' until recovered by the job timeout feature.
+        # The other tasks will continue to execute per asyncio.gather docs:
+        # https://docs.python.org/3/library/asyncio-task.html#asyncio.gather
         await asyncio.gather(
             self.queries.mark_jobs_as_retryable(retryable), self.queries.log_jobs(terminal)
         )
@@ -533,7 +537,7 @@ class QueueManager:
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)
             except RetryableException as e:
-                logconfig.logger.exception(
+                logconfig.logger.warning(
                     "Exception while processing entrypoint/job-id: %s/%s. Rescheduling",
                     job.entrypoint,
                     job.id,
