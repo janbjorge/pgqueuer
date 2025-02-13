@@ -710,7 +710,7 @@ class QueryQueueBuilder:
 
     def build_reschedule_job_query(self) -> str:
         """
-        Generate SQL query to move jobs from picked back to another status.
+        Generate SQL query to move multiple jobs from picked back to another status.
 
         Returns:
             str: The SQL query string to retry jobs.
@@ -718,25 +718,18 @@ class QueryQueueBuilder:
         return f"""WITH updated AS (
             UPDATE {self.settings.queue_table}
             SET
-                status=$2::{self.settings.queue_status_type},
-                execute_after=$3,
-                updated=NOW(),
-                queue_manager_id=NULL
-            WHERE id = $1::integer
-            RETURNING id, entrypoint, priority
-        ), job_status AS (
-            SELECT
-                UNNEST($1::integer[])                           AS id,
-                UNNEST($2::{self.settings.queue_status_type}[]) AS status
-        ), merged AS (
-            SELECT
-                job_status.id       AS id,
-                job_status.status   AS status,
-                updated.entrypoint  AS entrypoint,
-                updated.priority    AS priority
-            FROM job_status
-            INNER JOIN updated
-            ON updated.id = job_status.id
+                status = job_data.status,
+                execute_after = job_data.execute_after,
+                updated = NOW(),
+                queue_manager_id = NULL
+            FROM (
+                SELECT
+                    UNNEST($1::integer[]) AS id,
+                    UNNEST($2::{self.settings.queue_status_type}[]) AS status,
+                    UNNEST($3::timestamptz[]) AS execute_after
+            ) AS job_data
+            WHERE {self.settings.queue_table}.id = job_data.id
+            RETURNING {self.settings.queue_table}.id, status, entrypoint, priority
         )
         INSERT INTO {self.settings.queue_table_log} (
             job_id,
@@ -744,7 +737,7 @@ class QueryQueueBuilder:
             entrypoint,
             priority
         )
-        SELECT id, status, entrypoint, priority FROM merged
+        SELECT id, status, entrypoint, priority FROM updated
         """
 
     def build_log_job_query(self) -> str:
