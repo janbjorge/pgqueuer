@@ -537,16 +537,18 @@ class QueueManager:
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)
             except RetryableException as e:
+                next_status: types.JOB_STATUS = "exception" if e.schedule_for is None else "queued"
                 logconfig.logger.warning(
-                    "Exception while processing entrypoint/job-id: %s/%s. Rescheduling",
+                    "Exception while processing entrypoint/job-id: %s/%s. Marking as %s",
                     job.entrypoint,
                     job.id,
+                    next_status,
                     exc_info=e.__cause__ or e.__context__ or e,
                 )
                 await jbuff.add(
                     models.UpdateJobStatus(
                         job_id=job.id,
-                        status="exception" if e.schedule_for is None else "queued",
+                        status=next_status,
                         retryable=True,
                         reschedule_for=e.schedule_for,
                     )
