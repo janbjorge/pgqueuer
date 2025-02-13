@@ -720,7 +720,7 @@ class QueryQueueBuilder:
             SET
                 status = job_data.status,
                 execute_after = COALESCE(
-                    job_data.execute_after, 
+                    job_data.execute_after,
                     {self.settings.queue_table}.execute_after
                 ),
                 updated = NOW(),
