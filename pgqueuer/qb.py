@@ -719,7 +719,10 @@ class QueryQueueBuilder:
             UPDATE {self.settings.queue_table}
             SET
                 status = job_data.status,
-                execute_after = job_data.execute_after,
+                execute_after = COALESCE(
+                    job_data.execute_after, 
+                    {self.settings.queue_table}.execute_after
+                ),
                 updated = NOW(),
                 queue_manager_id = NULL
             FROM (
