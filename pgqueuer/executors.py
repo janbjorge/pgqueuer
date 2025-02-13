@@ -251,9 +251,9 @@ class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             async with async_timeout.timeout(deadline):
                 try:
                     return await super().execute(job, context)
-                except Exception as e:
+                except Exception:
                     if self.max_attempts and job.attempts + 1 > self.max_attempts:
-                        raise errors.MaxRetriesExceeded(self.max_attempts) from e
+                        raise errors.RetryableException(None)
 
                     max_delay = (
                         self.max_delay
@@ -266,8 +266,8 @@ class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             TimeoutError,
             asyncio.exceptions.TimeoutError,
             asyncio.TimeoutError,
-        ) as e:
-            raise errors.MaxTimeExceeded(self.max_time) from e
+        ):
+            raise errors.RetryableException(None)
 
 
 ######## Schedulers ########
