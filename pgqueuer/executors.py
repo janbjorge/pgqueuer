@@ -195,6 +195,81 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
+@dataclasses.dataclass
+class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
+    # maximum retry attempts
+    max_attempts: int | None = dataclasses.field(
+        default=5,
+    )
+
+    # maximum delay for retry
+    max_delay: float | timedelta = dataclasses.field(
+        default=timedelta(seconds=10),
+    )
+
+    # maximum time used on retry
+    max_time: timedelta | None = dataclasses.field(
+        default=timedelta(minutes=5),
+    )
+
+    # base delay for backoff
+    initial_delay: float = dataclasses.field(
+        default=0.1,
+    )
+
+    # base for exponential backoff
+    backoff_multiplier: float = dataclasses.field(
+        default=2.0,
+    )
+
+    # jitter callable
+    jitter: Callable[[], float] = dataclasses.field(
+        default=lambda: random.uniform(0, 1),
+    )
+
+    def exponential_delay(self, attempt: int) -> float:
+        delay = self.initial_delay * (self.backoff_multiplier**attempt) / 2
+        jitter = self.jitter() * self.initial_delay / 2
+        return delay + jitter
+
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        """
+        Execute the job with retry logic, using exponential backoff and jitter.
+
+        Args:
+            job (models.Job): The job to execute.
+            context (models.Context): The context for the job.
+
+        The function retries execution up to `max_attempts` times in case of failure,
+        applying exponential backoff with an initial delay (`initial_delay`),
+        up to a maximum delay (`max_delay`).
+        Jitter is added to the delay to avoid contention.
+        """
+
+        deadline = None if self.max_time is None else self.max_time.total_seconds()
+        try:
+            async with async_timeout.timeout(deadline):
+                try:
+                    return await super().execute(job, context)
+                except Exception as e:
+                    if self.max_attempts and job.attempts + 1 >= self.max_attempts:
+                        raise errors.MaxRetriesExceeded(self.max_attempts) from e
+
+                    max_delay = (
+                        self.max_delay
+                        if isinstance(self.max_delay, float | int)
+                        else self.max_delay.total_seconds()
+                    )
+                    delay = min(self.exponential_delay(job.attempts), max_delay)
+                    raise errors.RetryableException(datetime.now() + timedelta(seconds=delay))
+        except (
+            TimeoutError,
+            asyncio.exceptions.TimeoutError,
+            asyncio.TimeoutError,
+        ) as e:
+            raise errors.MaxTimeExceeded(self.max_time) from e
+
+
 ######## Schedulers ########
 
 

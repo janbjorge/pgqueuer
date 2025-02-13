@@ -157,9 +157,7 @@ async def test_clear_queue(
     await q.clear_queue(None)
     assert sum(x.count for x in await q.queue_size()) == 0
     assert sum(x.status == "deleted" for x in await q.queue_log()) == N
-    assert sum(
-        x.count for x in await q.log_statistics(tail=None) if x.status == "deleted"
-    ) == N
+    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "deleted") == N
     assert sum(x.status == "deleted" for x in await q.queue_log()) == N
 
     # Test delete one(1).

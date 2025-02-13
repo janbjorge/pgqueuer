@@ -131,16 +131,19 @@ class Job(BaseModel):
     queue_manager_id: uuid.UUID | None
     attempts: int = 1
 
+
 class UpdateJobStatus(BaseModel):
     """
     Represents a request to update the job status.
     If retryable is set to False the job is considered "terminal"
     and will not be retried.
     """
+
     job_id: JobId
     status: JOB_STATUS
     retryable: bool = False
     reschedule_for: datetime | None = None
+
 
 ###### Log ######
 
