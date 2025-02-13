@@ -119,7 +119,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
 
 
 @dataclasses.dataclass
-class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
+class BaseRetryWithBackoffExecutor(EntrypointExecutor):
     # maximum retry attempts
     max_attempts: int | None = dataclasses.field(
         default=5,
@@ -155,9 +155,18 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
         jitter = self.jitter() * self.initial_delay / 2
         return delay + jitter
 
+
+@dataclasses.dataclass
+class InlineRetryWithBackoffEntrypointExecutor(BaseRetryWithBackoffExecutor):
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
         Execute the job with retry logic, using exponential backoff and jitter.
+
+        Note: this attempts the retries inline meaning the worker will not pick
+        up additional jobs while the current failing one is being retried. It will
+        also not increment the `attempts` field on the job.
+
+        After the specified attempts the job will be discarded.
 
         Args:
             job (models.Job): The job to execute.
@@ -195,46 +204,26 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
+"""
+for backwards compatability
+"""
+RetryWithBackoffEntrypointExecutor = InlineRetryWithBackoffEntrypointExecutor
+
+
 @dataclasses.dataclass
-class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
-    # maximum retry attempts
-    max_attempts: int | None = dataclasses.field(
-        default=5,
-    )
-
-    # maximum delay for retry
-    max_delay: float | timedelta = dataclasses.field(
-        default=timedelta(seconds=10),
-    )
-
-    # maximum time used on retry
-    max_time: timedelta | None = dataclasses.field(
-        default=timedelta(minutes=5),
-    )
-
-    # base delay for backoff
-    initial_delay: float = dataclasses.field(
-        default=0.1,
-    )
-
-    # base for exponential backoff
-    backoff_multiplier: float = dataclasses.field(
-        default=2.0,
-    )
-
-    # jitter callable
-    jitter: Callable[[], float] = dataclasses.field(
-        default=lambda: random.uniform(0, 1),
-    )
-
-    def exponential_delay(self, attempt: int) -> float:
-        delay = self.initial_delay * (self.backoff_multiplier**attempt) / 2
-        jitter = self.jitter() * self.initial_delay / 2
-        return delay + jitter
-
+class DatabaseRetryWithBackoffEntrypointExecutor(BaseRetryWithBackoffExecutor):
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
         Execute the job with retry logic, using exponential backoff and jitter.
+
+        When a job fails it raises a RetryableException - this will cause pgqueuer
+        to move this job back into the queue, ready to be retried.
+
+        If `schedule_for` is passed to RetryableException the job will be processed
+        after that datetime.
+
+        If it is not set the job will remain in `exception` status and require manual
+        recovery (by setting the status back to `queued`).
 
         Args:
             job (models.Job): The job to execute.
@@ -251,9 +240,9 @@ class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             async with async_timeout.timeout(deadline):
                 try:
                     return await super().execute(job, context)
-                except Exception:
+                except Exception as e:
                     if self.max_attempts and job.attempts + 1 > self.max_attempts:
-                        raise errors.RetryableException(None)
+                        raise errors.RetryableException(None) from e
 
                     max_delay = (
                         self.max_delay
@@ -261,13 +250,14 @@ class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
                         else self.max_delay.total_seconds()
                     )
                     delay = min(self.exponential_delay(job.attempts), max_delay)
-                    raise errors.RetryableException(datetime.now() + timedelta(seconds=delay))
+                    next_attempt_at = helpers.utc_now() + timedelta(seconds=delay)
+                    raise errors.RetryableException(schedule_for=next_attempt_at) from e
         except (
             TimeoutError,
             asyncio.exceptions.TimeoutError,
             asyncio.TimeoutError,
-        ):
-            raise errors.RetryableException(None)
+        ) as e:
+            raise errors.RetryableException(None) from e
 
 
 ######## Schedulers ########
