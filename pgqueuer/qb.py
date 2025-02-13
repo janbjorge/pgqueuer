@@ -239,6 +239,7 @@ class QueryBuilderEnvironment:
         execute_after TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
         payload BYTEA
     );
     CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
