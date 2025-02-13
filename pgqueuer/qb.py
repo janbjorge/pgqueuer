@@ -443,6 +443,7 @@ class QueryBuilderEnvironment:
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"""  # noqa
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """

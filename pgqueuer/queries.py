@@ -305,8 +305,8 @@ class Queries:
 
     async def mark_jobs_as_retryable(
         self,
-        updates: list[tuple[models.Job, models.JOB_STATUS, datetime | None]]
-    ):
+        updates: list[tuple[models.JobId, models.JOB_STATUS, datetime | None]]
+    ) -> None:
         """
         Reschedule jobs
 
@@ -317,14 +317,14 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.build_reschedule_job_query(),
-            [job.id for job, _, _ in updates],
+            [job_id for job_id, _, _ in updates],
             [status for _, status, _ in updates],
             [rescheduled_for for _, _, rescheduled_for in updates],
         )
 
     async def log_jobs(
         self,
-        job_status: list[tuple[models.Job, models.JOB_STATUS]],
+        job_status: list[tuple[models.JobId, models.JOB_STATUS]],
     ) -> None:
         """
         Move completed or failed jobs from the queue to the log table.
@@ -339,7 +339,7 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.build_log_job_query(),
-            [job.id for job, _, in job_status],
+            [job_id for job_id, _, in job_status],
             [status for _, status in job_status],
         )
 

@@ -173,7 +173,7 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
         Jitter is added to the delay to avoid contention.
         """
 
-        attempt = 0
+        attempt = job.attempts
         deadline = None if self.max_time is None else self.max_time.total_seconds()
         try:
             async with async_timeout.timeout(deadline):

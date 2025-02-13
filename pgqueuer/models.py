@@ -139,8 +139,8 @@ class UpdateJobStatus(BaseModel):
     """
     job_id: JobId
     status: JOB_STATUS
-    retryable: bool
-    reschedule_for: datetime | None
+    retryable: bool = False
+    reschedule_for: datetime | None = None
 
 ###### Log ######
 
