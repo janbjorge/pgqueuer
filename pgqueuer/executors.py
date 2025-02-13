@@ -252,7 +252,7 @@ class DatabaseRetryWithBackoffEntrypointExecutor(EntrypointExecutor):
                 try:
                     return await super().execute(job, context)
                 except Exception as e:
-                    if self.max_attempts and job.attempts + 1 >= self.max_attempts:
+                    if self.max_attempts and job.attempts + 1 > self.max_attempts:
                         raise errors.MaxRetriesExceeded(self.max_attempts) from e
 
                     max_delay = (

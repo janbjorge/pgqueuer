@@ -729,7 +729,11 @@ class QueryQueueBuilder:
                     UNNEST($3::timestamptz[]) AS execute_after
             ) AS job_data
             WHERE {self.settings.queue_table}.id = job_data.id
-            RETURNING {self.settings.queue_table}.id, status, entrypoint, priority
+            RETURNING
+                {self.settings.queue_table}.id,
+                {self.settings.queue_table}.status,
+                entrypoint,
+                priority
         )
         INSERT INTO {self.settings.queue_table_log} (
             job_id,

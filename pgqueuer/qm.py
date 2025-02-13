@@ -537,6 +537,7 @@ class QueueManager:
                     "Exception while processing entrypoint/job-id: %s/%s. Rescheduling",
                     job.entrypoint,
                     job.id,
+                    exc_info=e.__cause__ or e.__context__ or e,
                 )
                 await jbuff.add(
                     models.UpdateJobStatus(
