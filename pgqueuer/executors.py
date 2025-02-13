@@ -112,10 +112,14 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        if self.is_async:
-            await cast(AsyncEntrypoint, self.parameters.func)(job)
-        else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+
+        try:
+            if self.is_async:
+                await cast(AsyncEntrypoint, self.parameters.func)(job)
+            else:
+                await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+        except Exception:
+            ...
 
 
 @dataclasses.dataclass
@@ -173,20 +177,22 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
         deadline = None if self.max_time is None else self.max_time.total_seconds()
         try:
             async with async_timeout.timeout(deadline):
-                while True:
-                    try:
-                        return await super().execute(job, context)
-                    except Exception as e:
-                        attempt += 1
-                        if self.max_attempts and attempt >= self.max_attempts:
-                            raise errors.MaxRetriesExceeded(self.max_attempts) from e
+                try:
+                    return await super().execute(job, context)
+                except Exception as e:
+                    attempt += 1
+                    if self.max_attempts and attempt >= self.max_attempts:
+                        raise errors.MaxRetriesExceeded(self.max_attempts) from e
 
-                        max_delay = (
-                            self.max_delay
-                            if isinstance(self.max_delay, float | int)
-                            else self.max_delay.total_seconds()
-                        )
-                        await asyncio.sleep(min(self.exponential_delay(attempt), max_delay))
+                    max_delay = (
+                        self.max_delay
+                        if isinstance(self.max_delay, float | int)
+                        else self.max_delay.total_seconds()
+                    )
+                    delay = min(self.exponential_delay(attempt), max_delay)
+                    raise errors.RetryableException(
+                        schedule_for=datetime.now() + timedelta(seconds=delay)
+                    ) from e
         except (
             TimeoutError,
             asyncio.exceptions.TimeoutError,

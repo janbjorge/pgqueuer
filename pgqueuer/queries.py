@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import overload
 
 from . import db, helpers, models, qb
@@ -303,6 +303,25 @@ class Queries:
             for x in await self.driver.fetch(self.qbq.build_queue_size_query())
         ]
 
+    async def mark_jobs_as_retryable(
+        self,
+        updates: list[tuple[models.Job, models.JOB_STATUS, datetime | None]]
+    ):
+        """
+        Reschedule jobs
+
+        Args:
+            job_status (list[tuple[models.Job, models.STATUS_LOG]]): A list of tuples
+                containing jobs and their corresponding statuses
+                ('successful', 'exception', or 'canceled').
+        """
+        await self.driver.execute(
+            self.qbq.build_reschedule_job_query(),
+            [job.id for job, _, _ in updates],
+            [status for _, status, _ in updates],
+            [rescheduled_for for _, _, rescheduled_for in updates],
+        )
+
     async def log_jobs(
         self,
         job_status: list[tuple[models.Job, models.JOB_STATUS]],
@@ -320,7 +339,7 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.build_log_job_query(),
-            [job.id for job, _ in job_status],
+            [job.id for job, _, in job_status],
             [status for _, status in job_status],
         )
 

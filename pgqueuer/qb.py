@@ -598,7 +598,12 @@ class QueryQueueBuilder:
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW(), heartbeat = NOW(), queue_manager_id = $6
+        SET 
+            status = 'picked', 
+            updated = NOW(), 
+            heartbeat = NOW(), 
+            queue_manager_id = $6, 
+            attempts = attempts + 1
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     ), queue_log AS (
@@ -700,6 +705,45 @@ class QueryQueueBuilder:
     GROUP BY entrypoint, priority, status
     ORDER BY count, entrypoint, priority, status
     """
+
+    def build_reschedule_job_query(self) -> str:
+        """
+        Generate SQL query to move jobs from picked back to another status.
+
+        Returns:
+            str: The SQL query string to retry jobs.
+        """
+        return f"""WITH updated AS (
+            UPDATE {self.settings.queue_table}
+            SET
+                status=$2::{self.settings.queue_status_type},
+                execute_after=$3,
+                updated=NOW(),
+                queue_manager_id=NULL
+            WHERE id = $1::integer
+            RETURNING id, entrypoint, priority
+        ), job_status AS (
+            SELECT
+                UNNEST($1::integer[])                           AS id,
+                UNNEST($2::{self.settings.queue_status_type}[]) AS status
+        ), merged AS (
+            SELECT
+                job_status.id       AS id,
+                job_status.status   AS status,
+                updated.entrypoint  AS entrypoint,
+                updated.priority    AS priority
+            FROM job_status
+            INNER JOIN updated
+            ON updated.id = job_status.id
+        )
+        INSERT INTO {self.settings.queue_table_log} (
+            job_id,
+            status,
+            entrypoint,
+            priority
+        )
+        SELECT id, status, entrypoint, priority FROM merged
+        """
 
     def build_log_job_query(self) -> str:
         """

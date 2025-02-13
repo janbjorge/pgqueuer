@@ -247,11 +247,12 @@ class TimedOverflowBuffer(Generic[T]):
             await asyncio.sleep(self.shutdown_backoff.next_delay().total_seconds())
 
 
-class JobStatusLogBuffer(TimedOverflowBuffer[tuple[models.Job, models.JOB_STATUS]]):
+class JobStatusLogBuffer(
+    TimedOverflowBuffer[models.UpdateJobStatus]
+):
     """
     Specialized TimedOverflowBuffer for handling Job/Status-log.
     """
-
 
 class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     """
