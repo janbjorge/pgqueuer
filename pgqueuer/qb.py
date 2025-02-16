@@ -239,6 +239,7 @@ class QueryBuilderEnvironment:
         execute_after TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
         payload BYTEA
     );
     CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
@@ -443,6 +444,7 @@ class QueryBuilderEnvironment:
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"""  # noqa
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -598,7 +600,12 @@ class QueryQueueBuilder:
     ),
     updated AS (
         UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW(), heartbeat = NOW(), queue_manager_id = $6
+        SET 
+            status = 'picked', 
+            updated = NOW(), 
+            heartbeat = NOW(), 
+            queue_manager_id = $6, 
+            attempts = attempts + 1
         WHERE id = ANY(SELECT id FROM combined_jobs)
         RETURNING *
     ), queue_log AS (
@@ -700,6 +707,45 @@ class QueryQueueBuilder:
     GROUP BY entrypoint, priority, status
     ORDER BY count, entrypoint, priority, status
     """
+
+    def build_reschedule_job_query(self) -> str:
+        """
+        Generate SQL query to move multiple jobs from picked back to another status.
+
+        Returns:
+            str: The SQL query string to retry jobs.
+        """
+        return f"""WITH updated AS (
+            UPDATE {self.settings.queue_table}
+            SET
+                status = job_data.status,
+                execute_after = COALESCE(
+                    job_data.execute_after,
+                    {self.settings.queue_table}.execute_after
+                ),
+                updated = NOW(),
+                queue_manager_id = NULL
+            FROM (
+                SELECT
+                    UNNEST($1::integer[]) AS id,
+                    UNNEST($2::{self.settings.queue_status_type}[]) AS status,
+                    UNNEST($3::timestamptz[]) AS execute_after
+            ) AS job_data
+            WHERE {self.settings.queue_table}.id = job_data.id
+            RETURNING
+                {self.settings.queue_table}.id,
+                {self.settings.queue_table}.status,
+                entrypoint,
+                priority
+        )
+        INSERT INTO {self.settings.queue_table_log} (
+            job_id,
+            status,
+            entrypoint,
+            priority
+        )
+        SELECT id, status, entrypoint, priority FROM updated
+        """
 
     def build_log_job_query(self) -> str:
         """

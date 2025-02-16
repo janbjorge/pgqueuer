@@ -89,6 +89,9 @@ docs = [
     "sphinx-rtd-theme"
 ]
 
+[tool.uv]
+default-groups = ["dev", "docs"]
+
 [tool.ruff]
 line-length = 100
 
