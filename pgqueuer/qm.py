@@ -390,7 +390,7 @@ class QueueManager:
         Args:
             dequeue_timeout (timedelta): Timeout duration for waiting to dequeue jobs.
             batch_size (int): Number of jobs to retrieve in each batch.
-            burst_mode (bool): Whether to run in burst mode, fetch until
+            mode (QueueExecutionMode): Whether to run in `continuous` or `drain` until
                 queue is empty then shutdown.
 
         Raises:
