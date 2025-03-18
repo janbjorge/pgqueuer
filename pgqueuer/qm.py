@@ -412,7 +412,7 @@ class QueueManager:
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
-                timeout=heartbeat_buffer_timeout / 2,
+                timeout=heartbeat_buffer_timeout / 4,
                 callback=self.queries.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
@@ -503,7 +503,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                executor.parameters.retry_timer,
+                executor.parameters.retry_timer / 2,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
