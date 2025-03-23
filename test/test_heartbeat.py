@@ -19,11 +19,11 @@ from pgqueuer.types import JobId, QueueExecutionMode
     ),
 )
 async def test_heartbeat_interval(interval: timedelta) -> None:
-    callbacks = list[tuple[list[JobId], datetime]]()
+    callbacks = list[JobId]()
 
     async def callback(jids: list[JobId]) -> None:
         nonlocal callbacks
-        callbacks.append((jids, datetime.now()))
+        callbacks.extend(jids)
 
     async with (
         HeartbeatBuffer(
@@ -37,9 +37,9 @@ async def test_heartbeat_interval(interval: timedelta) -> None:
             buffer=buffer,
         ),
     ):
-        await asyncio.sleep(interval.total_seconds() * 4)
+        await asyncio.sleep(interval.total_seconds())
 
-    assert len(callbacks) >= 2
+    assert 2 <= len(callbacks) <= 3
 
 
 @pytest.mark.parametrize("max_size", (10, 100))
@@ -67,17 +67,8 @@ async def test_heartbeat_max_size(max_size: int) -> None:
     assert len(callbacks) >= 2
 
 
-@pytest.mark.parametrize(
-    "retry_timer",
-    (
-        timedelta(seconds=0.5),
-        timedelta(seconds=0.1),
-    ),
-)
-async def test_heartbeat_interval_qm_dispatch(
-    apgdriver: AsyncpgDriver,
-    retry_timer: timedelta,
-) -> None:
+async def test_heartbeat_interval_qm_dispatch(apgdriver: AsyncpgDriver) -> None:
+    retry_timer = timedelta(seconds=0.1)
     q = QueueManager(apgdriver)
     waiter = asyncio.Event()
 
@@ -87,16 +78,22 @@ async def test_heartbeat_interval_qm_dispatch(
 
     async def fetch_heartbeat(job_id: int) -> timedelta:
         row, *_ = await apgdriver.fetch(
-            f"SELECT heartbeat FROM {q.queries.qbq.settings.queue_table}  WHERE id = $1",
+            f"""
+            SELECT
+                NOW() - heartbeat AS dt
+            FROM
+                {q.queries.qbq.settings.queue_table}
+            WHERE
+                id = $1
+            """,
             job_id,
         )
-        return row["heartbeat"]
+        return row["dt"]
 
     async def heartbeat_sampler(job_id: int) -> set[timedelta]:
         samples = set[timedelta]()
         while not waiter.is_set():
             samples.add(await fetch_heartbeat(job_id))
-            await asyncio.sleep(0.001)
         return samples
 
     async def timer(deadline: timedelta) -> None:
@@ -104,11 +101,10 @@ async def test_heartbeat_interval_qm_dispatch(
         waiter.set()
 
     job_id, *_ = await q.queries.enqueue("endpoint", None)
-    heartbeat_samplers, *_ = await asyncio.gather(
+    heartbeat_samples, *_ = await asyncio.gather(
         heartbeat_sampler(job_id),
         q.run(mode=QueueExecutionMode.drain),
         timer(retry_timer * 5),
     )
 
-    for x, y in zip(sorted(heartbeat_samplers), sorted(heartbeat_samplers)[1:]):
-        assert timedelta(seconds=0) < y - x < retry_timer, y - x
+    assert all(x < retry_timer for x in heartbeat_samples)
