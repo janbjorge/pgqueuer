@@ -6,7 +6,7 @@ requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
 packages = ["pgqueuer"]
 
 [tool.setuptools_scm]
-version_scheme= "only-version" 
+version_scheme= "only-version"
 local_scheme= "no-local-version"
 write_to= "pgqueuer/_version.py"
 
@@ -62,8 +62,6 @@ pgq = "pgqueuer.__main__:main"
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.30.0"]
 psycopg = ["psycopg>=3.2.0"]
-
-[dependency-groups]
 dev = [
     "async-timeout>=4.0.3",
     "asyncpg-stubs",
