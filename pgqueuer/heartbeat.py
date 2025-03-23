@@ -39,7 +39,12 @@ class Heartbeat:
             Heartbeat: The Heartbeat instance itself.
         """
         if self.interval > timedelta(seconds=0):
-            self.tm.add(asyncio.create_task(self.schedule_heartbeats()))
+            self.tm.add(
+                asyncio.create_task(
+                    self.schedule_heartbeats(),
+                    name=f"schedule_heartbeat_jid: {self.job_id}",
+                )
+            )
         return self
 
     async def __aexit__(self, *_: object) -> None:
