@@ -132,11 +132,7 @@ class TimedOverflowBuffer(Generic[T]):
         """
         await self.events.put(item)
 
-        if (
-            self.events.qsize() >= self.max_size
-            and not self.lock.locked()
-            and helpers.utc_now() > self.next_flush
-        ):
+        if not self.lock.locked() and self.events.qsize() >= self.max_size:
             self.tm.add(asyncio.create_task(self.flush()))
 
     async def pop_until(
