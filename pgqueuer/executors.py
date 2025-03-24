@@ -119,7 +119,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
 
 
 @dataclasses.dataclass
-class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
+class BaseRetryWithBackoffExecutor(EntrypointExecutor):
     # maximum retry attempts
     max_attempts: int | None = dataclasses.field(
         default=5,
@@ -155,9 +155,18 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
         jitter = self.jitter() * self.initial_delay / 2
         return delay + jitter
 
+
+@dataclasses.dataclass
+class InlineRetryWithBackoffEntrypointExecutor(BaseRetryWithBackoffExecutor):
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
         Execute the job with retry logic, using exponential backoff and jitter.
+
+        Note: this attempts the retries inline meaning the worker will not pick
+        up additional jobs while the current failing one is being retried. It will
+        also not increment the `attempts` field on the job.
+
+        After the specified attempts the job will be discarded.
 
         Args:
             job (models.Job): The job to execute.
@@ -193,6 +202,62 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             asyncio.TimeoutError,
         ) as e:
             raise errors.MaxTimeExceeded(self.max_time) from e
+
+
+"""
+for backwards compatability
+"""
+RetryWithBackoffEntrypointExecutor = InlineRetryWithBackoffEntrypointExecutor
+
+
+@dataclasses.dataclass
+class DatabaseRetryWithBackoffEntrypointExecutor(BaseRetryWithBackoffExecutor):
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        """
+        Execute the job with retry logic, using exponential backoff and jitter.
+
+        When a job fails it raises a RetryableException - this will cause pgqueuer
+        to move this job back into the queue, ready to be retried.
+
+        If `schedule_for` is passed to RetryableException the job will be processed
+        after that datetime.
+
+        If it is not set the job will remain in `exception` status and require manual
+        recovery (by setting the status back to `queued`).
+
+        Args:
+            job (models.Job): The job to execute.
+            context (models.Context): The context for the job.
+
+        The function retries execution up to `max_attempts` times in case of failure,
+        applying exponential backoff with an initial delay (`initial_delay`),
+        up to a maximum delay (`max_delay`).
+        Jitter is added to the delay to avoid contention.
+        """
+
+        deadline = None if self.max_time is None else self.max_time.total_seconds()
+        try:
+            async with async_timeout.timeout(deadline):
+                try:
+                    return await super().execute(job, context)
+                except Exception as e:
+                    if self.max_attempts and job.attempts + 1 > self.max_attempts:
+                        raise errors.RetryableException(None) from e
+
+                    max_delay = (
+                        self.max_delay
+                        if isinstance(self.max_delay, float | int)
+                        else self.max_delay.total_seconds()
+                    )
+                    delay = min(self.exponential_delay(job.attempts), max_delay)
+                    next_attempt_at = helpers.utc_now() + timedelta(seconds=delay)
+                    raise errors.RetryableException(schedule_for=next_attempt_at) from e
+        except (
+            TimeoutError,
+            asyncio.exceptions.TimeoutError,
+            asyncio.TimeoutError,
+        ) as e:
+            raise errors.RetryableException(None) from e
 
 
 ######## Schedulers ########

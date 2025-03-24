@@ -23,6 +23,8 @@ from typing import AsyncGenerator, Callable
 
 import anyio
 
+from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded, RetryableException
+
 from . import (
     buffers,
     db,
@@ -334,6 +336,25 @@ class QueueManager:
                 }
             )
 
+    async def handle_job_status(self, events: list[models.UpdateJobStatus]) -> None:
+        logconfig.logger.debug("Handling %s job updates", len(events))
+        # terminal = delete from jobs table, move to statistics table
+        # retryable = set job status in jobs table, optionally reschedule
+        terminal, retryable = [], []
+        for event in events:
+            if event.retryable:
+                retryable.append((event.job_id, event.status, event.reschedule_for))
+            else:
+                terminal.append((event.job_id, event.status))
+
+        # failure state: if either of the following tasks fails the failed task's jobs
+        # will remain in 'picked' until recovered by the job timeout feature.
+        # The other tasks will continue to execute per asyncio.gather docs:
+        # https://docs.python.org/3/library/asyncio-task.html#asyncio.gather
+        await asyncio.gather(
+            self.queries.mark_jobs_as_retryable(retryable), self.queries.log_jobs(terminal)
+        )
+
     async def verify_structure(self) -> None:
         """
         Verify the required database structure.
@@ -408,7 +429,7 @@ class QueueManager:
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 timeout=job_status_log_buffer_timeout,
-                callback=self.queries.log_jobs,
+                callback=self.handle_job_status,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 max_size=sys.maxsize,
@@ -515,13 +536,35 @@ class QueueManager:
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)
-            except Exception:
+            except RetryableException as e:
+                next_status: types.JOB_STATUS = "exception" if e.schedule_for is None else "queued"
+                logconfig.logger.warning(
+                    "Exception while processing entrypoint/job-id: %s/%s. Marking as %s",
+                    job.entrypoint,
+                    job.id,
+                    next_status,
+                    exc_info=e.__cause__ or e.__context__ or e,
+                )
+                await jbuff.add(
+                    models.UpdateJobStatus(
+                        job_id=job.id,
+                        status=next_status,
+                        retryable=True,
+                        reschedule_for=e.schedule_for,
+                    )
+                )
+            except (MaxRetriesExceeded, MaxTimeExceeded, Exception):
+                # backwards compatibility
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",
                     job.entrypoint,
                     job.id,
                 )
-                await jbuff.add((job, "exception"))
+                await jbuff.add(
+                    models.UpdateJobStatus(
+                        job_id=job.id, status="exception", retryable=False, reschedule_for=None
+                    )
+                )
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
@@ -529,6 +572,13 @@ class QueueManager:
                     job.id,
                 )
                 canceled = ctx.cancellation.cancel_called
-                await jbuff.add((job, "canceled" if canceled else "successful"))
+                await jbuff.add(
+                    models.UpdateJobStatus(
+                        job_id=job.id,
+                        status="canceled" if canceled else "successful",
+                        retryable=False,
+                        reschedule_for=None,
+                    )
+                )
             finally:
                 self.job_context.pop(job.id, None)
