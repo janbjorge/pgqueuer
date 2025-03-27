@@ -229,18 +229,11 @@ async def benchmark(settings: Settings) -> None:
     tqdm_format_dict = dict[str, str]()
 
     async def shutdown_timer() -> None:
-        _, pending = await asyncio.wait(
-            (
-                asyncio.create_task(asyncio.sleep(settings.timer.total_seconds())),
-                asyncio.create_task(shutdown.wait()),
-            ),
-            return_when=asyncio.FIRST_COMPLETED,
-        )
+        with suppress(TimeoutError, asyncio.TimeoutError):
+            await asyncio.wait_for(shutdown.wait(), settings.timer.total_seconds())
         shutdown.set()
         for q in pgqs:
             q.shutdown.set()
-        for p in pending:
-            p.cancel()
 
     def graceful_shutdown() -> None:
         shutdown.set()

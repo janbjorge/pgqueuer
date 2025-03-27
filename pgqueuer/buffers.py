@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from contextlib import suppress
 from datetime import datetime, timedelta
 from typing import (
     AsyncGenerator,
@@ -97,26 +98,16 @@ class TimedOverflowBuffer(Generic[T]):
     )
 
     async def periodic_flush(self) -> None:
-        shutdown = asyncio.create_task(self.shutdown.wait())
-        pending = set[asyncio.Task]()
         while not self.shutdown.is_set():
             if not self.lock.locked() and helpers.utc_now() > self.next_flush:
                 self.tm.add(asyncio.create_task(self.flush()))
                 self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(self.timeout)
 
-            sleep_task = asyncio.create_task(
-                asyncio.sleep(
-                    helpers.timeout_with_jitter(self.timeout).total_seconds(),
+            with suppress(asyncio.TimeoutError, TimeoutError):
+                await asyncio.wait_for(
+                    asyncio.create_task(self.shutdown.wait()),
+                    timeout=helpers.timeout_with_jitter(self.timeout).total_seconds(),
                 )
-            )
-
-            _, pending = await asyncio.wait(
-                (sleep_task, shutdown),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-        for p in pending:
-            p.cancel()
 
     async def add(self, item: T) -> None:
         """

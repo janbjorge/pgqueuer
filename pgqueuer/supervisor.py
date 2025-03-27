@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from contextlib import suppress
 from datetime import timedelta
 from typing import AsyncContextManager, Awaitable, Callable, ContextManager, TypeAlias
 
@@ -165,16 +166,10 @@ async def await_shutdown_or_timeout(
 
     logconfig.logger.info("Waiting %r before restarting.", restart_delay)
 
-    _, pending = await asyncio.wait(
-        (
-            asyncio.create_task(asyncio.sleep(restart_delay.total_seconds())),
-            asyncio.create_task(shutdown.wait()),
-        ),
-        return_when=asyncio.FIRST_COMPLETED,
-    )
-
-    for not_done in pending:
-        not_done.cancel()
+    with suppress(TimeoutError, asyncio.TimeoutError):
+        await asyncio.wait_for(
+            asyncio.create_task(shutdown.wait()), timeout=restart_delay.total_seconds()
+        )
 
     if not shutdown.is_set():
         logconfig.logger.info("Attempting to restart...")
