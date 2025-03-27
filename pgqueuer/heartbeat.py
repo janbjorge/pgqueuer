@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
 
 from typing_extensions import Self
 
-from . import buffers, logconfig, models, tm
+from . import buffers, logconfig, models
 
 
 @dataclass
@@ -25,9 +24,9 @@ class Heartbeat:
         init=False,
         default_factory=asyncio.Event,
     )
-    tm: tm.TaskManager = field(
+    handle: asyncio.TimerHandle | None = field(
         init=False,
-        default_factory=tm.TaskManager,
+        default=None,
     )
 
     async def __aenter__(self) -> Self:
@@ -40,7 +39,7 @@ class Heartbeat:
             Heartbeat: The Heartbeat instance itself.
         """
         if self.interval > timedelta(seconds=0):
-            self.tm.add(asyncio.create_task(self.send_heartbeat()))
+            self.schedule_heartbeat()
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -55,21 +54,30 @@ class Heartbeat:
             exc_tb: The traceback, if any.
         """
         self.shutdown.set()
-        await self.tm.gather_tasks()
+        if self.handle:
+            self.handle.cancel()
+
+    def schedule_heartbeat(self) -> None:
+        """
+        Schedule the next heartbeat callback.
+        """
+        loop = asyncio.get_event_loop()
+        self.handle = loop.call_later(
+            self.interval.total_seconds(),
+            lambda: asyncio.create_task(self.send_heartbeat()),
+        )
 
     async def send_heartbeat(self) -> None:
         """
         Send a heartbeat by adding a JobId to the buffer and scheduling the next heartbeat.
         """
+        if self.shutdown.is_set():
+            return
 
-        while not self.shutdown.is_set():
-            try:
-                await self.buffer.add(self.job_id)
-            except Exception as e:
-                logconfig.logger.exception("Failed to send heartbeat: %s", e)
-            finally:
-                with suppress(TimeoutError, asyncio.TimeoutError):
-                    await asyncio.wait_for(
-                        asyncio.create_task(self.shutdown.wait()),
-                        timeout=self.interval.total_seconds(),
-                    )
+        try:
+            await self.buffer.add(self.job_id)
+        except Exception as e:
+            logconfig.logger.exception("Failed to send heartbeat: %s", e)
+        finally:
+            if not self.shutdown.is_set():
+                self.schedule_heartbeat()
