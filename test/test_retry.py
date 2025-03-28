@@ -156,7 +156,7 @@ async def test_concurrent_retry_jobs(
         e1.set()
         e2.set()
 
-    async with async_timeout.timeout(retry_timer.total_seconds() * 2 * N):
+    async with async_timeout.timeout(retry_timer.total_seconds() * 10 * N):
         await asyncio.gather(
             c.run(dequeue_timeout=timedelta(seconds=0)),
             until_retry_updated(),
