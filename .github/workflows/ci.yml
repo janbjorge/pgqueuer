@@ -121,7 +121,7 @@ jobs:
 
       - name: Install PGQueuer
         run: |
-          uv sync --all-extras --dev
+          uv sync --all-extras --frozen
           uv run --frozen pgq install
 
       - name: Set ISO Timestamp
@@ -316,7 +316,7 @@ jobs:
 
       - name: Install PGQueuer
         run: |
-          uv sync --dev --frozen
+          uv sync --all-extras  --frozen
           uv run --frozen pgq install
 
       - name: Run Full Test Suite
@@ -338,7 +338,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install Dev Environment
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --frozen
 
       - name: Run Ruff Linter
         if: ${{ always() }}
@@ -364,7 +364,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install Dev Environment
-        run: uv sync --all-extras --dev
+        run: uv sync --all-extras --frozen
 
       - name: Run Mypy Type Check
         run: uv run mypy .
