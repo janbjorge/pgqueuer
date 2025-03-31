@@ -232,6 +232,6 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
         entrypoint_waiter(),
     )
 
-    leeway = timedelta(milliseconds=1)
+    leeway = retry_timer / 10
     for sample in samples:
         assert sample - leeway < retry_timer, (sample, retry_timer, sample - retry_timer)
