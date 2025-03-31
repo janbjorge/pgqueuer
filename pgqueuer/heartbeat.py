@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from typing_extensions import Self
 
-from . import buffers, logconfig, models, tm
+from . import buffers, logconfig, models
 
 
 @dataclass
@@ -25,10 +25,6 @@ class Heartbeat:
         init=False,
         default_factory=asyncio.Event,
     )
-    tm: tm.TaskManager = field(
-        init=False,
-        default_factory=tm.TaskManager,
-    )
 
     async def __aenter__(self) -> Self:
         """
@@ -40,7 +36,7 @@ class Heartbeat:
             Heartbeat: The Heartbeat instance itself.
         """
         if self.interval > timedelta(seconds=0):
-            self.tm.add(asyncio.create_task(self.send_heartbeat()))
+            self.buffer.tm.add(asyncio.create_task(self.send_heartbeat()))
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -55,7 +51,6 @@ class Heartbeat:
             exc_tb: The traceback, if any.
         """
         self.shutdown.set()
-        await self.tm.gather_tasks()
 
     async def send_heartbeat(self) -> None:
         """
