@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.10"
 
 [[package]]
@@ -519,7 +520,6 @@ wheels = [
 
 [[package]]
 name = "pgqueuer"
-version = "0.18.10"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -536,11 +536,6 @@ dependencies = [
 asyncpg = [
     { name = "asyncpg" },
 ]
-psycopg = [
-    { name = "psycopg" },
-]
-
-[package.dev-dependencies]
 dev = [
     { name = "async-timeout" },
     { name = "asyncpg" },
@@ -554,6 +549,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-mock" },
+    { name = "pytest-timeout" },
     { name = "ruff" },
     { name = "tqdm" },
     { name = "types-croniter" },
@@ -564,47 +560,46 @@ docs = [
     { name = "myst-parser" },
     { name = "sphinx" },
     { name = "sphinx-rtd-theme" },
+]
+psycopg = [
+    { name = "psycopg" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.0" },
     { name = "async-timeout", specifier = ">=5.0.1" },
+    { name = "async-timeout", marker = "extra == 'dev'", specifier = ">=4.0.3" },
     { name = "asyncpg", marker = "extra == 'asyncpg'", specifier = ">=0.30.0" },
+    { name = "asyncpg", marker = "extra == 'dev'" },
+    { name = "asyncpg-stubs", marker = "extra == 'dev'" },
     { name = "croniter", specifier = ">=5.0.1" },
+    { name = "fastapi", marker = "extra == 'dev'" },
+    { name = "httpx", marker = "extra == 'dev'" },
+    { name = "icecream", marker = "extra == 'dev'", specifier = ">=2.1.3" },
+    { name = "mypy", marker = "extra == 'dev'" },
+    { name = "mypy-extensions", marker = "extra == 'dev'" },
+    { name = "myst-parser", marker = "extra == 'docs'" },
+    { name = "psycopg", marker = "extra == 'dev'", specifier = ">=3.2.0" },
     { name = "psycopg", marker = "extra == 'psycopg'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.6.1" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'" },
+    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.14.0" },
+    { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3.1" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "sphinx", marker = "extra == 'docs'" },
+    { name = "sphinx-rtd-theme", marker = "extra == 'docs'" },
     { name = "tabulate", specifier = ">=0.9.0" },
+    { name = "tqdm", marker = "extra == 'dev'" },
     { name = "typer", specifier = ">=0.15.1" },
+    { name = "types-croniter", marker = "extra == 'dev'" },
+    { name = "types-tabulate", marker = "extra == 'dev'" },
+    { name = "uvicorn", marker = "extra == 'dev'" },
     { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.21.0" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "async-timeout", specifier = ">=4.0.3" },
-    { name = "asyncpg" },
-    { name = "asyncpg-stubs" },
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "icecream", specifier = ">=2.1.3" },
-    { name = "mypy" },
-    { name = "mypy-extensions" },
-    { name = "psycopg", specifier = ">=3.2.0" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-mock", specifier = ">=3.14.0" },
-    { name = "ruff" },
-    { name = "tqdm" },
-    { name = "types-croniter" },
-    { name = "types-tabulate" },
-    { name = "uvicorn" },
-]
-docs = [
-    { name = "myst-parser" },
-    { name = "sphinx" },
-    { name = "sphinx-rtd-theme" },
-]
+provides-extras = ["asyncpg", "psycopg", "dev", "docs"]
 
 [[package]]
 name = "pluggy"
@@ -778,6 +773,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c6/90/a955c3ab35ccd41ad4de556596fa86685bf4fc5ffcc62d22d856cfd4e29a/pytest-mock-3.14.0.tar.gz", hash = "sha256:2719255a1efeceadbc056d6bf3df3d1c5015530fb40cf347c0f9afac88410bd0", size = 32814 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/3b/b26f90f74e2986a82df6e7ac7e319b8ea7ccece1caec9f8ab6104dc70603/pytest_mock-3.14.0-py3-none-any.whl", hash = "sha256:0b72c38033392a5f4621342fe11e9219ac11ec9d375f8e2a0c164539e0d70f6f", size = 9863 },
+]
+
+[[package]]
+name = "pytest-timeout"
+version = "2.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/93/0d/04719abc7a4bdb3a7a1f968f24b0f5253d698c9cc94975330e9d3145befb/pytest-timeout-2.3.1.tar.gz", hash = "sha256:12397729125c6ecbdaca01035b9e5239d4db97352320af155b3f5de1ba5165d9", size = 17697 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/27/14af9ef8321f5edc7527e47def2a21d8118c6f329a9342cc61387a0c0599/pytest_timeout-2.3.1-py3-none-any.whl", hash = "sha256:68188cb703edfc6a18fad98dc25a3c61e9f24d644b0b70f33af545219fc7813e", size = 14148 },
 ]
 
 [[package]]

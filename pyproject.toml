@@ -80,6 +80,7 @@ dev = [
     "types-croniter",
     "types-tabulate",
     "uvicorn",
+    "pytest-timeout>=2.3.1",
 ]
 docs = [
     "myst-parser",
@@ -126,3 +127,4 @@ warn_unused_ignores = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+timeout = "30"
