@@ -99,7 +99,11 @@ class TimedOverflowBuffer(Generic[T]):
 
     async def periodic_flush(self) -> None:
         while not self.shutdown.is_set():
-            if not self.lock.locked() and helpers.utc_now() > self.next_flush:
+            if (
+                not self.lock.locked()
+                and helpers.utc_now() > self.next_flush
+                and self.events.qsize() > 0
+            ):
                 self.tm.add(asyncio.create_task(self.flush()))
                 self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(self.timeout)
 
