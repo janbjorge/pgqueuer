@@ -9,6 +9,9 @@ from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import JobId
 
+# Buffer timing is challenging due to built-in jitter, which helps avoid too
+# much concurrent writing.
+
 
 async def inspect_queued_jobs(jids: list[JobId], driver: db.Driver) -> list[Job]:
     sql = f"""SELECT * FROM {DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
@@ -32,11 +35,8 @@ async def test_retry_after_timer_expired(apgdriver: db.Driver) -> None:
 
     async def stop_after() -> None:
         # Wait for all jobs to be dequeued
-        while len(calls) < N:
+        while len(calls) <= N and all(v <= 2 for v in calls.values()):
             await asyncio.sleep(0.001)
-
-        # Give the jobs time to retry
-        await asyncio.sleep(retry_timer.total_seconds() * 2)
 
         e.set()
         qm.shutdown.set()
@@ -147,13 +147,19 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
         calls[context.id] += 1
         await e_long.wait()
 
-    await c.queries.enqueue(["fetch_short", "fetch_long"], [None, None], [0, 0])
+    await c.queries.enqueue(
+        ["fetch_short", "fetch_long"],
+        [None, None],
+        [0, 0],
+    )
 
     async def entrypoint_waiter() -> None:
-        while len(calls) < 2:
-            await asyncio.sleep(0.001)
-        await asyncio.sleep(retry_timer_long.total_seconds() * 2)
-        await asyncio.sleep(retry_timer_short.total_seconds() * 2)
+        # Wait for all jobs to be dequeued
+        # while sum(calls.values()) < 4:
+        while not (all(v > 1 for v in calls.values()) and len(calls) > 1):
+            await asyncio.sleep(0)
+        # await asyncio.sleep(retry_timer_long.total_seconds())
+        # await asyncio.sleep(retry_timer_short.total_seconds() * 2)
         e_short.set()
         e_long.set()
         c.shutdown.set()
@@ -163,6 +169,7 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
         entrypoint_waiter(),
     )
 
+    print(calls)
     assert len(calls) == 2
     assert all(v > 1 for v in calls.values())
 
