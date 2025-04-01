@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
-import sys
 import uuid
 import warnings
 from collections import Counter, deque
@@ -411,8 +410,10 @@ class QueueManager:
                 callback=self.queries.log_jobs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
-                max_size=sys.maxsize,
-                timeout=heartbeat_buffer_timeout / 2,
+                # Flush will be mainly driven by timeouts, but allow flush if
+                # backlog becomes too large.
+                max_size=batch_size**2,
+                timeout=heartbeat_buffer_timeout,
                 callback=self.queries.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
@@ -503,7 +504,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                executor.parameters.retry_timer,
+                executor.parameters.retry_timer / 2,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
