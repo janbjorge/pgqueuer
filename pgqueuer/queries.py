@@ -190,8 +190,7 @@ class Queries:
         payload: bytes | None,
         priority: int = 0,
         execute_after: timedelta | None = None,
-    ) -> list[models.JobId]:
-        ...
+    ) -> list[models.JobId]: ...
 
     @overload
     async def enqueue(
@@ -200,8 +199,7 @@ class Queries:
         payload: list[bytes | None],
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
-    ) -> list[models.JobId]:
-        ...
+    ) -> list[models.JobId]: ...
 
     async def enqueue(
         self,
@@ -521,8 +519,7 @@ class SyncQueries:
         payload: bytes | None,
         priority: int = 0,
         execute_after: timedelta | None = None,
-    ) -> list[models.JobId]:
-        ...
+    ) -> list[models.JobId]: ...
 
     @overload
     def enqueue(
@@ -531,8 +528,7 @@ class SyncQueries:
         payload: list[bytes | None],
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
-    ) -> list[models.JobId]:
-        ...
+    ) -> list[models.JobId]: ...
 
     def enqueue(
         self,
