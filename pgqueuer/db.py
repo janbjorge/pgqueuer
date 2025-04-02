@@ -406,8 +406,8 @@ class SyncDriver(Protocol):
     """
     Protocol defining the essential database operations for synchronous drivers.
 
-    The `SyncDriver` protocol specifies the methods that a synchronous database driver must implement
-    to be compatible with the system. This includes methods for fetching records.
+    The `SyncDriver` protocol specifies the methods that a synchronous database driver
+    must implement to be compatible with the system. This includes methods for fetching records.
     """
 
     def fetch(
