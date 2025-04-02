@@ -7,7 +7,7 @@ def normalize_enqueue_params(
     payload: bytes | None | list[bytes | None],
     priority: int | list[int],
     execute_after: timedelta | None | list[timedelta | None] = None,
-) -> tuple[list[str], list[bytes | None], list[int], list[timedelta]]:
+) -> tuple[list[int], list[str], list[bytes | None], list[timedelta]]:
     """Normalize parameters for enqueue operations to handle both single and batch inputs."""
     normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
     normed_payload = payload if isinstance(payload, list) else [payload]
