@@ -9,7 +9,14 @@ import psycopg
 import pytest
 from conftest import dsn
 
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
+from pgqueuer.db import (
+    AsyncpgDriver,
+    AsyncpgPoolDriver,
+    Driver,
+    PsycopgDriver,
+    _named_parameter,
+    _replace_dollar_named_parameter,
+)
 from pgqueuer.helpers import utc_now
 from pgqueuer.listeners import (
     PGNoticeEventListener,
@@ -208,3 +215,108 @@ async def test_event_listener(
             )
 
         assert (await asyncio.wait_for(listener.get(), timeout=1)) == payload
+
+
+def test_named_parameter_empty() -> None:
+    """Test with no arguments."""
+    args = ()
+    assert _named_parameter(args) == {}
+
+
+def test_named_parameter_single() -> None:
+    """Test with a single argument."""
+    args = (42,)
+    expected = {"parameter_1": 42}
+    assert _named_parameter(args) == expected
+
+
+def test_named_parameter_multiple() -> None:
+    """Test with multiple arguments."""
+    args = (42, "test", 3.14)
+    expected = {"parameter_1": 42, "parameter_2": "test", "parameter_3": 3.14}
+    assert _named_parameter(args) == expected
+
+
+def test_named_parameter_with_none() -> None:
+    """Test with None as an argument."""
+    args = (None, "test")
+    expected = {"parameter_1": None, "parameter_2": "test"}
+    assert _named_parameter(args) == expected
+
+
+def test_named_parameter_with_special_characters() -> None:
+    """Test with special characters in arguments."""
+    args = ("@#$", "test", "123")
+    expected = {"parameter_1": "@#$", "parameter_2": "test", "parameter_3": "123"}
+    assert _named_parameter(args) == expected
+
+
+def test_named_parameter_with_mixed_types() -> None:
+    """Test with mixed types of arguments."""
+    args = (42, "test", 3.14, None, True)
+    expected = {
+        "parameter_1": 42,
+        "parameter_2": "test",
+        "parameter_3": 3.14,
+        "parameter_4": None,
+        "parameter_5": True,
+    }
+    assert _named_parameter(args) == expected
+
+
+def test_replace_dollar_named_parameter_no_dollars() -> None:
+    """Test with a query that has no dollar parameters."""
+    query = "SELECT * FROM table WHERE column = 'value';"
+    expected = query
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_single() -> None:
+    """Test with a query that has a single dollar parameter."""
+    query = "SELECT * FROM table WHERE column = $1;"
+    expected = "SELECT * FROM table WHERE column = %(parameter_1)s;"
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_multiple() -> None:
+    """Test with a query that has multiple dollar parameters."""
+    query = "SELECT * FROM table WHERE column1 = $1 AND column2 = $2;"
+    expected = "SELECT * FROM table WHERE column1 = %(parameter_1)s AND column2 = %(parameter_2)s;"
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_repeated() -> None:
+    """Test with a query that has repeated dollar parameters."""
+    query = "SELECT * FROM table WHERE column1 = $1 OR column1 = $1;"
+    expected = "SELECT * FROM table WHERE column1 = %(parameter_1)s OR column1 = %(parameter_1)s;"
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_non_sequential() -> None:
+    """Test with a query that has non-sequential dollar parameters."""
+    query = "SELECT * FROM table WHERE column1 = $1 AND column2 = $3;"
+    expected = "SELECT * FROM table WHERE column1 = %(parameter_1)s AND column2 = %(parameter_3)s;"
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_mixed() -> None:
+    """Test with a query that has mixed dollar parameters and other text."""
+    query = "SELECT $1, column FROM table WHERE column2 = $2 AND column3 = 'value';"
+    expected = "SELECT %(parameter_1)s, column FROM table WHERE column2 = %(parameter_2)s AND column3 = 'value';"  # noqa: E501
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_edge_case() -> None:
+    """Test with a query that has dollar parameters at the edges."""
+    query = "$1 SELECT * FROM table WHERE column = $2;"
+    expected = "%(parameter_1)s SELECT * FROM table WHERE column = %(parameter_2)s;"
+    assert _replace_dollar_named_parameter(query) == expected
+
+
+def test_replace_dollar_named_parameter_large_numbers() -> None:
+    """Test with a query that has large numbered dollar parameters."""
+    query = "SELECT * FROM table WHERE column1 = $10 AND column2 = $20;"
+    expected = (
+        "SELECT * FROM table WHERE column1 = %(parameter_10)s AND column2 = %(parameter_20)s;"
+    )
+    assert _replace_dollar_named_parameter(query) == expected
