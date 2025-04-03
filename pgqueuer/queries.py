@@ -231,7 +231,13 @@ class Queries:
         )
         return [
             models.JobId(row["id"])
-            for row in await self.driver.fetch(self.qbq.build_enqueue_query(), *normed_params)
+            for row in await self.driver.fetch(
+                self.qbq.build_enqueue_query(),
+                normed_params.priority,
+                normed_params.entrypoint,
+                normed_params.payload,
+                normed_params.execute_after,
+            )
         ]
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
@@ -560,7 +566,13 @@ class SyncQueries:
         )
         return [
             models.JobId(row["id"])
-            for row in self.driver.fetch(self.qbq.build_enqueue_query(), *normed_params)
+            for row in self.driver.fetch(
+                self.qbq.build_enqueue_query(),
+                normed_params.priority,
+                normed_params.entrypoint,
+                normed_params.payload,
+                normed_params.execute_after,
+            )
         ]
 
     def queue_size(self) -> list[models.QueueStatistics]:

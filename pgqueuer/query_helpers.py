@@ -1,5 +1,14 @@
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Sequence
+
+
+@dataclass
+class NormedEnqueueParam:
+    priority: list[int]
+    entrypoint: list[str]
+    payload: list[bytes | None]
+    execute_after: list[timedelta]
 
 
 def normalize_enqueue_params(
@@ -7,7 +16,7 @@ def normalize_enqueue_params(
     payload: bytes | None | list[bytes | None],
     priority: int | list[int],
     execute_after: timedelta | None | list[timedelta | None] = None,
-) -> tuple[list[int], list[str], list[bytes | None], list[timedelta]]:
+) -> NormedEnqueueParam:
     """Normalize parameters for enqueue operations to handle both single and batch inputs."""
     normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
     normed_payload = payload if isinstance(payload, list) else [payload]
@@ -22,5 +31,9 @@ def normalize_enqueue_params(
         if isinstance(execute_after, Sequence)
         else [execute_after or timedelta(seconds=0)]
     )
-
-    return normed_priority, normed_entrypoint, normed_payload, normed_execute_after
+    return NormedEnqueueParam(
+        priority=normed_priority,
+        entrypoint=normed_entrypoint,
+        payload=normed_payload,
+        execute_after=normed_execute_after,
+    )
