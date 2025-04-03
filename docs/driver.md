@@ -23,9 +23,12 @@ To ensure smooth integration with PGQueuer, the following requirements must be m
    - The driver must support PostgreSQL-specific features and extensions used by PGQueuer.
 
 3. **Asynchronous Operations** (if applicable):
-   - Drivers should support asyncio-compatible operations if required for the application setup.
+   - Async drivers should support asyncio-compatible operations if required for the application setup.
+  
+4. **Synchronous Operations** (if applicable):
+   - Sync drivers could be used as well but support a smaller set of operations.
 
-4. **Default Isolation Level**:
+5. **Default Isolation Level**:
    - Connections should maintain the default PostgreSQL isolation level unless explicitly modified.
 
 ## Implementation Notes

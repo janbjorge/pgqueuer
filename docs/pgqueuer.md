@@ -95,6 +95,14 @@ queries = Queries(db_driver)
 job_ids = await queries.enqueue("task_entrypoint", b"Job data", priority=5)
 ```
 
+To enqueue jobs from synchronous code:
+
+```python
+from pgqueuer.queries import SyncQueries
+queries = Queries(sync_db_driver)
+job_ids = queries.enqueue("task_entrypoint", b"Job data", priority=5)
+```
+
 **Cancelling Jobs:**
 
 ```python

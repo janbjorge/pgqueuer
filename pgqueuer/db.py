@@ -400,3 +400,51 @@ class PsycopgDriver(Driver):
     async def __aexit__(self, *_: object) -> None:
         self.shutdown.set()
         await self.tm.gather_tasks()
+
+
+class SyncDriver(Protocol):
+    """
+    Protocol defining the essential database operations for synchronous drivers.
+
+    The `SyncDriver` protocol specifies the methods that a synchronous database driver
+    must implement to be compatible with the system. This includes methods for fetching records.
+    """
+
+    def fetch(
+        self,
+        query: str,
+        *args: Any,
+    ) -> list[dict]:
+        """
+        Fetch multiple records from the database synchronously.
+
+        Args:
+            query (str): The SQL query to execute.
+            *args (Any): Positional arguments to substitute into the query.
+
+        Returns:
+            list[dict]: A list of dictionaries representing the fetched records.
+        """
+        raise NotImplementedError
+
+
+class SyncPsycopgDriver(SyncDriver):
+    def __init__(
+        self,
+        connection: psycopg.Connection,
+    ) -> None:
+        self._connection = connection
+
+    def fetch(
+        self,
+        query: str,
+        *args: Any,
+    ) -> list[dict]:
+        cursor = self._connection.execute(
+            _replace_dollar_named_parameter(query),
+            _named_parameter(args),
+        )
+        if not (description := cursor.description):
+            raise RuntimeError("No description")
+        cols = [col.name for col in description]
+        return [dict(zip(cols, val)) for val in cursor.fetchall()]
