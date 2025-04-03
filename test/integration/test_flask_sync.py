@@ -1,8 +1,14 @@
+from __future__ import annotations
+
+import sys
 from http import HTTPStatus
+from pathlib import Path
 from typing import Generator
 
 import pytest
 from flask.testing import FlaskClient
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from examples.flask_sync_usage import app as flask_app
 

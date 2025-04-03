@@ -1,9 +1,14 @@
+from __future__ import annotations
+
+import sys
 from http import HTTPStatus
+from pathlib import Path
 from typing import Generator
 
 import pytest
 from fastapi.testclient import TestClient
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from examples.fastapi_usage import app as fast_api_app
 
 
