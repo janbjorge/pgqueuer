@@ -67,6 +67,7 @@ dev = [
     "asyncpg",
     "asyncpg-stubs",
     "fastapi",
+    "flask",
     "httpx",
     "icecream>=2.1.3",
     "mypy",

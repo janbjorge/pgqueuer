@@ -1,63 +1,35 @@
-from typing import AsyncGenerator, Generator
+from http import HTTPStatus
+from typing import Generator
 
-import asyncpg
 import pytest
-from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.queries import Queries
-
-
-async def get_driver() -> AsyncGenerator[Driver, None]:
-    conn = await asyncpg.connect()
-    try:
-        yield AsyncpgDriver(conn)
-    finally:
-        await conn.close()
+from examples.fastapi_usage import app as fast_api_app
 
 
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
-    app = FastAPI()
-
-    @app.post("/enqueue")
-    async def enqueue_job(
-        entrypoint: str,
-        payload: str,
-        priority: int = 0,
-        driver: AsyncpgDriver = Depends(get_driver),
-    ) -> dict:
-        queries = Queries(driver)
-        ids = await queries.enqueue(entrypoint, payload.encode(), priority)
-        return {"job-ids": ids}
-
-    @app.get("/queue-size")
-    async def get_queue_size(
-        driver: AsyncpgDriver = Depends(get_driver),
-    ) -> dict:
-        queries = Queries(driver)
-        size = await queries.queue_size()
-        return {"queue_size": size}
-
-    with TestClient(app) as client:
+    with TestClient(fast_api_app) as client:
         yield client
 
 
-def test_enqueue_job(client: TestClient) -> None:
-    response = client.post(
+def test_enqueue_and_size(client: TestClient) -> None:
+    # Initial size check
+    r1 = client.get("/queue-size")
+    assert r1.status_code == HTTPStatus.OK
+    assert sum(row["count"] for row in r1.json()) == 0
+
+    # Enqueue job
+    params = {"entrypoint": "sync-test", "payload": "data", "priority": 1}
+    r2 = client.post(
         "/enqueue",
-        params={
-            "entrypoint": "test_function",
-            "payload": "data",
-            "priority": 5,
-        },
+        params=params,
     )
-    assert response.status_code == 200
-    assert isinstance(response.json()["job-ids"], list)
+    assert r2.status_code == HTTPStatus.OK
+    job_ids = r2.json()["job_ids"]
+    assert len(job_ids) == 1
 
-
-def test_queue_size(client: TestClient) -> None:
-    response = client.get("/queue-size")
-    assert response.status_code == 200
-    assert "queue_size" in response.json()
+    # Check size after enqueue
+    r3 = client.get("/queue-size")
+    assert r3.status_code == HTTPStatus.OK
+    assert any(row["entrypoint"] == "sync-test" and row["count"] == 1 for row in r3.json())
