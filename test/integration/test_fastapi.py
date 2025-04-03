@@ -20,7 +20,7 @@ def test_enqueue_and_size(client: TestClient) -> None:
     assert sum(row["count"] for row in r1.json()) == 0
 
     # Enqueue job
-    params = {"entrypoint": "sync-test", "payload": "data", "priority": 1}
+    params: dict[str, str | int] = {"entrypoint": "sync-test", "payload": "data", "priority": 1}
     r2 = client.post(
         "/enqueue",
         params=params,

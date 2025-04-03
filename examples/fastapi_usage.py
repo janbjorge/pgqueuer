@@ -47,4 +47,6 @@ async def get_queue_size(
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    import uvicorn
+
+    uvicorn.run(app)
