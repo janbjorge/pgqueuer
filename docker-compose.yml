@@ -36,7 +36,6 @@ services:
       PGDATABASE: pgqdb
       PGPASSWORD: pgqpw
       PGHOST: db
-      PYTHONPATH: /app
     depends_on:
       populate:
         condition: service_completed_successfully
