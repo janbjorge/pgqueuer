@@ -5,7 +5,7 @@ from datetime import timedelta
 from pgqueuer.query_helpers import NormedEnqueueParam, normalize_enqueue_params
 
 
-def test_normalize_single_entrypoint():
+def test_normalize_single_entrypoint() -> None:
     result = normalize_enqueue_params(
         entrypoint="task1", payload=b"data1", priority=1, execute_after=timedelta(seconds=10)
     )
@@ -18,7 +18,7 @@ def test_normalize_single_entrypoint():
     assert result == expected
 
 
-def test_normalize_multiple_entrypoints():
+def test_normalize_multiple_entrypoints() -> None:
     result = normalize_enqueue_params(
         entrypoint=["task1", "task2"],
         payload=[b"data1", b"data2"],
@@ -34,7 +34,7 @@ def test_normalize_multiple_entrypoints():
     assert result == expected
 
 
-def test_normalize_single_entrypoint_no_execute_after():
+def test_normalize_single_entrypoint_no_execute_after() -> None:
     result = normalize_enqueue_params(
         entrypoint="task1",
         payload=b"data1",
@@ -49,7 +49,7 @@ def test_normalize_single_entrypoint_no_execute_after():
     assert result == expected
 
 
-def test_normalize_multiple_entrypoints_no_execute_after():
+def test_normalize_multiple_entrypoints_no_execute_after() -> None:
     result = normalize_enqueue_params(
         entrypoint=["task1", "task2"],
         payload=[b"data1", b"data2"],
@@ -64,7 +64,7 @@ def test_normalize_multiple_entrypoints_no_execute_after():
     assert result == expected
 
 
-def test_normalize_mixed_execute_after():
+def test_normalize_mixed_execute_after() -> None:
     result = normalize_enqueue_params(
         entrypoint=["task1", "task2"],
         payload=[b"data1", b"data2"],
@@ -80,7 +80,7 @@ def test_normalize_mixed_execute_after():
     assert result == expected
 
 
-def test_normalize_single_entrypoint_none_payload():
+def test_normalize_single_entrypoint_none_payload() -> None:
     result = normalize_enqueue_params(
         entrypoint="task1",
         payload=None,
@@ -96,7 +96,7 @@ def test_normalize_single_entrypoint_none_payload():
     assert result == expected
 
 
-def test_normalize_multiple_entrypoints_none_payload():
+def test_normalize_multiple_entrypoints_none_payload() -> None:
     result = normalize_enqueue_params(
         entrypoint=["task1", "task2"],
         payload=[None, b"data2"],
