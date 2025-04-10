@@ -115,14 +115,14 @@ def test_timer() -> None:
 def test_add_schema_to_empty_dsn() -> None:
     dsn = "postgresql://user:password@host:port/dbname"
     schema = "myschema"
-    expected = "postgresql://user:password@host:port/dbname?options=-c+search_path%3Dmyschema"
+    expected = "postgresql://user:password@host:port/dbname?options=-csearch_path%3Dmyschema"
     assert add_schema_to_dsn(dsn, schema) == expected
 
 
 def test_add_schema_to_dsn_with_existing_query() -> None:
     dsn = "postgresql://user:password@host:port/dbname?sslmode=require"
     schema = "myschema"
-    expected = "postgresql://user:password@host:port/dbname?sslmode=require&options=-c+search_path%3Dmyschema"
+    expected = "postgresql://user:password@host:port/dbname?sslmode=require&options=-csearch_path%3Dmyschema"
     assert add_schema_to_dsn(dsn, schema) == expected
 
 
@@ -134,9 +134,9 @@ def test_raise_on_existing_search_path() -> None:
 
 
 def test_preserve_other_options_and_add_search_path() -> None:
-    dsn = "postgresql://user:password@host:port/dbname?options=-c+other_option=foo"
+    dsn = "postgresql://user:password@host:port/dbname?options=-cother_option=foo"
     schema = "myschema"
-    expected = "postgresql://user:password@host:port/dbname?options=-c+other_option%3Dfoo&options=-c+search_path%3Dmyschema"
+    expected = "postgresql://user:password@host:port/dbname?options=-cother_option%3Dfoo&options=-csearch_path%3Dmyschema"
     assert add_schema_to_dsn(dsn, schema) == expected
 
 

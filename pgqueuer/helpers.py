@@ -205,7 +205,7 @@ def add_schema_to_dsn(dsn: str, schema: str) -> str:
     if any(opt.startswith("-c search_path=") for opt in options):
         raise ValueError("search_path is already set in the options parameter.")
 
-    options.append(f"-c search_path={schema}")
+    options.append(f"-csearch_path={schema}")
     query["options"] = options
 
     return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
