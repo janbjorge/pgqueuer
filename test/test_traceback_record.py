@@ -66,4 +66,4 @@ def test_default_additional_context() -> None:
         raise Exception("Generic error")
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id)
-    assert record.additional_context == {}
+    assert record.additional_context is None
