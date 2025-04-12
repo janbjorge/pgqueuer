@@ -7,15 +7,14 @@ from pgqueuer.models import JobId, TracebackRecord
 
 
 def test_from_exception() -> None:
-    # Arrange
     job_id: JobId = JobId(123)
     additional: dict[str, str] = {"detail": "Error occurred"}
-    # Act
+
     try:
         raise ValueError("Testing error")
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id, additional)
-    # Assert
+
     assert record.job_id == job_id
     assert isinstance(record.job_id, int)
     assert record.exception_type == "ValueError"
@@ -26,25 +25,22 @@ def test_from_exception() -> None:
 
 
 def test_timestamp() -> None:
-    # Arrange
     job_id: JobId = JobId(456)
-    # Act
+
     try:
         raise RuntimeError("Another test error")
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id)
     now: datetime = datetime.now(timezone.utc)
-    # Assert
+
     assert record.timestamp <= now
     diff: float = (now - record.timestamp).total_seconds()
     assert diff < 5  # Ensure the recorded timestamp is recent
 
 
 def test_model_dump() -> None:
-    # Arrange
     job_id: JobId = JobId(789)
     additional: dict[str, str] = {"key": "value"}
-    # Act
     try:
         raise KeyError("Missing key")
     except Exception as exc:
@@ -58,7 +54,6 @@ def test_model_dump() -> None:
         "traceback",
         "additional_context",
     }
-    # Assert
     assert set(record_dict.keys()) == expected_keys
     assert record_dict["job_id"] == job_id
     assert isinstance(record_dict["timestamp"], datetime)
@@ -66,12 +61,9 @@ def test_model_dump() -> None:
 
 
 def test_default_additional_context() -> None:
-    # Arrange
     job_id: JobId = JobId(1)
-    # Act
     try:
         raise Exception("Generic error")
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id)
-    # Assert
     assert record.additional_context == {}

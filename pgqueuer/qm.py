@@ -361,6 +361,7 @@ class QueueManager:
             (self.queries.qbe.settings.queue_table, "heartbeat"),
             (self.queries.qbe.settings.queue_table, "queue_manager_id"),
             (self.queries.qbe.settings.queue_table, "execute_after"),
+            (self.queries.qbe.settings.queue_table, "traceback"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
