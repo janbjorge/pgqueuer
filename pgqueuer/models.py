@@ -18,7 +18,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, NamedTuple
 
 import anyio
-from pydantic import AwareDatetime, BaseModel, Field, RootModel
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel
+from pydantic_core import from_json
 
 from .types import (
     EVENT_TYPES,
@@ -146,6 +147,10 @@ class Log(BaseModel):
     status: JOB_STATUS
     priority: int
     entrypoint: str
+    traceback: Annotated[
+        TracebackRecord | None,
+        BeforeValidator(lambda x: None if x is None else from_json(x)),
+    ]
     aggregated: bool
 
 
@@ -213,7 +218,7 @@ class TracebackRecord(BaseModel):
     exception_type: str
     exception_message: str
     traceback: str
-    additional_context: dict[str, str]
+    additional_context: dict[str, Any] | None
 
     @classmethod
     def from_exception(
@@ -228,5 +233,5 @@ class TracebackRecord(BaseModel):
             exception_type=exc.__class__.__name__,
             exception_message=str(exc),
             traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
-            additional_context=additional_context or {},
+            additional_context=additional_context,
         )
