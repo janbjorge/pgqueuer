@@ -269,7 +269,12 @@ class Queries:
             ids (list[models.JobId]): The IDs of the jobs to cancel.
         """
         await asyncio.gather(
-            self.driver.execute(self.qbq.build_log_job_query(), ids, ["canceled"] * len(ids)),
+            self.driver.execute(
+                self.qbq.build_log_job_query(),
+                ids,
+                ["canceled"] * len(ids),
+                [None] * len(ids),
+            ),
             self.notify_job_cancellation(ids),
         )
 
@@ -290,7 +295,13 @@ class Queries:
 
     async def log_jobs(
         self,
-        job_status: list[tuple[models.Job, models.JOB_STATUS]],
+        job_status: list[
+            tuple[
+                models.Job,
+                models.JOB_STATUS,
+                models.TracebackRecord | None,
+            ]
+        ],
     ) -> None:
         """
         Move completed or failed jobs from the queue to the log table.
@@ -305,8 +316,9 @@ class Queries:
         """
         await self.driver.execute(
             self.qbq.build_log_job_query(),
-            [job.id for job, _ in job_status],
-            [status for _, status in job_status],
+            [job.id for job, _, _ in job_status],
+            [status for _, status, _ in job_status],
+            [tb.model_dump_json() if tb else None for _, _, tb in job_status],
         )
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:

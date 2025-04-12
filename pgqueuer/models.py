@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import traceback
 import uuid
 from collections import deque
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Literal, NamedTuple
+from typing import Annotated, Any, Literal, NamedTuple
 
 import anyio
 from pydantic import AwareDatetime, BaseModel, Field, RootModel
@@ -201,3 +202,31 @@ class Schedule(BaseModel):
     last_run: AwareDatetime | None = None
     status: JOB_STATUS
     entrypoint: CronEntrypoint
+
+
+###### Tracebacks ######
+
+
+class TracebackRecord(BaseModel):
+    job_id: JobId
+    timestamp: datetime
+    exception_type: str
+    exception_message: str
+    traceback: str
+    additional_context: dict[str, str]
+
+    @classmethod
+    def from_exception(
+        cls,
+        exc: Exception,
+        job_id: JobId,
+        additional_context: dict[str, Any] | None = None,
+    ) -> TracebackRecord:
+        return cls(
+            job_id=job_id,
+            timestamp=datetime.now(timezone.utc),
+            exception_type=exc.__class__.__name__,
+            exception_message=str(exc),
+            traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            additional_context=additional_context or {},
+        )

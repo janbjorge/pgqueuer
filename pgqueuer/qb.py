@@ -255,6 +255,7 @@ class QueryBuilderEnvironment:
         status {self.settings.queue_status_type} NOT NULL,
         priority INT NOT NULL,
         entrypoint TEXT NOT NULL,
+        traceback JSONB DEFAULT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
     CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
@@ -443,6 +444,7 @@ class QueryBuilderEnvironment:
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"""  # noqa
         yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"""  # noqa
+        yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -721,24 +723,27 @@ class QueryQueueBuilder:
         ), job_status AS (
             SELECT
                 UNNEST($1::integer[])                           AS id,
-                UNNEST($2::{self.settings.queue_status_type}[]) AS status
+                UNNEST($2::{self.settings.queue_status_type}[]) AS status,
+                UNNEST($3::JSONB[])                             AS traceback
         ), merged AS (
             SELECT
-                job_status.id       AS id,
-                job_status.status   AS status,
-                deleted.entrypoint  AS entrypoint,
-                deleted.priority    AS priority
+                job_status.id           AS id,
+                job_status.status       AS status,
+                job_status.traceback    AS traceback,
+                deleted.entrypoint      AS entrypoint,
+                deleted.priority        AS priority
             FROM job_status
             INNER JOIN deleted
-            ON deleted.id = job_status.id
+                ON deleted.id = job_status.id
         )
         INSERT INTO {self.settings.queue_table_log} (
             job_id,
             status,
             entrypoint,
-            priority
+            priority,
+            traceback
         )
-        SELECT id, status, entrypoint, priority FROM merged
+        SELECT id, status, entrypoint, priority, traceback FROM merged
         """
 
     def build_truncate_log_statistics_query(self) -> str:

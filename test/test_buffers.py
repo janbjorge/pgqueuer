@@ -38,10 +38,10 @@ async def test_job_buffer_max_size(max_size: int) -> None:
         callback=helper,
     ) as buffer:
         for _ in range(max_size - 1):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
             assert len(helper_buffer) == 0
 
-        await buffer.add((job_faker(), "successful"))
+        await buffer.add((job_faker(), "successful", None))
 
     # On ctx-mangner exit flush is forced.
     assert len(helper_buffer) == max_size
@@ -64,7 +64,7 @@ async def test_job_buffer_timeout(
         callback=helper,
     ) as buffer:
         for _ in range(N):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
             assert len(helper_buffer) == 0
 
         await asyncio.sleep(timeout.total_seconds() * 1.1)
@@ -89,7 +89,7 @@ async def test_job_buffer_flush_on_exit(max_size: int) -> None:
         callback=helper,
     ) as buffer:
         for _ in range(max_size - 2):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
             assert len(helper_buffer) == 0
 
     # After exiting the context, remaining items should be flushed
@@ -114,7 +114,7 @@ async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
     ) as buffer:
         for _ in range(flushes):
             for _ in range(max_size):
-                await buffer.add((job_faker(), "successful"))
+                await buffer.add((job_faker(), "successful", None))
             buffer.next_flush = utc_now()
             await buffer.flush()
 
@@ -143,7 +143,7 @@ async def test_job_buffer_flush_on_exception(max_size: int) -> None:
         callback=faulty_helper,
     ) as buffer:
         for _ in range(max_size):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
 
         # Allow time for the flush to be attempted and retried
         await asyncio.sleep(0.02)
@@ -193,7 +193,7 @@ async def test_job_buffer_concurrent_adds(max_size: int) -> None:
 
         async def add_items(n: int) -> None:
             for _ in range(n):
-                await buffer.add((job_faker(), "successful"))
+                await buffer.add((job_faker(), "successful", None))
 
         tasks = [asyncio.create_task(add_items(max_size // 2)) for _ in range(4)]
         await asyncio.gather(*tasks)
@@ -240,7 +240,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
     ) as buffer:
         # First flush
         for _ in range(max_size):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
         buffer.next_flush = utc_now()
         await buffer.flush()
         assert len(helper_buffer) == max_size
@@ -250,7 +250,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
 
         # Second flush
         for _ in range(max_size):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
         buffer.next_flush = utc_now()
         await buffer.flush()
         assert len(helper_buffer) == max_size
@@ -277,7 +277,7 @@ async def test_job_buffer_exception_during_flush(max_size: int) -> None:
         callback=faulty_helper,
     ) as buffer:
         for _ in range(max_size):
-            await buffer.add((job_faker(), "successful"))
+            await buffer.add((job_faker(), "successful", None))
 
         # Allow time for the flush to be attempted and retried
         await asyncio.sleep(0.02)
@@ -311,7 +311,9 @@ async def test_job_buffer_callback_called_correctly(max_size: int) -> None:
 
 async def test_job_buffer_callback_exception_during_teardown() -> None:
     N = 10
-    items: list[tuple[Job, JOB_STATUS]] = [(job_faker(), "successful") for _ in range(N)]
+    items: list[tuple[Job, JOB_STATUS, None]] = [
+        (job_faker(), "successful", None) for _ in range(N)
+    ]
 
     async def helper(_: object) -> None:
         raise ValueError

@@ -44,7 +44,7 @@ async def test_queries_next_jobs(
             payoad = job.payload
             assert payoad is not None
             seen.append(int(payoad))
-            await q.log_jobs([(job, "successful")])
+            await q.log_jobs([(job, "successful", None)])
 
     assert seen == list(range(N))
 
@@ -78,7 +78,7 @@ async def test_queries_next_jobs_concurrent(
                 payload = job.payload
                 assert payload is not None
                 seen.append(int(payload))
-                await q.log_jobs([(job, "successful")])
+                await q.log_jobs([(job, "successful", None)])
 
     await asyncio.wait_for(
         asyncio.gather(*[consumer() for _ in range(concurrency)]),
@@ -121,7 +121,7 @@ async def test_move_job_log(
         queue_manager_id=uuid.uuid4(),
     ):
         for job in jobs:
-            await q.log_jobs([(job, "successful")])
+            await q.log_jobs([(job, "successful", None)])
 
     assert sum(x.status == "successful" for x in await q.queue_log()) == N
 
@@ -197,7 +197,7 @@ async def test_queue_priority(
     ):
         for job in next_jobs:
             jobs.append(job)
-            await q.log_jobs([(job, "successful")])
+            await q.log_jobs([(job, "successful", None)])
 
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
 
@@ -286,7 +286,7 @@ async def test_queue_log_queued_picked_successful(
     assert sum(x.status == "picked" for x in await q.queue_log()) == N
 
     for job in picked_jobs:
-        await q.log_jobs([(job, "successful")])
+        await q.log_jobs([(job, "successful", None)])
 
     assert sum(x.status == "successful" for x in await q.queue_log()) == N
 
@@ -323,6 +323,6 @@ async def test_queue_log_queued_picked_exception(
     assert sum(x.status == "picked" for x in await q.queue_log()) == N
 
     for job in picked_jobs:
-        await q.log_jobs([(job, "exception")])
+        await q.log_jobs([(job, "exception", None)])
 
     assert sum(x.status == "exception" for x in await q.queue_log()) == N
