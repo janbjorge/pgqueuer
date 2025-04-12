@@ -361,6 +361,7 @@ class QueueManager:
             (self.queries.qbe.settings.queue_table, "heartbeat"),
             (self.queries.qbe.settings.queue_table, "queue_manager_id"),
             (self.queries.qbe.settings.queue_table, "execute_after"),
+            (self.queries.qbe.settings.queue_table_log, "traceback"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
@@ -516,13 +517,21 @@ class QueueManager:
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)
-            except Exception:
+            except Exception as e:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",
                     job.entrypoint,
                     job.id,
                 )
-                await jbuff.add((job, "exception"))
+                tbr = models.TracebackRecord.from_exception(
+                    exc=e,
+                    job_id=job.id,
+                    additional_context={
+                        "entrypoint": job.entrypoint,
+                        "queue_manager_id": self.queue_manager_id,
+                    },
+                )
+                await jbuff.add((job, "exception", tbr))
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
@@ -530,6 +539,6 @@ class QueueManager:
                     job.id,
                 )
                 canceled = ctx.cancellation.cancel_called
-                await jbuff.add((job, "canceled" if canceled else "successful"))
+                await jbuff.add((job, "canceled" if canceled else "successful", None))
             finally:
                 self.job_context.pop(job.id, None)

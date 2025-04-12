@@ -192,3 +192,26 @@ async def test_drain_mode(
         await qm.run(mode=QueueExecutionMode.drain)
 
     assert len(jobs) == N
+
+
+@pytest.mark.parametrize("N", (1, 10, 100))
+async def test_traceback_log(
+    apgdriver: db.Driver,
+    N: int,
+) -> None:
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        raise ValueError(f"Test error {job.id}")
+
+    jids = await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+
+    async with async_timeout.timeout(10):
+        await qm.run(mode=QueueExecutionMode.drain)
+
+    logs = await q.queue_log()
+    assert sum(log.status == "exception" for log in logs) == N
+    assert sum(log.traceback is not None for log in logs if log.status == "exception") == N
+    assert sum(log.job_id in jids and log.status == "exception" for log in logs) == N
