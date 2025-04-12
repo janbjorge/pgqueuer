@@ -31,12 +31,11 @@ async def test_retry_after_timer_expired(apgdriver: db.Driver) -> None:
         calls[context.id] += 1
         await e.wait()
 
-    await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
+    jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     async def stop_after() -> None:
-        # Wait for all jobs to be dequeued
-        while len(calls) <= N and all(v <= 2 for v in calls.values()):
-            await asyncio.sleep(0.001)
+        while any(j not in calls for j in jids) or any(v <= 1 for v in calls.values()):
+            await asyncio.sleep(0.01)
 
         e.set()
         qm.shutdown.set()
