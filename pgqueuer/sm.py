@@ -64,6 +64,7 @@ class SchedulerManager:
             executors.AbstractScheduleExecutor,
         ]
         | None = None,
+        clean_old: bool = False,
     ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
         """
         Register a new job with a cron schedule.
@@ -122,6 +123,7 @@ class SchedulerManager:
                     entrypoint=entrypoint,
                     expression=expression,
                     func=func,
+                    clean_old=clean_old,
                 )
             )
             return func
@@ -146,6 +148,9 @@ class SchedulerManager:
                 f"The {self.queries.qbe.settings.queue_table_log} table is missing "
                 "please run 'pgq upgrade'"
             )
+
+        if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
+            await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)
 
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 

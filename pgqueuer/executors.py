@@ -206,6 +206,7 @@ class ScheduleExecutorFactoryParameters:
     func: AsyncCrontab
     queries: queries.Queries
     shutdown: asyncio.Event
+    clean_old: bool
 
 
 @dataclasses.dataclass

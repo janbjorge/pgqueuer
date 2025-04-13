@@ -16,6 +16,8 @@ import uuid
 from datetime import timedelta
 from typing import overload
 
+from pgqueuer.types import CronEntrypoint
+
 from . import db, helpers, models, qb, query_helpers
 
 
@@ -495,7 +497,7 @@ class Queries:
     async def delete_schedule(
         self,
         ids: set[models.ScheduleId],
-        entrypoints: set[str],
+        entrypoints: set[CronEntrypoint],
     ) -> None:
         await self.driver.execute(
             self.qbs.build_delete_schedule_query(),
