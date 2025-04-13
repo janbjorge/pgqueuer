@@ -399,7 +399,11 @@ def run(
     mode: types.QueueExecutionMode = typer.Option(
         types.QueueExecutionMode.continuous.name,
         "--mode",
-        help="Queue execution mode.",
+        help="Limit the total number of tasks running concurrently. Defaults to no limit.",
+    ),
+    max_concurrent_tasks: int | None = typer.Option(
+        None,
+        "--max-concurrent-tasks",
     ),
 ) -> None:
     """
@@ -416,6 +420,7 @@ def run(
             restart_on_failure=restart_on_failure,
             shutdown=asyncio.Event(),
             mode=mode,
+            max_concurrent_tasks=max_concurrent_tasks,
         )
     )
 

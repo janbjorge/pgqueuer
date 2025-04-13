@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import AsyncGenerator
 
 import asyncpg
@@ -9,7 +9,7 @@ import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.logconfig import logger
-from pgqueuer.models import Job, Schedule
+from pgqueuer.models import Job
 
 
 async def create_pgqueuer() -> PgQueuer:
@@ -20,11 +20,12 @@ async def create_pgqueuer() -> PgQueuer:
     # Setup the 'fetch' entrypoint
     @pgq.entrypoint("fetch")
     async def process_message(job: Job) -> None:
-        print(f"Processed message: {job!r}")
+        # print(f"Processed message: {job!r}")
+        await asyncio.sleep(1)
 
-    @pgq.schedule("scheduled_every_minute", "* * * * *")
-    async def scheduled_every_minute(schedule: Schedule) -> None:
-        print(f"Executed every minute {schedule!r} {datetime.now()!r}")
+    # @pgq.schedule("scheduled_every_minute", "* * * * *")
+    # async def scheduled_every_minute(schedule: Schedule) -> None:
+    #     print(f"Executed every minute {schedule!r} {datetime.now()!r}")
 
     return pgq
 

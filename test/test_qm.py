@@ -7,7 +7,7 @@ import async_timeout
 import pytest
 
 from pgqueuer import db
-from pgqueuer.models import Job
+from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
@@ -215,3 +215,35 @@ async def test_traceback_log(
     assert sum(log.status == "exception" for log in logs) == N
     assert sum(log.traceback is not None for log in logs if log.status == "exception") == N
     assert sum(log.job_id in jids and log.status == "exception" for log in logs) == N
+
+
+@pytest.mark.parametrize("N", (100, 200))
+@pytest.mark.parametrize("max_concurrent_tasks", (40, 80))
+async def test_max_concurrent_tasks(
+    apgdriver: db.Driver,
+    N: int,
+    max_concurrent_tasks: int,
+) -> None:
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
+    picked_jobs = list[Log]()
+
+    async def log_sampler() -> None:
+        await asyncio.sleep(0.1)
+        logs = [log for log in await q.queue_log() if log.status == "picked"]
+        qm.shutdown.set()
+        picked_jobs.extend(logs)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        await qm.shutdown.wait()
+
+    await q.enqueue(["fetch"] * N, [None] * N, [0] * N)
+
+    async with async_timeout.timeout(10):
+        await asyncio.gather(
+            qm.run(max_concurrent_tasks=max_concurrent_tasks),
+            log_sampler(),
+        )
+
+    assert len(picked_jobs) == max_concurrent_tasks

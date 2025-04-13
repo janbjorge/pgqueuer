@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
+import sys
 import uuid
 import warnings
 from collections import Counter, deque
@@ -291,7 +292,7 @@ class QueueManager:
             if below_capacity_limit(entrypoint, executor)
         }
 
-    async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[models.Job, None]:
+    async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[list[models.Job], None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
 
@@ -319,8 +320,7 @@ class QueueManager:
             ):
                 break
 
-            for job in jobs:
-                yield job
+            yield jobs
 
     async def update_rps_stats(self, events: list[str]) -> None:
         """Update rate-per-second statistics for the given entrypoints."""
@@ -380,6 +380,7 @@ class QueueManager:
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
         mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
+        max_concurrent_tasks: int | None = None,
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -403,6 +404,11 @@ class QueueManager:
         heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
             [x.parameters.retry_timer for x in self.entrypoint_registry.values()]
         )
+
+        max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
+
+        if max_concurrent_tasks < 2 * batch_size:
+            raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
         async with (
             buffers.JobStatusLogBuffer(
@@ -441,25 +447,36 @@ class QueueManager:
             event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
 
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(batch_size):
-                    await rpsbuff.add(job.entrypoint)
-                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
-                    task_manager.add(
-                        asyncio.create_task(
-                            self._dispatch(
-                                job,
-                                jbuff,
-                                hbuff,
+                if len(task_manager.tasks) < max_concurrent_tasks - batch_size:
+                    async for jobs in self.fetch_jobs(batch_size):
+                        for job in jobs:
+                            await rpsbuff.add(job.entrypoint)
+                            self.job_context[job.id] = models.Context(
+                                cancellation=anyio.CancelScope()
                             )
-                        )
-                    )
+                            task_manager.add(
+                                asyncio.create_task(
+                                    self._dispatch(
+                                        job,
+                                        jbuff,
+                                        hbuff,
+                                    )
+                                )
+                            )
 
-                    with contextlib.suppress(asyncio.QueueEmpty):
-                        notice_event_listener.get_nowait()
+                            with contextlib.suppress(asyncio.QueueEmpty):
+                                notice_event_listener.get_nowait()
 
-                # Run until the queue is empty and then shutdown.
-                if mode is types.QueueExecutionMode.drain:
-                    self.shutdown.set()
+                        if (
+                            self.shutdown.is_set()
+                            or len(task_manager.tasks) >= max_concurrent_tasks
+                            or len(task_manager.tasks) - batch_size >= max_concurrent_tasks
+                        ):
+                            break
+                    else:
+                        # Run until the queue is empty and then shutdown.
+                        if mode is types.QueueExecutionMode.drain:
+                            self.shutdown.set()
 
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,
