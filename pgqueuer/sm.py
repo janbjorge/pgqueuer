@@ -149,6 +149,7 @@ class SchedulerManager:
                 "please run 'pgq upgrade'"
             )
 
+        # Identify entrypoints that need to be removed based on the 'clean_old' parameter
         if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
             await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)
 

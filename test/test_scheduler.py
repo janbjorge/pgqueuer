@@ -136,3 +136,64 @@ async def test_schedule_storage_and_retrieval(
     assert received is not None
     assert received.entrypoint == entrypoint
     assert received.expression == expression
+
+
+@pytest.mark.asyncio
+async def test_schedule_clean_old(
+    apgdriver: AsyncpgDriver,
+    mocker: Mock,
+) -> None:
+    async def shutdown_after(
+        sm: SchedulerManager,
+        delay: timedelta = timedelta(seconds=0.1),
+    ) -> None:
+        await asyncio.sleep(delay.total_seconds())
+        sm.shutdown.set()
+
+    sm1 = SchedulerManager(apgdriver)
+
+    @sm1.schedule("sm_task", "1 * * * *")
+    async def _(schedule: Schedule) -> None:
+        pass
+
+    await asyncio.gather(sm1.run(), shutdown_after(sm1))
+
+    schedules = await inspect_schedule(apgdriver)
+    assert len(schedules) == 1
+
+    sm2 = SchedulerManager(apgdriver)
+
+    @sm2.schedule("sm_task", "2 * * * *")
+    async def _(schedule: Schedule) -> None:
+        pass
+
+    await asyncio.gather(sm2.run(), shutdown_after(sm2))
+
+    schedules = await inspect_schedule(apgdriver)
+    assert len(schedules) == 2
+
+    sm3 = SchedulerManager(apgdriver)
+
+    @sm3.schedule("sm_task", "3 * * * *", clean_old=True)
+    async def _(schedule: Schedule) -> None:
+        pass
+
+    await asyncio.gather(sm3.run(), shutdown_after(sm3))
+
+    schedules = await inspect_schedule(apgdriver)
+    assert len(schedules) == 1
+    assert schedules[0].expression == "3 * * * *"
+
+    sm4 = SchedulerManager(apgdriver)
+
+    @sm4.schedule("sm_task", "3 * * * *", clean_old=True)
+    @sm4.schedule("sm_task", "4 * * * *", clean_old=True)
+    async def _(schedule: Schedule) -> None:
+        pass
+
+    await asyncio.gather(sm4.run(), shutdown_after(sm4))
+
+    schedules = await inspect_schedule(apgdriver)
+    assert len(schedules) == 2
+    assert schedules[0].expression == "4 * * * *"
+    assert schedules[1].expression == "3 * * * *"
