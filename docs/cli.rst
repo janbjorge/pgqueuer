@@ -77,6 +77,29 @@ Listen to PostgreSQL NOTIFY channels for debugging.
 ~~~~~~~
 Start a ``QueueManager`` to manage job queues and processes.
 
+- **Options**:
+  - ``--dequeue-timeout`` (float, default=30.0):
+    Maximum number of seconds to wait for new jobs before returning an empty batch.
+  - ``--batch-size`` (int, default=10):
+    Number of jobs to dequeue and process in each batch.
+  - ``--restart-delay`` (float, default=5.0):
+    Delay in seconds between restarts if --restart-on-failure is used.
+  - ``--restart-on-failure`` (boolean, default=False):
+    Automatically restart the manager upon unexpected failure.
+  - ``--log-level`` (str, default="INFO"):
+    Logging level for pgqueuer output (DEBUG, INFO, WARNING, ERROR).
+  - ``--mode`` (continuous|drain, default=continuous):
+    Whether to run continuously or shut down once the queue is empty.
+  - ``--max-concurrent-tasks`` (int|None, default=None):
+    Limit the total number of tasks that can run at the same time. If unspecified or None, there is no limit.
+
+This command initializes a job manager that continuously (or until drained) pulls tasks from the queue and runs them with worker processes. Use the ``--max-concurrent-tasks`` flag to cap the total concurrent tasks, thereby controlling resource usage to prevent excessive load.
+
+**Example**::
+
+    # Run with a limit of 5 concurrent tasks
+    pgq run my_module.my_factory --max-concurrent-tasks 5
+
 ``schedules``
 ~~~~~~~~~~~~~
 Manage schedules within PGQueuer. Use this command to display all schedules or remove specific ones by ID or name.
