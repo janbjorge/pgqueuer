@@ -82,6 +82,7 @@ dev = [
     "types-croniter",
     "types-tabulate",
     "uvicorn",
+    "time-machine>=2.16.0",
 ]
 docs = [
     "myst-parser",

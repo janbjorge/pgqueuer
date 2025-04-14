@@ -25,6 +25,7 @@ import anyio
 
 from . import (
     buffers,
+    cache,
     db,
     executors,
     heartbeat,
@@ -296,7 +297,7 @@ class QueueManager:
         self,
         batch_size: int,
         global_concurrency_limit: int | None,
-    ) -> AsyncGenerator[list[models.Job], None]:
+    ) -> AsyncGenerator[models.Job, None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
 
@@ -325,7 +326,8 @@ class QueueManager:
             ):
                 break
 
-            yield jobs
+            for job in jobs:
+                yield job
 
     async def update_rps_stats(self, events: list[str]) -> None:
         """Update rate-per-second statistics for the given entrypoints."""
@@ -450,31 +452,29 @@ class QueueManager:
 
             shutdown_task = asyncio.create_task(self.shutdown.wait())
             event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
+            cached_queued_work = cache.TTLCache.create(
+                ttl=timedelta(seconds=0.250),
+                on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
+            )
 
             while not self.shutdown.is_set():
-                async for jobs in self.fetch_jobs(batch_size, max_concurrent_tasks):
-                    for job in jobs:
-                        await rpsbuff.add(job.entrypoint)
-                        self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
-                        task_manager.add(
-                            asyncio.create_task(
-                                self._dispatch(
-                                    job,
-                                    jbuff,
-                                    hbuff,
-                                )
-                            )
-                        )
+                async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
+                    await rpsbuff.add(job.entrypoint)
+                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
+                    task_manager.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
 
-                        with contextlib.suppress(asyncio.QueueEmpty):
-                            notice_event_listener.get_nowait()
+                    with contextlib.suppress(asyncio.QueueEmpty):
+                        notice_event_listener.get_nowait()
 
                     if self.shutdown.is_set():
                         break
-                else:
-                    # Run until the queue is empty and then shutdown.
-                    if mode is types.QueueExecutionMode.drain:
-                        self.shutdown.set()
+
+                # Run until the queue is empty and then shutdown,
+                # if max_concurrent_tasks is low, we could exit early due to
+                # fetch_jobs not yield more jobs due to at work capacity. Need to check
+                # back in with the database to see if there are any jobs left.
+                if mode is types.QueueExecutionMode.drain and (await cached_queued_work()) == 0:
+                    self.shutdown.set()
 
             event_task = helpers.wait_for_notice_event(
                 notice_event_listener,

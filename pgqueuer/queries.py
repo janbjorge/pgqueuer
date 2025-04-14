@@ -242,6 +242,10 @@ class Queries:
             )
         ]
 
+    async def queued_work(self, entrypoints: list[str]) -> int:
+        rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
+        return rows[0]["queued_work"] if rows else 0
+
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Remove jobs from the queue, optionally filtered by entrypoints.

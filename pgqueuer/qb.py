@@ -625,6 +625,17 @@ class QueryQueueBuilder:
     SELECT * FROM updated ORDER BY priority DESC, id ASC;
     """  # noqa
 
+    def build_has_queued_work(self) -> str:
+        return f"""
+        SELECT
+            COUNT(*) AS queued_work
+        FROM
+            {self.settings.queue_table}
+        WHERE
+                entrypoint = ANY($1)
+            AND status = 'queued'
+        """
+
     def build_enqueue_query(self) -> str:
         """
         Generate SQL query to insert new jobs into the queue.
