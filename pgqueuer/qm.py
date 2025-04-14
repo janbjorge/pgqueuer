@@ -292,7 +292,11 @@ class QueueManager:
             if below_capacity_limit(entrypoint, executor)
         }
 
-    async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[list[models.Job], None]:
+    async def fetch_jobs(
+        self,
+        batch_size: int,
+        global_concurrency_limit: int | None,
+    ) -> AsyncGenerator[list[models.Job], None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
 
@@ -316,6 +320,7 @@ class QueueManager:
                     batch_size=batch_size,
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
+                    global_concurrency_limit=global_concurrency_limit,
                 )
             ):
                 break
@@ -447,45 +452,38 @@ class QueueManager:
             event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
 
             while not self.shutdown.is_set():
-                if len(task_manager.tasks) < max_concurrent_tasks - batch_size:
-                    async for jobs in self.fetch_jobs(batch_size):
-                        for job in jobs:
-                            await rpsbuff.add(job.entrypoint)
-                            self.job_context[job.id] = models.Context(
-                                cancellation=anyio.CancelScope()
-                            )
-                            task_manager.add(
-                                asyncio.create_task(
-                                    self._dispatch(
-                                        job,
-                                        jbuff,
-                                        hbuff,
-                                    )
+                async for jobs in self.fetch_jobs(batch_size, max_concurrent_tasks):
+                    for job in jobs:
+                        await rpsbuff.add(job.entrypoint)
+                        self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
+                        task_manager.add(
+                            asyncio.create_task(
+                                self._dispatch(
+                                    job,
+                                    jbuff,
+                                    hbuff,
                                 )
                             )
+                        )
 
-                            with contextlib.suppress(asyncio.QueueEmpty):
-                                notice_event_listener.get_nowait()
+                        with contextlib.suppress(asyncio.QueueEmpty):
+                            notice_event_listener.get_nowait()
 
-                        if (
-                            self.shutdown.is_set()
-                            or len(task_manager.tasks) >= max_concurrent_tasks
-                            or len(task_manager.tasks) - batch_size >= max_concurrent_tasks
-                        ):
-                            break
-                    else:
-                        # Run until the queue is empty and then shutdown.
-                        if mode is types.QueueExecutionMode.drain:
-                            self.shutdown.set()
+                    if self.shutdown.is_set():
+                        break
+                else:
+                    # Run until the queue is empty and then shutdown.
+                    if mode is types.QueueExecutionMode.drain:
+                        self.shutdown.set()
 
-                event_task = helpers.wait_for_notice_event(
-                    notice_event_listener,
-                    dequeue_timeout,
-                )
-                await asyncio.wait(
-                    (shutdown_task, event_task),
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+            event_task = helpers.wait_for_notice_event(
+                notice_event_listener,
+                dequeue_timeout,
+            )
+            await asyncio.wait(
+                (shutdown_task, event_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
         if event_task and not event_task.done():
             event_task.cancel()
