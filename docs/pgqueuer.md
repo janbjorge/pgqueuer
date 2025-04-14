@@ -286,6 +286,22 @@ async def fetch_db(schedule: Schedule):
 - **Execution**: The scheduler runs tasks at defined intervals and tracks execution state.
 - **Database Integration**: Schedules are stored in PostgreSQL, ensuring durability and recovery.
 
+#### New Feature: `clean_old` Flag
+
+The `clean_old` flag is a new addition to the scheduler decorator. When set to `True`, it will remove any old schedules that are not in the current registry. This is useful for cleaning up schedules that are no longer needed.
+
+##### Example Usage
+
+To use the `clean_old` flag, simply set it to `True` in the `@schedule` decorator:
+
+```python
+@pgq.schedule("fetch_db", "* * * * *", clean_old=True)
+async def fetch_db(schedule: Schedule):
+    await perform_task()
+```
+
+By default, the `clean_old` flag is set to `False`, so it will not remove any old schedules unless explicitly set to `True`.
+
 ---
 
 ### Throttling and Concurrency Control
