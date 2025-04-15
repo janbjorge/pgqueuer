@@ -8,6 +8,8 @@ from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
 
+from pgqueuer.db import AsyncpgDriver
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from examples.fastapi_usage import create_app
 
@@ -18,7 +20,10 @@ def client() -> Generator[TestClient, None, None]:
         yield client
 
 
-def test_enqueue_and_size(client: TestClient) -> None:
+async def test_enqueue_and_size(
+    client: TestClient,
+    apgdriver: AsyncpgDriver,
+) -> None:
     # Initial size check
     r1 = client.get("/queue-size")
     assert r1.status_code == HTTPStatus.OK
