@@ -8,6 +8,8 @@ from typing import Generator
 import pytest
 from flask.testing import FlaskClient
 
+from pgqueuer.db import SyncPsycopgDriver
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from examples.flask_sync_usage import create_app
@@ -19,7 +21,10 @@ def client() -> Generator[FlaskClient, None, None]:
         yield client
 
 
-def test_enqueue_and_size(client: FlaskClient) -> None:
+def test_enqueue_and_size(
+    client: FlaskClient,
+    pgdriver: SyncPsycopgDriver,
+) -> None:
     # Initial size check
     r1 = client.get("/queue_size")
     assert r1.status_code == HTTPStatus.OK
