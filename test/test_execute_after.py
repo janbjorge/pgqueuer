@@ -16,6 +16,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
                 10,
                 {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
                 uuid.uuid4(),
+                global_concurrency_limit=1000,
             )
         )
         == 1
@@ -28,6 +29,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
                 10,
                 {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
                 uuid.uuid4(),
+                global_concurrency_limit=1000,
             )
         )
         == 1
@@ -43,6 +45,7 @@ async def test_execute_after_zero(apgdriver: Driver) -> None:
                 10,
                 {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
                 uuid.uuid4(),
+                global_concurrency_limit=1000,
             )
         )
         == 1
@@ -58,6 +61,7 @@ async def test_execute_after_negative(apgdriver: Driver) -> None:
                 10,
                 {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
                 uuid.uuid4(),
+                global_concurrency_limit=1000,
             )
         )
         == 1
@@ -71,6 +75,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
         10,
         {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
         uuid.uuid4(),
+        global_concurrency_limit=1000,
     )
     assert len(before) == 0
 
@@ -79,6 +84,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
         10,
         {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
         uuid.uuid4(),
+        global_concurrency_limit=1000,
     )
     assert len(after) == 1
 
@@ -91,6 +97,7 @@ async def test_execute_after_updated_gt_execute_after(apgdriver: Driver) -> None
         10,
         {"foo": EntrypointExecutionParameter(timedelta(seconds=60), False, 0)},
         uuid.uuid4(),
+        global_concurrency_limit=1000,
     )
     assert len(after) == 1
     assert all(x.updated > x.execute_after for x in after)

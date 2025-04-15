@@ -39,6 +39,7 @@ async def test_queries_next_jobs(
             "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
         },
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     ):
         for job in jobs:
             payoad = job.payload
@@ -73,6 +74,7 @@ async def test_queries_next_jobs_concurrent(
             },
             batch_size=10,
             queue_manager_id=uuid.uuid4(),
+            global_concurrency_limit=1000,
         ):
             for job in jobs:
                 payload = job.payload
@@ -119,6 +121,7 @@ async def test_move_job_log(
             "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
         },
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     ):
         for job in jobs:
             await q.log_jobs([(job, "successful", None)])
@@ -194,6 +197,7 @@ async def test_queue_priority(
         },
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     ):
         for job in next_jobs:
             jobs.append(job)
@@ -224,6 +228,7 @@ async def test_queue_retry_timer(
             "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
         },
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     ):
         ...
 
@@ -235,6 +240,7 @@ async def test_queue_retry_timer(
                     "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
                 },
                 queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=1000,
             ),
         )
         == 0
@@ -248,6 +254,7 @@ async def test_queue_retry_timer(
         entrypoints={"placeholder": queries.EntrypointExecutionParameter(retry_timer, False, 0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     ):
         jobs.extend(next_jobs)
 
@@ -280,6 +287,7 @@ async def test_queue_log_queued_picked_successful(
             )
         },
         queue_manager_id=queue_manager_id,
+        global_concurrency_limit=1000,
     ):
         picked_jobs.extend(jobs)
 
@@ -317,6 +325,7 @@ async def test_queue_log_queued_picked_exception(
             )
         },
         queue_manager_id=queue_manager_id,
+        global_concurrency_limit=1000,
     ):
         picked_jobs.extend(jobs)
 

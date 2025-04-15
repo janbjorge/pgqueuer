@@ -401,6 +401,10 @@ def run(
         "--mode",
         help="Queue execution mode.",
     ),
+    max_concurrent_tasks: int | None = typer.Option(
+        None,
+        "--max-concurrent-tasks",
+    ),
 ) -> None:
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
@@ -416,6 +420,7 @@ def run(
             restart_on_failure=restart_on_failure,
             shutdown=asyncio.Event(),
             mode=mode,
+            max_concurrent_tasks=max_concurrent_tasks,
         )
     )
 

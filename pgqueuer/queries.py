@@ -147,6 +147,7 @@ class Queries:
         batch_size: int,
         entrypoints: dict[str, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
+        global_concurrency_limit: int | None,
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
@@ -180,6 +181,7 @@ class Queries:
             [x.serialized for x in entrypoints.values()],
             [x.concurrency_limit for x in entrypoints.values()],
             queue_manager_id,
+            global_concurrency_limit,
         )
         return [models.Job.model_validate(dict(row)) for row in rows]
 
@@ -239,6 +241,10 @@ class Queries:
                 normed_params.execute_after,
             )
         ]
+
+    async def queued_work(self, entrypoints: list[str]) -> int:
+        rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
+        return rows[0]["queued_work"] if rows else 0
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """

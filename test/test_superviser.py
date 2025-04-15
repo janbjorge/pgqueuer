@@ -104,6 +104,7 @@ async def test_runit_normal_operation(
             restart_on_failure=False,
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
         )
     )
 
@@ -148,6 +149,7 @@ async def test_runit_restart_on_failure(
             restart_on_failure=True,
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
         )
     )
 
@@ -186,6 +188,7 @@ async def test_runit_no_restart_on_failure(
             restart_on_failure=False,
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
         )
 
 
@@ -199,6 +202,7 @@ async def test_runit_negative_restart_delay(shutdown_event: asyncio.Event) -> No
             restart_on_failure=True,
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
         )
 
 
@@ -212,4 +216,21 @@ async def test_run_manager_invalid_manager() -> None:
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+        )
+
+
+async def test_run_max_concurrent_tasks_twice_batch_size(
+    queue_manager: QueueManager,
+) -> None:
+    with pytest.raises(
+        RuntimeError,
+        match=r"max_concurrent_tasks must be at least twice the batch size",
+    ):
+        await supervisor.run_manager(
+            queue_manager,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=10,
         )

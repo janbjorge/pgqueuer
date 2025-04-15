@@ -142,6 +142,7 @@ async def test_no_jobs_processed_when_locked(
         1,
         {"serialized_dispatch_true": EntrypointExecutionParameter(timedelta(seconds=30), True, 0)},
         queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
     )
     assert len(picked_job) == 1, "Failed to pick a job for locking"
 

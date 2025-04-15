@@ -12,6 +12,7 @@ import asyncio
 import contextlib
 import dataclasses
 import functools
+import sys
 import uuid
 import warnings
 from collections import Counter, deque
@@ -24,6 +25,7 @@ import anyio
 
 from . import (
     buffers,
+    cache,
     db,
     executors,
     heartbeat,
@@ -291,7 +293,11 @@ class QueueManager:
             if below_capacity_limit(entrypoint, executor)
         }
 
-    async def fetch_jobs(self, batch_size: int) -> AsyncGenerator[models.Job, None]:
+    async def fetch_jobs(
+        self,
+        batch_size: int,
+        global_concurrency_limit: int | None,
+    ) -> AsyncGenerator[models.Job, None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
 
@@ -315,6 +321,7 @@ class QueueManager:
                     batch_size=batch_size,
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
+                    global_concurrency_limit=global_concurrency_limit,
                 )
             ):
                 break
@@ -380,6 +387,7 @@ class QueueManager:
         dequeue_timeout: timedelta = timedelta(seconds=30),
         batch_size: int = 10,
         mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
+        max_concurrent_tasks: int | None = None,
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -403,6 +411,11 @@ class QueueManager:
         heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
             [x.parameters.retry_timer for x in self.entrypoint_registry.values()]
         )
+
+        max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
+
+        if max_concurrent_tasks < 2 * batch_size:
+            raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
         async with (
             buffers.JobStatusLogBuffer(
@@ -439,36 +452,38 @@ class QueueManager:
 
             shutdown_task = asyncio.create_task(self.shutdown.wait())
             event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
+            cached_queued_work = cache.TTLCache.create(
+                ttl=timedelta(seconds=0.250),
+                on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
+            )
 
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(batch_size):
+                async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
                     await rpsbuff.add(job.entrypoint)
                     self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
-                    task_manager.add(
-                        asyncio.create_task(
-                            self._dispatch(
-                                job,
-                                jbuff,
-                                hbuff,
-                            )
-                        )
-                    )
+                    task_manager.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
-                # Run until the queue is empty and then shutdown.
-                if mode is types.QueueExecutionMode.drain:
+                    if self.shutdown.is_set():
+                        break
+
+                # Run until the queue is empty and then shutdown,
+                # if max_concurrent_tasks is low, we could exit early due to
+                # fetch_jobs not yield more jobs due to at work capacity. Need to check
+                # back in with the database to see if there are any jobs left.
+                if mode is types.QueueExecutionMode.drain and (await cached_queued_work()) == 0:
                     self.shutdown.set()
 
-                event_task = helpers.wait_for_notice_event(
-                    notice_event_listener,
-                    dequeue_timeout,
-                )
-                await asyncio.wait(
-                    (shutdown_task, event_task),
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
+            event_task = helpers.wait_for_notice_event(
+                notice_event_listener,
+                dequeue_timeout,
+            )
+            await asyncio.wait(
+                (shutdown_task, event_task),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
         if event_task and not event_task.done():
             event_task.cancel()
