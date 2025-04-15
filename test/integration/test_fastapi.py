@@ -9,12 +9,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from examples.fastapi_usage import app as fast_api_app
+from examples.fastapi_usage import create_app
 
 
 @pytest.fixture
 def client() -> Generator[TestClient, None, None]:
-    with TestClient(fast_api_app) as client:
+    with TestClient(create_app()) as client:
         yield client
 
 

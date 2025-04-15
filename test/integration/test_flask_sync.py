@@ -10,12 +10,12 @@ from flask.testing import FlaskClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from examples.flask_sync_usage import app as flask_app
+from examples.flask_sync_usage import create_app
 
 
 @pytest.fixture(scope="module")
 def client() -> Generator[FlaskClient, None, None]:
-    with flask_app.test_client() as client:
+    with create_app().test_client() as client:
         yield client
 
 

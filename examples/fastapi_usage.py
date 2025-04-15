@@ -35,14 +35,39 @@ def create_app() -> FastAPI:
     @app.get("/reset_password_email")
     async def reset_password_email(
         user_name: str,
-        pgq_queries: Queries = Depends(get_pgq_queries),
+        queries: Queries = Depends(get_pgq_queries),
     ) -> Response:
         """Enqueue a job to reset a user's password, identified by user_name."""
-        await pgq_queries.enqueue(
+        await queries.enqueue(
             "reset_email_by_user_name",
             payload=json.dumps({"user_name": user_name}).encode(),
         )
         return Response(status_code=201)
+
+    @app.post("/enqueue")
+    async def enqueue_job(
+        entrypoint: str,
+        payload: str,
+        priority: int = 0,
+        queries: Queries = Depends(get_pgq_queries),
+    ) -> dict:
+        ids = await queries.enqueue(entrypoint, payload.encode(), priority)
+        return {"job_ids": ids}
+
+    @app.get("/queue-size")
+    async def get_queue_size(
+        queries: Queries = Depends(get_pgq_queries),
+    ) -> list:
+        stats = await queries.queue_size()
+        return [
+            {
+                "entrypoint": s.entrypoint,
+                "priority": s.priority,
+                "status": s.status,
+                "count": s.count,
+            }
+            for s in stats
+        ]
 
     return app
 
