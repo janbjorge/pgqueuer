@@ -13,12 +13,46 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
+from contextlib import suppress
 from datetime import timedelta
 from typing import overload
 
 from pgqueuer.types import CronEntrypoint
 
-from . import db, helpers, models, qb, query_helpers
+from . import db, errors, helpers, models, qb, query_helpers
+
+
+def is_unique_violation(exc: Exception) -> bool:
+    """
+    Determine whether the given exception represents a unique constraint violation
+    from a supported database driver.
+
+    This function supports:
+    - asyncpg (asyncpg.exceptions.UniqueViolationError)
+    - psycopg3 (psycopg.errors.UniqueViolation)
+
+    It safely handles environments where only one driver is installed by importing
+    the drivers at runtime.
+
+    Args:
+        exc (Exception): The exception to inspect.
+
+    Returns:
+        bool: True if the exception is a known unique constraint violation, False otherwise.
+    """
+    with suppress(ImportError):
+        import asyncpg
+
+        if isinstance(exc, asyncpg.UniqueViolationError):
+            return True
+
+    with suppress(ImportError):
+        import psycopg
+
+        if isinstance(exc, psycopg.errors.UniqueViolation):
+            return True
+
+    return False
 
 
 @dataclasses.dataclass
@@ -194,6 +228,7 @@ class Queries:
         payload: bytes | None,
         priority: int = 0,
         execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -203,6 +238,7 @@ class Queries:
         payload: list[bytes | None],
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
     ) -> list[models.JobId]: ...
 
     async def enqueue(
@@ -211,6 +247,7 @@ class Queries:
         payload: bytes | None | list[bytes | None],
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
+        dedupe_key: str | list[str | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -231,18 +268,29 @@ class Queries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after
+            entrypoint, payload, priority, execute_after, dedupe_key
         )
-        return [
-            models.JobId(row["id"])
-            for row in await self.driver.fetch(
-                self.qbq.build_enqueue_query(),
-                normed_params.priority,
-                normed_params.entrypoint,
-                normed_params.payload,
-                normed_params.execute_after,
-            )
-        ]
+        print(normed_params)
+
+        try:
+            return [
+                models.JobId(row["id"])
+                for row in await self.driver.fetch(
+                    self.qbq.build_enqueue_query(),
+                    normed_params.priority,
+                    normed_params.entrypoint,
+                    normed_params.payload,
+                    normed_params.execute_after,
+                    normed_params.dedupe_key,
+                )
+            ]
+        except Exception as e:
+            if is_unique_violation(e):
+                raise errors.DuplicateJobError(
+                    normed_params.entrypoint,
+                    normed_params.dedupe_key,
+                ) from e
+            raise
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
@@ -562,6 +610,7 @@ class SyncQueries:
         payload: bytes | None | list[bytes | None],
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
+        dedupe_key: str | list[str | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -582,18 +631,29 @@ class SyncQueries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after
+            entrypoint, payload, priority, execute_after, dedupe_key
         )
-        return [
-            models.JobId(row["id"])
-            for row in self.driver.fetch(
-                self.qbq.build_enqueue_query(),
-                normed_params.priority,
-                normed_params.entrypoint,
-                normed_params.payload,
-                normed_params.execute_after,
-            )
-        ]
+        print(normed_params)
+
+        try:
+            return [
+                models.JobId(row["id"])
+                for row in self.driver.fetch(
+                    self.qbq.build_enqueue_query(),
+                    normed_params.priority,
+                    normed_params.entrypoint,
+                    normed_params.payload,
+                    normed_params.execute_after,
+                    normed_params.dedupe_key,
+                )
+            ]
+        except Exception as e:
+            if is_unique_violation(e):
+                raise errors.DuplicateJobError(
+                    normed_params.entrypoint,
+                    normed_params.dedupe_key,
+                ) from e
+            raise
 
     def queue_size(self) -> list[models.QueueStatistics]:
         """

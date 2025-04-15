@@ -441,10 +441,12 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );"""
-        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"""  # noqa
-        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"""  # noqa
-        yield f"""CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"""  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"  # noqa
         yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL;"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_uniq_dedupe_key ON {self.settings.queue_table} (dedupe_key, entrypoint) WHERE (status IN ('queued', 'picked') AND dedupe_key IS NOT NULL);"  # noqa
 
     def build_table_has_column_query(self) -> str:
         """
@@ -650,12 +652,13 @@ class QueryQueueBuilder:
         return f"""
         WITH inserted AS (
             INSERT INTO {self.settings.queue_table}
-            (priority, entrypoint, payload, execute_after, status)
+            (priority, entrypoint, payload, execute_after, dedupe_key, status)
             VALUES (
                 UNNEST($1::int[]),                  -- priority
                 UNNEST($2::text[]),                 -- entrypoint
                 UNNEST($3::bytea[]),                -- payload
                 UNNEST($4::interval[]) + NOW(),     -- execute_after
+                UNNEST($5::text[]),                 -- dedupe_key
                 'queued'                            -- status
             )
             RETURNING id, entrypoint, status, priority

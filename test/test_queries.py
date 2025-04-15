@@ -4,7 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-from pgqueuer import db, models, queries
+from pgqueuer import db, models, queries, errors
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -335,3 +335,20 @@ async def test_queue_log_queued_picked_exception(
         await q.log_jobs([(job, "exception", None)])
 
     assert sum(x.status == "exception" for x in await q.queue_log()) == N
+
+
+async def test_queue_log_queued_dedupe_key_raises(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+
+    await q.enqueue(
+        "test_queue_log_queued_dedupe_key_raises",
+        None,
+        dedupe_key="test_queue_log_queued_dedupe_key_raises",
+    )
+
+    with pytest.raises(errors.DuplicateJobError):
+        await q.enqueue(
+                "test_queue_log_queued_dedupe_key_raises",
+                None,
+                dedupe_key="test_queue_log_queued_dedupe_key_raises",
+            )
