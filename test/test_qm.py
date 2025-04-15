@@ -229,7 +229,7 @@ async def test_max_concurrent_tasks(
     picked_jobs = list[Log]()
 
     async def log_sampler() -> None:
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.25)
         logs = [log for log in await q.queue_log() if log.status == "picked"]
         qm.shutdown.set()
         picked_jobs.extend(logs)
