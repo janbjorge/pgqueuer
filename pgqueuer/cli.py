@@ -439,7 +439,7 @@ def schedules(
         async with yield_queries(ctx, qb.DBSettings()) as q:
             if remove:
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
-                schedule_names = {x for x in remove if not x.isdigit()}
+                schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
                 await q.delete_schedule(schedule_ids, schedule_names)
             await display_schedule(await q.peak_schedule())
 

@@ -125,10 +125,12 @@ class PgQueuer:
             AbstractScheduleExecutor,
         ]
         | None = None,
+        clean_old: bool = False,
     ) -> Callable[[AsyncCrontab], AsyncCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,
             expression=expression,
             executor=executor,
             executor_factory=executor_factory,
+            clean_old=clean_old,
         )
