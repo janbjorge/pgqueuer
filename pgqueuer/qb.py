@@ -566,7 +566,7 @@ class QueryQueueBuilder:
                 {self.settings.queue_table}.entrypoint = ANY($2)
             AND {self.settings.queue_table}.status = 'queued'
             AND {self.settings.queue_table}.execute_after < NOW()
-            AND (SELECT qm_count FROM jobs_by_queue_manager) < $7
+            AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
             AND (
                 NOT entrypoint_execution_params.serialized
                 OR NOT EXISTS (
@@ -596,7 +596,7 @@ class QueryQueueBuilder:
             AND {self.settings.queue_table}.execute_after < NOW()
             AND entrypoint_execution_params.retry_after > interval '0'
             AND {self.settings.queue_table}.heartbeat < NOW() - entrypoint_execution_params.retry_after
-            AND (SELECT qm_count FROM jobs_by_queue_manager) < $7
+            AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
         ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
