@@ -270,7 +270,6 @@ class Queries:
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key
         )
-        print(normed_params)
 
         try:
             return [

@@ -2,9 +2,10 @@ import asyncio
 import uuid
 from datetime import timedelta
 
+import asyncpg
 import pytest
 
-from pgqueuer import db, models, queries, errors
+from pgqueuer import db, errors, models, queries
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -345,10 +346,59 @@ async def test_queue_log_queued_dedupe_key_raises(apgdriver: db.Driver) -> None:
         None,
         dedupe_key="test_queue_log_queued_dedupe_key_raises",
     )
+    assert sum(x.count for x in await q.queue_size()) == 1
 
     with pytest.raises(errors.DuplicateJobError):
         await q.enqueue(
-                "test_queue_log_queued_dedupe_key_raises",
-                None,
-                dedupe_key="test_queue_log_queued_dedupe_key_raises",
-            )
+            "test_queue_log_queued_dedupe_key_raises",
+            None,
+            dedupe_key="test_queue_log_queued_dedupe_key_raises",
+        )
+    assert sum(x.count for x in await q.queue_size()) == 1
+
+
+async def test_queue_log_queued_dedupe_key_raises_array(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+
+    await q.enqueue(
+        ["test_queue_log_queued_dedupe_key_raises_array"],
+        [None],
+        [0],
+        dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+    )
+    assert sum(x.count for x in await q.queue_size()) == 1
+
+    with pytest.raises(errors.DuplicateJobError):
+        await q.enqueue(
+            ["test_queue_log_queued_dedupe_key_raises_array"],
+            [None],
+            [0],
+            dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+        )
+
+    assert sum(x.count for x in await q.queue_size()) == 1
+
+
+@pytest.mark.parametrize("batch_size", (2, 10))
+@pytest.mark.parametrize("loop_size", (2, 10))
+async def test_queue_log_queued_dedupe_key_raises_concurrent(
+    batch_size: int,
+    loop_size: int,
+    apgdriver: db.Driver,
+) -> None:
+    async with asyncpg.create_pool() as pool:
+        for _ in range(loop_size):
+            with pytest.raises(errors.DuplicateJobError):
+                await asyncio.gather(
+                    *[
+                        queries.Queries(db.AsyncpgPoolDriver(pool)).enqueue(
+                            "test_queue_log_queued_dedupe_key_raises_concurrent",
+                            None,
+                            dedupe_key="test_queue_log_queued_dedupe_key_raises_concurrent",
+                        )
+                        for _ in range(batch_size)
+                    ],
+                )
+            assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
+
+    assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
