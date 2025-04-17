@@ -285,10 +285,7 @@ class Queries:
             ]
         except Exception as e:
             if is_unique_violation(e):
-                raise errors.DuplicateJobError(
-                    normed_params.entrypoint,
-                    normed_params.dedupe_key,
-                ) from e
+                raise errors.DuplicateJobError(normed_params.dedupe_key) from e
             raise
 
     async def queued_work(self, entrypoints: list[str]) -> int:
@@ -592,6 +589,7 @@ class SyncQueries:
         payload: bytes | None,
         priority: int = 0,
         execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -601,6 +599,7 @@ class SyncQueries:
         payload: list[bytes | None],
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
     ) -> list[models.JobId]: ...
 
     def enqueue(
@@ -632,7 +631,6 @@ class SyncQueries:
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key
         )
-        print(normed_params)
 
         try:
             return [
@@ -648,10 +646,7 @@ class SyncQueries:
             ]
         except Exception as e:
             if is_unique_violation(e):
-                raise errors.DuplicateJobError(
-                    normed_params.entrypoint,
-                    normed_params.dedupe_key,
-                ) from e
+                raise errors.DuplicateJobError(normed_params.dedupe_key) from e
             raise
 
     def queue_size(self) -> list[models.QueueStatistics]:

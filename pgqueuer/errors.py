@@ -19,3 +19,7 @@ class MaxTimeExceeded(RetryException):
 
 class DuplicateJobError(PgqException):
     """Raised when enqueue violates a deduplication constraint."""
+
+    def __init__(self, dedupe_key: list[str | None]) -> None:
+        super().__init__()
+        self.dedupe_key = dedupe_key
