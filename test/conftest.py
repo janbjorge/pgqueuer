@@ -37,7 +37,7 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
 
 @pytest.fixture(scope="function")
 async def pgdriver(apgdriver: AsyncpgDriver) -> AsyncGenerator[SyncPsycopgDriver, None]:
-    conn = psycopg.connect(dsn())
+    conn = psycopg.connect(dsn(), autocommit=True)
     try:
         yield SyncPsycopgDriver(conn)
     finally:

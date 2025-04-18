@@ -14,6 +14,8 @@ from pgqueuer.db import (
     AsyncpgPoolDriver,
     Driver,
     PsycopgDriver,
+    SyncDriver,
+    SyncPsycopgDriver,
     _named_parameter,
     _replace_dollar_named_parameter,
 )
@@ -320,3 +322,40 @@ def test_replace_dollar_named_parameter_large_numbers() -> None:
         "SELECT * FROM table WHERE column1 = %(parameter_10)s AND column2 = %(parameter_20)s;"
     )
     assert _replace_dollar_named_parameter(query) == expected
+
+
+@pytest.mark.parametrize("driver", drivers())
+async def test_recovery_after_failed_sql(
+    driver: Callable[..., AsyncContextManager[Driver]],
+) -> None:
+    async with driver() as d:
+        with pytest.raises(Exception):
+            await d.execute("SELECT 1 WHERE")
+
+        result = await d.fetch("SELECT 1 as one")
+        assert result == [{"one": 1}]
+
+        with pytest.raises(Exception):
+            await d.fetch("SELECT 1 WHERE")
+
+        result = await d.fetch("SELECT 2 as two")
+        assert result == [{"two": 2}]
+
+
+async def test_recovery_after_failed_sql_sync(
+    pgdriver: SyncDriver,
+) -> None:
+    with pytest.raises(Exception):
+        pgdriver.fetch("SELECT 1 WHERE")
+
+    result = pgdriver.fetch("SELECT 1 as one")
+    assert result == [{"one": 1}]
+
+
+async def test_no_autocommit_raises() -> None:
+    with pytest.raises(RuntimeError):
+        SyncPsycopgDriver(psycopg.connect(dsn()))
+
+    with pytest.raises(RuntimeError):
+        async with await psycopg.AsyncConnection.connect(conninfo=dsn()) as conn:
+            PsycopgDriver(conn)

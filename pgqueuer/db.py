@@ -327,6 +327,13 @@ class PsycopgDriver(Driver):
         self._notify_stop_after = notify_stop_after
         self._notify_timeout = notify_timeout
 
+        if not self._connection.autocommit:
+            raise RuntimeError(
+                f"Database connection({self._connection}) must have autocommit enabled. This is "
+                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
+                "configured with autocommit=True."
+            )
+
     @property
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
@@ -366,13 +373,6 @@ class PsycopgDriver(Driver):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        if not self._connection.autocommit:
-            raise RuntimeError(
-                f"Database connection({self._connection}) must have autocommit enabled. This is "
-                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
-                "configured with autocommit=True."
-            )
-
         async with self._lock:
             await self._connection.execute(f"LISTEN {channel};")
 
@@ -434,6 +434,12 @@ class SyncPsycopgDriver(SyncDriver):
         connection: psycopg.Connection,
     ) -> None:
         self._connection = connection
+        if not self._connection.autocommit:
+            raise RuntimeError(
+                f"Database connection({self._connection}) must have autocommit enabled. This is "
+                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
+                "configured with autocommit=True."
+            )
 
     def fetch(
         self,
