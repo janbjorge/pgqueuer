@@ -40,6 +40,8 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import MutableMapping, TypeAlias, TypeVar
+import uuid
+from typing import Callable, MutableMapping
 
 from . import db, logconfig, models, types
 

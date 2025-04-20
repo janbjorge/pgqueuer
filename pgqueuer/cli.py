@@ -395,6 +395,7 @@ def run(
         logconfig.LogLevel.INFO.name,
         "--log-level",
         help="Set pgqueuer log level.",
+        parser=lambda x: x.upper(),
     ),
     mode: types.QueueExecutionMode = typer.Option(
         types.QueueExecutionMode.continuous.name,
@@ -404,6 +405,11 @@ def run(
     max_concurrent_tasks: int | None = typer.Option(
         None,
         "--max-concurrent-tasks",
+    ),
+    shutdown_on_failing_listener: bool = typer.Option(
+        False,
+        "--shutdown-on-failing-listener",
+        help="...",
     ),
 ) -> None:
     """
@@ -421,6 +427,7 @@ def run(
             shutdown=asyncio.Event(),
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
+            shutdown_on_failing_listener=shutdown_on_failing_listener,
         )
     )
 
