@@ -476,14 +476,14 @@ class QueueManager:
                 if mode is types.QueueExecutionMode.drain and (await cached_queued_work()) == 0:
                     self.shutdown.set()
 
-            event_task = helpers.wait_for_notice_event(
-                notice_event_listener,
-                dequeue_timeout,
-            )
-            await asyncio.wait(
-                (shutdown_task, event_task),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
+                event_task = helpers.wait_for_notice_event(
+                    notice_event_listener,
+                    dequeue_timeout,
+                )
+                await asyncio.wait(
+                    (shutdown_task, event_task),
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
 
         if event_task and not event_task.done():
             event_task.cancel()
