@@ -405,11 +405,12 @@ def run(
     max_concurrent_tasks: int | None = typer.Option(
         None,
         "--max-concurrent-tasks",
+        help="An upper global limit for the current runner.",
     ),
-    shutdown_on_failing_listener: bool = typer.Option(
+    shutdown_on_listener_failure: bool = typer.Option(
         False,
-        "--shutdown-on-failing-listener",
-        help="...",
+        "--shutdown-on-listener-failure",
+        help="Shutdown the manager if the listener fails.",
     ),
 ) -> None:
     """
@@ -427,7 +428,7 @@ def run(
             shutdown=asyncio.Event(),
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
-            shutdown_on_failing_listener=shutdown_on_failing_listener,
+            shutdown_on_listener_failure=shutdown_on_listener_failure,
         )
     )
 

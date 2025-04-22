@@ -39,9 +39,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import MutableMapping, TypeAlias, TypeVar
-import uuid
-from typing import Callable, MutableMapping
+from typing import Callable, MutableMapping, TypeAlias, TypeVar
 
 from . import db, logconfig, models, types
 
@@ -80,6 +78,7 @@ class EventRouter:
 
 def default_event_router(
     *,
+    event: models.AnyEvent,
     notice_event_queue: PGNoticeEventListener,
     statistics: MutableMapping[str, models.EntrypointStatistics],
     canceled: MutableMapping[models.JobId, models.Context],

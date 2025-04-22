@@ -447,7 +447,7 @@ class QueueManager:
         batch_size: int = 10,
         mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
         max_concurrent_tasks: int | None = None,
-        shutdown_on_failing_listener: bool = False,
+        shutdown_on_listener_failure: bool = False,
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -542,6 +542,7 @@ class QueueManager:
                     periodic_health_check_task.done()
                     and periodic_health_check_task.exception()
                     and mode is not types.QueueExecutionMode.drain
+                    and shutdown_on_listener_failure
                 ):
                     self.shutdown.set()
                     await periodic_health_check_task

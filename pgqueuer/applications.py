@@ -65,7 +65,7 @@ class PgQueuer:
         batch_size: int = 10,
         mode: QueueExecutionMode = QueueExecutionMode.continuous,
         max_concurrent_tasks: int | None = None,
-        shutdown_on_failing_listener: bool = False,
+        shutdown_on_listener_failure: bool = False,
     ) -> None:
         """
         Run both QueueManager and SchedulerManager concurrently.
@@ -85,7 +85,7 @@ class PgQueuer:
                         dequeue_timeout=dequeue_timeout,
                         mode=mode,
                         max_concurrent_tasks=max_concurrent_tasks,
-                        shutdown_on_failing_listener=shutdown_on_failing_listener,
+                        shutdown_on_listener_failure=shutdown_on_listener_failure,
                     )
                 )
             )
