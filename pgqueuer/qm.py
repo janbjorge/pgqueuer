@@ -61,6 +61,9 @@ class QueueManager:
         queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
             including cancellation scopes.
+        shutdown_on_listener_failure
+            If *True*, raise `FailingListenerError` and set the shutdown event when
+            the periodic listener health‑check times out.
     """
 
     connection: db.Driver
@@ -460,7 +463,8 @@ class QueueManager:
             batch_size (int): Number of jobs to retrieve in each batch.
             mode (QueueExecutionMode): Whether to run in `continuous` or `drain` until
                 queue is empty then shutdown.
-
+            max_concurrent_tasks (int|None, default=None): Limit the total number of tasks that
+                can run at the same time. If unspecified or None, there is no limit.
         Raises:
             RuntimeError: If required database columns or types are missing.
         """

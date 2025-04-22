@@ -202,6 +202,7 @@ async def test_event_listener(
                 notice_event_queue=listener,
                 statistics={},
                 canceled={},
+                pending_health_check={},
             ),
         )
 
