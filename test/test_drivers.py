@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import inspect
 from contextlib import asynccontextmanager, suppress
 from typing import AsyncContextManager, AsyncGenerator, Callable
@@ -22,7 +21,7 @@ from pgqueuer.db import (
 from pgqueuer.helpers import utc_now
 from pgqueuer.listeners import (
     PGNoticeEventListener,
-    handle_event_type,
+    default_event_router,
     initialize_notice_event_listener,
 )
 from pgqueuer.models import TableChangedEvent
@@ -199,8 +198,7 @@ async def test_event_listener(
         await initialize_notice_event_listener(
             d,
             channel,
-            functools.partial(
-                handle_event_type,
+            default_event_router(
                 notice_event_queue=listener,
                 statistics={},
                 canceled={},

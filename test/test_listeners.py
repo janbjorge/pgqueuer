@@ -4,13 +4,15 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import MutableMapping
 
+import pytest
 from anyio import CancelScope
 from async_timeout import timeout
 
 from pgqueuer import db
 from pgqueuer.listeners import (
+    EventRouter,
     PGNoticeEventListener,
-    handle_event_type,
+    default_event_router,
     initialize_notice_event_listener,
 )
 from pgqueuer.models import (
@@ -46,10 +48,12 @@ async def test_handle_table_changed_event() -> None:
             table="jobs_table",
         )
     )
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        statistics=statistics,
+        canceled=canceled,
+    )(event)
 
-    handle_event_type(event, notice_event_queue, statistics, canceled)
-
-    assert not notice_event_queue.empty()
     assert notice_event_queue.qsize() == 1
     assert isinstance(notice_event_queue.get_nowait(), TableChangedEvent)
 
@@ -73,7 +77,11 @@ async def test_handle_requests_per_second_event() -> None:
         )
     )
 
-    handle_event_type(event, notice_event_queue, statistics, canceled)
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        statistics=statistics,
+        canceled=canceled,
+    )(event)
 
     assert len(statistics["entrypoint_1"].samples) == 1
     assert statistics["entrypoint_1"].samples[0] == (10, event.root.sent_at)
@@ -101,7 +109,11 @@ async def test_handle_cancellation_event() -> None:
         )
     )
 
-    handle_event_type(event, notice_event_queue, statistics, canceled)
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        statistics=statistics,
+        canceled=canceled,
+    )(event)
 
     assert cancellation_context.cancellation.cancel_called
 
@@ -226,3 +238,56 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     )
     await asyncio.sleep(0.1)
     assert len(evnets) == 0
+
+
+def test_event_router_dispatches_correct_handler() -> None:
+    router = EventRouter()
+    called = {"flag": False}
+
+    @router.register("table_changed_event")
+    def _handle(evt: TableChangedEvent) -> None:
+        called["flag"] = evt.table == "jobs_table"
+
+    event = AnyEvent(
+        root=TableChangedEvent(
+            channel="chan",
+            sent_at=datetime.now(tz=timezone.utc),
+            type="table_changed_event",
+            operation="insert",
+            table="jobs_table",
+        )
+    )
+
+    router(event)
+    assert called["flag"] is True
+
+
+def test_event_router_duplicate_registration_raises() -> None:
+    router = EventRouter()
+
+    @router.register("table_changed_event")
+    def _handler(evt: TableChangedEvent) -> None:
+        pass
+
+    with pytest.raises(ValueError):
+
+        @router.register("table_changed_event")
+        def _another(evt: TableChangedEvent) -> None:
+            pass
+
+
+def test_event_router_missing_handler_raises() -> None:
+    router = EventRouter()
+
+    event = AnyEvent(
+        root=TableChangedEvent(
+            channel="chan",
+            sent_at=datetime.now(tz=timezone.utc),
+            type="table_changed_event",
+            operation="insert",
+            table="jobs_table",
+        )
+    )
+
+    with pytest.raises(NotImplementedError):
+        router(event)
