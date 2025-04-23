@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-import functools
 import sys
 import uuid
 import warnings
@@ -442,8 +441,7 @@ class QueueManager:
             await listeners.initialize_notice_event_listener(
                 self.connection,
                 self.channel,
-                functools.partial(
-                    listeners.handle_event_type,
+                listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
                     statistics=self.entrypoint_statistics,
                     canceled=self.job_context,
