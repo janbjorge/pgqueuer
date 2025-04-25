@@ -241,3 +241,67 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
     leeway = retry_timer / 10
     for sample in samples:
         assert sample - leeway < retry_timer, (sample, retry_timer, sample - retry_timer)
+
+
+async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> None:
+    retry_timer = timedelta(seconds=0.1)
+    event = asyncio.Event()
+    qm = QueueManager(apgdriver)
+    calls = Counter[JobId]()
+
+    @qm.entrypoint("fetch", retry_timer=retry_timer, serialized_dispatch=True)
+    async def fetch(context: Job) -> None:
+        calls[context.id] += 1
+        await event.wait()
+
+    jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
+
+    async def stopper() -> None:
+        await asyncio.sleep(retry_timer.total_seconds() * 5)
+        event.set()
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0)),
+        stopper(),
+    )
+
+    # ensure only one invocation occurred
+    assert calls[jid] == 1
+
+
+async def test_retry_concurrency_limit_for_retries(apgdriver: db.Driver) -> None:
+    """
+    Ensure that retry honors the concurrency_limit at the SQL level: a retry won't fire
+    if the number of in-flight executions meets the limit, even when in-memory limiter is disabled.
+    """
+
+    retry_timer = timedelta(seconds=0.100)
+    concurrency_limit = 1
+    qm = QueueManager(apgdriver)
+    calls = Counter[JobId]()
+
+    @qm.entrypoint("fetch", retry_timer=retry_timer, concurrency_limit=concurrency_limit)
+    async def fetch(context: Job) -> None:
+        calls[context.id] += 1
+        # block the first run to occupy the retry window
+        if calls[context.id] == 1:
+            await asyncio.sleep(retry_timer.total_seconds() * 2)
+        # after delay, allow exit
+        await asyncio.sleep(0)
+
+    jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
+
+    async def stopper() -> None:
+        # wait longer than retry window
+        await asyncio.sleep(retry_timer.total_seconds() * 5)
+        # with SQL concurrency_limit=1, no retry should have been fetched
+        assert calls[jid] == 1
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0)),
+        stopper(),
+    )
+    # ensure only one invocation occurred
+    assert calls[jid] == 1

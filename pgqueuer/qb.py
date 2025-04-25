@@ -572,9 +572,8 @@ class QueryQueueBuilder:
             AND {self.settings.queue_table}.status = 'queued'
             AND {self.settings.queue_table}.execute_after < NOW()
             AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
-            AND (
-                NOT entrypoint_execution_params.serialized
-                OR NOT EXISTS (
+            AND NOT (
+                entrypoint_execution_params.serialized AND EXISTS (
                     SELECT 1
                     FROM {self.settings.queue_table} existing_job
                     WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
@@ -602,6 +601,24 @@ class QueryQueueBuilder:
             AND entrypoint_execution_params.retry_after > interval '0'
             AND {self.settings.queue_table}.heartbeat < NOW() - entrypoint_execution_params.retry_after
             AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
+            -- Honor serialized_dispatch on retries: skip retry if serialized and a job is still in flight
+            AND NOT (
+                entrypoint_execution_params.serialized AND EXISTS (
+                    SELECT 1
+                    FROM {self.settings.queue_table} existing_job
+                    WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
+                    AND existing_job.status = 'picked'
+                )
+            )
+            -- Also enforce concurrency_limit on retry
+            AND (
+                entrypoint_execution_params.concurrency_limit <= 0
+                OR EXISTS(
+                    SELECT 1 FROM jobs_by_queue_manager_entrypoint j
+                    WHERE j.entrypoint = {self.settings.queue_table}.entrypoint
+                      AND j.count < entrypoint_execution_params.concurrency_limit
+                )
+            )
         ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
         LIMIT $1
