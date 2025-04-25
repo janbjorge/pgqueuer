@@ -241,3 +241,30 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
     leeway = retry_timer / 10
     for sample in samples:
         assert sample - leeway < retry_timer, (sample, retry_timer, sample - retry_timer)
+
+
+async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> None:
+    retry_timer = timedelta(seconds=0.1)
+    event = asyncio.Event()
+    qm = QueueManager(apgdriver)
+    calls = Counter[JobId]()
+
+    @qm.entrypoint("fetch", retry_timer=retry_timer, serialized_dispatch=True)
+    async def fetch(context: Job) -> None:
+        calls[context.id] += 1
+        await event.wait()
+
+    jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
+
+    async def stopper() -> None:
+        await asyncio.sleep(retry_timer.total_seconds() * 5)
+        event.set()
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0)),
+        stopper(),
+    )
+
+    # after shutdown, ensure no further invocation occurred
+    assert calls[jid] == 1
