@@ -102,10 +102,23 @@ class CancellationEvent(Event):
     ids: list[JobId]
 
 
+class HealthCheckEvent(Event):
+    """
+    A class representing a health check event in a PostgreSQL channel.
+
+    Attributes:
+        id: A unique identifier for the health check event, used to ensure
+            correct event matching in scenarios with multiple senders.
+    """
+
+    id: uuid.UUID
+    type: Literal["health_check_event"]
+
+
 class AnyEvent(
     RootModel[
         Annotated[
-            TableChangedEvent | RequestsPerSecondEvent | CancellationEvent,
+            TableChangedEvent | RequestsPerSecondEvent | CancellationEvent | HealthCheckEvent,
             Field(discriminator="type"),
         ]
     ]

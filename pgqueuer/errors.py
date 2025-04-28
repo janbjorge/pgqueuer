@@ -23,3 +23,7 @@ class DuplicateJobError(PgqException):
     def __init__(self, dedupe_key: list[str | None]) -> None:
         super().__init__()
         self.dedupe_key = dedupe_key
+
+
+class FailingListenerError(PgqException):
+    """Raised when a listener fails to process a job."""

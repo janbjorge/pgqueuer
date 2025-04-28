@@ -14,7 +14,7 @@ import asyncio
 import dataclasses
 import uuid
 from contextlib import suppress
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import overload
 
 from pgqueuer.types import CronEntrypoint
@@ -484,6 +484,28 @@ class Queries:
                 ids=ids,
                 sent_at=helpers.utc_now(),
                 type="cancellation_event",
+            ).model_dump_json(),
+        )
+
+    async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
+        """
+        Send a health check event notification.
+
+        Emits a 'health_check_event' notification via the PostgreSQL NOTIFY system
+        to inform other components about the current health status of the system.
+        This can be used for monitoring and ensuring the system is functioning as expected.
+
+        Args:
+            event (models.HealthCheckEvent): The health check event containing
+                details about the system's health status.
+        """
+        await self.driver.execute(
+            self.qbq.build_notify_query(),
+            models.HealthCheckEvent(
+                channel=self.qbq.settings.channel,
+                sent_at=datetime.now(timezone.utc),
+                type="health_check_event",
+                id=health_check_event_id,
             ).model_dump_json(),
         )
 

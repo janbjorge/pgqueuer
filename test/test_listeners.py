@@ -21,6 +21,7 @@ from pgqueuer.models import (
     Channel,
     Context,
     EntrypointStatistics,
+    HealthCheckEvent,
     JobId,
     RequestsPerSecondEvent,
     TableChangedEvent,
@@ -38,6 +39,7 @@ async def test_handle_table_changed_event() -> None:
         )
     }
     canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=TableChangedEvent(
@@ -52,6 +54,7 @@ async def test_handle_table_changed_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert notice_event_queue.qsize() == 1
@@ -67,6 +70,7 @@ async def test_handle_requests_per_second_event() -> None:
         )
     }
     canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=RequestsPerSecondEvent(
@@ -81,6 +85,7 @@ async def test_handle_requests_per_second_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert len(statistics["entrypoint_1"].samples) == 1
@@ -96,6 +101,8 @@ async def test_handle_cancellation_event() -> None:
         )
     }
     canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+
     cancellation_context = Context(cancellation=CancelScope())
     job_id = JobId(123)
     canceled[job_id] = cancellation_context
@@ -113,9 +120,42 @@ async def test_handle_cancellation_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert cancellation_context.cancellation.cancel_called
+
+
+async def test_handle_health_check_event_event() -> None:
+    notice_event_queue = PGNoticeEventListener()
+    statistics = {
+        "entrypoint_1": EntrypointStatistics(
+            samples=deque(),
+            concurrency_limiter=asyncio.Semaphore(5),
+        )
+    }
+    canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+
+    event = AnyEvent(
+        root=HealthCheckEvent(
+            channel="channel_1",
+            sent_at=datetime.now(timezone.utc),
+            type="health_check_event",
+            id=uuid.uuid4(),
+        )
+    )
+    assert isinstance(event.root, HealthCheckEvent)
+    pending_health_check[event.root.id] = asyncio.Future()
+
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        statistics=statistics,
+        canceled=canceled,
+        pending_health_check=pending_health_check,
+    )(event)
+
+    assert pending_health_check[event.root.id].result().id == event.root.id
 
 
 async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:

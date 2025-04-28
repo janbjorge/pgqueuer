@@ -10,6 +10,8 @@ import async_timeout
 import pytest
 
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager, supervisor
+from pgqueuer.errors import FailingListenerError
+from pgqueuer.models import HealthCheckEvent
 from pgqueuer.types import QueueExecutionMode
 
 
@@ -105,6 +107,7 @@ async def test_runit_normal_operation(
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
         )
     )
 
@@ -150,6 +153,7 @@ async def test_runit_restart_on_failure(
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
         )
     )
 
@@ -189,6 +193,7 @@ async def test_runit_no_restart_on_failure(
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
         )
 
 
@@ -203,6 +208,7 @@ async def test_runit_negative_restart_delay(shutdown_event: asyncio.Event) -> No
             shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
         )
 
 
@@ -217,6 +223,7 @@ async def test_run_manager_invalid_manager() -> None:
             batch_size=10,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
         )
 
 
@@ -233,4 +240,25 @@ async def test_run_max_concurrent_tasks_twice_batch_size(
             batch_size=10,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=10,
+            shutdown_on_listener_failure=False,
+        )
+
+
+async def test_shutdown_on_listener_failure(queue_manager: QueueManager) -> None:
+    with pytest.raises(FailingListenerError):
+        await queue_manager.listener_healthy(timedelta(seconds=0))
+
+    async def mocked_listener_healthy(timeout: timedelta) -> HealthCheckEvent:
+        await asyncio.sleep(0.1)
+        raise RuntimeError("Mocked")
+
+    queue_manager.listener_healthy = mocked_listener_healthy  # type: ignore
+    with pytest.raises(RuntimeError):
+        await supervisor.run_manager(
+            queue_manager,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=True,
         )

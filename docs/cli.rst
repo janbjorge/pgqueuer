@@ -92,6 +92,8 @@ Start a ``QueueManager`` to manage job queues and processes.
     Whether to run continuously or shut down once the queue is empty.
   - ``--max-concurrent-tasks`` (int|None, default=None):
     Limit the total number of tasks that can run at the same time. If unspecified or None, there is no limit.
+  - ``--shutdown-on-listener-failure`` (bool, default = False):
+    NEW. Shutdown the manager if the listener fails its periodic health‑check probes.
 
 This command initializes a job manager that continuously (or until drained) pulls tasks from the queue and runs them with worker processes. Use the ``--max-concurrent-tasks`` flag to cap the total concurrent tasks, thereby controlling resource usage to prevent excessive load.
 
