@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import (
     AsyncGenerator,
     Awaitable,
@@ -51,7 +51,6 @@ class TimedOverflowBuffer(Generic[T]):
             failed flush operations during normal operation.
         shutdown_backoff (helpers.ExponentialBackoff): A backoff strategy used during
             shutdown to ensure all items are flushed before the process exits.
-        next_flush (datetime): The scheduled time for the next flush operation.
         shutdown (asyncio.Event): An event that signals when the buffer should stop
             operations, such as during shutdown.
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
@@ -76,10 +75,6 @@ class TimedOverflowBuffer(Generic[T]):
         )
     )
 
-    next_flush: datetime = dataclasses.field(
-        init=False,
-        default_factory=helpers.utc_now,
-    )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -99,13 +94,8 @@ class TimedOverflowBuffer(Generic[T]):
 
     async def periodic_flush(self) -> None:
         while not self.shutdown.is_set():
-            if (
-                not self.lock.locked()
-                and helpers.utc_now() > self.next_flush
-                and self.events.qsize() > 0
-            ):
+            if not self.lock.locked() and self.events.qsize() > 0:
                 self.tm.add(asyncio.create_task(self.flush()))
-                self.next_flush = helpers.utc_now() + helpers.timeout_with_jitter(self.timeout)
 
             with suppress(asyncio.TimeoutError, TimeoutError):
                 await asyncio.wait_for(
