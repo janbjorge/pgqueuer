@@ -58,7 +58,6 @@ class SchedulerManager:
         self,
         entrypoint: str,
         expression: str,
-        executor: type[executors.AbstractScheduleExecutor] | None = None,
         executor_factory: Callable[
             [executors.ScheduleExecutorFactoryParameters],
             executors.AbstractScheduleExecutor,
@@ -72,10 +71,6 @@ class SchedulerManager:
         Args:
             entrypoint (str): The entrypoint identifier for the job to be scheduled.
             expression (str): The cron expression defining the schedule.
-            executor (type[executors.AbstractScheduleExecutor] | None, optional):
-                Deprecated. The executor type that will run the job.
-                This parameter is deprecated and will be removed in a future version.
-                Please use 'executor_factory' instead for custom executor handling.
             executor_factory (Callable[[ScheduleExecutorFactoryParameters],
                 executors.AbstractScheduleExecutor]): A factory function to
                 create the executor for the job.
@@ -88,14 +83,6 @@ class SchedulerManager:
             ValueError: If the provided cron expression is invalid.
             RuntimeError: If the entrypoint and expression are already registered.
         """
-
-        if executor is not None:
-            warnings.warn(
-                "The 'executor' parameter is deprecated and will be removed in a future version. "
-                "Please use 'executor_factory' instead for custom executor handling.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
 
         if not croniter.croniter.is_valid(expression):
             raise ValueError(f"Invalid cron expression: {expression}")
