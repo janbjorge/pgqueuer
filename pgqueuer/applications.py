@@ -100,7 +100,6 @@ class PgQueuer:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
             [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
@@ -113,7 +112,6 @@ class PgQueuer:
             concurrency_limit=concurrency_limit,
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
-            executor=executor,
             executor_factory=executor_factory,
         )
 
@@ -121,7 +119,6 @@ class PgQueuer:
         self,
         entrypoint: str,
         expression: str,
-        executor: type[AbstractScheduleExecutor] | None = None,
         executor_factory: Callable[
             [ScheduleExecutorFactoryParameters],
             AbstractScheduleExecutor,
@@ -132,7 +129,6 @@ class PgQueuer:
         return self.sm.schedule(
             entrypoint=entrypoint,
             expression=expression,
-            executor=executor,
             executor_factory=executor_factory,
             clean_old=clean_old,
         )

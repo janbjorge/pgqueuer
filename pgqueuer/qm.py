@@ -13,7 +13,6 @@ import contextlib
 import dataclasses
 import sys
 import uuid
-import warnings
 from collections import Counter, deque
 from contextlib import nullcontext, suppress
 from datetime import timedelta
@@ -38,8 +37,6 @@ from . import (
     tm,
     types,
 )
-
-warnings.simplefilter("default", DeprecationWarning)
 
 
 @dataclasses.dataclass
@@ -156,17 +153,6 @@ class QueueManager:
                     timeout=interval.total_seconds(),
                 )
 
-    @property
-    def alive(self) -> asyncio.Event:
-        # For backwards compatibility
-        warnings.warn(
-            "The `alive` property is deprecated and will be removed in a future release. "
-            "Please use `shutdown` instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        return self.shutdown
-
     def __post_init__(self) -> None:
         """
         Initialize the QueueManager after dataclass fields have been set.
@@ -221,7 +207,6 @@ class QueueManager:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
-        executor: type[executors.AbstractEntrypointExecutor] | None = None,
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
@@ -240,7 +225,6 @@ class QueueManager:
             concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
-            executor (JobExecutor): Custom executor instance to use.
 
         Returns:
             Callable[[T], T]: A decorator that registers the function as an entrypoint.
@@ -249,14 +233,6 @@ class QueueManager:
             RuntimeError: If the entrypoint name is already registered.
             ValueError: If `requests_per_second` or `concurrency_limit` are negative.
         """
-
-        if executor is not None:
-            warnings.warn(
-                "The 'executor' parameter is deprecated and will be removed in a future version. "
-                "Please use 'executor_factory' instead for custom executor handling.",
-                DeprecationWarning,
-                stacklevel=3,
-            )
 
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
