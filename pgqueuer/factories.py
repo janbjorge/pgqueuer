@@ -1,7 +1,8 @@
+from __future__ import annotations
+
 import importlib
 import os
 import sys
-import warnings
 from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar
 
@@ -19,21 +20,7 @@ def load_factory(factory_path: str) -> Callable[..., Any]:
     """
     sys.path.insert(0, os.getcwd())
 
-    if ":" in factory_path:
-        module_name, factory_name = factory_path.split(":", 1)
-    else:
-        # Backward compatibility for module.function style
-        warnings.warn(
-            (
-                "The use of 'module.function' syntax for specifying the factory path is "
-                "deprecated and will be removed in a future version. Please use "
-                "'module:factory' syntax instead."
-            ),
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        module_name, factory_name = factory_path.rsplit(".", 1)
-
+    module_name, factory_name = factory_path.split(":", 1)
     module = importlib.import_module(module_name)
     return getattr(module, factory_name)
 
