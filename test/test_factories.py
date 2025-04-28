@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import warnings
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -36,45 +35,6 @@ def test_load_factory_with_module_colon_function(monkeypatch: pytest.MonkeyPatch
 
     # Assertions
     assert factory is mock_factory, "The loaded factory should match the mock factory."
-
-
-def test_load_factory_with_module_dot_function(monkeypatch: pytest.MonkeyPatch) -> None:
-    """
-    Test loading a factory using the deprecated 'module.function' syntax.
-    Ensure that a DeprecationWarning is raised.
-    """
-    factory_path: str = "test_module.test_factory"
-
-    # Create a mock factory function
-    mock_factory: Mock = Mock(return_value="factory_result")
-    # Create a mock module and assign the mock factory to it
-    mock_module: Mock = Mock(spec_set=["test_factory"])
-    mock_module.test_factory = mock_factory
-
-    # Define a mock import_module function
-    def mock_import_module(module_name: str) -> Any:
-        if module_name == "test_module":
-            return mock_module
-        raise ImportError(f"No module named '{module_name}'")
-
-    # Patch 'importlib.import_module' with the mock_import_module
-    monkeypatch.setattr("importlib.import_module", mock_import_module)
-
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")  # Ensure all warnings are captured
-
-        # Call the function under test
-        factory: Callable[..., Any] = load_factory(factory_path)
-
-        # Assertions
-        assert factory is mock_factory, "The loaded factory should match the mock factory."
-        assert len(w) == 1, "A single warning should have been raised."
-        assert issubclass(w[0].category, DeprecationWarning), (
-            "The warning should be a DeprecationWarning."
-        )
-        assert "deprecated" in str(w[0].message).lower(), (
-            "The warning message should mention deprecation."
-        )
 
 
 def test_load_factory_nonexistent_module(monkeypatch: pytest.MonkeyPatch) -> None:
