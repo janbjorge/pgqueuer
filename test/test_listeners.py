@@ -54,6 +54,7 @@ async def test_handle_table_changed_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert notice_event_queue.qsize() == 1
@@ -84,6 +85,7 @@ async def test_handle_requests_per_second_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert len(statistics["entrypoint_1"].samples) == 1
@@ -118,6 +120,7 @@ async def test_handle_cancellation_event() -> None:
         notice_event_queue=notice_event_queue,
         statistics=statistics,
         canceled=canceled,
+        pending_health_check=pending_health_check,
     )(event)
 
     assert cancellation_context.cancellation.cancel_called
@@ -145,7 +148,13 @@ async def test_handle_health_check_event_event() -> None:
     assert isinstance(event.root, HealthCheckEvent)
     pending_health_check[event.root.id] = asyncio.Future()
 
-    handle_event_type(event, notice_event_queue, statistics, canceled, pending_health_check)
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        statistics=statistics,
+        canceled=canceled,
+        pending_health_check=pending_health_check,
+    )(event)
+
     assert pending_health_check[event.root.id].result().id == event.root.id
 
 

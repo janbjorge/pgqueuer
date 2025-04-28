@@ -37,9 +37,10 @@ Typical usage::
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, MutableMapping, TypeAlias, TypeVar
+from typing import MutableMapping, TypeAlias, TypeVar
 
 from . import db, logconfig, models, types
 
@@ -78,10 +79,10 @@ class EventRouter:
 
 def default_event_router(
     *,
-    event: models.AnyEvent,
     notice_event_queue: PGNoticeEventListener,
     statistics: MutableMapping[str, models.EntrypointStatistics],
     canceled: MutableMapping[models.JobId, models.Context],
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[models.HealthCheckEvent]],
 ) -> EventRouter:
     """Return an `EventRouter` wired with handlers for all known event types."""
 
@@ -101,6 +102,11 @@ def default_event_router(
         for jid in evt.ids:
             if ctx := canceled.get(jid):
                 ctx.cancellation.cancel()
+
+    @router.register("health_check_event")
+    def _health_check_event(evt: models.HealthCheckEvent) -> None:
+        if fut := pending_health_check.get(evt.id):
+            fut.set_result(evt)
 
     return router
 
