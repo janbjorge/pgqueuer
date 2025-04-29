@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import time
 from contextlib import suppress
 from datetime import timedelta
 from typing import (
@@ -135,8 +136,8 @@ class TimedOverflowBuffer(Generic[T]):
         Yields:
             AsyncGenerator[T, None]: An asynchronous generator yielding items.
         """
-        deadline = helpers.utc_now() + until
-        while not self.events.empty() and helpers.utc_now() < deadline:
+        deadline = time.time() + until.total_seconds()
+        while not self.events.empty() and time.time() < deadline:
             yield await self.events.get()
 
     async def flush(self) -> None:
