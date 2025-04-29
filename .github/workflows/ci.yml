@@ -26,7 +26,7 @@ jobs:
 
     name: Run PGQueuer Example
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     services:
       postgres:
@@ -89,7 +89,7 @@ jobs:
 
     name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     services:
       postgres:
@@ -182,7 +182,7 @@ jobs:
 
     name: Validate Benchmark Results
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -233,7 +233,7 @@ jobs:
 
     name: Run PGQueuer install and upgrade
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     services:
       postgres:
@@ -284,7 +284,7 @@ jobs:
 
     name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     services:
       postgres:
