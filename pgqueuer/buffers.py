@@ -61,8 +61,10 @@ class TimedOverflowBuffer(Generic[T]):
     """
 
     max_size: int
-    timeout: timedelta
     callback: Callable[[list[T]], Awaitable[None]]
+    timeout: timedelta = dataclasses.field(
+        default_factory=lambda: timedelta(seconds=0.1),
+    )
     retry_backoff: helpers.ExponentialBackoff = dataclasses.field(
         default_factory=lambda: helpers.ExponentialBackoff(
             start_delay=timedelta(seconds=0.01),
@@ -98,6 +100,7 @@ class TimedOverflowBuffer(Generic[T]):
             if not self.lock.locked() and self.events.qsize() > 0:
                 self.tm.add(asyncio.create_task(self.flush()))
 
+            # await asyncio.sleep(helpers.timeout_with_jitter(self.timeout).total_seconds())
             with suppress(asyncio.TimeoutError, TimeoutError):
                 await asyncio.wait_for(
                     asyncio.create_task(self.shutdown.wait()),
