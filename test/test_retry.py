@@ -127,48 +127,41 @@ async def test_heartbeat_no_updates(apgdriver: db.Driver) -> None:
 
 
 async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
-    retry_timer_short = timedelta(seconds=0.200)
-    e_short = asyncio.Event()
-
-    retry_timer_long = timedelta(seconds=0.400)
-    e_long = asyncio.Event()
-
-    c = QueueManager(apgdriver)
+    waiter = asyncio.Event()
+    qm = QueueManager(apgdriver)
     calls = Counter[JobId]()
 
-    @c.entrypoint("fetch_short", retry_timer=retry_timer_short)
-    async def fetch_short(context: Job) -> None:
-        calls[context.id] += 1
-        await e_short.wait()
+    @qm.entrypoint("fetch_short", retry_timer=timedelta(seconds=0.5))
+    async def fetch_short(job: Job) -> None:
+        calls[job.id] += 1
+        await waiter.wait()
 
-    @c.entrypoint("fetch_long", retry_timer=retry_timer_long)
-    async def fetch_long(context: Job) -> None:
-        calls[context.id] += 1
-        await e_long.wait()
+    @qm.entrypoint("fetch_long", retry_timer=timedelta(seconds=1))
+    async def fetch_long(job: Job) -> None:
+        calls[job.id] += 1
+        await waiter.wait()
 
-    await c.queries.enqueue(
+    jids = await qm.queries.enqueue(
         ["fetch_short", "fetch_long"],
         [None, None],
         [0, 0],
     )
 
     async def entrypoint_waiter() -> None:
-        # Wait for all jobs to be dequeued
-        # while sum(calls.values()) < 4:
+        import icecream
+
         while not (all(v > 1 for v in calls.values()) and len(calls) > 1):
-            await asyncio.sleep(0)
-        # await asyncio.sleep(retry_timer_long.total_seconds())
-        # await asyncio.sleep(retry_timer_short.total_seconds() * 2)
-        e_short.set()
-        e_long.set()
-        c.shutdown.set()
+            icecream.ic(calls)
+            icecream.ic(await inspect_queued_jobs(jids, apgdriver))
+            await asyncio.sleep(0.1)
+        waiter.set()
+        qm.shutdown.set()
 
     await asyncio.gather(
-        c.run(dequeue_timeout=timedelta(seconds=0)),
+        qm.run(dequeue_timeout=timedelta(seconds=0)),
         entrypoint_waiter(),
     )
 
-    print(calls)
     assert len(calls) == 2
     assert all(v > 1 for v in calls.values())
 

@@ -465,7 +465,7 @@ class QueueManager:
                 # Flush will be mainly driven by timeouts, but allow flush if
                 # backlog becomes too large.
                 max_size=batch_size**2,
-                timeout=heartbeat_buffer_timeout,
+                timeout=heartbeat_buffer_timeout / 2,
                 callback=self.queries.update_heartbeat,
             ) as hbuff,
             buffers.RequestsPerSecondBuffer(
@@ -568,7 +568,7 @@ class QueueManager:
         async with (
             heartbeat.Heartbeat(
                 job.id,
-                executor.parameters.retry_timer / 2,
+                executor.parameters.retry_timer,
                 hbuff,
             ),
             self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
