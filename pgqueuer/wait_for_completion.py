@@ -7,6 +7,7 @@ from itertools import chain
 
 from . import db, models, qb, queries, tm
 
+
 @dataclass
 class WaitForCompletion:
     """
@@ -17,6 +18,7 @@ class WaitForCompletion:
         waiters: Mapping from JobId to list of asyncio.Future awaiting completion.
         task_manager: TaskManager for scheduling background tasks.
     """
+
     driver: db.Driver
     waiters: defaultdict[models.JobId, list[asyncio.Future[models.JOB_STATUS]]] = field(
         default_factory=lambda: defaultdict(list),
@@ -65,7 +67,7 @@ class WaitForCompletion:
         await self.driver.add_listener(qb.DBSettings().channel, self._is_relevant_event)
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> bool:
+    async def __aexit__(self, *_: object) -> bool:
         """
         Exit async context: wait for all pending waiters and gather tasks.
 

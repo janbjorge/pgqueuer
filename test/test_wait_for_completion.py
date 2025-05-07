@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
+
+import pytest
 
 from pgqueuer import db
 from pgqueuer.models import JOB_STATUS, Job
@@ -137,3 +141,8 @@ async def test_wait_for_completion_deleted(apgdriver: db.Driver) -> None:
 
     assert len(waiters) == N
     assert all(w.result() == "deleted" for w in waiters)
+
+
+@pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
+async def test_wait_for_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
+    assert WaitForCompletion(apgdriver)._is_terminal(status)  # type: ignore
