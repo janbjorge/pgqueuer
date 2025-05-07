@@ -582,6 +582,16 @@ class Queries:
             for x in await self.driver.fetch(self.qbq.build_fetch_log_query())
         ]
 
+    async def job_status(
+        self,
+        ids: list[models.JobId],
+    ) -> list[tuple[models.JobId, models.JOB_STATUS]]:
+        # A lack of status indicates that the job was removed, ie.
+        return [
+            (row["job_id"], row["status"])
+            for row in await self.driver.fetch(self.qbq.build_job_status(), ids)
+        ]
+
 
 @dataclasses.dataclass
 class SyncQueries:
