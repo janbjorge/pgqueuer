@@ -78,6 +78,7 @@ class CompletionWatcher:
         f: asyncio.Future[models.JOB_STATUS] = asyncio.get_running_loop().create_future()
         self.waiters[jid].append(f)
         f.add_done_callback(lambda x: self.waiters.get(jid, []).remove(x))
+        self.task_manager.add(asyncio.create_task(self._on_change()))
         return f
 
     async def _on_change(self) -> None:
