@@ -910,21 +910,12 @@ class QueryQueueBuilder:
             count = {self.settings.statistics_table}.count + EXCLUDED.count
         """  # noqa
 
-    def build_job_status(self) -> str:
+    def build_job_status_query(self) -> str:
         return f"""SELECT DISTINCT ON (job_id) job_id, status
         FROM   {self.settings.queue_table_log}
-        WHERE  job_id = ANY ($1)
+        WHERE  job_id = ANY($1)
         ORDER  BY job_id, created DESC, id DESC;
         """
-        # return f"""WITH jids AS (
-        #     SELECT UNNEST($1::integer[]) AS id
-        # )
-        # SELECT
-        #     j.id AS id,
-        #     q.status AS status
-        # FROM jids j
-        # LEFT JOIN {self.settings.queue_table} q ON q.id = k.id
-        # """
 
 
 @dataclasses.dataclass

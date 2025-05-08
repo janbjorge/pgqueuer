@@ -589,7 +589,7 @@ class Queries:
         # A lack of status indicates that the job was removed, ie.
         return [
             (row["job_id"], row["status"])
-            for row in await self.driver.fetch(self.qbq.build_job_status(), ids)
+            for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
 
