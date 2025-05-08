@@ -11,16 +11,16 @@ build:
       - asdf plugin add uv || true
       - asdf install uv latest
       - asdf global uv latest
-      - uv venv  # Initialize a UV-managed virtual environment
+      - uv venv # Initialize a UV-managed virtual environment
 
     install:
       # Use UV to install the documentation dependencies
-      - uv sync --frozen --only-group docs
+      - uv sync --frozen --all-extras
 
     build:
       html:
         # Build the documentation using Sphinx
-        - uv run --only-group docs sphinx-build -T -b html -d _build/doctrees -D language=en docs/ $READTHEDOCS_OUTPUT/html
+        - uv run --frozen --all-extras sphinx-build -T -b html -d _build/doctrees -D language=en docs/ $READTHEDOCS_OUTPUT/html
 
 sphinx:
   configuration: docs/conf.py
