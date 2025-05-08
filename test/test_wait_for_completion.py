@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+from datetime import timedelta
 
 import pytest
 
@@ -108,3 +110,67 @@ async def test_wait_for_completion_deleted(apgdriver: db.Driver) -> None:
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
 async def test_wait_for_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
     assert CompletionWatcher(apgdriver)._is_terminal(status)  # type: ignore
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Debounce-specific tests
+# ─────────────────────────────────────────────────────────────────────
+
+
+async def test_debounce_coalesces_burst(monkeypatch, apgdriver: db.Driver) -> None:
+    """
+    Rapidly trigger `_schedule_on_change` many times inside a single debounce
+    window and assert that the expensive `_on_change` body executes only once.
+    """
+    watcher = CompletionWatcher(
+        apgdriver,
+        debounce=timedelta(milliseconds=20),
+    )
+    await watcher.__aenter__()
+
+    call_count = 0
+
+    async def fake_refresh_waiters() -> None:  # type: ignore[return-value]
+        nonlocal call_count
+        call_count += 1
+
+    # Patch before scheduling so the debounced coroutine sees the stub
+    monkeypatch.setattr(watcher, "_refresh_waiters", fake_refresh_waiters)
+
+    for _ in range(10):
+        watcher._schedule_refresh_waiters()  # burst of triggers
+
+    await asyncio.sleep(0.05)  # > debounce window
+    assert call_count == 1
+
+    await watcher.__aexit__(None, None, None)
+
+
+async def test_debounce_allows_separate_windows(monkeypatch, apgdriver: db.Driver) -> None:
+    """
+    Ensure that events separated by more than the debounce interval result in
+    multiple `_on_change` executions.
+    """
+    watcher = CompletionWatcher(
+        apgdriver,
+        debounce=timedelta(milliseconds=20),
+    )
+    await watcher.__aenter__()
+
+    call_count = 0
+
+    async def fake_refresh_waiters() -> None:  # type: ignore[return-value]
+        nonlocal call_count
+        call_count += 1
+
+    monkeypatch.setattr(watcher, "_refresh_waiters", fake_refresh_waiters)
+
+    watcher._schedule_refresh_waiters()
+    await asyncio.sleep(0.05)  # wait past first debounce firing
+
+    watcher._schedule_refresh_waiters()
+    await asyncio.sleep(0.05)  # wait past second debounce firing
+
+    assert call_count == 2
+
+    await watcher.__aexit__(None, None, None)
