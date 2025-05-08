@@ -165,7 +165,6 @@ class CompletionWatcher:
         """
         fut: asyncio.Future[models.JOB_STATUS] = asyncio.get_running_loop().create_future()
         self.waiters[jid].append(fut)
-        fut.add_done_callback(lambda x: self.waiters[jid].remove(x))
         self._schedule_refresh_waiters()
         return fut
 
