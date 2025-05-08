@@ -8,6 +8,7 @@ from pgqueuer import db
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
+from pgqueuer.types import QueueExecutionMode
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -147,3 +148,33 @@ async def test_cancellation_sync_context_manager(
         raise NotImplementedError(
             "anyio.CancelScope() does not support cancellation in sync functions."
         )
+
+
+async def test_cancellation_drain_mode(apgdriver: db.Driver) -> None:
+    N = 10
+    event = asyncio.Event()
+    q = Queries(apgdriver)
+    qm = QueueManager(apgdriver)
+
+    @qm.entrypoint("to_be_canceled")
+    async def to_be_canceled(job: Job) -> None:
+        ctx = qm.get_context(job.id)
+        with ctx.cancellation:
+            await event.wait()
+
+    jids = await q.enqueue(
+        ["to_be_canceled"] * N,
+        [f"{n}".encode() for n in range(N)],
+        [0] * N,
+    )
+
+    async def cancel_after() -> None:
+        await asyncio.sleep(0.5)
+        await q.mark_job_as_cancelled(jids)
+
+    await asyncio.gather(
+        cancel_after(),
+        qm.run(mode=QueueExecutionMode.drain),
+    )
+
+    assert sum(x.status == "canceled" for x in await q.queue_log()) == N
