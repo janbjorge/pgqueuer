@@ -387,3 +387,62 @@ async with CompletionWatcher(driver) as w:
 ```
 
 Recognised terminal states: **`canceled`**, **`deleted`**, **`exception`**, **`successful`**.
+
+#### Helper functions
+
+For one-off scripts and test suites you can avoid the context-manager boilerplate by using two tiny wrappers that ship with PgQueuer.
+Their full source is shown here so you can copy/paste or consult the doc-strings any time.
+
+```python
+import asyncio
+from datetime import timedelta
+
+from pgqueuer import db, models
+from pgqueuer.wait_for_completion import CompletionWatcher
+
+
+async def wait_for_all(
+    driver: db.Driver,
+    job_ids: list[models.JobId],
+    refresh_interval: timedelta = timedelta(seconds=5),
+    debounce: timedelta = timedelta(milliseconds=50),
+) -> list[models.JOB_STATUS]:
+    """
+    Block until **every** supplied job finishes and return their statuses in
+    the same order the IDs were passed.
+
+    Extra keyword arguments are forwarded to ``CompletionWatcher``.
+    """
+    async with CompletionWatcher(
+        driver,
+        refresh_interval=refresh_interval,
+        debounce=debounce,
+    ) as watcher:
+        waiters = [watcher.wait_for(jid) for jid in job_ids]
+        return await asyncio.gather(*waiters)
+
+
+async def wait_for_first(
+    driver: db.Driver,
+    job_ids: list[models.JobId],
+    refresh_interval: timedelta = timedelta(seconds=5),
+    debounce: timedelta = timedelta(milliseconds=50),
+) -> models.JOB_STATUS:
+    """
+    Return as soon as **any** job hits a terminal state; pending waiters are
+    cancelled and the watcher shuts down cleanly.
+    """
+    async with CompletionWatcher(
+        driver,
+        refresh_interval=refresh_interval,
+        debounce=debounce,
+    ) as watcher:
+        waiters = [watcher.wait_for(jid) for jid in job_ids]
+        done, pending = await asyncio.wait(
+            waiters, return_when=asyncio.FIRST_COMPLETED
+        )
+        for fut in pending:
+            fut.cancel()
+
+    return next(iter(done)).result()
+```

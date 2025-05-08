@@ -117,7 +117,10 @@ async def test_wait_for_completion_is_terminal(apgdriver: db.Driver, status: str
 # ─────────────────────────────────────────────────────────────────────
 
 
-async def test_debounce_coalesces_burst(monkeypatch, apgdriver: db.Driver) -> None:
+async def test_debounce_coalesces_burst(
+    monkeypatch: pytest.MonkeyPatch,
+    apgdriver: db.Driver,
+) -> None:
     """
     Rapidly trigger `_schedule_on_change` many times inside a single debounce
     window and assert that the expensive `_on_change` body executes only once.
@@ -130,7 +133,7 @@ async def test_debounce_coalesces_burst(monkeypatch, apgdriver: db.Driver) -> No
 
     call_count = 0
 
-    async def fake_refresh_waiters() -> None:  # type: ignore[return-value]
+    async def fake_refresh_waiters() -> None:
         nonlocal call_count
         call_count += 1
 
@@ -146,7 +149,10 @@ async def test_debounce_coalesces_burst(monkeypatch, apgdriver: db.Driver) -> No
     await watcher.__aexit__(None, None, None)
 
 
-async def test_debounce_allows_separate_windows(monkeypatch, apgdriver: db.Driver) -> None:
+async def test_debounce_allows_separate_windows(
+    monkeypatch: pytest.MonkeyPatch,
+    apgdriver: db.Driver,
+) -> None:
     """
     Ensure that events separated by more than the debounce interval result in
     multiple `_on_change` executions.
@@ -159,7 +165,7 @@ async def test_debounce_allows_separate_windows(monkeypatch, apgdriver: db.Drive
 
     call_count = 0
 
-    async def fake_refresh_waiters() -> None:  # type: ignore[return-value]
+    async def fake_refresh_waiters() -> None:
         nonlocal call_count
         call_count += 1
 
