@@ -347,3 +347,43 @@ The automatic heartbeat mechanism ensures active jobs are monitored:
 - **Periodic Updates**: Updates a `heartbeat` timestamp to signal job activity.
 - **Stall Detection**: Identifies stalled jobs for retries or alerts.
 - **Resource Management**: Prevents unresponsive jobs from locking system resources.
+
+### Wait-for-Completion (close to real-time job tracking)
+
+`CompletionWatcher` lets you **await** the final status of any job, live-streamed via PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
+
+| Parameter | Type | Default | Purpose |
+|-----------|------|---------|---------|
+| `refresh_interval` | `timedelta \| None` | **5 s** | Safety-net: a lightweight query every *n* seconds in case a `NOTIFY` was lost. |
+| `debounce` | `timedelta` | **50 ms** | Coalesces bursts of `NOTIFY`s so the expensive status query runs at most once per window. |
+
+#### Basic usage
+
+```python
+from pgqueuer.wait_for_completion import CompletionWatcher
+
+async with CompletionWatcher(driver) as watcher:      # uses defaults
+    status = await watcher.wait_for(job_id)           # "successful", "exception", …
+````
+
+#### Tracking many jobs at once
+
+```python
+from asyncio import gather
+from pgqueuer.wait_for_completion import CompletionWatcher
+
+image_ids   = await qm.queries.enqueue(["render_img"]   * 20, [b"..."] * 20, [0] * 20)
+report_ids  = await qm.queries.enqueue(["generate_pdf"] * 10, [b"..."] * 10, [0] * 10)
+cleanup_ids = await qm.queries.enqueue(["cleanup"]      *  5, [b"..."] *  5, [0] *  5)
+
+async with CompletionWatcher(driver) as w:
+    img_waiters   = [w.wait_for(j) for j in image_ids]
+    pdf_waiters   = [w.wait_for(j) for j in report_ids]
+    clean_waiters = [w.wait_for(j) for j in cleanup_ids]
+
+    img_statuses, pdf_statuses, clean_statuses = await gather(
+        gather(*img_waiters), gather(*pdf_waiters), gather(*clean_waiters)
+    )
+```
+
+Recognised terminal states: **`canceled`**, **`deleted`**, **`exception`**, **`successful`**.
