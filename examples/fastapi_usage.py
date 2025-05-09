@@ -5,7 +5,7 @@ from typing import AsyncGenerator
 import asyncpg
 from fastapi import Depends, FastAPI, Request, Response
 
-from pgqueuer.db import AsyncpgDriver
+from pgqueuer.db import AsyncpgPoolDriver
 from pgqueuer.queries import Queries
 
 
@@ -23,12 +23,9 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage async database connection throughout the app's lifespan."""
-        connection = await asyncpg.connect()
-        app.extra["pgq_queries"] = Queries(AsyncpgDriver(connection))
-        try:
+        async with asyncpg.create_pool() as pool:
+            app.extra["pgq_queries"] = Queries(AsyncpgPoolDriver(pool))
             yield
-        finally:
-            await connection.close()
 
     app = FastAPI(lifespan=lifespan)
 
