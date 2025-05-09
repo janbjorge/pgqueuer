@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import signal
 from contextlib import asynccontextmanager
 from datetime import timedelta
@@ -262,3 +263,22 @@ async def test_shutdown_on_listener_failure(queue_manager: QueueManager) -> None
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=True,
         )
+
+
+@pytest.mark.asyncio
+async def test_fallback_when_add_signal_handler_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
+
+    # Simulate Windows/Proactor behavior
+    def boom(*_: object) -> None:
+        raise NotImplementedError
+
+    monkeypatch.setattr(loop, "add_signal_handler", boom)
+
+    caplog.set_level(logging.WARNING)
+
+    supervisor.setup_signal_handlers(asyncio.Event())
+    assert "not supported on this platform" in caplog.text.lower()
