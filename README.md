@@ -68,7 +68,7 @@ async def main() -> PgQueuer:
 
 The above example is located in the examples folder, and can be run by using the `pgq` cli.
 ```bash
-pgq run examples.consumer.main
+pgq run examples.consumer:main
 ```
 
 ### Step 2: Write a producer
@@ -138,4 +138,3 @@ PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
 
 ---
 Ready to supercharge your workflows? Install PGQueuer today and take your job management to the next level!
-

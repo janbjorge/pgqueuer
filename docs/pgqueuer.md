@@ -45,7 +45,7 @@ This example demonstrates how to define both a job entrypoint (`fetch`) and a re
 PgQueuer includes a CLI tool for easy startup without additional scripting. To launch it:
 
 ```bash
-pgq run mypackage.create_pgqueuer
+pgq run mypackage:create_pgqueuer
 ```
 
 This command initializes the PgQueuer instance, manages job queues, schedules tasks, and ensures graceful shutdown.

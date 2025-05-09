@@ -100,7 +100,7 @@ This command initializes a job manager that continuously (or until drained) pull
 **Example**::
 
     # Run with a limit of 5 concurrent tasks
-    pgq run my_module.my_factory --max-concurrent-tasks 5
+    pgq run my_module:my_factory --max-concurrent-tasks 5
 
 ``schedules``
 ~~~~~~~~~~~~~
@@ -134,7 +134,7 @@ The `run` command supports two execution modes:
 
 **Example**:
 ```sh
-pgq run my_module.my_factory --mode drain
+pgq run my_module:my_factory --mode drain
 ```
 
 Use **continuous** for long-running workers and **drain** for batch processing.
