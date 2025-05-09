@@ -10,10 +10,10 @@ from pgqueuer import db
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import QueueExecutionMode
-from pgqueuer.wait_for_completion import CompletionWatcher
+from pgqueuer.completion import CompletionWatcher
 
 
-async def test_wait_for_completion_successful(apgdriver: db.Driver) -> None:
+async def test_completion_successful(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
 
     @qm.entrypoint("fetch")
@@ -30,7 +30,7 @@ async def test_wait_for_completion_successful(apgdriver: db.Driver) -> None:
     assert all(w.result() == "successful" for w in waiters)
 
 
-async def test_wait_for_completion_already_successful(apgdriver: db.Driver) -> None:
+async def test_completion_already_successful(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
 
     @qm.entrypoint("fetch")
@@ -47,7 +47,7 @@ async def test_wait_for_completion_already_successful(apgdriver: db.Driver) -> N
     assert all(w.result() == "successful" for w in waiters)
 
 
-async def test_wait_for_completion_exception(apgdriver: db.Driver) -> None:
+async def test_completion_exception(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
 
     @qm.entrypoint("fetch")
@@ -65,7 +65,7 @@ async def test_wait_for_completion_exception(apgdriver: db.Driver) -> None:
     assert all(w.result() == "exception" for w in waiters)
 
 
-async def test_wait_for_completion_canceled(apgdriver: db.Driver) -> None:
+async def test_for_completion_canceled(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
 
     N = 25
@@ -79,7 +79,7 @@ async def test_wait_for_completion_canceled(apgdriver: db.Driver) -> None:
     assert all(w.result() == "canceled" for w in waiters)
 
 
-async def test_wait_for_completion_deleted(apgdriver: db.Driver) -> None:
+async def test_completion_deleted(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
 
     N = 25
@@ -108,7 +108,7 @@ async def test_wait_for_completion_deleted(apgdriver: db.Driver) -> None:
 
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
-async def test_wait_for_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
+async def test_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
     assert CompletionWatcher(apgdriver)._is_terminal(status)  # type: ignore
 
 

@@ -360,7 +360,7 @@ The automatic heartbeat mechanism ensures active jobs are monitored:
 #### Basic usage
 
 ```python
-from pgqueuer.wait_for_completion import CompletionWatcher
+from pgqueuer.completion import CompletionWatcher
 
 async with CompletionWatcher(driver) as watcher:      # uses defaults
     status = await watcher.wait_for(job_id)           # "successful", "exception", …
@@ -370,7 +370,7 @@ async with CompletionWatcher(driver) as watcher:      # uses defaults
 
 ```python
 from asyncio import gather
-from pgqueuer.wait_for_completion import CompletionWatcher
+from pgqueuer.completion import CompletionWatcher
 
 image_ids   = await qm.queries.enqueue(["render_img"]   * 20, [b"..."] * 20, [0] * 20)
 report_ids  = await qm.queries.enqueue(["generate_pdf"] * 10, [b"..."] * 10, [0] * 10)
@@ -398,7 +398,7 @@ import asyncio
 from datetime import timedelta
 
 from pgqueuer import db, models
-from pgqueuer.wait_for_completion import CompletionWatcher
+from pgqueuer.completion import CompletionWatcher
 
 
 async def wait_for_all(
