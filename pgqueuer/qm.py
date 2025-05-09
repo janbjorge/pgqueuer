@@ -420,6 +420,18 @@ class QueueManager:
                     f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
                 )
 
+        for table, index in (
+            (
+                self.queries.qbe.settings.queue_table_log,
+                f"{self.queries.qbe.settings.queue_table_log}_job_id_status",
+            ),
+        ):
+            if not (await self.queries.table_has_index(table, index)):
+                raise RuntimeError(
+                    f"The required index '{index}' is missing in the '{table}' table. "
+                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+                )
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),

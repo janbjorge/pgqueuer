@@ -164,6 +164,22 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def table_has_index(self, table: str, index: str) -> bool:
+        """
+        Check if the column exists in table.
+
+        Returns:
+            bool: True if the column exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qbe.build_table_has_index_query(),
+            table,
+            index,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
         rows = await self.driver.fetch(self.qbe.build_user_types_query())
@@ -580,6 +596,15 @@ class Queries:
         return [
             models.Log.model_validate(x)
             for x in await self.driver.fetch(self.qbq.build_fetch_log_query())
+        ]
+
+    async def job_status(
+        self,
+        ids: list[models.JobId],
+    ) -> list[tuple[models.JobId, models.JOB_STATUS]]:
+        return [
+            (row["job_id"], row["status"])
+            for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
 

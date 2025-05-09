@@ -264,6 +264,7 @@ class QueryBuilderEnvironment:
     CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
     CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
     CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
+    CREATE INDEX {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);
 
     CREATE {durability_policy.statistics_table} TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
@@ -450,6 +451,7 @@ class QueryBuilderEnvironment:
         yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL;"  # noqa: E501
         yield f"CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -465,6 +467,23 @@ class QueryBuilderEnvironment:
             AND table_name = $1
             AND column_name = $2
         );"""
+
+    def build_table_has_index_query(self) -> str:
+        """
+        A query to check if a specific index exists in a table.
+
+        Returns:
+            str: The SQL query string to check for a index's existence.
+        """
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_indexes
+            WHERE
+                    tablename  = $1
+                AND indexname  = $2
+                AND schemaname = current_schema()
+        );
+        """
 
     def build_has_table_query(self) -> str:
         """
@@ -907,6 +926,13 @@ class QueryQueueBuilder:
         ) DO UPDATE SET
             count = {self.settings.statistics_table}.count + EXCLUDED.count
         """  # noqa
+
+    def build_job_status_query(self) -> str:
+        return f"""SELECT DISTINCT ON (job_id) job_id, status
+        FROM   {self.settings.queue_table_log}
+        WHERE  job_id = ANY($1)
+        ORDER  BY job_id, created DESC, id DESC;
+        """
 
 
 @dataclasses.dataclass
