@@ -7,10 +7,10 @@ from datetime import timedelta
 import pytest
 
 from pgqueuer import db
+from pgqueuer.completion import CompletionWatcher
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import QueueExecutionMode
-from pgqueuer.completion import CompletionWatcher
 
 
 async def test_completion_successful(apgdriver: db.Driver) -> None:

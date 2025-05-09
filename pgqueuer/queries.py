@@ -164,6 +164,22 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def table_has_index(self, table: str, index: str) -> bool:
+        """
+        Check if the column exists in table.
+
+        Returns:
+            bool: True if the column exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qbe.build_table_has_index_query(),
+            table,
+            index,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
         rows = await self.driver.fetch(self.qbe.build_user_types_query())

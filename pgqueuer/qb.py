@@ -468,6 +468,23 @@ class QueryBuilderEnvironment:
             AND column_name = $2
         );"""
 
+    def build_table_has_index_query(self) -> str:
+        """
+        A query to check if a specific index exists in a table.
+
+        Returns:
+            str: The SQL query string to check for a index's existence.
+        """
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_indexes
+            WHERE
+                    tablename  = $1
+                AND indexname  = $2
+                AND schemaname = current_schema()
+        );
+        """
+
     def build_has_table_query(self) -> str:
         """
         A query to check if a specific table exists in a table.
