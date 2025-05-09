@@ -65,9 +65,18 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
         logconfig.logger.info("Signal %d received, shutting down.", signum)
         shutdown.set()
 
+    # Adding signal handlers ensures the application can gracefully
+    # handle shutdown signals (SIGINT, SIGTERM).The try/except block is
+    # necessary because some platforms, like Windows, do not support adding async signal handlers.
     loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
-    loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
+    try:
+        loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
+        loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
+    except NotImplementedError:
+        logconfig.logger.warning(
+            "Async signal handlers are not supported on this platform; "
+            "KeyboardInterrupt will still stop the worker."
+        )
 
 
 async def runit(
