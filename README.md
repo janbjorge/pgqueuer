@@ -126,6 +126,13 @@ Example output:
 +---------------------------+-------+------------+--------------------------+------------+----------+
 ```
 
+## Supported Python Versions
+
+We follow the [Scientific Python SPEC 0](https://scientific-python.org/specs/spec-0000/) policy of dropping a Python minor version three years after its initial releas.
+
+- **Current minimum**: Python 3.11
+
+
 ## Why Choose PGQueuer?
 
 - **Built for Scale**: Handles thousands of jobs per second, making it ideal for high-throughput applications.
