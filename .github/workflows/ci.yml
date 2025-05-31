@@ -101,11 +101,14 @@ jobs:
         ports:
           - 5432:5432
         options: >-
+          --cpus=2
+          --memory=4g
+          --shm-size=512m
+          --tmpfs /var/lib/postgresql/data:rw,size=2g
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
 
     steps:
       - uses: actions/checkout@v4
@@ -123,6 +126,24 @@ jobs:
         run: |
           uv sync --all-extras --frozen
           uv run --frozen pgq install
+
+      - name: Warm-up
+        run: |
+          until pg_isready -h "$PGHOST" -U "$PGUSER" -d "$PGDATABASE"; do sleep 1; done
+          psql -U "$PGUSER" -d "$PGDATABASE" -c "CHECKPOINT"
+          pgbench -U "$PGUSER" -d "$PGDATABASE" -i -s 10   # ← scale factor is plain 10
+
+      # after the health-check says Postgres is ready
+      - name: Relax Postgres durability + JIT
+        run: |
+          psql -h $PGHOST -U $PGUSER -d $PGDATABASE <<'SQL'
+          ALTER SYSTEM SET fsync = off;
+          ALTER SYSTEM SET synchronous_commit = off;
+          ALTER SYSTEM SET full_page_writes = off;
+          ALTER SYSTEM SET wal_level = minimal;
+          ALTER SYSTEM SET jit = off;
+          ALTER SYSTEM SET max_parallel_workers = 0;
+          SELECT pg_reload_conf();
 
       - name: Set ISO Timestamp
         id: timestamp
