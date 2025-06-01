@@ -508,6 +508,7 @@ class QueueManager:
                 on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
             )
 
+            tcnt = 0
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
                     await rpsbuff.add(job.entrypoint)
@@ -519,6 +520,11 @@ class QueueManager:
 
                     if self.shutdown.is_set():
                         break
+
+                    tcnt += 1
+                    if tcnt > 25_000:
+                        await asyncio.sleep(0.1)
+                        tcnt = 0
 
                 # Run until the queue is empty and then shutdown,
                 # if max_concurrent_tasks is low, we could exit early due to
