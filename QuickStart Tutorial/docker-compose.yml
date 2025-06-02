@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: pgqueuer
+      POSTGRES_USER: pguser
+      POSTGRES_PASSWORD: pgpass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pguser -d pgqueuer"]
+
+volumes:
+  postgres_data:
