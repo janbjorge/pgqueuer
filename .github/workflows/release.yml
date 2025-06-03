@@ -19,12 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Ensures tags are also fetched
+          fetch-depth: 0  # Ensures tags are also fetched
 
-      - name: Set up Python 3.11.
+      - name: Set up Python 3.10.
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
       - name: Install release dependencies.
         run: python3 -m pip install build twine setuptools_scm
