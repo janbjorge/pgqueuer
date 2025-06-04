@@ -153,7 +153,10 @@ class AsyncpgDriver(Driver):
 
     This driver uses an AsyncPG connection to perform asynchronous database operations
     such as fetching records, executing queries, and listening for notifications.
-    It ensures thread safety using an asyncio.Lock.
+    It ensures thread safety using an asyncio.Lock. The driver does not close the
+    provided connection; callers should manage the connection lifecycle
+    themselves by closing it manually or using the connection as a context
+    manager.
     """
 
     def __init__(
