@@ -215,7 +215,9 @@ class AsyncpgPoolDriver(Driver):
 
     This class manages asynchronous database operations using a connection pool.
     It ensures thread safety through query locking and supports PostgreSQL LISTEN/NOTIFY
-    functionality with dedicated listeners.
+    functionality with dedicated listeners. The driver does not close the provided
+    pool; callers are responsible for managing the pool lifecycle by closing it
+    manually or using the pool as a context manager.
     """
 
     def __init__(
@@ -317,6 +319,14 @@ def _named_parameter(args: tuple) -> dict[str, Any]:
 
 
 class PsycopgDriver(Driver):
+    """Psycopg implementation of the :class:`Driver` protocol.
+
+    This driver operates on an existing ``psycopg.AsyncConnection`` instance to
+    execute queries and listen for notifications. The driver itself does not
+    close the provided connection; callers should close it manually or manage it
+    with an async context manager.
+    """
+
     def __init__(
         self,
         connection: psycopg.AsyncConnection,
@@ -432,6 +442,13 @@ class SyncDriver(Protocol):
 
 
 class SyncPsycopgDriver(SyncDriver):
+    """Synchronous psycopg implementation of the :class:`SyncDriver` protocol.
+
+    The driver works with an existing ``psycopg.Connection`` instance. It does
+    not close the provided connection; callers must handle the connection
+    lifecycle themselves.
+    """
+
     def __init__(
         self,
         connection: psycopg.Connection,
