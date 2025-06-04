@@ -50,7 +50,6 @@ class TTLCache(Generic[T]):
         if self.value is not UNSET and now <= self.expires_at:
             return cast(T, self.value)
         if self.update_task is None or self.update_task.done():
-            self.expires_at = datetime.now() + self.ttl
             self.update_task = asyncio.create_task(self._update_value())
         await self.update_task
         return cast(T, self.value)
@@ -66,6 +65,7 @@ class TTLCache(Generic[T]):
         """
         async with self.lock:
             self.value = await self.on_expired()
+            self.expires_at = datetime.now() + self.ttl
 
     @classmethod
     def create(cls, ttl: timedelta, on_expired: Callable[[], Awaitable[T]]) -> TTLCache[T]:
