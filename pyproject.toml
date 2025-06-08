@@ -17,7 +17,7 @@ description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient 
 authors = [{name = "JeyBee"}]
 license = {text = "MIT License"}
 dynamic = ["version"]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 readme = "README.md"
 
 classifiers = [
@@ -28,6 +28,7 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -119,7 +120,7 @@ exclude = "^(build)"
 extra_checks = true
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
-python_version = "3.11"
+python_version = "3.10"
 strict_equality = true
 warn_redundant_casts = true
 warn_unused_configs = true
