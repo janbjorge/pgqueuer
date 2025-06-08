@@ -132,6 +132,10 @@ Example output:
 - **PostgreSQL Native**: Utilizes advanced PostgreSQL features for robust job handling.
 - **Flexible Concurrency**: Offers rate and concurrency limiting to cater to different use-cases, from bursty workloads to critical resource-bound tasks.
 
+## Comparison with Celery
+
+If you're coming from [Celery](https://docs.celeryq.dev/), see the [PGQueuer vs Celery](docs/celery-comparison.md) document for a quick overview of the main differences and when PGQueuer might be the better fit.
+
 ## License
 
 PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
