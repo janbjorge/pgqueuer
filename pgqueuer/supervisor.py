@@ -134,7 +134,7 @@ async def runit(
 
 
 async def run_manager(
-    mananger: Manager,
+    manager: Manager,
     dequeue_timeout: timedelta,
     batch_size: int,
     mode: types.QueueExecutionMode,
@@ -145,26 +145,26 @@ async def run_manager(
     Run a queue management instance.
 
     Args:
-        instance: The instance to run (QueueManager, SchedulerManager, or PgQueuer).
+        manager: The instance to run (QueueManager, SchedulerManager, or PgQueuer).
         dequeue_timeout: Timeout duration for dequeuing jobs.
         batch_size: Number of jobs to process per batch.
 
     Raises:
         NotImplementedError: If the instance type is unsupported.
     """
-    logconfig.logger.debug("Running: %s", type(mananger).__name__)
-    if isinstance(mananger, qm.QueueManager):
-        await mananger.run(
+    logconfig.logger.debug("Running: %s", type(manager).__name__)
+    if isinstance(manager, qm.QueueManager):
+        await manager.run(
             dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
         )
-    elif isinstance(mananger, sm.SchedulerManager):
-        await mananger.run()
-    elif isinstance(mananger, applications.PgQueuer):
-        await mananger.run(
+    elif isinstance(manager, sm.SchedulerManager):
+        await manager.run()
+    elif isinstance(manager, applications.PgQueuer):
+        await manager.run(
             dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
             mode=mode,
@@ -172,7 +172,7 @@ async def run_manager(
             shutdown_on_listener_failure=shutdown_on_listener_failure,
         )
     else:
-        raise NotImplementedError(f"Unsupported instance type: {type(mananger)}")
+        raise NotImplementedError(f"Unsupported instance type: {type(manager)}")
 
 
 async def await_shutdown_or_timeout(
@@ -180,20 +180,17 @@ async def await_shutdown_or_timeout(
     restart_delay: timedelta,
 ) -> None:
     """
-    Wait for a shutdown event or timeout after an exception.
+    Wait for shutdown or until ``restart_delay`` elapses.
 
     Args:
         shutdown: Event indicating shutdown.
         restart_delay: Delay duration before restarting.
-        exc: The exception that triggered the wait.
     """
 
     logconfig.logger.info("Waiting %r before restarting.", restart_delay)
 
     with suppress(TimeoutError, asyncio.TimeoutError):
-        await asyncio.wait_for(
-            asyncio.create_task(shutdown.wait()), timeout=restart_delay.total_seconds()
-        )
+        await asyncio.wait_for(shutdown.wait(), timeout=restart_delay.total_seconds())
 
     if not shutdown.is_set():
         logconfig.logger.info("Attempting to restart...")
