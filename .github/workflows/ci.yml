@@ -43,6 +43,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
           --tmpfs /var/lib/postgresql/data:rw
+          -c max_wal_size=2GB
+          -c checkpoint_timeout=30min
+          -c wal_buffers=16MB
+          -c synchronous_commit=off
 
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +107,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
           --tmpfs /var/lib/postgresql/data:rw
+          -c max_wal_size=2GB
+          -c checkpoint_timeout=30min
+          -c wal_buffers=16MB
+          -c synchronous_commit=off
 
     steps:
       - uses: actions/checkout@v4
@@ -241,6 +249,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
           --tmpfs /var/lib/postgresql/data:rw
+          -c max_wal_size=2GB
+          -c checkpoint_timeout=30min
+          -c wal_buffers=16MB
+          -c synchronous_commit=off
 
     steps:
       - uses: actions/checkout@v4
@@ -288,6 +300,10 @@ jobs:
           --health-timeout 5s
           --health-retries 5
           --tmpfs /var/lib/postgresql/data:rw
+          -c max_wal_size=2GB
+          -c checkpoint_timeout=30min
+          -c wal_buffers=16MB
+          -c synchronous_commit=off
 
     steps:
       - uses: actions/checkout@v4
