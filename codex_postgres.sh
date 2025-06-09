@@ -29,6 +29,27 @@ CREATE DATABASE $pg_db OWNER $pg_user;
 ALTER USER $pg_user CREATEDB;
 EOF
 
+echo "Configuring PostgreSQL to accept connections from any host..."
+
+# Update postgresql.conf to listen on all IP addresses
+sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = '*'/" /etc/postgresql/*/main/postgresql.conf
+
+# Update pg_hba.conf to allow all IP connections
+echo "host all all 0.0.0.0/0 trust" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+echo "host all all ::/0 trust" | sudo tee -a /etc/postgresql/*/main/pg_hba.conf
+
+echo "Restarting PostgreSQL service to apply changes..."
+sudo service postgresql restart
+
+# Install PGQueuer schema if the pgq command is available
+if command -v pgq > /dev/null 2>&1; then
+    echo "Installing PGQueuer schema..."
+    PGUSER="$pg_user" PGDATABASE="$pg_db" PGPASSWORD="$pg_password" \
+    PGHOST=localhost PGPORT=5432 pgq install || true
+else
+    echo "pgq command not found. Install PGQueuer and run 'pgq install' manually."
+fi
+
 echo "PostgreSQL setup is complete."
 echo "User '$pg_user' and database '$pg_db' have been created."
 echo "You can now connect to the database using the following environment variables:"
