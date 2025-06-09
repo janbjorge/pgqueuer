@@ -446,3 +446,29 @@ async def wait_for_first(
 
     return next(iter(done)).result()
 ```
+
+### Notification Reliability
+
+To maximize reliability without relying on heavy polling:
+
+1. **Listener Health Check** – The `QueueManager` performs periodic
+   health checks on the `LISTEN/NOTIFY` channel. Enable
+   `--shutdown-on-listener-failure` so the manager stops if the
+   listener becomes unhealthy. An external supervisor can then restart
+   it to recover.
+
+2. **Disable the refresh poll** – `CompletionWatcher` issues a safety
+   query every few seconds by default. Set `refresh_interval=None` to
+   rely solely on notifications when your channel is stable.
+
+   ```python
+   async with CompletionWatcher(driver, refresh_interval=None) as w:
+       status = await w.wait_for(job_id)
+   ```
+
+3. **Adjust debounce and heartbeat** – Tune `debounce` to combine bursts
+   of notifications and rely on the automatic heartbeat to detect
+   stalled jobs.
+
+If notifications remain unreliable, consider integrating an external
+message broker such as RabbitMQ or Kafka for guaranteed delivery.
