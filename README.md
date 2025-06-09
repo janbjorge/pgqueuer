@@ -132,6 +132,13 @@ Example output:
 - **PostgreSQL Native**: Utilizes advanced PostgreSQL features for robust job handling.
 - **Flexible Concurrency**: Offers rate and concurrency limiting to cater to different use-cases, from bursty workloads to critical resource-bound tasks.
 
+### Improving Notification Reliability
+
+Use ``--shutdown-on-listener-failure`` so a failing listener triggers a restart.
+To disable the periodic status poll,
+pass ``refresh_interval=None`` to ``CompletionWatcher`` when your notification
+channel is stable.
+
 ## License
 
 PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
