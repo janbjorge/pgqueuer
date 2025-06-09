@@ -8,11 +8,18 @@ consumers up to date.
 
 The diagram below illustrates the main components involved in job processing.
 
-.. figure:: images/pgqueuer_component.svg
-   :alt: Producer sends jobs to PostgreSQL which notifies the consumer
-   :width: 400
+```mermaid
+flowchart LR
+    P[Producer]
+    DB[PostgreSQL Broker]
+    R[Entrypoint Router]
+    C[Consumer]
 
-   Producer to consumer flow
+    P -- enqueue job --> DB
+    DB -- NOTIFY event --> R
+    R -- dispatch job --> C
+    C -- update status --> DB
+```
 
 ## Sequence Diagram
 
