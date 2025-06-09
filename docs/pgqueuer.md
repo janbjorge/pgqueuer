@@ -465,10 +465,3 @@ To maximize reliability without relying on heavy polling:
    async with CompletionWatcher(driver, refresh_interval=None) as w:
        status = await w.wait_for(job_id)
    ```
-
-3. **Adjust debounce and heartbeat** – Tune `debounce` to combine bursts
-   of notifications and rely on the automatic heartbeat to detect
-   stalled jobs.
-
-If notifications remain unreliable, consider integrating an external
-message broker such as RabbitMQ or Kafka for guaranteed delivery.
