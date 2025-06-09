@@ -53,3 +53,8 @@ synchronous_commit = off
 This provides a throughput boost at the cost of a small window where recent jobs may be lost if the database crashes.
 
 These recommendations are starting points—benchmark with your workload to find the best values. Well-tuned WAL parameters combined with batching and housekeeping can yield substantial improvements in throughput.
+
+## Example Configurations
+
+The example `docker-compose.yml` and the `ci.yml` workflow start PostgreSQL with these tuning flags.
+This keeps WAL settings consistent in local development and CI.
