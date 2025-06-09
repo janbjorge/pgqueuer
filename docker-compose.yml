@@ -10,6 +10,16 @@ services:
       - "5432:5432"
     tmpfs:
       - /var/lib/pg/data
+    command:
+      - postgres
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - checkpoint_timeout=30min
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - synchronous_commit=off
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pgquser -d pgqdb || exit 1"]
       interval: 250ms
