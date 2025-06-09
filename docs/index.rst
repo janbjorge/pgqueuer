@@ -60,6 +60,7 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    cli
    database_initialization
    pgqueuer
+   architecture
    driver
    dashboard
    development
