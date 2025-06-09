@@ -21,6 +21,7 @@ PGQueuer is a minimalist, high-performance job queue library for Python, leverag
 - **⏳ Graceful Shutdowns**: Built-in signal handling ensures safe job processing shutdown without data loss.
 - **⌛ Recurring Job Scheduling**: Register and manage recurring tasks using cron-like expressions for periodic execution.
 - **⚙️ WAL Tuning Guide**: See [PostgreSQL Tuning](docs/postgres-tuning.md) for tips on reducing write overhead and maximizing throughput.
+- **💾 Unlogged Tables**: For high-speed, disposable queues install with `--durability volatile` to bypass WAL completely.
 
 ## Installation
 
