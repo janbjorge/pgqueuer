@@ -135,9 +135,14 @@ Example output:
 ### Improving Notification Reliability
 
 Use ``--shutdown-on-listener-failure`` so a failing listener triggers a restart.
-To disable the periodic status poll,
-pass ``refresh_interval=None`` to ``CompletionWatcher`` when your notification
-channel is stable.
+To disable the periodic status poll, pass ``refresh_interval=None`` to
+``CompletionWatcher`` when your notification channel is stable.
+
+### Windows Support
+
+PGQueuer is validated on Windows through GitHub Actions. The worker runs with the
+default asyncio event loop and shuts down gracefully with ``Ctrl+C`` even when
+signal handlers cannot be registered.
 
 ## License
 

@@ -4,15 +4,24 @@ from typing import AsyncGenerator
 import asyncpg
 import psycopg
 import pytest
-import uvloop
+
+try:  # pragma: no cover - uvloop not installed on Windows
+    import uvloop
+except ModuleNotFoundError:
+    uvloop = None  # type: ignore[assignment]
 
 from pgqueuer.db import AsyncpgDriver, SyncPsycopgDriver, dsn
 from pgqueuer.queries import Queries
 
 
 @pytest.fixture(scope="session", autouse=True)
-def event_loop_policy() -> uvloop.EventLoopPolicy:
-    return uvloop.EventLoopPolicy()
+def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
+    """Provide uvloop if available; fallback to default policy."""
+
+    if uvloop is not None:
+        return uvloop.EventLoopPolicy()
+
+    return asyncio.DefaultEventLoopPolicy()
 
 
 async def clear_all(driver: AsyncpgDriver) -> None:
