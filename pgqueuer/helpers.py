@@ -142,10 +142,7 @@ def retry_timer_buffer_timeout(
     Returns:
         timedelta: The smallest valid timedelta from the list or `_default` if none found.
     """
-    try:
-        return min(dt for dt in dts if dt > _t0)
-    except ValueError:
-        return _default
+    return min((dt for dt in dts if dt > _t0), default=_default)
 
 
 def timeout_with_jitter(
@@ -153,16 +150,14 @@ def timeout_with_jitter(
     jitter_span: tuple[float, float] = (0.8, 1.2),
 ) -> timedelta:
     """
-    Calculate a delay with a jitter applied.
+    Calculate a jittered delay based on ``timeout``.
 
     Args:
-        base_timeout (timedelta): The base timeout as a timedelta object.
-        jitter_span (tuple[float, float]): A tuple representing the lower and upper
-            bounds of the jitter range.
+        timeout: The base timeout value.
+        jitter_span: Range from which the random jitter factor is chosen.
 
     Returns:
-        float: The calculated delay with jitter applied, in seconds.
-        The jitter will be in the specified range of the base delay.
+        timedelta: The timeout scaled by the jitter factor.
     """
     return timeout * random.uniform(*jitter_span)
 

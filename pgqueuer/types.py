@@ -12,7 +12,7 @@ class QueueExecutionMode(Enum):
 
 ###### Events ######
 Channel = NewType("Channel", str)
-PGChannel = Channel  # TODO: Depricate
+PGChannel = Channel  # TODO: Deprecate
 OPERATIONS = Literal["insert", "update", "delete", "truncate"]
 EVENT_TYPES = Literal[
     "table_changed_event",

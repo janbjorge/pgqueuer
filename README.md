@@ -126,18 +126,18 @@ Example output:
 +---------------------------+-------+------------+--------------------------+------------+----------+
 ```
 
-## Supported Python Versions
-
-We follow the [Scientific Python SPEC 0](https://scientific-python.org/specs/spec-0000/) policy of dropping a Python minor version three years after its initial releas.
-
-- **Current minimum**: Python 3.11
-
-
 ## Why Choose PGQueuer?
 
 - **Built for Scale**: Handles thousands of jobs per second, making it ideal for high-throughput applications.
 - **PostgreSQL Native**: Utilizes advanced PostgreSQL features for robust job handling.
 - **Flexible Concurrency**: Offers rate and concurrency limiting to cater to different use-cases, from bursty workloads to critical resource-bound tasks.
+
+### Improving Notification Reliability
+
+Use ``--shutdown-on-listener-failure`` so a failing listener triggers a restart.
+To disable the periodic status poll,
+pass ``refresh_interval=None`` to ``CompletionWatcher`` when your notification
+channel is stable.
 
 ## License
 
