@@ -15,9 +15,8 @@ import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
+import anyio
 from typing_extensions import Self
-
-from . import tm
 
 if TYPE_CHECKING:
     import asyncpg
@@ -119,14 +118,6 @@ class Driver(Protocol):
         """
         raise NotImplementedError
 
-    @property
-    def tm(self) -> tm.TaskManager:
-        """
-        TaskManager instance for managing background tasks.
-
-        Provides a way to manage and await background tasks associated with the driver.
-        """
-        raise NotImplementedError
 
     async def __aenter__(self) -> Self:
         """
@@ -199,10 +190,6 @@ class AsyncpgDriver(Driver):
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
 
-    @property
-    def tm(self) -> tm.TaskManager:
-        return tm.TaskManager()
-
     async def __aenter__(self) -> Self:
         return self
 
@@ -269,10 +256,6 @@ class AsyncpgPoolDriver(Driver):
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
 
-    @property
-    def tm(self) -> tm.TaskManager:
-        return tm.TaskManager()
-
     async def __aenter__(self) -> Self:
         return self
 
@@ -336,7 +319,8 @@ class PsycopgDriver(Driver):
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._lock = asyncio.Lock()
-        self._tm = tm.TaskManager()
+        self._tg: anyio.abc.TaskGroup | None = None
+        self._tg_cm: anyio.abc.TaskGroup | None = None
         self._notify_stop_after = notify_stop_after
         self._notify_timeout = notify_timeout
 
@@ -351,9 +335,6 @@ class PsycopgDriver(Driver):
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
 
-    @property
-    def tm(self) -> tm.TaskManager:
-        return self._tm
 
     async def fetch(
         self,
@@ -400,19 +381,22 @@ class PsycopgDriver(Driver):
                             callback(note.payload)
                     await asyncio.sleep(self._notify_timeout.total_seconds())
 
-            self._tm.add(
-                asyncio.create_task(
-                    notify_handler(),
-                    name=f"notify_psycopg_handler_{channel}",
-                )
+            assert self._tg is not None
+            self._tg.start_soon(
+                notify_handler,
+                name=f"notify_psycopg_handler_{channel}",
             )
 
     async def __aenter__(self) -> Self:
+        tg_cm = anyio.create_task_group()
+        self._tg = await tg_cm.__aenter__()
+        self._tg_cm = tg_cm
         return self
 
     async def __aexit__(self, *_: object) -> None:
         self.shutdown.set()
-        await self.tm.gather_tasks()
+        if self._tg_cm is not None:
+            await self._tg_cm.__aexit__(None, None, None)
 
 
 class SyncDriver(Protocol):

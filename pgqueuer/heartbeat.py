@@ -36,7 +36,8 @@ class Heartbeat:
             Heartbeat: The Heartbeat instance itself.
         """
         if self.interval > timedelta(seconds=0):
-            self.buffer.tm.add(asyncio.create_task(self.send_heartbeat()))
+            assert self.buffer.task_group is not None
+            self.buffer.task_group.start_soon(self.send_heartbeat)
         return self
 
     async def __aexit__(self, *_: object) -> None:

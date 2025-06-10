@@ -7,7 +7,9 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from itertools import chain
 
-from . import db, models, qb, queries, tm
+import anyio
+
+from . import db, models, qb, queries
 
 
 @dataclass
@@ -99,8 +101,13 @@ class CompletionWatcher:
         init=False,
         repr=False,
     )
-    task_manager: tm.TaskManager = field(
-        default_factory=tm.TaskManager,
+    task_group: anyio.abc.TaskGroup | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
+    _tg_cm: anyio.abc.TaskGroup | None = field(
+        default=None,
         init=False,
         repr=False,
     )
@@ -114,8 +121,8 @@ class CompletionWatcher:
         init=False,
         repr=False,
     )
-    debounce_task: asyncio.Task[None] | None = field(
-        default=None,
+    debounce_active: bool = field(
+        default=False,
         init=False,
         repr=False,
     )
@@ -133,7 +140,9 @@ class CompletionWatcher:
         * register LISTEN/NOTIFY callback;
         * schedule an immediate status probe.
         """
-        self.task_manager.add(asyncio.create_task(self._poll_for_change()))
+        self._tg_cm = anyio.create_task_group()
+        self.task_group = await self._tg_cm.__aenter__()
+        self.task_group.start_soon(self._poll_for_change)
         await self.driver.add_listener(qb.DBSettings().channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
@@ -149,7 +158,8 @@ class CompletionWatcher:
         self.shutdown.set()
         self._schedule_refresh_waiters()
         await asyncio.gather(*chain.from_iterable(self.waiters.values()))
-        await self.task_manager.gather_tasks()
+        if self._tg_cm is not None:
+            await self._tg_cm.__aexit__(None, None, None)
         return False
 
     # ───────────────────────── public API ────────────────────────────
@@ -174,10 +184,11 @@ class CompletionWatcher:
         (Re)arm the debounce timer so that `_on_change` is executed at most once
         in every ``debounce`` window irrespective of how many triggers arrive.
         """
-        if self.debounce_task and not self.debounce_task.done():
-            return  # timer already running
-        self.debounce_task = asyncio.create_task(self._debounced())
-        self.task_manager.add(self.debounce_task)
+        if self.debounce_active:
+            return
+        assert self.task_group is not None
+        self.debounce_active = True
+        self.task_group.start_soon(self._debounced)
 
     async def _debounced(self) -> None:
         """Sleep for the debounce interval, then run the consolidated check."""
@@ -188,7 +199,7 @@ class CompletionWatcher:
                     timeout=self.debounce.total_seconds(),
                 )
         finally:
-            self.debounce_task = None
+            self.debounce_active = False
         await self._refresh_waiters()
 
     # ────────────────── event handlers & polling ─────────────────────

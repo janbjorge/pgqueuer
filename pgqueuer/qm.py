@@ -34,7 +34,6 @@ from . import (
     models,
     qb,
     queries,
-    tm,
     types,
 )
 
@@ -484,7 +483,7 @@ class QueueManager:
                 max_size=batch_size,
                 callback=self.update_rps_stats,
             ) as rpsbuff,
-            tm.TaskManager() as task_manager,
+            anyio.create_task_group() as task_group,
             self.connection,
         ):
             periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
@@ -512,7 +511,7 @@ class QueueManager:
                 async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
                     await rpsbuff.add(job.entrypoint)
                     self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
-                    task_manager.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
+                    task_group.start_soon(self._dispatch, job, jbuff, hbuff)
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()

@@ -145,3 +145,5 @@ PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
 
 ---
 Ready to supercharge your workflows? Install PGQueuer today and take your job management to the next level!
+
+**Note**: PGQueuer now uses `anyio.TaskGroup` for background task management, replacing the previous custom TaskManager.

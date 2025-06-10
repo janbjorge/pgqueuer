@@ -22,9 +22,10 @@ from typing import (
     TypeVar,
 )
 
+import anyio
 from typing_extensions import Self
 
-from . import helpers, logconfig, models, tm
+from . import helpers, logconfig, models
 
 T = TypeVar("T")
 
@@ -56,8 +57,8 @@ class TimedOverflowBuffer(Generic[T]):
             operations, such as during shutdown.
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
         lock (asyncio.Lock): A lock to prevent concurrent flush operations.
-        tm (tm.TaskManager): A task manager for managing background tasks associated
-            with the buffer's operations.
+        task_group (anyio.abc.TaskGroup | None): Task group managing background
+            tasks for buffer operations.
     """
 
     max_size: int
@@ -90,15 +91,22 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Lock,
     )
-    tm: tm.TaskManager = dataclasses.field(
+    _tg_cm: anyio.abc.TaskGroup | None = dataclasses.field(
         init=False,
-        default_factory=tm.TaskManager,
+        default=None,
+        repr=False,
+    )
+    task_group: anyio.abc.TaskGroup | None = dataclasses.field(
+        init=False,
+        default=None,
+        repr=False,
     )
 
     async def periodic_flush(self) -> None:
         while not self.shutdown.is_set():
             if not self.lock.locked() and self.events.qsize() > 0:
-                self.tm.add(asyncio.create_task(self.flush()))
+                assert self.task_group is not None
+                self.task_group.start_soon(self.flush)
 
             # await asyncio.sleep(helpers.timeout_with_jitter(self.timeout).total_seconds())
             with suppress(asyncio.TimeoutError, TimeoutError):
@@ -122,7 +130,8 @@ class TimedOverflowBuffer(Generic[T]):
         await self.events.put(item)
 
         if self.events.qsize() >= self.max_size and not self.lock.locked():
-            self.tm.add(asyncio.create_task(self.flush()))
+            assert self.task_group is not None
+            self.task_group.start_soon(self.flush)
 
     async def pop_until(
         self,
@@ -196,7 +205,9 @@ class TimedOverflowBuffer(Generic[T]):
         Returns:
             TimedOverflowBuffer: The TimedOverflowBuffer instance itself.
         """
-        self.tm.add(asyncio.create_task(self.periodic_flush()))
+        self._tg_cm = anyio.create_task_group()
+        self.task_group = await self._tg_cm.__aenter__()
+        self.task_group.start_soon(self.periodic_flush)
         return self
 
     async def __aexit__(self, *_: object) -> None:
@@ -223,7 +234,8 @@ class TimedOverflowBuffer(Generic[T]):
         """
 
         self.shutdown.set()
-        await self.tm.gather_tasks()
+        if self._tg_cm is not None:
+            await self._tg_cm.__aexit__(None, None, None)
 
         while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_delay:
             await self.flush()

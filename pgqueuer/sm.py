@@ -7,9 +7,10 @@ from contextlib import suppress
 from datetime import timedelta
 from typing import Callable
 
+import anyio
 import croniter
 
-from . import db, executors, helpers, logconfig, models, queries, tm
+from . import db, executors, helpers, logconfig, models, queries
 
 warnings.simplefilter("default", DeprecationWarning)
 
@@ -143,7 +144,7 @@ class SchedulerManager:
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 
         async with (
-            tm.TaskManager() as task_manager,
+            anyio.create_task_group() as task_group,
             self.connection,
         ):
             while not self.shutdown.is_set():
@@ -151,19 +152,16 @@ class SchedulerManager:
                     {k: v.next_in() for k, v in self.registry.items()}
                 )
                 for schedule in scheduled:
-                    task_manager.add(
-                        asyncio.create_task(
-                            self.dispatch(
-                                self.registry[
-                                    models.CronExpressionEntrypoint(
-                                        schedule.entrypoint,
-                                        schedule.expression,
-                                    )
-                                ],
-                                schedule,
-                                task_manager,
-                            ),
-                        )
+                    task_group.start_soon(
+                        self.dispatch,
+                        self.registry[
+                            models.CronExpressionEntrypoint(
+                                schedule.entrypoint,
+                                schedule.expression,
+                            )
+                        ],
+                        schedule,
+                        task_group,
                     )
 
                 leeway = timedelta(seconds=1)
@@ -183,7 +181,7 @@ class SchedulerManager:
         self,
         executor: executors.AbstractScheduleExecutor,
         schedule: models.Schedule,
-        task_manager: tm.TaskManager,
+        task_group: anyio.abc.TaskGroup,
     ) -> None:
         """
         Dispatch a scheduled job for execution.
@@ -193,8 +191,8 @@ class SchedulerManager:
                 responsible for running the job.
             schedule (models.Schedule): The schedule object containing details
                 of the job to be executed.
-            task_manager (tm.TaskManager): The task manager to manage the
-                execution tasks.
+            task_group (anyio.abc.TaskGroup): The task group managing
+                background tasks.
         """
         logconfig.logger.debug(
             "Dispatching entrypoint/expression: %s/%s",
@@ -208,7 +206,7 @@ class SchedulerManager:
                 await self.queries.update_schedule_heartbeat({schedule.id})
                 await asyncio.sleep(1)
 
-        task_manager.add(asyncio.create_task(heartbeat()))
+        task_group.start_soon(heartbeat)
 
         try:
             await executor.execute(schedule)

@@ -12,6 +12,8 @@ import dataclasses
 from datetime import timedelta
 from typing import Callable
 
+import anyio
+
 from .db import Driver
 from .executors import (
     AbstractEntrypointExecutor,
@@ -25,7 +27,6 @@ from .models import Channel
 from .qb import DBSettings
 from .qm import QueueManager
 from .sm import SchedulerManager
-from .tm import TaskManager
 from .types import QueueExecutionMode
 
 
@@ -76,21 +77,18 @@ class PgQueuer:
 
         # The task manager waits for all tasks for compile before
         # exit.
-        async with TaskManager() as tm:
+        async with anyio.create_task_group() as task_group:
             # Start queue manager
-            tm.add(
-                asyncio.create_task(
-                    self.qm.run(
-                        batch_size=batch_size,
-                        dequeue_timeout=dequeue_timeout,
-                        mode=mode,
-                        max_concurrent_tasks=max_concurrent_tasks,
-                        shutdown_on_listener_failure=shutdown_on_listener_failure,
-                    )
-                )
+            task_group.start_soon(
+                self.qm.run,
+                dequeue_timeout,
+                batch_size,
+                mode,
+                max_concurrent_tasks,
+                shutdown_on_listener_failure,
             )
             # Start scheduler manager
-            tm.add(asyncio.create_task(self.sm.run()))
+            task_group.start_soon(self.sm.run)
 
     def entrypoint(
         self,
