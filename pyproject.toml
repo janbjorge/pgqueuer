@@ -87,7 +87,8 @@ dev = [
 docs = [
     "myst-parser",
     "sphinx",
-    "sphinx-rtd-theme"
+    "sphinx-rtd-theme",
+    "sphinxcontrib-mermaid"
 ]
 
 [tool.ruff]

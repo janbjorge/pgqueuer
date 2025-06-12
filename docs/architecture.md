@@ -6,7 +6,7 @@ consumers up to date.
 
 ## Job Flow Diagram
 
-```mermaid
+```{mermaid}
 flowchart LR
     P[Producer]
     DB[(PostgreSQL)]
