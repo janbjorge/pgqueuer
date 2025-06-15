@@ -65,4 +65,5 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    dashboard
    development
    benchmark
+   celery-comparison
    prometheus-metrics-service
