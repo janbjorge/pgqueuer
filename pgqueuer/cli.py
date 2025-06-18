@@ -523,6 +523,8 @@ def optimize_autovacuum(
     dry_run: bool = typer.Option(False, help="Print SQL commands only."),
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
+    """Apply or revert recommended autovacuum settings."""
+
     qbe = qb.QueryBuilderEnvironment()
     if rollback:
         query = qbe.build_optimize_autovacuum_rollback_query()
