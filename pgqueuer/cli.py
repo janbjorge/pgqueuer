@@ -517,5 +517,27 @@ def durability(
         asyncio_run(run())
 
 
+@app.command(name="autovac", help="Optimize autovacuum settings for PGQueuer tables.")
+def optimize_autovacuum(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL commands only."),
+    rollback: bool = typer.Option(False, help="Reset to defaults instead."),
+) -> None:
+    qbe = qb.QueryBuilderEnvironment()
+    if rollback:
+        query = qbe.build_optimize_autovacuum_rollback_query()
+    else:
+        query = qbe.build_optimize_autovacuum_query()
+
+    print(query)
+
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            await q.optimize_autovacuum(rollback=rollback)
+
+    if not dry_run:
+        asyncio_run(run())
+
+
 if __name__ == "__main__":
     app(prog_name="pgqueuer")

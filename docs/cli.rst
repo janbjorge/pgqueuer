@@ -53,6 +53,22 @@ Change the durability level of existing PGQueuer tables without data loss.
 
     pgq alter-durability durable
 
+``autovac``
+~~~~~~~~~~~
+Apply recommended autovacuum settings for PGQueuer tables or roll back to defaults.
+
+- **Options**:
+  - ``--dry-run``: Print SQL commands without executing them.
+  - ``--rollback``: Reset the settings to system defaults.
+
+**Example**::
+
+    pgq autovac
+
+**Rollback Example**::
+
+    pgq autovac --rollback
+
 ``queue``
 ~~~~~~~~~
 Manually enqueue a job into the PGQueuer system.
