@@ -41,8 +41,8 @@ Apply database schema upgrades to PGQueuer.
 
     pgq upgrade --durability durable
 
-``alter-durability``
-~~~~~~~~~~~~~~~~~~~~~
+``durability``
+~~~~~~~~~~~~~~
 Change the durability level of existing PGQueuer tables without data loss.
 
 - **Arguments**:
@@ -51,7 +51,7 @@ Change the durability level of existing PGQueuer tables without data loss.
 
 **Example**::
 
-    pgq alter-durability durable
+    pgq durability durable
 
 ``autovac``
 ~~~~~~~~~~~

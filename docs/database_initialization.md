@@ -34,7 +34,7 @@ pgq install --dry-run
 
 PGQueuer tables are installed with **durable** settings by default. You can
 select a different durability level during installation or upgrade using the
-``--durability`` flag. The ``pgq alter-durability`` command also allows
+``--durability`` flag. The ``pgq durability`` command also allows
 changing the durability of existing tables without data loss. Durability levels
 range from ``volatile`` (unlogged tables for maximum speed) to ``durable``
 (fully logged tables). Refer to :doc:`cli` for a full explanation of each
