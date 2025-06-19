@@ -526,10 +526,11 @@ def optimize_autovacuum(
     """Apply or revert recommended autovacuum settings."""
 
     qbe = qb.QueryBuilderEnvironment()
-    if rollback:
-        query = qbe.build_optimize_autovacuum_rollback_query()
-    else:
-        query = qbe.build_optimize_autovacuum_query()
+    query = (
+        qbe.build_optimize_autovacuum_rollback_query()
+        if rollback
+        else qbe.build_optimize_autovacuum_query()
+    )
 
     print(query)
 
