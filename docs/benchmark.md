@@ -94,3 +94,29 @@ Enqueue Batch Size:     10
 
 - **Throughput**: `asyncpg` demonstrated significantly higher throughput compared to `psycopg`, processing jobs at nearly double the rate.
 - **Efficiency**: The asynchronous nature of `asyncpg` allows for better utilization of system resources, leading to more efficient job processing.
+
+## Drain Mode
+
+You can prefill the queue with a fixed number of jobs and measure how long it
+takes PGQueuer to process them. The following command enqueues one million jobs
+and waits until the queue is empty:
+
+```bash
+python3 tools/benchmark.py --drain 1000000
+```
+
+The elapsed time in the result reflects the drain duration.
+
+## Burst Mode
+
+To simulate bursty workloads, specify a burst size and pause between bursts.
+Each producer enqueues the given number of jobs before waiting for the pause
+interval.
+
+```bash
+python3 tools/benchmark.py --burst-size 1000 --burst-pause 2
+```
+
+This pattern helps reveal how the system behaves when load comes in waves. The
+benchmark tool uses interchangeable producer strategies, so you can easily add
+new enqueue patterns.

@@ -6,6 +6,7 @@ import os
 import random
 import signal
 import sys
+from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
+from pgqueuer.types import QueueExecutionMode
 
 app = typer.Typer()
 
@@ -95,6 +97,21 @@ class Settings(BaseModel):
         [sys.maxsize, sys.maxsize],
         help="Concurrency limit.",
     )
+    drain_jobs: int = typer.Option(
+        0,
+        help=(
+            "Prefill the queue with this many jobs and measure the time to drain. "
+            "When set, producers are disabled."
+        ),
+    )
+    burst_size: int = typer.Option(
+        0,
+        help="Number of jobs each producer enqueues per burst. 0 disables burst mode.",
+    )
+    burst_pause: float = typer.Option(
+        0.0,
+        help="Seconds to wait between bursts when burst_size > 0.",
+    )
     output_json: Path | None = typer.Option(
         None,
         help="Output JSON file for benchmark metrics.",
@@ -111,9 +128,12 @@ class Settings(BaseModel):
                     ["Enqueue Tasks", self.enqueue],
                     ["Enqueue Batch Size", self.enqueue_batch_size],
                     ["Requests Per Second", self.requests_per_second],
-                    ["Concurrency Limit", self.concurrency_limit],
-                    ["Output JSON", self.output_json or "None"],
-                ],
+                ["Concurrency Limit", self.concurrency_limit],
+                ["Drain Jobs", self.drain_jobs],
+                ["Burst Size", self.burst_size],
+                ["Burst Pause (s)", self.burst_pause],
+                ["Output JSON", self.output_json or "None"],
+            ],
                 headers=["Field", "Value"],
                 tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
                 colalign=("left", "left"),
@@ -144,6 +164,25 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
     raise NotImplementedError(driver)
 
 
+async def prefill_queue(
+    queries: Queries,
+    jobs: int,
+    batch_size: int,
+    cnt: count,
+) -> None:
+    """Enqueue ``jobs`` items before starting the benchmark."""
+
+    remaining = jobs
+    while remaining > 0:
+        n = min(batch_size, remaining)
+        await queries.enqueue(
+            ["syncfetch"] * n,
+            [f"{next(cnt)}".encode() for _ in range(n)],
+            [0] * n,
+        )
+        remaining -= n
+
+
 @dataclass
 class Consumer:
     pgq: PgQueuer
@@ -151,6 +190,7 @@ class Consumer:
     entrypoint_rps: list[float]
     concurrency_limits: list[int]
     bar: tqdm
+    mode: QueueExecutionMode
 
     async def run(self) -> None:
         async_rps, sync_rps = self.entrypoint_rps
@@ -166,16 +206,35 @@ class Consumer:
         def syncfetch(job: Job) -> None:
             self.bar.update()
 
-        await self.pgq.run(batch_size=self.batch_size)
+        await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
 
 
-@dataclass
-class Producer:
+class AbstractProducer(ABC):
+    """Base class for enqueue strategies."""
+
     shutdown: asyncio.Event
     queries: Queries
     batch_size: int
     cnt: count
 
+    def __init__(
+        self,
+        shutdown: asyncio.Event,
+        queries: Queries,
+        batch_size: int,
+        cnt: count,
+    ) -> None:
+        self.shutdown = shutdown
+        self.queries = queries
+        self.batch_size = batch_size
+        self.cnt = cnt
+
+    @abstractmethod
+    async def run(self) -> None:
+        """Run the producer until ``shutdown`` is set."""
+
+
+class ContinuousProducer(AbstractProducer):
     async def run(self) -> None:
         entrypoints = ["syncfetch", "asyncfetch"] * self.batch_size
         while not self.shutdown.is_set():
@@ -186,13 +245,64 @@ class Producer:
             )
 
 
+class BurstProducer(AbstractProducer):
+    def __init__(
+        self,
+        shutdown: asyncio.Event,
+        queries: Queries,
+        batch_size: int,
+        cnt: count,
+        burst_size: int,
+        burst_pause: float,
+    ) -> None:
+        super().__init__(shutdown, queries, batch_size, cnt)
+        self.burst_size = burst_size
+        self.burst_pause = burst_pause
+
+    async def run(self) -> None:
+        entrypoints = ["syncfetch", "asyncfetch"] * self.batch_size
+        while not self.shutdown.is_set():
+            jobs_in_burst = self.burst_size
+            while jobs_in_burst > 0 and not self.shutdown.is_set():
+                n = min(self.batch_size, jobs_in_burst)
+                await self.queries.enqueue(
+                    random.sample(entrypoints, k=n),
+                    [f"{next(self.cnt)}".encode() for _ in range(n)],
+                    [0] * n,
+                )
+                jobs_in_burst -= n
+            if self.burst_pause:
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(self.shutdown.wait(), self.burst_pause)
+
+
 async def run_enqueuers(settings: Settings, shutdown: asyncio.Event) -> None:
+    """Run producer tasks according to the configured strategy."""
+
+    if settings.drain_jobs:
+        return
+
     cnt = count()
     tasks = []
     for _ in range(settings.enqueue):
         q = await make_queries(settings.driver, dsn())
-        p = Producer(shutdown, q, settings.enqueue_batch_size, cnt)
-        tasks.append(p.run())
+        if settings.burst_size:
+            producer: AbstractProducer = BurstProducer(
+                shutdown,
+                q,
+                settings.enqueue_batch_size,
+                cnt,
+                settings.burst_size,
+                settings.burst_pause,
+            )
+        else:
+            producer = ContinuousProducer(
+                shutdown,
+                q,
+                settings.enqueue_batch_size,
+                cnt,
+            )
+        tasks.append(producer.run())
     await asyncio.gather(*tasks)
 
 
@@ -200,6 +310,7 @@ async def run_dequeuers(
     settings: Settings,
     pgqs: list[PgQueuer],
     tqdm_format_dict: dict,
+    mode: QueueExecutionMode,
 ) -> None:
     queries = [await make_queries(settings.driver, dsn()) for _ in range(settings.dequeue)]
     for q in queries:
@@ -212,6 +323,7 @@ async def run_dequeuers(
                 settings.requests_per_second,
                 settings.concurrency_limit,
                 bar,
+                mode,
             ).run()
             for pgq in pgqs
         ]
@@ -224,13 +336,25 @@ async def benchmark(settings: Settings) -> None:
     await (await make_queries(settings.driver, dsn())).clear_statistics_log()
     await (await make_queries(settings.driver, dsn())).clear_queue()
 
+    if settings.drain_jobs:
+        preq = await make_queries(settings.driver, dsn())
+        await prefill_queue(
+            preq,
+            settings.drain_jobs,
+            settings.enqueue_batch_size,
+            count(),
+        )
+
     shutdown = asyncio.Event()
     pgqs = list[PgQueuer]()
     tqdm_format_dict = dict[str, str]()
 
     async def shutdown_timer() -> None:
-        with suppress(TimeoutError, asyncio.TimeoutError):
-            await asyncio.wait_for(shutdown.wait(), settings.timer.total_seconds())
+        if settings.drain_jobs:
+            await shutdown.wait()
+        else:
+            with suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(shutdown.wait(), settings.timer.total_seconds())
         shutdown.set()
         for q in pgqs:
             q.shutdown.set()
@@ -245,8 +369,13 @@ async def benchmark(settings: Settings) -> None:
     loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
 
     await asyncio.gather(
-        run_dequeuers(settings, pgqs, tqdm_format_dict),
-        run_enqueuers(settings, shutdown),
+        run_dequeuers(
+            settings,
+            pgqs,
+            tqdm_format_dict,
+            QueueExecutionMode.drain if settings.drain_jobs else QueueExecutionMode.continuous,
+        ),
+        run_enqueuers(settings, shutdown) if not settings.drain_jobs else asyncio.sleep(0),
         shutdown_timer(),
     )
 
@@ -276,6 +405,9 @@ def main(
     enqueue_batch_size: int = typer.Option(10),
     requests_per_second: list[float] = typer.Option([float("inf"), float("inf")]),
     concurrency_limit: list[int] = typer.Option([0, 0]),
+    drain_jobs: int = typer.Option(0, "--drain"),
+    burst_size: int = typer.Option(0, "--burst-size"),
+    burst_pause: float = typer.Option(0.0, "--burst-pause"),
     output_json: Path | None = typer.Option(None),
 ) -> None:
     uvloop.run(
@@ -289,6 +421,9 @@ def main(
                 enqueue_batch_size=enqueue_batch_size,
                 requests_per_second=requests_per_second,
                 concurrency_limit=concurrency_limit,
+                drain_jobs=drain_jobs,
+                burst_size=burst_size,
+                burst_pause=burst_pause,
                 output_json=output_json,
             )
         )
