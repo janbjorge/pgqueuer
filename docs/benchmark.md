@@ -16,7 +16,7 @@ PGQueuer includes a built-in benchmarking tool to help you assess performance in
 To run a benchmark, use the following command, ensuring you have set the appropriate environment variables for your PostgreSQL credentials.
 
 ```bash
-python3 tools/benchmark.py -dq 5 -eqbs 10
+python3 tools/benchmark.py continuous -dq 5 -eqbs 10
 Settings:
 Timer:                  15.0 seconds
 Dequeue:                5
@@ -57,7 +57,7 @@ Both tests were run with the following settings to ensure a fair comparison:
 The first test used `asyncpg`, an asynchronous PostgreSQL driver, and produced the following results:
 
 ```bash
-python3 tools/benchmark.py -d apg
+python3 tools/benchmark.py continuous -d apg
 Settings:
 Timer:                  10.0 seconds
 Dequeue:                5
@@ -76,7 +76,7 @@ Enqueue Batch Size:     10
 The second test used `psycopg`, a popular PostgreSQL driver for Python, yielding the following results:
 
 ```bash
-python3 tools/benchmark.py -d psy
+python3 tools/benchmark.py continuous -d psy
 Settings:
 Timer:                  10.0 seconds
 Dequeue:                5
@@ -102,7 +102,7 @@ takes PGQueuer to process them. The following command enqueues one million jobs
 and waits until the queue is empty:
 
 ```bash
-python3 tools/benchmark.py --drain 1000000
+python3 tools/benchmark.py drain --drain 1000000
 ```
 
 The elapsed time in the result reflects the drain duration.
@@ -114,7 +114,7 @@ Each producer enqueues the given number of jobs before waiting for the pause
 interval.
 
 ```bash
-python3 tools/benchmark.py --burst-size 1000 --burst-pause 2
+python3 tools/benchmark.py burst --burst-size 1000 --burst-pause 2
 ```
 
 This pattern helps reveal how the system behaves when load comes in waves. The

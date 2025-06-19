@@ -36,6 +36,12 @@ class DriverEnum(str, Enum):
     psy = "psy"
 
 
+class StrategyEnum(str, Enum):
+    continuous = "continuous"
+    burst = "burst"
+    drain = "drain"
+
+
 class BenchmarkResult(BaseModel):
     created_at: AwareDatetime
     driver: DriverEnum
@@ -65,6 +71,10 @@ class BenchmarkResult(BaseModel):
 
 
 class Settings(BaseModel):
+    strategy: StrategyEnum = typer.Option(
+        StrategyEnum.continuous,
+        help="Producer strategy: continuous, burst, or drain.",
+    )
     driver: DriverEnum = typer.Option(
         DriverEnum.apg,
         help="Postgres driver to use.",
@@ -124,10 +134,11 @@ class Settings(BaseModel):
                     ["Driver", self.driver],
                     ["Timer (s)", self.timer.total_seconds()],
                     ["Dequeue Tasks", self.dequeue],
-                    ["Dequeue Batch Size", self.dequeue_batch_size],
-                    ["Enqueue Tasks", self.enqueue],
-                    ["Enqueue Batch Size", self.enqueue_batch_size],
-                    ["Requests Per Second", self.requests_per_second],
+                ["Dequeue Batch Size", self.dequeue_batch_size],
+                ["Enqueue Tasks", self.enqueue],
+                ["Enqueue Batch Size", self.enqueue_batch_size],
+                ["Strategy", self.strategy],
+                ["Requests Per Second", self.requests_per_second],
                 ["Concurrency Limit", self.concurrency_limit],
                 ["Drain Jobs", self.drain_jobs],
                 ["Burst Size", self.burst_size],
@@ -279,14 +290,14 @@ class BurstProducer(AbstractProducer):
 async def run_enqueuers(settings: Settings, shutdown: asyncio.Event) -> None:
     """Run producer tasks according to the configured strategy."""
 
-    if settings.drain_jobs:
+    if settings.strategy is StrategyEnum.drain:
         return
 
     cnt = count()
     tasks = []
     for _ in range(settings.enqueue):
         q = await make_queries(settings.driver, dsn())
-        if settings.burst_size:
+        if settings.strategy is StrategyEnum.burst:
             producer: AbstractProducer = BurstProducer(
                 shutdown,
                 q,
@@ -336,7 +347,7 @@ async def benchmark(settings: Settings) -> None:
     await (await make_queries(settings.driver, dsn())).clear_statistics_log()
     await (await make_queries(settings.driver, dsn())).clear_queue()
 
-    if settings.drain_jobs:
+    if settings.strategy is StrategyEnum.drain and settings.drain_jobs:
         preq = await make_queries(settings.driver, dsn())
         await prefill_queue(
             preq,
@@ -350,7 +361,7 @@ async def benchmark(settings: Settings) -> None:
     tqdm_format_dict = dict[str, str]()
 
     async def shutdown_timer() -> None:
-        if settings.drain_jobs:
+        if settings.strategy is StrategyEnum.drain:
             await shutdown.wait()
         else:
             with suppress(TimeoutError, asyncio.TimeoutError):
@@ -373,9 +384,13 @@ async def benchmark(settings: Settings) -> None:
             settings,
             pgqs,
             tqdm_format_dict,
-            QueueExecutionMode.drain if settings.drain_jobs else QueueExecutionMode.continuous,
+            QueueExecutionMode.drain
+            if settings.strategy is StrategyEnum.drain
+            else QueueExecutionMode.continuous,
         ),
-        run_enqueuers(settings, shutdown) if not settings.drain_jobs else asyncio.sleep(0),
+        run_enqueuers(settings, shutdown)
+        if settings.strategy is not StrategyEnum.drain
+        else asyncio.sleep(0),
         shutdown_timer(),
     )
 
@@ -397,6 +412,10 @@ async def benchmark(settings: Settings) -> None:
 
 @app.command()
 def main(
+    strategy: StrategyEnum = typer.Argument(
+        StrategyEnum.continuous,
+        help="Producer strategy: continuous, burst, or drain.",
+    ),
     driver: DriverEnum = typer.Option(DriverEnum.apg, "-d", "--driver"),
     timer: float = typer.Option(30.0, "-t", "--time"),
     dequeue: int = typer.Option(5),
@@ -413,6 +432,7 @@ def main(
     uvloop.run(
         benchmark(
             Settings(
+                strategy=strategy,
                 driver=driver,
                 timer=timer,
                 dequeue=dequeue,
