@@ -133,6 +133,7 @@ jobs:
 
       - name: Benchmark
         run: |
+          uv run pgq autovac
           PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
             --driver ${{ matrix.pgdriver }} \
             --output-json benchmark.json
@@ -375,7 +376,15 @@ jobs:
 
   complete-pipeline:
     if: github.event_name != 'schedule'
-    needs: [validate-benchmark, run-tests, run-windows-tests, run-ruff, run-mypy, run-example]
+    needs:
+      [
+        validate-benchmark,
+        run-tests,
+        run-windows-tests,
+        run-ruff,
+        run-mypy,
+        run-example,
+      ]
     runs-on: ubuntu-24.04
     steps:
       - name: Confirm All Tests Completed
