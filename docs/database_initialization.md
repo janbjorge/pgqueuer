@@ -29,3 +29,21 @@ You can find the commands needed for setting up your database for you version of
 ```bash
 pgq install --dry-run
 ```
+
+## Adjusting Durability
+
+PGQueuer tables are installed with **durable** settings by default. You can
+select a different durability level during installation or upgrade using the
+``--durability`` flag. The ``pgq durability`` command also allows
+changing the durability of existing tables without data loss. Durability levels
+range from ``volatile`` (unlogged tables for maximum speed) to ``durable``
+(fully logged tables). Refer to :doc:`cli` for a full explanation of each
+option.
+
+## Autovacuum Optimization
+
+After installation you can tune PostgreSQL's autovacuum settings for the queue
+tables with ``pgq autovac``. This command applies recommended values aimed at
+reducing bloat on the queue while keeping the log table mostly append-only. Use
+``pgq autovac --rollback`` to reset these parameters back to their system
+defaults. See :doc:`cli` for detailed command options.

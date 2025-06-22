@@ -148,6 +148,16 @@ class Queries:
         """
         await self.driver.execute("\n\n".join(self.qbe.build_alter_durability_query()))
 
+    async def optimize_autovacuum(self) -> None:
+        """Apply autovacuum settings."""
+        query = self.qbe.build_optimize_autovacuum_query()
+        await self.driver.execute(query)
+
+    async def optimize_autovacuum_rollback(self) -> None:
+        """Revert autovacuum settings."""
+        query = self.qbe.build_optimize_autovacuum_rollback_query()
+        await self.driver.execute(query)
+
     async def table_has_column(self, table: str, column: str) -> bool:
         """
         Check if the column exists in table.

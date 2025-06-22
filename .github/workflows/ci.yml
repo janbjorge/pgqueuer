@@ -117,6 +117,7 @@ jobs:
         run: |
           uv sync --all-extras --frozen
           uv run --frozen pgq install
+          uv run --frozen pgq autovac
 
       - name: Set ISO Timestamp
         id: timestamp
@@ -375,7 +376,15 @@ jobs:
 
   complete-pipeline:
     if: github.event_name != 'schedule'
-    needs: [validate-benchmark, run-tests, run-windows-tests, run-ruff, run-mypy, run-example]
+    needs:
+      [
+        validate-benchmark,
+        run-tests,
+        run-windows-tests,
+        run-ruff,
+        run-mypy,
+        run-example,
+      ]
     runs-on: ubuntu-24.04
     steps:
       - name: Confirm All Tests Completed

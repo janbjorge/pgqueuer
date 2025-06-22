@@ -27,7 +27,9 @@ services:
         condition: service_healthy
     build: .
     working_dir: /app
-    command: /bin/sh -c "uv run --frozen pgq install || exit 0"
+    command: >
+      uv run --frozen pgq install || true;
+      uv run --frozen pgq autovac || true;
     restart: "no"
 
   test:
