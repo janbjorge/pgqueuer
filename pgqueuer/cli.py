@@ -536,7 +536,7 @@ def optimize_autovacuum(
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await q.optimize_autovacuum(rollback=rollback)
+            await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     if not dry_run:
         asyncio_run(run())

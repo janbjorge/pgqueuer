@@ -117,6 +117,7 @@ jobs:
         run: |
           uv sync --all-extras --frozen
           uv run --frozen pgq install
+          uv run --frozen pgq autovac
 
       - name: Set ISO Timestamp
         id: timestamp
@@ -133,7 +134,6 @@ jobs:
 
       - name: Benchmark
         run: |
-          uv run pgq autovac
           PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
             --driver ${{ matrix.pgdriver }} \
             --output-json benchmark.json
