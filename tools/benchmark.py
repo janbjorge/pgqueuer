@@ -25,7 +25,7 @@ from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
-app = typer.Typer()
+app = typer.Typer(add_completion=False)
 
 
 class DriverEnum(str, Enum):
@@ -87,14 +87,6 @@ class Settings(BaseModel):
         10,
         help="Batch size for enqueue tasks.",
     )
-    requests_per_second: list[float] = typer.Option(
-        [float("inf"), float("inf")],
-        help="RPS for endpoints.",
-    )
-    concurrency_limit: list[int] = typer.Option(
-        [sys.maxsize, sys.maxsize],
-        help="Concurrency limit.",
-    )
     output_json: Path | None = typer.Option(
         None,
         help="Output JSON file for benchmark metrics.",
@@ -110,8 +102,6 @@ class Settings(BaseModel):
                     ["Dequeue Batch Size", self.dequeue_batch_size],
                     ["Enqueue Tasks", self.enqueue],
                     ["Enqueue Batch Size", self.enqueue_batch_size],
-                    ["Requests Per Second", self.requests_per_second],
-                    ["Concurrency Limit", self.concurrency_limit],
                     ["Output JSON", self.output_json or "None"],
                 ],
                 headers=["Field", "Value"],
@@ -148,21 +138,14 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
 class Consumer:
     pgq: PgQueuer
     batch_size: int
-    entrypoint_rps: list[float]
-    concurrency_limits: list[int]
     bar: tqdm
 
     async def run(self) -> None:
-        async_rps, sync_rps = self.entrypoint_rps
-        async_cl, sync_cl = self.concurrency_limits
-
-        @self.pgq.entrypoint(
-            "asyncfetch", requests_per_second=async_rps, concurrency_limit=async_cl
-        )
+        @self.pgq.entrypoint("asyncfetch")
         async def asyncfetch(job: Job) -> None:
             self.bar.update()
 
-        @self.pgq.entrypoint("syncfetch", requests_per_second=sync_rps, concurrency_limit=sync_cl)
+        @self.pgq.entrypoint("syncfetch")
         def syncfetch(job: Job) -> None:
             self.bar.update()
 
@@ -205,16 +188,7 @@ async def run_dequeuers(
     for q in queries:
         pgqs.append(PgQueuer(q.driver))
     with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
-        tasks = [
-            Consumer(
-                pgq,
-                settings.dequeue_batch_size,
-                settings.requests_per_second,
-                settings.concurrency_limit,
-                bar,
-            ).run()
-            for pgq in pgqs
-        ]
+        tasks = [Consumer(pgq, settings.dequeue_batch_size, bar).run() for pgq in pgqs]
         await asyncio.gather(*tasks)
         tqdm_format_dict.update(bar.format_dict)
 
@@ -274,8 +248,6 @@ def main(
     dequeue_batch_size: int = typer.Option(10),
     enqueue: int = typer.Option(1),
     enqueue_batch_size: int = typer.Option(10),
-    requests_per_second: list[float] = typer.Option([float("inf"), float("inf")]),
-    concurrency_limit: list[int] = typer.Option([0, 0]),
     output_json: Path | None = typer.Option(None),
 ) -> None:
     uvloop.run(
@@ -287,8 +259,6 @@ def main(
                 dequeue_batch_size=dequeue_batch_size,
                 enqueue=enqueue,
                 enqueue_batch_size=enqueue_batch_size,
-                requests_per_second=requests_per_second,
-                concurrency_limit=concurrency_limit,
                 output_json=output_json,
             )
         )
