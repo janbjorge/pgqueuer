@@ -45,7 +45,7 @@ sync:
 check: lint typecheck sync pytest
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
+	docker compose -f $(COMPOSE_FILE) down --remove-orphans -v
 
 clean:
 	docker compose -f $(COMPOSE_FILE) down --rmi all --volumes --remove-orphans
