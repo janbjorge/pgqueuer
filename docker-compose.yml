@@ -1,3 +1,15 @@
+x-app-environment: &app-environment
+  PGUSER: pgquser
+  PGDATABASE: pgqdb
+  PGPASSWORD: pgqpw
+  PGHOST: db
+  PGPORT: 5432
+
+x-app-base: &app-base
+  build: .
+  working_dir: /app
+  environment: *app-environment
+
 services:
   db:
     image: postgres:${POSTGRES_VERSION:-16}
@@ -17,45 +29,25 @@ services:
     restart: "no"
 
   populate:
-    environment:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: db
+    <<: *app-base
     depends_on:
       db:
         condition: service_healthy
-    build: .
-    working_dir: /app
-    command: >
-      uv run --frozen pgq install || true;
-      uv run --frozen pgq autovac || true;
+    command: /bin/sh -c "(uv -n run --frozen pgq install || uv -n run --frozen pgq autovac); exit 0"
     restart: "no"
 
   test:
-    environment:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: db
+    <<: *app-base
     depends_on:
       populate:
         condition: service_completed_successfully
-    build: .
-    working_dir: /app
     command: uv -n run --frozen pytest
     restart: "no"
 
   benchmark:
-    environment:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: db
+    <<: *app-base
     depends_on:
       populate:
         condition: service_completed_successfully
-    build: .
-    working_dir: /app
     command: uv -n run --frozen tools/benchmark.py
     restart: "no"
