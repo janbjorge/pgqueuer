@@ -246,7 +246,7 @@ def main(
     timer: float = typer.Option(30.0, "-t", "--time"),
     dequeue: int = typer.Option(5),
     dequeue_batch_size: int = typer.Option(10),
-    enqueue: int = typer.Option(1),
+    enqueue: int = typer.Option(2),
     enqueue_batch_size: int = typer.Option(10),
     output_json: Path | None = typer.Option(None),
 ) -> None:
