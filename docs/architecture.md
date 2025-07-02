@@ -62,9 +62,6 @@ The lifecycle of a job flows through these statuses:
 - **`deleted`** – Used when jobs are removed from the queue without running,
   such as during manual cleanup operations.
 
-The last four states are terminal; once reached, a job will not re-enter the
-queue.
-
 ### Status Transition Diagram
 
 ```{mermaid}
