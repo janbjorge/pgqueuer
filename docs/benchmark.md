@@ -11,6 +11,18 @@ PGQueuer underwent benchmark testing to evaluate its performance across varying 
 
 PGQueuer includes a built-in benchmarking tool to help you assess performance in your environment. You can customize various parameters such as timer duration, number of workers, and batch sizes for enqueueing and dequeueing.
 
+### Drain Strategy
+
+The benchmarking tool also supports a **drain** strategy. This mode enqueues a fixed
+number of jobs and measures how long PGQueuer takes to empty the queue. Specify
+the amount of work with the ``--jobs`` option:
+
+```bash
+python3 tools/benchmark.py --strategy drain --jobs 5000
+```
+
+Use this strategy when you want to evaluate batch processing performance.
+
 ## Running the Benchmark
 
 To run a benchmark, use the following command, ensuring you have set the appropriate environment variables for your PostgreSQL credentials.

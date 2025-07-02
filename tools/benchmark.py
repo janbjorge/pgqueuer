@@ -20,7 +20,7 @@ from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
-from pgqueuer import PgQueuer
+from pgqueuer import PgQueuer, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
@@ -39,6 +39,7 @@ class StrategyEnum(str, Enum):
     """Available benchmarking strategies."""
 
     throughput = "throughput"
+    drain = "drain"
 
 
 class BenchmarkResult(BaseModel):
@@ -99,6 +100,10 @@ class Settings(BaseModel):
         10,
         help="Batch size for enqueue tasks.",
     )
+    jobs: int = typer.Option(
+        1000,
+        help="Number of jobs to enqueue for the drain strategy.",
+    )
     output_json: Path | None = typer.Option(
         None,
         help="Output JSON file for benchmark metrics.",
@@ -115,6 +120,7 @@ class Settings(BaseModel):
                     ["Dequeue Batch Size", self.dequeue_batch_size],
                     ["Enqueue Tasks", self.enqueue],
                     ["Enqueue Batch Size", self.enqueue_batch_size],
+                    ["Jobs", self.jobs],
                     ["Output JSON", self.output_json or "None"],
                 ],
                 headers=["Field", "Value"],
@@ -152,6 +158,7 @@ class Consumer:
     pgq: PgQueuer
     batch_size: int
     bar: tqdm
+    mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous
 
     async def run(self) -> None:
         @self.pgq.entrypoint("asyncfetch")
@@ -162,7 +169,7 @@ class Consumer:
         def syncfetch(job: Job) -> None:
             self.bar.update()
 
-        await self.pgq.run(batch_size=self.batch_size)
+        await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
 
 
 @dataclass
@@ -283,6 +290,77 @@ class ThroughputStrategy:
 
 
 @dataclass
+class DrainStrategy:
+    """Benchmark strategy that drains a pre-populated queue."""
+
+    settings: Settings
+    pgqs: list[PgQueuer] = dataclass_field(default_factory=list, init=False)
+    tqdm_format_dict: dict[str, str] = dataclass_field(default_factory=dict, init=False)
+
+    async def setup(self) -> None:
+        loop = asyncio.get_event_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, self.graceful_shutdown)
+
+        self.settings.pretty_print()
+        queries = await make_queries(self.settings.driver, dsn())
+        await queries.clear_statistics_log()
+        await queries.clear_queue()
+
+        entrypoints = ["syncfetch", "asyncfetch"] * self.settings.jobs
+        await queries.enqueue(
+            random.sample(entrypoints, k=self.settings.jobs),
+            [b"" for _ in range(self.settings.jobs)],
+            [0] * self.settings.jobs,
+        )
+
+    def graceful_shutdown(self) -> None:
+        for qm in self.pgqs:
+            qm.shutdown.set()
+
+    async def run(self) -> BenchmarkResult:
+        queries = [
+            await make_queries(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
+        ]
+        for q in queries:
+            self.pgqs.append(PgQueuer(q.driver))
+
+        start = datetime.now(timezone.utc)
+        with tqdm(
+            total=self.settings.jobs,
+            ascii=True,
+            unit=" job",
+            unit_scale=True,
+            file=sys.stdout,
+        ) as bar:
+            tasks = [
+                Consumer(
+                    pgq,
+                    self.settings.dequeue_batch_size,
+                    bar,
+                    types.QueueExecutionMode.drain,
+                ).run()
+                for pgq in self.pgqs
+            ]
+            await asyncio.gather(*tasks)
+            self.tqdm_format_dict.update(bar.format_dict)
+        elapsed = datetime.now(timezone.utc) - start
+        return BenchmarkResult(
+            created_at=datetime.now(timezone.utc),
+            driver=self.settings.driver,
+            strategy=StrategyEnum.drain,
+            elapsed=elapsed,
+            github_ref_name=os.environ.get("REF_NAME", ""),
+            queued=0,
+            rate=self.settings.jobs / elapsed.total_seconds(),
+            steps=self.settings.jobs,
+        )
+
+    async def teardown(self) -> None:  # pragma: no cover - nothing to clean up
+        pass
+
+
+@dataclass
 class BenchmarkRunner:
     """Execute benchmarks using a chosen strategy."""
 
@@ -307,6 +385,7 @@ def main(
     dequeue_batch_size: int = typer.Option(10),
     enqueue: int = typer.Option(1),
     enqueue_batch_size: int = typer.Option(10),
+    jobs: int = typer.Option(1000, help="Number of jobs for the drain strategy"),
     output_json: Path | None = typer.Option(None),
     strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
 ) -> None:
@@ -318,9 +397,13 @@ def main(
         dequeue_batch_size=dequeue_batch_size,
         enqueue=enqueue,
         enqueue_batch_size=enqueue_batch_size,
+        jobs=jobs,
         output_json=output_json,
     )
-    strategy_impl: BenchmarkStrategy = ThroughputStrategy(settings)
+    if strategy is StrategyEnum.drain:
+        strategy_impl: BenchmarkStrategy = DrainStrategy(settings)
+    else:
+        strategy_impl = ThroughputStrategy(settings)
     runner = BenchmarkRunner(settings=settings, strategy=strategy_impl)
     uvloop.run(runner.execute())
 
