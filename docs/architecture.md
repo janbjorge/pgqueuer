@@ -30,3 +30,46 @@ flowchart LR
 Endpoint routing is handled by `EventRouter` which maps notification types to
 functions registered via `@pgq.entrypoint`. Notifications delivered through
 `LISTEN/NOTIFY` ensure consumers promptly react to new work.
+
+## Job Status Lifecycle
+
+PGQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
+`pgqueuer_status` by default:
+
+```sql
+CREATE TYPE pgqueuer_status AS ENUM (
+    'queued',
+    'picked',
+    'successful',
+    'exception',
+    'canceled',
+    'deleted'
+);
+```
+
+The lifecycle of a job flows through these statuses:
+
+- **`queued`** – Newly enqueued jobs start here and wait for a worker to pick
+  them up.
+- **`picked`** – Set by `QueueManager` when a worker begins processing the job.
+  A heartbeat timestamp keeps track of active work.
+- **`successful`** – Assigned after a job completes without errors. Details are
+  copied to the statistics log and removed from the queue.
+- **`exception`** – Indicates the job failed with an uncaught error. The
+  traceback is stored for later inspection.
+- **`canceled`** – Jobs canceled before completion receive this status and are
+  logged accordingly.
+- **`deleted`** – Used when jobs are removed from the queue without running,
+  such as during manual cleanup operations.
+
+### Status Transition Diagram
+
+```{mermaid}
+stateDiagram-v2
+    direction LR
+    queued --> picked
+    queued --> deleted
+    picked --> successful
+    picked --> exception
+    picked --> canceled
+```
