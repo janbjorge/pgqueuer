@@ -7,11 +7,12 @@ import random
 import signal
 import sys
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import count
 from pathlib import Path
+from typing import Protocol
 
 import typer
 import uvloop
@@ -34,10 +35,17 @@ class DriverEnum(str, Enum):
     psy = "psy"
 
 
+class StrategyEnum(str, Enum):
+    """Available benchmarking strategies."""
+
+    throughput = "throughput"
+
+
 class BenchmarkResult(BaseModel):
     created_at: AwareDatetime
     driver: DriverEnum
     elapsed: timedelta
+    strategy: StrategyEnum
     github_ref_name: str
     queued: int
     rate: float
@@ -66,6 +74,10 @@ class Settings(BaseModel):
     driver: DriverEnum = typer.Option(
         DriverEnum.apg,
         help="Postgres driver to use.",
+    )
+    strategy: StrategyEnum = typer.Option(
+        StrategyEnum.throughput,
+        help="Benchmarking strategy to execute.",
     )
     timer: timedelta = typer.Option(
         30.0,
@@ -97,6 +109,7 @@ class Settings(BaseModel):
             tabulate(
                 [
                     ["Driver", self.driver],
+                    ["Strategy", self.strategy],
                     ["Timer (s)", self.timer.total_seconds()],
                     ["Dequeue Tasks", self.dequeue],
                     ["Dequeue Batch Size", self.dequeue_batch_size],
@@ -169,75 +182,121 @@ class Producer:
             )
 
 
-async def run_enqueuers(settings: Settings, shutdown: asyncio.Event) -> None:
-    cnt = count()
-    tasks = []
-    for _ in range(settings.enqueue):
-        q = await make_queries(settings.driver, dsn())
-        p = Producer(shutdown, q, settings.enqueue_batch_size, cnt)
-        tasks.append(p.run())
-    await asyncio.gather(*tasks)
+class BenchmarkStrategy(Protocol):
+    """Strategy interface for running benchmarks."""
+
+    async def setup(self) -> None:
+        """Prepare environment for benchmarking."""
+
+    async def run(self) -> BenchmarkResult:
+        """Execute the benchmark and return results."""
+
+    async def teardown(self) -> None:
+        """Clean up resources after the benchmark."""
 
 
-async def run_dequeuers(
-    settings: Settings,
-    pgqs: list[PgQueuer],
-    tqdm_format_dict: dict,
-) -> None:
-    queries = [await make_queries(settings.driver, dsn()) for _ in range(settings.dequeue)]
-    for q in queries:
-        pgqs.append(PgQueuer(q.driver))
-    with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
-        tasks = [Consumer(pgq, settings.dequeue_batch_size, bar).run() for pgq in pgqs]
+@dataclass
+class ThroughputStrategy:
+    """Replicate the original benchmark measuring throughput."""
+
+    settings: Settings
+    shutdown: asyncio.Event = dataclass_field(
+        default_factory=asyncio.Event,
+        init=False,
+    )
+    pgqs: list[PgQueuer] = dataclass_field(
+        default_factory=list,
+        init=False,
+    )
+    tqdm_format_dict: dict[str, str] = dataclass_field(
+        default_factory=dict,
+        init=False,
+    )
+
+    async def run_enqueuers(self) -> None:
+        cnt = count()
+        tasks = []
+        for _ in range(self.settings.enqueue):
+            q = await make_queries(self.settings.driver, dsn())
+            p = Producer(self.shutdown, q, self.settings.enqueue_batch_size, cnt)
+            tasks.append(p.run())
         await asyncio.gather(*tasks)
-        tqdm_format_dict.update(bar.format_dict)
 
+    async def run_dequeuers(self) -> None:
+        queries = [
+            await make_queries(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
+        ]
+        for q in queries:
+            self.pgqs.append(PgQueuer(q.driver))
+        with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
+            tasks = [
+                Consumer(pgq, self.settings.dequeue_batch_size, bar).run() for pgq in self.pgqs
+            ]
+            await asyncio.gather(*tasks)
+            self.tqdm_format_dict.update(bar.format_dict)
 
-async def benchmark(settings: Settings) -> None:
-    settings.pretty_print()
-    await (await make_queries(settings.driver, dsn())).clear_statistics_log()
-    await (await make_queries(settings.driver, dsn())).clear_queue()
-
-    shutdown = asyncio.Event()
-    pgqs = list[PgQueuer]()
-    tqdm_format_dict = dict[str, str]()
-
-    async def shutdown_timer() -> None:
+    async def shutdown_timer(self) -> None:
         with suppress(TimeoutError, asyncio.TimeoutError):
-            await asyncio.wait_for(shutdown.wait(), settings.timer.total_seconds())
-        shutdown.set()
-        for q in pgqs:
-            q.shutdown.set()
+            await asyncio.wait_for(
+                self.shutdown.wait(),
+                self.settings.timer.total_seconds(),
+            )
 
-    def graceful_shutdown() -> None:
-        shutdown.set()
-        for qm in pgqs:
+        self.graceful_shutdown()
+
+    async def setup(self) -> None:
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(signal.SIGINT, self.graceful_shutdown)
+        loop.add_signal_handler(signal.SIGTERM, self.graceful_shutdown)
+
+        self.settings.pretty_print()
+        queries = await make_queries(self.settings.driver, dsn())
+        await queries.clear_statistics_log()
+        await queries.clear_queue()
+
+    def graceful_shutdown(self) -> None:
+        self.shutdown.set()
+        for qm in self.pgqs:
             qm.shutdown.set()
 
-    loop = asyncio.get_event_loop()
-    loop.add_signal_handler(signal.SIGINT, graceful_shutdown)
-    loop.add_signal_handler(signal.SIGTERM, graceful_shutdown)
+    async def run(self) -> BenchmarkResult:
+        await asyncio.gather(
+            self.run_dequeuers(),
+            self.run_enqueuers(),
+            self.shutdown_timer(),
+        )
 
-    await asyncio.gather(
-        run_dequeuers(settings, pgqs, tqdm_format_dict),
-        run_enqueuers(settings, shutdown),
-        shutdown_timer(),
-    )
+        qsize = await (await make_queries(self.settings.driver, dsn())).queue_size()
+        return BenchmarkResult(
+            created_at=datetime.now(timezone.utc),
+            driver=self.settings.driver,
+            strategy=StrategyEnum.throughput,
+            elapsed=self.tqdm_format_dict["elapsed"],
+            github_ref_name=os.environ.get("REF_NAME", ""),
+            queued=sum(x.count for x in qsize),
+            rate=float(self.tqdm_format_dict["n"]) / float(self.tqdm_format_dict["elapsed"]),
+            steps=self.tqdm_format_dict["n"],
+        )
 
-    qsize = await (await make_queries(settings.driver, dsn())).queue_size()
-    benchmark_result = BenchmarkResult(
-        created_at=datetime.now(timezone.utc),
-        driver=settings.driver,
-        elapsed=tqdm_format_dict["elapsed"],
-        github_ref_name=os.environ.get("REF_NAME", ""),
-        queued=sum(x.count for x in qsize),
-        rate=float(tqdm_format_dict["n"]) / float(tqdm_format_dict["elapsed"]),
-        steps=tqdm_format_dict["n"],
-    )
-    if settings.output_json:
-        with open(settings.output_json, "w") as f:
-            json.dump(benchmark_result.model_dump(mode="json"), f)
-    benchmark_result.pretty_print()
+    async def teardown(self) -> None:  # pragma: no cover - nothing to clean up
+        pass
+
+
+@dataclass
+class BenchmarkRunner:
+    """Execute benchmarks using a chosen strategy."""
+
+    settings: Settings
+    strategy: BenchmarkStrategy
+
+    async def execute(self) -> None:
+        await self.strategy.setup()
+        result = await self.strategy.run()
+        await self.strategy.teardown()
+        if self.settings.output_json:
+            with open(self.settings.output_json, "w") as f:
+                json.dump(result.model_dump(mode="json"), f)
+        result.pretty_print()
 
 
 @app.command()
@@ -249,20 +308,21 @@ def main(
     enqueue: int = typer.Option(1),
     enqueue_batch_size: int = typer.Option(10),
     output_json: Path | None = typer.Option(None),
+    strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
 ) -> None:
-    uvloop.run(
-        benchmark(
-            Settings(
-                driver=driver,
-                timer=timer,
-                dequeue=dequeue,
-                dequeue_batch_size=dequeue_batch_size,
-                enqueue=enqueue,
-                enqueue_batch_size=enqueue_batch_size,
-                output_json=output_json,
-            )
-        )
+    settings = Settings(
+        driver=driver,
+        strategy=strategy,
+        timer=timer,
+        dequeue=dequeue,
+        dequeue_batch_size=dequeue_batch_size,
+        enqueue=enqueue,
+        enqueue_batch_size=enqueue_batch_size,
+        output_json=output_json,
     )
+    strategy_impl: BenchmarkStrategy = ThroughputStrategy(settings)
+    runner = BenchmarkRunner(settings=settings, strategy=strategy_impl)
+    uvloop.run(runner.execute())
 
 
 if __name__ == "__main__":
