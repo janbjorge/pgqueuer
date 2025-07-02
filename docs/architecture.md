@@ -70,15 +70,9 @@ queue.
 ```{mermaid}
 stateDiagram-v2
     direction LR
-    [*] --> queued
-    queued --> picked: worker begins
-    queued --> deleted: remove
-    picked --> successful: complete
-    picked --> exception: fail
-    picked --> canceled: cancel
-    successful --> end
-    exception --> end
-    canceled --> end
-    deleted --> end
-    end --> [*]
+    queued --> picked
+    queued --> deleted
+    picked --> successful
+    picked --> exception
+    picked --> canceled
 ```
