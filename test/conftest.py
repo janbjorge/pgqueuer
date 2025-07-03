@@ -38,6 +38,7 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
     conn = await asyncpg.connect(dsn=dsn())
     driver = AsyncpgDriver(conn)
     await clear_all(driver)
+    await Queries(driver).upgrade()
     try:
         yield driver
     finally:

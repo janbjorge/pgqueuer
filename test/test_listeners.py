@@ -216,8 +216,15 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
         uuid.uuid4(),
         global_concurrency_limit=1000,
     )
-    await asyncio.sleep(0.1)
-    assert len(evnets) == 0
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    (evt,) = evnets
+    assert evt.root.type == "table_changed_event"
+    assert evt.root.table == add_prefix("pgqueuer")
+    assert evt.root.operation == "update"
 
 
 async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:

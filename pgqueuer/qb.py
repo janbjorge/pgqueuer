@@ -336,7 +336,14 @@ class QueryBuilderEnvironment:
     $$ LANGUAGE plpgsql;
 
     CREATE TRIGGER {self.settings.trigger}
-    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {self.settings.queue_table}
+    AFTER INSERT OR UPDATE OF priority, queue_manager_id, execute_after, status,
+          entrypoint, dedupe_key, payload OR DELETE ON {self.settings.queue_table}
+    FOR EACH ROW
+    EXECUTE FUNCTION {self.settings.function}();
+
+    CREATE TRIGGER {self.settings.trigger}_truncate
+    AFTER TRUNCATE ON {self.settings.queue_table}
+    FOR EACH STATEMENT
     EXECUTE FUNCTION {self.settings.function}();
         """  # noqa: E501
 
@@ -352,7 +359,8 @@ class QueryBuilderEnvironment:
             str: A string containing the SQL commands to uninstall the schema.
         """
         return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
-    DROP FUNCTION   IF EXISTS   {self.settings.function};
+    DROP TRIGGER    IF EXISTS   {self.settings.trigger}_truncate ON {self.settings.queue_table};
+    DROP FUNCTION   IF EXISTS   {self.settings.function} CASCADE;
     DROP TABLE      IF EXISTS   {self.settings.queue_table};
     DROP TABLE      IF EXISTS   {self.settings.statistics_table};
     DROP TABLE      IF EXISTS   {self.settings.schedules_table};
@@ -414,6 +422,17 @@ class QueryBuilderEnvironment:
 
     END;
     $$ LANGUAGE plpgsql;"""
+        yield f"DROP TRIGGER IF EXISTS {self.settings.trigger} ON {self.settings.queue_table};"
+        yield f"""CREATE TRIGGER {self.settings.trigger}
+    AFTER INSERT OR UPDATE OF priority, queue_manager_id, execute_after, status,
+          entrypoint, dedupe_key, payload OR DELETE ON {self.settings.queue_table}
+    FOR EACH ROW
+    EXECUTE FUNCTION {self.settings.function}();"""
+        yield f"DROP TRIGGER IF EXISTS {self.settings.trigger}_truncate ON {self.settings.queue_table};"  # noqa: E501
+        yield f"""CREATE TRIGGER {self.settings.trigger}_truncate
+    AFTER TRUNCATE ON {self.settings.queue_table}
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION {self.settings.function}();"""
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
