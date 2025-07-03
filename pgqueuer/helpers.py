@@ -204,4 +204,3 @@ def add_schema_to_dsn(dsn: str, schema: str) -> str:
     query["options"] = options
 
     return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
-

@@ -31,6 +31,7 @@ def job_progress_bar(total: int | None = None) -> tqdm:
     """Return a progress bar configured for job throughput measurements."""
     return tqdm(total=total, ascii=True, unit=" job", unit_scale=True, file=sys.stdout)
 
+
 app = typer.Typer(add_completion=False)
 
 
