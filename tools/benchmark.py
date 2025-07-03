@@ -71,7 +71,7 @@ class BenchmarkResult(BaseModel):
         )
 
 
-class Settings(BaseModel):
+class ThroughputSettings(BaseModel):
     driver: DriverEnum = typer.Option(
         DriverEnum.apg,
         help="Postgres driver to use.",
@@ -100,10 +100,6 @@ class Settings(BaseModel):
         10,
         help="Batch size for enqueue tasks.",
     )
-    jobs: int = typer.Option(
-        1000,
-        help="Number of jobs to enqueue for the drain strategy.",
-    )
     output_json: Path | None = typer.Option(
         None,
         help="Output JSON file for benchmark metrics.",
@@ -120,7 +116,50 @@ class Settings(BaseModel):
                     ["Dequeue Batch Size", self.dequeue_batch_size],
                     ["Enqueue Tasks", self.enqueue],
                     ["Enqueue Batch Size", self.enqueue_batch_size],
+                    ["Output JSON", self.output_json or "None"],
+                ],
+                headers=["Field", "Value"],
+                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                colalign=("left", "left"),
+            )
+        )
+
+
+class DrainSettings(BaseModel):
+    driver: DriverEnum = typer.Option(
+        DriverEnum.apg,
+        help="Postgres driver to use.",
+    )
+    strategy: StrategyEnum = typer.Option(
+        StrategyEnum.drain,
+        help="Benchmarking strategy to execute.",
+    )
+    jobs: int = typer.Option(
+        1000,
+        help="Number of jobs to enqueue for the drain strategy.",
+    )
+    dequeue: int = typer.Option(
+        5,
+        help="Number of concurrent dequeue tasks.",
+    )
+    dequeue_batch_size: int = typer.Option(
+        10,
+        help="Batch size for dequeue tasks.",
+    )
+    output_json: Path | None = typer.Option(
+        None,
+        help="Output JSON file for benchmark metrics.",
+    )
+
+    def pretty_print(self) -> None:
+        print(
+            tabulate(
+                [
+                    ["Driver", self.driver],
+                    ["Strategy", self.strategy],
                     ["Jobs", self.jobs],
+                    ["Dequeue Tasks", self.dequeue],
+                    ["Dequeue Batch Size", self.dequeue_batch_size],
                     ["Output JSON", self.output_json or "None"],
                 ],
                 headers=["Field", "Value"],
@@ -206,7 +245,7 @@ class BenchmarkStrategy(Protocol):
 class ThroughputStrategy:
     """Replicate the original benchmark measuring throughput."""
 
-    settings: Settings
+    settings: ThroughputSettings
     shutdown: asyncio.Event = dataclass_field(
         default_factory=asyncio.Event,
         init=False,
@@ -293,7 +332,7 @@ class ThroughputStrategy:
 class DrainStrategy:
     """Benchmark strategy that drains a pre-populated queue."""
 
-    settings: Settings
+    settings: DrainSettings
     pgqs: list[PgQueuer] = dataclass_field(default_factory=list, init=False)
     tqdm_format_dict: dict[str, str] = dataclass_field(default_factory=dict, init=False)
 
@@ -358,7 +397,7 @@ class DrainStrategy:
 class BenchmarkRunner:
     """Execute benchmarks using a chosen strategy."""
 
-    settings: Settings
+    settings: ThroughputSettings | DrainSettings
     strategy: BenchmarkStrategy
 
     async def execute(self) -> None:
@@ -383,22 +422,31 @@ def main(
     output_json: Path | None = typer.Option(None),
     strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
 ) -> None:
-    settings = Settings(
-        driver=driver,
-        strategy=strategy,
-        timer=timer,
-        dequeue=dequeue,
-        dequeue_batch_size=dequeue_batch_size,
-        enqueue=enqueue,
-        enqueue_batch_size=enqueue_batch_size,
-        jobs=jobs,
-        output_json=output_json,
-    )
-    match strategy:
-        case StrategyEnum.drain:
-            strategy_impl: BenchmarkStrategy = DrainStrategy(settings)
-        case _:
-            strategy_impl = ThroughputStrategy(settings)
+    settings: ThroughputSettings | DrainSettings
+    if strategy is StrategyEnum.drain:
+        drain_settings = DrainSettings(
+            driver=driver,
+            strategy=strategy,
+            jobs=jobs,
+            dequeue=dequeue,
+            dequeue_batch_size=dequeue_batch_size,
+            output_json=output_json,
+        )
+        strategy_impl: BenchmarkStrategy = DrainStrategy(drain_settings)
+        settings = drain_settings
+    else:
+        tp_settings = ThroughputSettings(
+            driver=driver,
+            strategy=strategy,
+            timer=timer,
+            dequeue=dequeue,
+            dequeue_batch_size=dequeue_batch_size,
+            enqueue=enqueue,
+            enqueue_batch_size=enqueue_batch_size,
+            output_json=output_json,
+        )
+        strategy_impl = ThroughputStrategy(tp_settings)
+        settings = tp_settings
     runner = BenchmarkRunner(settings=settings, strategy=strategy_impl)
     uvloop.run(runner.execute())
 
