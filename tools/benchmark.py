@@ -5,7 +5,6 @@ import json
 import os
 import random
 import signal
-import sys
 from contextlib import suppress
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta, timezone
@@ -22,6 +21,7 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer import PgQueuer, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
+from pgqueuer.helpers import job_progress_bar
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
@@ -235,7 +235,7 @@ class ThroughputStrategy:
         ]
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver))
-        with tqdm(ascii=True, unit=" job", unit_scale=True, file=sys.stdout) as bar:
+        with job_progress_bar() as bar:
             tasks = [
                 Consumer(pgq, self.settings.dequeue_batch_size, bar).run() for pgq in self.pgqs
             ]
@@ -326,13 +326,7 @@ class DrainStrategy:
             self.pgqs.append(PgQueuer(q.driver))
 
         start = datetime.now(timezone.utc)
-        with tqdm(
-            total=self.settings.jobs,
-            ascii=True,
-            unit=" job",
-            unit_scale=True,
-            file=sys.stdout,
-        ) as bar:
+        with job_progress_bar(total=self.settings.jobs) as bar:
             tasks = [
                 Consumer(
                     pgq,
@@ -400,10 +394,11 @@ def main(
         jobs=jobs,
         output_json=output_json,
     )
-    if strategy is StrategyEnum.drain:
-        strategy_impl: BenchmarkStrategy = DrainStrategy(settings)
-    else:
-        strategy_impl = ThroughputStrategy(settings)
+    match strategy:
+        case StrategyEnum.drain:
+            strategy_impl: BenchmarkStrategy = DrainStrategy(settings)
+        case _:
+            strategy_impl = ThroughputStrategy(settings)
     runner = BenchmarkRunner(settings=settings, strategy=strategy_impl)
     uvloop.run(runner.execute())
 

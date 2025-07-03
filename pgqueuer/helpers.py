@@ -12,12 +12,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from croniter import croniter
+from tqdm.asyncio import tqdm
 
 from . import listeners, models
 
@@ -204,3 +206,8 @@ def add_schema_to_dsn(dsn: str, schema: str) -> str:
     query["options"] = options
 
     return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
+
+
+def job_progress_bar(total: int | None = None) -> tqdm:
+    """Return a progress bar configured for job throughput measurements."""
+    return tqdm(total=total, ascii=True, unit=" job", unit_scale=True, file=sys.stdout)
