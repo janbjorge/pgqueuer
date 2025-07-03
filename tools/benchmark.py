@@ -5,6 +5,7 @@ import json
 import os
 import random
 import signal
+import sys
 from contextlib import suppress
 from dataclasses import dataclass, field as dataclass_field
 from datetime import datetime, timedelta, timezone
@@ -21,10 +22,14 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer import PgQueuer, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
-from pgqueuer.helpers import job_progress_bar
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
+
+
+def job_progress_bar(total: int | None = None) -> tqdm:
+    """Return a progress bar configured for job throughput measurements."""
+    return tqdm(total=total, ascii=True, unit=" job", unit_scale=True, file=sys.stdout)
 
 app = typer.Typer(add_completion=False)
 
@@ -135,7 +140,7 @@ class DrainSettings(BaseModel):
         help="Benchmarking strategy to execute.",
     )
     jobs: int = typer.Option(
-        1000,
+        50_000,
         help="Number of jobs to enqueue for the drain strategy.",
     )
     dequeue: int = typer.Option(
@@ -397,15 +402,15 @@ class DrainStrategy:
 class BenchmarkRunner:
     """Execute benchmarks using a chosen strategy."""
 
-    settings: ThroughputSettings | DrainSettings
     strategy: BenchmarkStrategy
+    output_json: Path | None
 
     async def execute(self) -> None:
         await self.strategy.setup()
         result = await self.strategy.run()
         await self.strategy.teardown()
-        if self.settings.output_json:
-            with open(self.settings.output_json, "w") as f:
+        if self.output_json:
+            with open(self.output_json, "w") as f:
                 json.dump(result.model_dump(mode="json"), f)
         result.pretty_print()
 
@@ -418,11 +423,10 @@ def main(
     dequeue_batch_size: int = typer.Option(10),
     enqueue: int = typer.Option(1),
     enqueue_batch_size: int = typer.Option(10),
-    jobs: int = typer.Option(1000, help="Number of jobs for the drain strategy"),
+    jobs: int = typer.Option(50_000, help="Number of jobs for the drain strategy"),
     output_json: Path | None = typer.Option(None),
     strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
 ) -> None:
-    settings: ThroughputSettings | DrainSettings
     if strategy is StrategyEnum.drain:
         drain_settings = DrainSettings(
             driver=driver,
@@ -433,7 +437,6 @@ def main(
             output_json=output_json,
         )
         strategy_impl: BenchmarkStrategy = DrainStrategy(drain_settings)
-        settings = drain_settings
     else:
         tp_settings = ThroughputSettings(
             driver=driver,
@@ -446,8 +449,7 @@ def main(
             output_json=output_json,
         )
         strategy_impl = ThroughputStrategy(tp_settings)
-        settings = tp_settings
-    runner = BenchmarkRunner(settings=settings, strategy=strategy_impl)
+    runner = BenchmarkRunner(strategy=strategy_impl, output_json=output_json)
     uvloop.run(runner.execute())
 
 

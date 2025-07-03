@@ -18,7 +18,7 @@ number of jobs and measures how long PGQueuer takes to empty the queue. Specify
 the amount of work with the ``--jobs`` option:
 
 ```bash
-python3 tools/benchmark.py --strategy drain --jobs 5000
+python3 tools/benchmark.py --strategy drain --jobs 50000
 ```
 
 Use this strategy when you want to evaluate batch processing performance.
