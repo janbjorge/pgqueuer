@@ -255,6 +255,7 @@ class Queries:
         priority: int = 0,
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
+        headers: bytes | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -265,6 +266,7 @@ class Queries:
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
+        headers: list[bytes | None] | None = None,
     ) -> list[models.JobId]: ...
 
     async def enqueue(
@@ -274,6 +276,7 @@ class Queries:
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
+        headers: bytes | list[bytes | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -294,7 +297,7 @@ class Queries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key
+            entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
 
         try:
@@ -307,6 +310,7 @@ class Queries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
+                    normed_params.headers,
                 )
             ]
         except Exception as e:
@@ -647,6 +651,7 @@ class SyncQueries:
         priority: int = 0,
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
+        headers: bytes | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -657,6 +662,7 @@ class SyncQueries:
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
+        headers: list[bytes | None] | None = None,
     ) -> list[models.JobId]: ...
 
     def enqueue(
@@ -666,6 +672,7 @@ class SyncQueries:
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
+        headers: bytes | list[bytes | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -686,7 +693,7 @@ class SyncQueries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key
+            entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
 
         try:
@@ -699,6 +706,7 @@ class SyncQueries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
+                    normed_params.headers,
                 )
             ]
         except Exception as e:

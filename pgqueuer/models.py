@@ -144,6 +144,7 @@ class Job(BaseModel):
     entrypoint: str
     payload: bytes | None
     queue_manager_id: uuid.UUID | None
+    headers: bytes | None
 
 
 ###### Log ######
