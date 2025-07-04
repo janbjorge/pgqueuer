@@ -23,7 +23,7 @@ import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
-from . import db, errors, helpers, models, queries
+from . import db, errors, helpers, models, queries, telemetry
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -112,10 +112,14 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        if self.is_async:
-            await cast(AsyncEntrypoint, self.parameters.func)(job)
-        else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+        with telemetry.span_from_headers(job.entrypoint, job.headers):
+            if self.is_async:
+                await cast(AsyncEntrypoint, self.parameters.func)(job)
+            else:
+                await anyio.to_thread.run_sync(
+                    cast(SyncEntrypoint, self.parameters.func),
+                    job,
+                )
 
 
 @dataclasses.dataclass

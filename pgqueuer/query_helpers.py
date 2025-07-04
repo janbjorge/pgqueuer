@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Sequence
 
+from . import telemetry
+
 
 @dataclass
 class NormedEnqueueParam:
@@ -10,6 +12,7 @@ class NormedEnqueueParam:
     payload: list[bytes | None]
     execute_after: list[timedelta]
     dedupe_key: list[str | None]
+    headers: list[dict[str, str] | None]
 
 
 def normalize_enqueue_params(
@@ -18,6 +21,7 @@ def normalize_enqueue_params(
     priority: int | list[int],
     execute_after: timedelta | None | list[timedelta | None] = None,
     dedupe_key: str | list[str | None] | None = None,
+    headers: dict[str, str] | list[dict[str, str] | None] | None = None,
 ) -> NormedEnqueueParam:
     """Normalize parameters for enqueue operations to handle both single and batch inputs."""
     normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
@@ -37,10 +41,21 @@ def normalize_enqueue_params(
     dedupe_key = [None] * len(normed_entrypoint) if dedupe_key is None else dedupe_key
     normed_dedupe_key = dedupe_key if isinstance(dedupe_key, list) else [dedupe_key]
 
+    if headers is None:
+        normed_headers = [telemetry.capture_headers() for _ in normed_entrypoint]
+    elif isinstance(headers, list):
+        normed_headers = [
+            h if h is not None else telemetry.capture_headers() for h in headers
+        ]
+    else:
+        normed_headers = [headers for _ in normed_entrypoint]
+
     return NormedEnqueueParam(
         priority=normed_priority,
         entrypoint=normed_entrypoint,
         payload=normed_payload,
         execute_after=normed_execute_after,
         dedupe_key=normed_dedupe_key,
+        headers=normed_headers,
     )
+
