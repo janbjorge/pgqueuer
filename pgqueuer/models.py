@@ -144,6 +144,10 @@ class Job(BaseModel):
     entrypoint: str
     payload: bytes | None
     queue_manager_id: uuid.UUID | None
+    headers: Annotated[
+        dict[str, str] | None,
+        BeforeValidator(lambda x: None if x is None else from_json(x)),
+    ]
 
 
 ###### Log ######

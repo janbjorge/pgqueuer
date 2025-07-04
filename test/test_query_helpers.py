@@ -19,6 +19,7 @@ def test_normalize_single_entrypoint() -> None:
         payload=[b"data1"],
         execute_after=[timedelta(seconds=10)],
         dedupe_key=["key"],
+        headers=[None],
     )
     assert result == expected
 
@@ -37,6 +38,7 @@ def test_normalize_multiple_entrypoints() -> None:
         payload=[b"data1", b"data2"],
         execute_after=[timedelta(seconds=10), timedelta(seconds=20)],
         dedupe_key=["k1", "k2"],
+        headers=[None, None],
     )
     assert result == expected
 
@@ -53,6 +55,7 @@ def test_normalize_single_entrypoint_no_execute_after() -> None:
         payload=[b"data1"],
         execute_after=[timedelta(seconds=0)],
         dedupe_key=[None],
+        headers=[None],
     )
     assert result == expected
 
@@ -69,6 +72,7 @@ def test_normalize_single_entrypoint_no_dedupe_key() -> None:
         payload=[b"data1"],
         execute_after=[timedelta(seconds=0)],
         dedupe_key=[None],
+        headers=[None],
     )
     assert result == expected
 
@@ -85,6 +89,7 @@ def test_normalize_multiple_entrypoints_no_execute_after() -> None:
         payload=[b"data1", b"data2"],
         execute_after=[timedelta(seconds=0), timedelta(seconds=0)],
         dedupe_key=[None, None],
+        headers=[None, None],
     )
     assert result == expected
 
@@ -102,6 +107,7 @@ def test_normalize_mixed_execute_after() -> None:
         payload=[b"data1", b"data2"],
         execute_after=[timedelta(seconds=10), timedelta(seconds=0)],
         dedupe_key=[None, None],
+        headers=[None, None],
     )
     assert result == expected
 
@@ -119,6 +125,7 @@ def test_normalize_mixed_dedupe_key() -> None:
         payload=[b"data1", b"data2"],
         execute_after=[timedelta(seconds=0), timedelta(seconds=0)],
         dedupe_key=["foo", "bar"],
+        headers=[None, None],
     )
     assert result == expected
 
@@ -137,6 +144,7 @@ def test_normalize_single_entrypoint_none_payload() -> None:
         payload=[None],
         execute_after=[timedelta(seconds=10)],
         dedupe_key=["foo"],
+        headers=[None],
     )
     assert result == expected
 
@@ -155,5 +163,24 @@ def test_normalize_multiple_entrypoints_none_payload() -> None:
         payload=[None, b"data2"],
         execute_after=[timedelta(seconds=10), timedelta(seconds=20)],
         dedupe_key=["foo", "bar"],
+        headers=[None, None],
+    )
+    assert result == expected
+
+
+def test_normalize_headers_dict() -> None:
+    result = normalize_enqueue_params(
+        entrypoint="task1",
+        payload=None,
+        priority=1,
+        headers={"trace": "123"},
+    )
+    expected = NormedEnqueueParam(
+        priority=[1],
+        entrypoint=["task1"],
+        payload=[None],
+        execute_after=[timedelta(seconds=0)],
+        dedupe_key=[None],
+        headers=[{"trace": "123"}],
     )
     assert result == expected

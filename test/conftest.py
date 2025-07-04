@@ -31,6 +31,7 @@ async def clear_all(driver: AsyncpgDriver) -> None:
         Queries(driver).clear_schedule(),
         Queries(driver).clear_statistics_log(),
     )
+    await Queries(driver).upgrade()
 
 
 @pytest.fixture(scope="function")
