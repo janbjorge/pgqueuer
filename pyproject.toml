@@ -48,6 +48,7 @@ dependencies = [
     "typer>=0.15.1",
     "uvloop>=0.21.0; sys_platform != 'win32'",
     "async-timeout>=5.0.1",
+    "backoff>=2.2.1"
 ]
 
 [project.urls]

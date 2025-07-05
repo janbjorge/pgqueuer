@@ -27,3 +27,7 @@ class DuplicateJobError(PgqException):
 
 class FailingListenerError(PgqException):
     """Raised when a listener fails to process a job."""
+
+
+class FlushException(Exception):
+    """Custom exception for flush callback operations."""
