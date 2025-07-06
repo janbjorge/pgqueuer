@@ -240,7 +240,8 @@ class QueryBuilderEnvironment:
         status {self.settings.queue_status_type} NOT NULL,
         entrypoint TEXT NOT NULL,
         dedupe_key TEXT,
-        payload BYTEA
+        payload BYTEA,
+        headers JSONB
     );
     CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
@@ -452,6 +453,7 @@ class QueryBuilderEnvironment:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL;"  # noqa: E501
         yield f"CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -785,13 +787,14 @@ class QueryQueueBuilder:
         return f"""
         WITH inserted AS (
             INSERT INTO {self.settings.queue_table}
-            (priority, entrypoint, payload, execute_after, dedupe_key, status)
+            (priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
             VALUES (
                 UNNEST($1::int[]),                  -- priority
                 UNNEST($2::text[]),                 -- entrypoint
                 UNNEST($3::bytea[]),                -- payload
                 UNNEST($4::interval[]) + NOW(),     -- execute_after
                 UNNEST($5::text[]),                 -- dedupe_key
+                UNNEST($6::jsonb[]),                -- headers
                 'queued'                            -- status
             )
             RETURNING id, entrypoint, status, priority

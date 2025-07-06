@@ -446,3 +446,22 @@ async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     with pytest.raises(errors.DuplicateJobError) as raised:
         queries.SyncQueries(pgdriver).enqueue("...", None, dedupe_key=dedupe_key)
     assert dedupe_key in raised.value.dedupe_key
+
+
+async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+    headers = {"trace": "abc"}
+    await q.enqueue("header_task", None, headers=headers)
+
+    jobs = await q.dequeue(
+        entrypoints={
+            "header_task": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
+        },
+        batch_size=1,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].headers == headers
+    await q.log_jobs([(jobs[0], "successful", None)])

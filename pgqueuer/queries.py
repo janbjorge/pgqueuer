@@ -17,6 +17,8 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import overload
 
+from pydantic_core import to_json
+
 from pgqueuer.types import CronEntrypoint
 
 from . import db, errors, helpers, models, qb, query_helpers
@@ -255,6 +257,7 @@ class Queries:
         priority: int = 0,
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -265,6 +268,7 @@ class Queries:
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
     ) -> list[models.JobId]: ...
 
     async def enqueue(
@@ -274,6 +278,7 @@ class Queries:
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
+        headers: dict[str, str] | list[dict[str, str] | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -294,7 +299,7 @@ class Queries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key
+            entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
 
         try:
@@ -307,6 +312,7 @@ class Queries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
+                    [to_json(x).decode() for x in normed_params.headers],
                 )
             ]
         except Exception as e:
@@ -647,6 +653,7 @@ class SyncQueries:
         priority: int = 0,
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -657,6 +664,7 @@ class SyncQueries:
         priority: list[int],
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
     ) -> list[models.JobId]: ...
 
     def enqueue(
@@ -666,6 +674,7 @@ class SyncQueries:
         priority: int | list[int] = 0,
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
+        headers: dict[str, str] | list[dict[str, str] | None] | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -686,7 +695,12 @@ class SyncQueries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key
+            entrypoint,
+            payload,
+            priority,
+            execute_after,
+            dedupe_key,
+            headers,
         )
 
         try:
@@ -699,6 +713,7 @@ class SyncQueries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
+                    [to_json(x).decode() for x in normed_params.headers],
                 )
             ]
         except Exception as e:
