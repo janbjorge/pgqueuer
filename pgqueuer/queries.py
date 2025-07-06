@@ -17,6 +17,8 @@ from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from typing import overload
 
+from pydantic_core import to_json
+
 from pgqueuer.types import CronEntrypoint
 
 from . import db, errors, helpers, models, qb, query_helpers
@@ -310,7 +312,7 @@ class Queries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
-                    normed_params.headers,
+                    [to_json(x).decode() for x in normed_params.headers],
                 )
             ]
         except Exception as e:
@@ -693,7 +695,12 @@ class SyncQueries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed_params = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key, headers
+            entrypoint,
+            payload,
+            priority,
+            execute_after,
+            dedupe_key,
+            headers,
         )
 
         try:
@@ -706,7 +713,7 @@ class SyncQueries:
                     normed_params.payload,
                     normed_params.execute_after,
                     normed_params.dedupe_key,
-                    normed_params.headers,
+                    [to_json(x).decode() for x in normed_params.headers],
                 )
             ]
         except Exception as e:

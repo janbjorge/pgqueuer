@@ -1,8 +1,8 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Sequence
-
-from . import telemetry
 
 
 @dataclass
@@ -12,7 +12,7 @@ class NormedEnqueueParam:
     payload: list[bytes | None]
     execute_after: list[timedelta]
     dedupe_key: list[str | None]
-    headers: list[dict[str, str] | None]
+    headers: list[dict | None]
 
 
 def normalize_enqueue_params(
@@ -21,7 +21,7 @@ def normalize_enqueue_params(
     priority: int | list[int],
     execute_after: timedelta | None | list[timedelta | None] = None,
     dedupe_key: str | list[str | None] | None = None,
-    headers: dict[str, str] | list[dict[str, str] | None] | None = None,
+    headers: dict | list[dict | None] | None = None,
 ) -> NormedEnqueueParam:
     """Normalize parameters for enqueue operations to handle both single and batch inputs."""
     normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
@@ -41,14 +41,8 @@ def normalize_enqueue_params(
     dedupe_key = [None] * len(normed_entrypoint) if dedupe_key is None else dedupe_key
     normed_dedupe_key = dedupe_key if isinstance(dedupe_key, list) else [dedupe_key]
 
-    if headers is None:
-        normed_headers = [telemetry.capture_headers() for _ in normed_entrypoint]
-    elif isinstance(headers, list):
-        normed_headers = [
-            h if h is not None else telemetry.capture_headers() for h in headers
-        ]
-    else:
-        normed_headers = [headers for _ in normed_entrypoint]
+    headers = [None] * len(normed_entrypoint) if headers is None else headers
+    normed_headers = headers if isinstance(headers, list) else [headers]
 
     return NormedEnqueueParam(
         priority=normed_priority,
@@ -58,4 +52,3 @@ def normalize_enqueue_params(
         dedupe_key=normed_dedupe_key,
         headers=normed_headers,
     )
-

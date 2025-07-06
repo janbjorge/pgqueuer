@@ -18,7 +18,7 @@ def mocked_job(
     entrypoint: str = "test",
     payload: bytes | None = None,
     queue_manager_id: None | uuid.UUID = None,
-    headers: dict[str, str] | None = None,
+    headers: dict | None = None,
 ) -> Job:
     now = datetime.now(timezone.utc)
     return Job(

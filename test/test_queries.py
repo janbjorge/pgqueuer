@@ -455,9 +455,7 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
 
     jobs = await q.dequeue(
         entrypoints={
-            "header_task": queries.EntrypointExecutionParameter(
-                timedelta(days=1), False, 0
-            )
+            "header_task": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
         },
         batch_size=1,
         queue_manager_id=uuid.uuid4(),
