@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 
 import pytest
@@ -83,6 +84,21 @@ def test_custom_jitter_range() -> None:
         delay = timeout_with_jitter(base_timeout, jitter_span)
         base_delay = base_timeout.total_seconds()
         assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
+
+
+@pytest.mark.parametrize(
+    "span,raises",
+    [
+        ((-0.2, 0.2), True),
+        ((0, 1), True),
+        ((1.3, 0.5), False),
+    ],
+)
+def test_jitter_span_validation(span: tuple[float, float], raises: bool):
+    cm = pytest.raises(ValueError) if raises else nullcontext()
+
+    with cm:
+        timeout_with_jitter(timedelta(seconds=1), span)
 
 
 @pytest.mark.parametrize(

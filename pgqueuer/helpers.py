@@ -159,7 +159,12 @@ def timeout_with_jitter(
     Returns:
         timedelta: The timeout scaled by the jitter factor.
     """
-    return timeout * random.uniform(*jitter_span)
+
+    lo, hi = sorted(jitter_span)
+    if lo <= 0:
+        raise ValueError("jitter_span values must be > 0")
+    jitter = random.uniform(lo, hi)
+    return timedelta(seconds=timeout.total_seconds() * jitter)
 
 
 def normalize_cron_expression(expression: str) -> str:
