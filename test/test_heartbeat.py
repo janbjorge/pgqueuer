@@ -62,3 +62,25 @@ async def test_heartbeat_max_size(max_size: int) -> None:
         await asyncio.sleep(timedelta(seconds=0.1).total_seconds())
 
     assert len(callbacks) >= 2
+
+
+async def test_heartbeat_keeps_buffer_ticking() -> None:
+    async def noop(_: list[JobId]) -> None:
+        pass
+
+    class DummyBuffer(HeartbeatBuffer):
+        def __init__(self) -> None:
+            super().__init__(
+                max_size=10,
+                timeout=timedelta(seconds=0),
+                callback=noop,
+            )
+            self.received = 0
+
+        async def add(self, _: object) -> None:
+            self.received += 1
+
+    hbuf = DummyBuffer()
+    async with Heartbeat(JobId(1), timedelta(seconds=0.1), hbuf):
+        await asyncio.sleep(0.35)
+    assert hbuf.received >= 3  # ~1 beat per 0.1 s

@@ -31,12 +31,10 @@ async def test_retry_after_timer_expired(apgdriver: db.Driver) -> None:
         calls[context.id] += 1
         await e.wait()
 
-    jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
+    await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     async def stop_after() -> None:
-        while any(j not in calls for j in jids) or any(v <= 1 for v in calls.values()):
-            await asyncio.sleep(0.01)
-
+        await asyncio.sleep(retry_timer.total_seconds() * 5)
         e.set()
         qm.shutdown.set()
 
@@ -46,7 +44,7 @@ async def test_retry_after_timer_expired(apgdriver: db.Driver) -> None:
     )
 
     assert len(calls) == N
-    assert all(v > 1 for v in calls.values())
+    assert all(v == 1 for v in calls.values())
 
 
 async def test_no_retry_on_zero_timer(apgdriver: db.Driver) -> None:
@@ -131,12 +129,16 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
     qm = QueueManager(apgdriver)
     calls = Counter[JobId]()
 
-    @qm.entrypoint("fetch_short", retry_timer=timedelta(seconds=0.5))
+    short_retry_timer = timedelta(seconds=0.5)
+
+    @qm.entrypoint("fetch_short", retry_timer=short_retry_timer)
     async def fetch_short(job: Job) -> None:
         calls[job.id] += 1
         await waiter.wait()
 
-    @qm.entrypoint("fetch_long", retry_timer=timedelta(seconds=1))
+    long_retry_timer = timedelta(seconds=1)
+
+    @qm.entrypoint("fetch_long", retry_timer=long_retry_timer)
     async def fetch_long(job: Job) -> None:
         calls[job.id] += 1
         await waiter.wait()
@@ -148,8 +150,7 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
     )
 
     async def entrypoint_waiter() -> None:
-        while not (all(v > 1 for v in calls.values()) and len(calls) > 1):
-            await asyncio.sleep(0.1)
+        await asyncio.sleep(long_retry_timer.total_seconds() * 5)
         waiter.set()
         qm.shutdown.set()
 
@@ -158,8 +159,9 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
         entrypoint_waiter(),
     )
 
+    assert long_retry_timer > short_retry_timer
     assert len(calls) == 2
-    assert all(v > 1 for v in calls.values())
+    assert all(v == 1 for v in calls.values())
 
 
 async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
@@ -294,3 +296,33 @@ async def test_retry_concurrency_limit_for_retries(apgdriver: db.Driver) -> None
     )
     # ensure only one invocation occurred
     assert calls[jid] == 1
+
+
+async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
+    """Job should not be retried while still running (issue #430)."""
+    retry_timer = timedelta(seconds=0.1)
+    waiter = asyncio.Event()
+    calls = 0
+    qm = QueueManager(apgdriver)
+
+    @qm.entrypoint("fetch", retry_timer=retry_timer)
+    async def fetch(job: Job) -> None:
+        nonlocal calls
+        calls += 1
+        # Run longer than the retry timer to expose premature retry
+        await waiter.wait()
+
+    await qm.queries.enqueue(["fetch"], [None], [0])
+
+    async def stopper() -> None:
+        await asyncio.sleep(retry_timer.total_seconds() * 10)
+        waiter.set()
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0)),
+        stopper(),
+    )
+
+    # Expect only a single execution
+    assert calls == 1
