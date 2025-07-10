@@ -265,7 +265,6 @@ async def test_shutdown_on_listener_failure(queue_manager: QueueManager) -> None
         )
 
 
-@pytest.mark.asyncio
 async def test_fallback_when_add_signal_handler_is_missing(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

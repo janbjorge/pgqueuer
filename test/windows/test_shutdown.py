@@ -15,7 +15,6 @@ class DummyManager:
         await self.shutdown.wait()
 
 
-@pytest.mark.asyncio
 async def test_shutdown_without_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     loop = asyncio.get_running_loop()
 

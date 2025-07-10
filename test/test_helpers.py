@@ -94,7 +94,7 @@ def test_custom_jitter_range() -> None:
         ((1.3, 0.5), False),
     ],
 )
-def test_jitter_span_validation(span: tuple[float, float], raises: bool):
+def test_jitter_span_validation(span: tuple[float, float], raises: bool) -> None:
     cm = pytest.raises(ValueError) if raises else nullcontext()
 
     with cm:
