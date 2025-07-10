@@ -18,7 +18,7 @@ PGQueuer is a minimalist, high-performance job queue library for Python, leverag
 - **⚛️ Efficient Concurrency Handling**: Supports `FOR UPDATE SKIP LOCKED` to ensure reliable concurrency control and smooth job processing without contention.
 - **🚧 Real-time Notifications**: Uses PostgreSQL's `LISTEN` and `NOTIFY` commands for real-time job status updates.
 - **👨‍🎓 Batch Processing**: Supports large job batches, optimizing enqueueing and dequeuing with minimal overhead.
-- **📈 Optional Sentry Telemetry**: Install with `pgqueuer[sentry]` to trace job and schedule execution.
+- **📈 Optional Sentry Telemetry**: Install with `pgqueuer[sentry]` and use `TracedEntrypointExecutor` to trace work.
 - **⏳ Graceful Shutdowns**: Built-in signal handling ensures safe job processing shutdown without data loss.
 - **⌛ Recurring Job Scheduling**: Register and manage recurring tasks using cron-like expressions for periodic execution.
 

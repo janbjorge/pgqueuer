@@ -21,7 +21,7 @@ from pydantic_core import to_json
 
 from pgqueuer.types import CronEntrypoint
 
-from . import db, errors, helpers, models, qb, query_helpers
+from . import db, errors, helpers, models, qb, query_helpers, telemetry
 
 
 def is_unique_violation(exc: Exception) -> bool:
@@ -279,6 +279,7 @@ class Queries:
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
+        telemetry: telemetry.Telemetry | None = None,
     ) -> list[models.JobId]:
         """
         Insert new jobs into the queue.
@@ -302,19 +303,32 @@ class Queries:
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
 
+        if telemetry:
+            trace_headers = telemetry.trace_headers()
+            for i, hdr in enumerate(normed_params.headers):
+                normed_params.headers[i] = {**(hdr or {}), **trace_headers}
+
         try:
-            return [
-                models.JobId(row["id"])
-                for row in await self.driver.fetch(
-                    self.qbq.build_enqueue_query(),
-                    normed_params.priority,
+            rows = await self.driver.fetch(
+                self.qbq.build_enqueue_query(),
+                normed_params.priority,
+                normed_params.entrypoint,
+                normed_params.payload,
+                normed_params.execute_after,
+                normed_params.dedupe_key,
+                [to_json(x).decode() for x in normed_params.headers],
+            )
+            job_ids = [models.JobId(row["id"]) for row in rows]
+            if telemetry:
+                for ep, payload_bytes, jid in zip(
                     normed_params.entrypoint,
                     normed_params.payload,
-                    normed_params.execute_after,
-                    normed_params.dedupe_key,
-                    [to_json(x).decode() for x in normed_params.headers],
-                )
-            ]
+                    job_ids,
+                ):
+                    size = len(payload_bytes or b"")
+                    with telemetry.publish_span(ep, str(jid), size):
+                        pass
+            return job_ids
         except Exception as e:
             if is_unique_violation(e):
                 raise errors.DuplicateJobError(normed_params.dedupe_key) from e

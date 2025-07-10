@@ -23,7 +23,7 @@ import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
-from . import db, errors, helpers, models, queries
+from . import db, errors, helpers, models, queries, telemetry
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -195,6 +195,20 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
+@dataclasses.dataclass
+class TracedEntrypointExecutor(EntrypointExecutor):
+    """Entrypoint executor that instruments job execution."""
+
+    telemetry: telemetry.Telemetry = dataclasses.field(
+        default_factory=telemetry.Telemetry,
+        repr=False,
+    )
+
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        with self.telemetry.job_span(job):
+            await super().execute(job, context)
+
+
 ######## Schedulers ########
 
 
@@ -267,3 +281,17 @@ class ScheduleExecutor(AbstractScheduleExecutor):
         This method calls the provided asynchronous function when the job is triggered.
         """
         await self.parameters.func(schedule)
+
+
+@dataclasses.dataclass
+class TracedScheduleExecutor(ScheduleExecutor):
+    """Schedule executor that instruments schedule runs."""
+
+    telemetry: telemetry.Telemetry = dataclasses.field(
+        default_factory=telemetry.Telemetry,
+        repr=False,
+    )
+
+    async def execute(self, schedule: models.Schedule) -> None:
+        with self.telemetry.schedule_span(schedule):
+            await super().execute(schedule)

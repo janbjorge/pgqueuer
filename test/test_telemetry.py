@@ -1,15 +1,14 @@
-from types import SimpleNamespace
 import types
+from types import SimpleNamespace
 
 import pytest
 
-from pgqueuer import models, telemetry, helpers
+from pgqueuer import helpers, models, telemetry
 
 
 def test_job_span_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
     tel = telemetry.Telemetry()
-    # ensure sentry_sdk import fails
-    monkeypatch.setitem(__import__('sys').modules, 'sentry_sdk', None)
+    monkeypatch.setitem(__import__("sys").modules, "sentry_sdk", None)
     job = models.Job(
         id=models.JobId(1),
         priority=1,
@@ -32,7 +31,10 @@ def test_job_span_with_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class DummySpan:
         def __enter__(self) -> None:
-            captured['entered'] = True
+            captured["entered"] = True
+
+        def set_data(self, *_: object, **__: object) -> None:
+            pass
 
         def __exit__(
             self,
@@ -40,10 +42,14 @@ def test_job_span_with_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
             exc: BaseException | None,
             tb: types.TracebackType | None,
         ) -> None:
-            captured['exited'] = True
+            captured["exited"] = True
 
-    dummy_sdk = SimpleNamespace(start_span=lambda **_: DummySpan())
-    monkeypatch.setitem(__import__('sys').modules, 'sentry_sdk', dummy_sdk)
+    dummy_sdk = SimpleNamespace(
+        start_span=lambda **_: DummySpan(),
+        get_traceparent=lambda: "tp",
+        get_baggage=lambda: "bg",
+    )
+    monkeypatch.setitem(__import__("sys").modules, "sentry_sdk", dummy_sdk)
     tel = telemetry.Telemetry()
     job = models.Job(
         id=models.JobId(1),
@@ -59,8 +65,15 @@ def test_job_span_with_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
         headers=None,
     )
     with tel.job_span(job):
-        assert captured.get('entered')
-    assert captured.get('exited')
+        assert captured.get("entered")
+    assert captured.get("exited")
+
+
+def test_trace_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    dummy_sdk = SimpleNamespace(get_traceparent=lambda: "tp", get_baggage=lambda: "bg")
+    monkeypatch.setitem(__import__("sys").modules, "sentry_sdk", dummy_sdk)
+    tel = telemetry.Telemetry()
+    assert tel.trace_headers() == {"sentry-trace": "tp", "baggage": "bg"}
 
 
 

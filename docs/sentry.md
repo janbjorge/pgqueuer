@@ -6,5 +6,5 @@ PGQueuer supports optional integration with Sentry's queues instrumentation. Ins
 pip install "pgqueuer[sentry]"
 ```
 
-Once installed, job and schedule execution will automatically create spans when using `QueueManager` and `SchedulerManager`. These spans are grouped under the operations `pgqueuer.job` and `pgqueuer.schedule`.
+Use :class:`pgqueuer.executors.TracedEntrypointExecutor` to instrument job execution and pass a :class:`pgqueuer.telemetry.Telemetry` instance to :meth:`pgqueuer.queries.Queries.enqueue` to record producer spans.
 

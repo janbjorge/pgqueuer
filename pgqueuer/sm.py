@@ -9,7 +9,7 @@ from typing import Callable
 
 import croniter
 
-from . import db, executors, helpers, logconfig, models, queries, telemetry, tm
+from . import db, executors, helpers, logconfig, models, queries, tm
 
 warnings.simplefilter("default", DeprecationWarning)
 
@@ -38,10 +38,6 @@ class SchedulerManager:
     )
     queries: queries.Queries = dataclasses.field(
         init=False,
-    )
-    telemetry: telemetry.Telemetry = dataclasses.field(
-        default_factory=telemetry.Telemetry,
-        repr=False,
     )
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
@@ -215,8 +211,7 @@ class SchedulerManager:
         task_manager.add(asyncio.create_task(heartbeat()))
 
         try:
-            with self.telemetry.schedule_span(schedule):
-                await executor.execute(schedule)
+            await executor.execute(schedule)
         except Exception:
             logconfig.logger.exception(
                 "Exception while processing entrypoint/expression: %s/%s",
