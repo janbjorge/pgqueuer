@@ -258,6 +258,7 @@ class Queries:
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
+        telemetry: telemetry.Telemetry | None = None,
     ) -> list[models.JobId]: ...
 
     @overload
@@ -269,6 +270,7 @@ class Queries:
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
+        telemetry: telemetry.Telemetry | None = None,
     ) -> list[models.JobId]: ...
 
     async def enqueue(
@@ -300,11 +302,16 @@ class Queries:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
         normed = query_helpers.normalize_enqueue_params(
-            entrypoint, payload, priority, execute_after, dedupe_key, headers
+            entrypoint,
+            payload,
+            priority,
+            execute_after,
+            dedupe_key,
+            headers,
         )
 
-        if telemetry:
-            trace_headers = telemetry.trace_headers()
+        trace_headers = telemetry.trace_headers() if telemetry else None
+        if trace_headers:
             normed.headers = [
                 {**(hdr or {}), **trace_headers} for hdr in normed.headers
             ]
@@ -319,24 +326,23 @@ class Queries:
                 normed.dedupe_key,
                 [to_json(x).decode() for x in normed.headers],
             )
-            job_ids = [models.JobId(row["id"]) for row in rows]
-            if telemetry:
-                for ep, payload_bytes, jid in zip(
-                    normed.entrypoint,
-                    normed.payload,
-                    job_ids,
-                ):
-                    with telemetry.publish_span(
-                        ep,
-                        str(jid),
-                        len(payload_bytes or b""),
-                    ):
-                        pass
-            return job_ids
         except Exception as e:
             if is_unique_violation(e):
                 raise errors.DuplicateJobError(normed.dedupe_key) from e
             raise
+
+        job_ids: list[models.JobId] = []
+        for row, ep, payload_bytes in zip(
+            rows,
+            normed.entrypoint,
+            normed.payload,
+        ):
+            jid = models.JobId(row["id"])
+            job_ids.append(jid)
+            if telemetry:
+                with telemetry.publish_span(ep, str(jid), len(payload_bytes or b"")):
+                    pass
+        return job_ids
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
