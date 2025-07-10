@@ -34,6 +34,7 @@ from . import (
     models,
     qb,
     queries,
+    telemetry,
     tm,
     types,
 )
@@ -73,6 +74,10 @@ class QueueManager:
         default_factory=asyncio.Event,
     )
     queries: queries.Queries = dataclasses.field(init=False)
+    telemetry: telemetry.Telemetry = dataclasses.field(
+        default_factory=telemetry.Telemetry,
+        repr=False,
+    )
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -592,7 +597,8 @@ class QueueManager:
                 # concurrency limit semaphore.
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
-                    await executor.execute(job, ctx)
+                    with self.telemetry.job_span(job):
+                        await executor.execute(job, ctx)
             except Exception as e:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",

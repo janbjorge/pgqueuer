@@ -4,6 +4,7 @@ from .models import Job, JobId
 from .qm import QueueManager
 from .queries import Queries
 from .sm import SchedulerManager
+from .telemetry import Telemetry
 
 try:
     from ._version import version as __version__
@@ -20,4 +21,5 @@ __all__ = [
     "Queries",
     "QueueManager",
     "SchedulerManager",
+    "Telemetry",
 ]
