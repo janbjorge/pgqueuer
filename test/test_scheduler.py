@@ -28,7 +28,6 @@ async def shutdown_Scheduler_after(
     scheduler.shutdown.set()
 
 
-@pytest.mark.asyncio
 async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -49,7 +48,6 @@ async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     assert scheduler.registry[key].parameters.expression == "2 * * * *"
 
 
-@pytest.mark.asyncio
 async def test_scheduler_register_raises_invalid_expression(scheduler: SchedulerManager) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -58,7 +56,6 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
         scheduler.schedule("sample_task", "bla * * * *")(sample_task)
 
 
-@pytest.mark.asyncio
 async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
@@ -82,7 +79,6 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
     assert executed
 
 
-@pytest.mark.asyncio
 async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
@@ -105,7 +101,6 @@ async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> N
     assert all(a.heartbeat > b.heartbeat for a, b in zip(after, before))
 
 
-@pytest.mark.asyncio
 async def test_schedule_storage_and_retrieval(
     scheduler: SchedulerManager,
     mocker: Mock,
@@ -138,7 +133,6 @@ async def test_schedule_storage_and_retrieval(
     assert received.expression == expression
 
 
-@pytest.mark.asyncio
 async def test_schedule_clean_old(
     apgdriver: AsyncpgDriver,
     mocker: Mock,

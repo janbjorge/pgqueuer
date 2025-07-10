@@ -41,7 +41,6 @@ class MultiprocessingExecutor(AbstractEntrypointExecutor):
             self.queue.put(job.payload)
 
 
-@pytest.mark.asyncio
 async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
     result = []
 
@@ -72,7 +71,6 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
     assert result == [b"test_payload"]
 
 
-@pytest.mark.asyncio
 async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     result = []
 
@@ -102,7 +100,6 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     assert result == [b"test_payload"]
 
 
-@pytest.mark.asyncio
 async def test_custom_threading_executor() -> None:
     class ThreadingExecutor(AbstractEntrypointExecutor):
         def __init__(self) -> None:
@@ -131,7 +128,6 @@ async def test_custom_threading_executor() -> None:
     assert executor.result == [b"thread_payload"]
 
 
-@pytest.mark.asyncio
 async def test_custom_multiprocessing_executor() -> None:
     executor = MultiprocessingExecutor()
     job = mocked_job(payload=b"process_payload")
@@ -145,7 +141,6 @@ async def test_custom_multiprocessing_executor() -> None:
     assert result == b"process_payload"
 
 
-@pytest.mark.asyncio
 async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
     qm = QueueManager(connection=apgdriver)
     results = []

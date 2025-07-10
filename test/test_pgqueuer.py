@@ -173,7 +173,6 @@ async def shutdown_scheduler_after(pgq: PgQueuer, delay: timedelta = timedelta(s
     pgq.shutdown.set()
 
 
-@pytest.mark.asyncio
 async def test_scheduler_register(scheduler: PgQueuer) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -194,7 +193,6 @@ async def test_scheduler_register(scheduler: PgQueuer) -> None:
     assert scheduler.sm.registry[key].parameters.expression == "2 * * * *"
 
 
-@pytest.mark.asyncio
 async def test_scheduler_register_raises_invalid_expression(scheduler: PgQueuer) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -203,7 +201,6 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: PgQueuer)
         scheduler.schedule("sample_task", "bla * * * *")(sample_task)
 
 
-@pytest.mark.asyncio
 async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
@@ -227,7 +224,6 @@ async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
     assert executed
 
 
-@pytest.mark.asyncio
 async def test_heartbeat_updates(scheduler: PgQueuer, mocker: Mock) -> None:
     mocker.patch(
         "pgqueuer.helpers.utc_now",
@@ -250,7 +246,6 @@ async def test_heartbeat_updates(scheduler: PgQueuer, mocker: Mock) -> None:
     assert all(a.heartbeat > b.heartbeat for a, b in zip(after, before))
 
 
-@pytest.mark.asyncio
 async def test_schedule_storage_and_retrieval(
     scheduler: PgQueuer,
     mocker: Mock,
