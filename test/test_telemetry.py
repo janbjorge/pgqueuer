@@ -30,8 +30,9 @@ def test_job_span_with_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: dict[str, bool] = {}
 
     class DummySpan:
-        def __enter__(self) -> None:
+        def __enter__(self) -> "DummySpan":
             captured["entered"] = True
+            return self
 
         def set_data(self, *_: object, **__: object) -> None:
             pass

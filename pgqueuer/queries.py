@@ -299,39 +299,43 @@ class Queries:
         Raises:
             ValueError: If the lengths of the lists provided do not match when using multiple jobs.
         """
-        normed_params = query_helpers.normalize_enqueue_params(
+        normed = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
 
         if telemetry:
             trace_headers = telemetry.trace_headers()
-            for i, hdr in enumerate(normed_params.headers):
-                normed_params.headers[i] = {**(hdr or {}), **trace_headers}
+            normed.headers = [
+                {**(hdr or {}), **trace_headers} for hdr in normed.headers
+            ]
 
         try:
             rows = await self.driver.fetch(
                 self.qbq.build_enqueue_query(),
-                normed_params.priority,
-                normed_params.entrypoint,
-                normed_params.payload,
-                normed_params.execute_after,
-                normed_params.dedupe_key,
-                [to_json(x).decode() for x in normed_params.headers],
+                normed.priority,
+                normed.entrypoint,
+                normed.payload,
+                normed.execute_after,
+                normed.dedupe_key,
+                [to_json(x).decode() for x in normed.headers],
             )
             job_ids = [models.JobId(row["id"]) for row in rows]
             if telemetry:
                 for ep, payload_bytes, jid in zip(
-                    normed_params.entrypoint,
-                    normed_params.payload,
+                    normed.entrypoint,
+                    normed.payload,
                     job_ids,
                 ):
-                    size = len(payload_bytes or b"")
-                    with telemetry.publish_span(ep, str(jid), size):
+                    with telemetry.publish_span(
+                        ep,
+                        str(jid),
+                        len(payload_bytes or b""),
+                    ):
                         pass
             return job_ids
         except Exception as e:
             if is_unique_violation(e):
-                raise errors.DuplicateJobError(normed_params.dedupe_key) from e
+                raise errors.DuplicateJobError(normed.dedupe_key) from e
             raise
 
     async def queued_work(self, entrypoints: list[str]) -> int:

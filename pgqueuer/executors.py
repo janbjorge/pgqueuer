@@ -92,12 +92,8 @@ class AbstractEntrypointExecutor(ABC):
 
 
 @dataclasses.dataclass
-class EntrypointExecutor(AbstractEntrypointExecutor):
-    """
-    Job executor that wraps an entrypoint function.
-
-    Executes the provided function when processing a job.
-    """
+class _BasicEntrypointExecutor(AbstractEntrypointExecutor):
+    """Uninstrumented executor that wraps an entrypoint function."""
 
     is_async: bool = dataclasses.field(init=False)
 
@@ -116,6 +112,25 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             await cast(AsyncEntrypoint, self.parameters.func)(job)
         else:
             await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+
+
+@dataclasses.dataclass
+class TracedEntrypointExecutor(_BasicEntrypointExecutor):
+    """Entrypoint executor that instruments job execution."""
+
+    telemetry: telemetry.Telemetry = dataclasses.field(
+        default_factory=telemetry.Telemetry,
+        repr=False,
+    )
+
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        with self.telemetry.job_span(job):
+            await super().execute(job, context)
+
+
+@dataclasses.dataclass
+class EntrypointExecutor(TracedEntrypointExecutor):
+    """Default executor with tracing enabled."""
 
 
 @dataclasses.dataclass
@@ -195,20 +210,6 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
-@dataclasses.dataclass
-class TracedEntrypointExecutor(EntrypointExecutor):
-    """Entrypoint executor that instruments job execution."""
-
-    telemetry: telemetry.Telemetry = dataclasses.field(
-        default_factory=telemetry.Telemetry,
-        repr=False,
-    )
-
-    async def execute(self, job: models.Job, context: models.Context) -> None:
-        with self.telemetry.job_span(job):
-            await super().execute(job, context)
-
-
 ######## Schedulers ########
 
 
@@ -266,13 +267,8 @@ class AbstractScheduleExecutor(ABC):
 
 
 @dataclasses.dataclass
-class ScheduleExecutor(AbstractScheduleExecutor):
-    """
-    Job executor that wraps an entrypoint function.
-
-    This executor runs the provided function according to the defined schedule.
-    It is a concrete implementation of AbstractScheduleExecutor.
-    """
+class _BasicScheduleExecutor(AbstractScheduleExecutor):
+    """Uninstrumented schedule executor that wraps an entrypoint function."""
 
     async def execute(self, schedule: models.Schedule) -> None:
         """
@@ -284,7 +280,7 @@ class ScheduleExecutor(AbstractScheduleExecutor):
 
 
 @dataclasses.dataclass
-class TracedScheduleExecutor(ScheduleExecutor):
+class TracedScheduleExecutor(_BasicScheduleExecutor):
     """Schedule executor that instruments schedule runs."""
 
     telemetry: telemetry.Telemetry = dataclasses.field(
@@ -295,3 +291,8 @@ class TracedScheduleExecutor(ScheduleExecutor):
     async def execute(self, schedule: models.Schedule) -> None:
         with self.telemetry.schedule_span(schedule):
             await super().execute(schedule)
+
+
+@dataclasses.dataclass
+class ScheduleExecutor(TracedScheduleExecutor):
+    """Default schedule executor with tracing enabled."""

@@ -44,7 +44,7 @@ class Telemetry:
             assert self._sdk
             with self._sdk.start_span(
                 op="queue.publish",
-                description=queue,
+                name=queue,
             ) as span:
                 span.set_data("messaging.message.id", message_id)
                 span.set_data("messaging.destination.name", queue)
@@ -60,7 +60,7 @@ class Telemetry:
             assert self._sdk
             with self._sdk.start_span(
                 op="queue.process",
-                description=job.entrypoint,
+                name=job.entrypoint,
             ) as span:
                 span.set_data("messaging.message.id", int(job.id))
                 span.set_data("messaging.destination.name", job.entrypoint)
@@ -80,8 +80,8 @@ class Telemetry:
             assert self._sdk
             with self._sdk.start_span(
                 op="pgqueuer.schedule",
-                description=schedule.entrypoint,
-                data={"schedule_id": int(schedule.id)},
-            ):
+                name=schedule.entrypoint,
+            ) as span:
+                span.set_data("schedule_id", int(schedule.id))
                 yield
 
