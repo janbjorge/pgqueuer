@@ -141,18 +141,14 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
         calls[job.id] += 1
         await waiter.wait()
 
-    jids = await qm.queries.enqueue(
+    await qm.queries.enqueue(
         ["fetch_short", "fetch_long"],
         [None, None],
         [0, 0],
     )
 
     async def entrypoint_waiter() -> None:
-        import icecream
-
         while not (all(v > 1 for v in calls.values()) and len(calls) > 1):
-            icecream.ic(calls)
-            icecream.ic(await inspect_queued_jobs(jids, apgdriver))
             await asyncio.sleep(0.1)
         waiter.set()
         qm.shutdown.set()
