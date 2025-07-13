@@ -105,7 +105,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
         self.is_async = is_async_callable(self.parameters.func)
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
-        async with tracing.sentry_trace_job(job):
+        async with tracing.sentry_trace_process(job):
             if self.is_async:
                 await cast(AsyncEntrypoint, self.parameters.func)(job)
             else:

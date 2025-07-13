@@ -21,7 +21,7 @@ from pydantic_core import to_json
 
 from pgqueuer.types import CronEntrypoint
 
-from . import db, errors, helpers, models, qb, query_helpers
+from . import db, errors, helpers, models, qb, query_helpers, tracing
 
 
 def is_unique_violation(exc: Exception) -> bool:
@@ -301,6 +301,16 @@ class Queries:
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
+
+        if tracing.sentry_sdk is not None:
+            trace_headers = tracing.sentry_trace_publish(
+                entryponits=normed_params.entrypoint,
+                body_sizes=[len(p.decode()) if p else 0 for p in normed_params.payload],
+            )
+            normed_params.headers = [
+                {**(h or {}), **(tr or {})}
+                for h, tr in zip(normed_params.headers, trace_headers, strict=True)
+            ]
 
         try:
             return [
