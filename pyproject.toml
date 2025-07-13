@@ -62,6 +62,7 @@ pgq = "pgqueuer.__main__:main"
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.30.0"]
 psycopg = ["psycopg>=3.2.0"]
+sentry = ["sentry-sdk>=1.39.0"]
 dev = [
     "async-timeout>=4.0.3",
     "asyncpg",
