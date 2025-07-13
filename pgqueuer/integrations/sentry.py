@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 import sentry_sdk
 from sentry_sdk.consts import OP
@@ -81,10 +80,6 @@ def _patch_enqueue(func: Callable[..., Any]) -> Callable[..., Any]:
         headers: Any | None = None,
     ) -> list[Any]:
         integration = sentry_sdk.get_client().get_integration(PgQueuerIntegration)
-        import icecream
-
-        icecream.ic("heloo....")
-        icecream.ic("Integration:", PgQueuerIntegration)
         if integration is None:
             return await func(
                 self,
@@ -97,12 +92,9 @@ def _patch_enqueue(func: Callable[..., Any]) -> Callable[..., Any]:
             )
 
         header_list = headers if isinstance(headers, list) else [headers] * len(entrypoint)
-        icecream.ic(header_list)
         new_headers = _inject_headers_batch(header_list)
-        icecream.ic(new_headers)
         with sentry_sdk.start_span(
             op=OP.QUEUE_PUBLISH,
-            name=str(entrypoint),
             origin=PgQueuerIntegration.origin,
         ):
             return await func(
@@ -139,7 +131,6 @@ def _patch_enqueue(func: Callable[..., Any]) -> Callable[..., Any]:
         new_headers = _inject_headers_single(headers)
         with sentry_sdk.start_span(
             op=OP.QUEUE_PUBLISH,
-            name=entrypoint,
             origin=PgQueuerIntegration.origin,
         ):
             return func(
@@ -177,7 +168,6 @@ def _patch_enqueue(func: Callable[..., Any]) -> Callable[..., Any]:
         new_headers = _inject_headers_batch(header_list)
         with sentry_sdk.start_span(
             op=OP.QUEUE_PUBLISH,
-            name=str(entrypoint),
             origin=PgQueuerIntegration.origin,
         ):
             return func(
