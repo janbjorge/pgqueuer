@@ -18,6 +18,7 @@ import sentry_sdk
 import typer
 import uvloop
 from pydantic import AwareDatetime, BaseModel
+from sentry_sdk.integrations.logging import LoggingIntegration
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
@@ -211,6 +212,7 @@ class Consumer:
         @self.pgq.entrypoint("asyncfetch")
         async def asyncfetch(job: Job) -> None:
             self.bar.update()
+            raise ValueError("This is a test error to measure retry behavior.")
 
         @self.pgq.entrypoint("syncfetch")
         def syncfetch(job: Job) -> None:
@@ -461,10 +463,14 @@ if __name__ == "__main__":
         dsn="https://a93d7eb14d8908c9355be3a2917e2aab@o4509644118163456.ingest.de.sentry.io/4509644122751056",
         # Set traces_sample_rate to 1.0 to capture 100%
         # of transactions for tracing.
-        traces_sample_rate=1.0,
+        traces_sample_rate=0.1,
         integrations=[
             PgQueuerIntegration(),
+            LoggingIntegration(sentry_logs_level=None),  # Do not monkeypatch the sentry handler
         ],
+        _experiments={
+            "enable_logs": True,
+        },
     )
     with suppress(KeyboardInterrupt):
         app()

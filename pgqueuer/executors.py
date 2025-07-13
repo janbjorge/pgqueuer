@@ -7,10 +7,8 @@ import dataclasses
 import functools
 import random
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import (
-    AsyncGenerator,
     Awaitable,
     Callable,
     TypeAlias,
@@ -25,7 +23,7 @@ import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
-from . import db, errors, helpers, models, queries
+from . import db, errors, helpers, models, queries, tracing
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -54,57 +52,6 @@ def is_async_callable(obj: object) -> bool:
     return asyncio.iscoroutinefunction(obj) or (
         callable(obj) and asyncio.iscoroutinefunction(obj.__call__)
     )
-
-
-@asynccontextmanager
-async def sentry_trace_job(job: models.Job) -> AsyncGenerator[None, None]:
-    try:
-        import sentry_sdk
-
-        headers = job.headers or {}
-        has_sentry_headers = "sentry-trace" in headers or "baggage" in headers
-        import icecream
-
-        icecream.ic(headers)
-
-        if has_sentry_headers:
-            transaction = sentry_sdk.continue_trace(
-                headers,
-                op="function",  # Transaction op for consumer
-                name=f"queue_consumer_transaction:{job.entrypoint}",
-            )
-            transaction_ctx = sentry_sdk.start_transaction(transaction)
-        else:
-            transaction_ctx = sentry_sdk.start_transaction(
-                op="function",  # Transaction op for consumer
-                name=f"queue_consumer_transaction:{job.entrypoint}",
-            )
-
-        with transaction_ctx:
-            with sentry_sdk.start_span(
-                op="queue.process",  # Span op for consumer
-                name=f"queue_consumer:{job.entrypoint}",
-            ) as span:
-                span.set_data("messaging.message.id", job.id)
-                span.set_data("messaging.destination.name", job.entrypoint)
-                import icecream
-
-                icecream.ic(span)
-                span.set_data(
-                    "messaging.message.body.size",
-                    len(str(job.payload).encode("utf-8") if job.payload else ""),
-                )
-                span.set_data("messaging.message.retry.count", getattr(job, "retry_count", 0))
-                latency = (job.updated - job.created).total_seconds() * 1000
-                span.set_data("messaging.message.receive.latency", latency)
-                icecream.ic(latency)
-                try:
-                    yield
-                except Exception:
-                    sentry_sdk.set_tag("queue.process.status", "internal_error")
-                    raise
-    except ImportError:
-        yield
 
 
 ######## Entrypoints ########
@@ -158,7 +105,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
         self.is_async = is_async_callable(self.parameters.func)
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
-        async with sentry_trace_job(job):
+        async with tracing.sentry_trace_job(job):
             if self.is_async:
                 await cast(AsyncEntrypoint, self.parameters.func)(job)
             else:
