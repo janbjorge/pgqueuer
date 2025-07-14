@@ -467,7 +467,7 @@ if __name__ == "__main__":
         dsn="https://a93d7eb14d8908c9355be3a2917e2aab@o4509644118163456.ingest.de.sentry.io/4509644122751056",
         # Set traces_sample_rate to 1.0 to capture 100%
         # of transactions for tracing.
-        traces_sample_rate=1,
+        traces_sample_rate=0.01,
     )
     with suppress(KeyboardInterrupt):
         app()
