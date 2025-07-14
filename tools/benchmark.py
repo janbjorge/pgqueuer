@@ -21,7 +21,7 @@ from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
-from pgqueuer import PgQueuer, types
+from pgqueuer import PgQueuer, logconfig, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
@@ -428,7 +428,14 @@ def main(
     jobs: int = typer.Option(50_000, help="Number of jobs for the drain strategy"),
     output_json: Path | None = typer.Option(None),
     strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
+    log_level: logconfig.LogLevel = typer.Option(
+        logconfig.LogLevel.INFO.name,
+        "--log-level",
+        help="Set pgqueuer log level.",
+        parser=lambda x: x.upper(),
+    ),
 ) -> None:
+    logconfig.setup_fancy_logger(log_level)
     if strategy is StrategyEnum.drain:
         drain_settings = DrainSettings(
             driver=driver,

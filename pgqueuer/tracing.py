@@ -11,10 +11,29 @@ except ImportError:
     sentry_sdk = None  # type: ignore[assignment]
 
 
-def sentry_trace_publish(
+def _publish_spans(
     entryponits: list[str],
     body_sizes: list[int],
-) -> Generator[dict | None, None, None]:
+) -> Generator[dict, None, None]:
+    assert sentry_sdk, "Sentry SDK must be available to publish spans"
+    for entrypoint, body_size in zip(entryponits, body_sizes, strict=True):
+        with sentry_sdk.start_span(
+            op="queue.publish",
+            name=f"queue_producer:{entrypoint}",
+        ) as span:
+            span.set_data("messaging.destination.name", entrypoint)
+            span.set_data("messaging.message.body.size", body_size)
+            yield {
+                "pgq-sentry-trace": {
+                    "sentry-trace": sentry_sdk.get_traceparent(),
+                    "baggage": sentry_sdk.get_baggage(),
+                }
+            }
+
+
+def sentry_trace_publish(
+    entryponits: list[str], body_sizes: list[int]
+) -> Generator[dict[str, str | None], None, None]:
     """
     Publishes Sentry tracing headers for queue producer operations.
 
@@ -26,29 +45,20 @@ def sentry_trace_publish(
         - https://docs.sentry.io/platforms/python/guides/asyncio/performance/instrumentation/
         - https://docs.sentry.io/platforms/python/performance/instrumentation/custom-instrumentation/
     """
-    if sentry_sdk is None:
-        yield from [None] * len(entryponits)
+    if not sentry_sdk:
+        yield from [{} for _ in entryponits]
         return
 
-    with sentry_sdk.start_transaction(
-        op="function", name="queue_producer_transaction"
-    ) as transaction:
-        for entryponit, body_size in zip(entryponits, body_sizes, strict=True):
-            with sentry_sdk.start_span(
-                op="queue.publish", name=f"queue_producer:{entryponit}"
-            ) as span:
-                # Set span data
-                span.set_data("messaging.destination.name", entryponit)
-                span.set_data("messaging.message.body.size", body_size)
-
-                yield {
-                    "pgq-sentry-trace": {
-                        "sentry-trace": sentry_sdk.get_traceparent(),
-                        "baggage": sentry_sdk.get_baggage(),
-                    }
-                }
-
-        transaction.set_status("ok")
+    if sentry_sdk.get_current_span() is None:
+        # Not in a trace; start a transaction, create spans, and propagate headers
+        with sentry_sdk.start_transaction(
+            op="function", name="queue_producer_transaction"
+        ) as transaction:
+            yield from _publish_spans(entryponits, body_sizes)
+            transaction.set_status("ok")
+    else:
+        # Already in a trace; just create child spans and propagate headers
+        yield from _publish_spans(entryponits, body_sizes)
 
 
 @asynccontextmanager
@@ -71,15 +81,18 @@ async def sentry_trace_process(job: Job) -> AsyncGenerator[None, None]:
         yield
         return
 
-    headers = job.headers or {}
-    sentry_headers = headers.get("pgq-sentry-trace", {})
+    if not job.headers:
+        yield
+        return
+
+    sentry_headers: dict[str, str] | None = job.headers.get("pgq-sentry-trace")
 
     if not sentry_headers:
         yield
         return
 
     transaction = sentry_sdk.continue_trace(
-        headers,
+        sentry_headers,
         op="function",
         name="queue_consumer_transaction",
     )
