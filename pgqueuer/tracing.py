@@ -16,11 +16,11 @@ PGQ_SENTRY_TRACE_HEADER: Final[str] = "pgq-sentry-trace"
 
 
 def _publish_spans(
-    entryponits: list[str],
+    entrypoints: list[str],
     body_sizes: list[int],
 ) -> Generator[dict, None, None]:
     assert sentry_sdk, "Sentry SDK must be available to publish spans"
-    for entrypoint, body_size in zip(entryponits, body_sizes, strict=True):
+    for entrypoint, body_size in zip(entrypoints, body_sizes, strict=True):
         with sentry_sdk.start_span(
             op="queue.publish",
             name=f"queue_producer:{entrypoint}",
@@ -36,7 +36,7 @@ def _publish_spans(
 
 
 def sentry_trace_publish(
-    entryponits: list[str], body_sizes: list[int]
+    entrypoints: list[str], body_sizes: list[int]
 ) -> Generator[dict[str, str | None], None, None]:
     """
     Publishes Sentry tracing headers for queue producer operations.
@@ -50,7 +50,7 @@ def sentry_trace_publish(
         - https://docs.sentry.io/platforms/python/performance/instrumentation/custom-instrumentation/
     """
     if not sentry_sdk:
-        yield from [{} for _ in entryponits]
+        yield from [{} for _ in entrypoints]
         return
 
     if sentry_sdk.get_current_span() is None:
@@ -58,11 +58,11 @@ def sentry_trace_publish(
         with sentry_sdk.start_transaction(
             op="function", name="queue_producer_transaction"
         ) as transaction:
-            yield from _publish_spans(entryponits, body_sizes)
+            yield from _publish_spans(entrypoints, body_sizes)
             transaction.set_status("ok")
     else:
         # Already in a trace; just create child spans and propagate headers
-        yield from _publish_spans(entryponits, body_sizes)
+        yield from _publish_spans(entrypoints, body_sizes)
 
 
 @asynccontextmanager

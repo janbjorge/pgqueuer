@@ -15,6 +15,7 @@ from pgqueuer.helpers import (
     timer,
     utc_now,
 )
+from pgqueuer.models import _parse_json_if_needed
 
 
 async def test_perf_counter_dt() -> None:
@@ -202,3 +203,12 @@ def test_exponential_backoff_reset() -> None:
     assert backoff.current_delay == timedelta(20)
     backoff.reset()
     assert backoff.current_delay == timedelta(5)
+
+
+def test_parse_json_if_needed_none() -> None:
+    assert _parse_json_if_needed(None) is None
+
+
+def test_parse_json_if_needed_dict() -> None:
+    d = {"foo": "bar"}
+    assert _parse_json_if_needed(d) == d

@@ -207,8 +207,11 @@ class Consumer:
     mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous
 
     async def run(self) -> None:
+        import random
+
         @self.pgq.entrypoint("asyncfetch")
         async def asyncfetch(job: Job) -> None:
+            await asyncio.sleep(random.random())
             self.bar.update()
 
         @self.pgq.entrypoint("syncfetch")
@@ -463,11 +466,12 @@ def main(
 
 
 if __name__ == "__main__":
-    sentry_sdk.init(
-        dsn="https://a93d7eb14d8908c9355be3a2917e2aab@o4509644118163456.ingest.de.sentry.io/4509644122751056",
-        # Set traces_sample_rate to 1.0 to capture 100%
-        # of transactions for tracing.
-        traces_sample_rate=0.01,
-    )
+    if sentry_dsn := os.environ.get("SENTRY_DSN"):
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            # Set traces_sample_rate to 1.0 to capture 100%
+            # of transactions for tracing.
+            traces_sample_rate=0.1,
+        )
     with suppress(KeyboardInterrupt):
         app()

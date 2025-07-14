@@ -304,7 +304,7 @@ class Queries:
 
         if tracing.sentry_sdk is not None:
             trace_headers = tracing.sentry_trace_publish(
-                entryponits=normed_params.entrypoint,
+                entrypoints=normed_params.entrypoint,
                 body_sizes=[len(p.decode()) if p else 0 for p in normed_params.payload],
             )
             normed_params.headers = [
