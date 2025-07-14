@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Final, Generator
 
 from pgqueuer.models import Job
 
@@ -9,6 +9,10 @@ try:
     import sentry_sdk
 except ImportError:
     sentry_sdk = None  # type: ignore[assignment]
+
+
+# Global constant for Sentry trace header propagation
+PGQ_SENTRY_TRACE_HEADER: Final[str] = "pgq-sentry-trace"
 
 
 def _publish_spans(
@@ -24,7 +28,7 @@ def _publish_spans(
             span.set_data("messaging.destination.name", entrypoint)
             span.set_data("messaging.message.body.size", body_size)
             yield {
-                "pgq-sentry-trace": {
+                PGQ_SENTRY_TRACE_HEADER: {
                     "sentry-trace": sentry_sdk.get_traceparent(),
                     "baggage": sentry_sdk.get_baggage(),
                 }
@@ -81,13 +85,11 @@ async def sentry_trace_process(job: Job) -> AsyncGenerator[None, None]:
         yield
         return
 
-    if not job.headers:
+    if not (headers := job.headers):
         yield
         return
 
-    sentry_headers: dict[str, str] | None = job.headers.get("pgq-sentry-trace")
-
-    if not sentry_headers:
+    if not isinstance(sentry_headers := headers.get(PGQ_SENTRY_TRACE_HEADER), dict):
         yield
         return
 

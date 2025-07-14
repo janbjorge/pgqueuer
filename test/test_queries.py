@@ -6,6 +6,7 @@ import asyncpg
 import pytest
 
 from pgqueuer import db, errors, models, queries
+from pgqueuer.tracing import PGQ_SENTRY_TRACE_HEADER
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -463,5 +464,14 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     )
 
     assert len(jobs) == 1
-    assert jobs[0].headers == headers
-    await q.log_jobs([(jobs[0], "successful", None)])
+
+    job_headers = jobs[0].headers
+    assert job_headers
+
+    sentry_headers = job_headers.pop(PGQ_SENTRY_TRACE_HEADER)
+    assert job_headers == headers
+
+    # Check that sentry headers are a dict with expected keys
+    assert isinstance(sentry_headers, dict)
+    assert "sentry-trace" in sentry_headers
+    assert "baggage" in sentry_headers
