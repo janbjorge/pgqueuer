@@ -38,7 +38,7 @@ class TracingProtocol(Protocol):
     - Managing tracing for queue consumer job processing.
     """
 
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict | None, None, None]:
+    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
         """
         Publishes tracing headers for queue producer operations.
 
@@ -65,7 +65,7 @@ class TracingProtocol(Protocol):
 
 
 class LogfireTracing(TracingProtocol):
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict | None, None, None]:
+    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
         if logfire is None:
             yield {}
             return

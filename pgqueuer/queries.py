@@ -22,6 +22,7 @@ from pydantic_core import to_json
 from pgqueuer.types import CronEntrypoint
 
 from . import db, errors, helpers, models, qb, query_helpers, tracing
+from .helpers import merge_tracing_headers
 
 
 def is_unique_violation(exc: Exception) -> bool:
@@ -302,15 +303,12 @@ class Queries:
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
         if tracing.TRACER.tracer:
-            headers = [
-                {**(h or {}), **(t or {})}
-                for h, t in zip(
+            normed_params.headers = list(
+                merge_tracing_headers(
                     normed_params.headers,
                     tracing.TRACER.tracer.trace_publish(normed_params.entrypoint),
-                    strict=True,
                 )
-            ]
-            normed_params.headers = headers
+            )
 
         try:
             return [
@@ -714,15 +712,12 @@ class SyncQueries:
         )
 
         if tracing.TRACER.tracer:
-            headers = [
-                {**(h or {}), **(t or {})}
-                for h, t in zip(
+            normed_params.headers = list(
+                merge_tracing_headers(
                     normed_params.headers,
                     tracing.TRACER.tracer.trace_publish(normed_params.entrypoint),
-                    strict=True,
                 )
-            ]
-            normed_params.headers = headers
+            )
 
         try:
             return [

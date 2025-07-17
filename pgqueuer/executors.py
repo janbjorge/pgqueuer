@@ -113,7 +113,9 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        trace_context = tracing.TRACER.tracer.trace_process(job) if tracing.TRACER.tracer else nullcontext()
+        trace_context = (
+            tracing.TRACER.tracer.trace_process(job) if tracing.TRACER.tracer else nullcontext()
+        )
         with trace_context:
             if self.is_async:
                 await cast(AsyncEntrypoint, self.parameters.func)(job)

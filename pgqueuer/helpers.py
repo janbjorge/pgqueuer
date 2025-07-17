@@ -1,10 +1,9 @@
 """
-Helper functions for time measurement and asynchronous event handling.
+Helper functions for time measurement, asynchronous event handling, and tracing.
 
-This module provides utility functions for obtaining high-resolution timestamps
-and waiting for events from asynchronous queues with specified timeouts.
-It is used to assist in measuring performance and managing asynchronous tasks
-that involve timing constraints.
+This module provides utility functions for obtaining high-resolution timestamps,
+waiting for events from asynchronous queues with specified timeouts, and managing
+tracing headers to reduce code duplication.
 """
 
 from __future__ import annotations
@@ -209,3 +208,27 @@ def add_schema_to_dsn(dsn: str, schema: str) -> str:
     query["options"] = options
 
     return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
+
+
+def merge_tracing_headers(
+    headers: list[dict | None],
+    trace_headers: Generator[dict | None, None, None],
+) -> list[dict]:
+    """
+    Merge tracing headers into the existing headers for each entrypoint.
+
+    Args:
+        headers (list[dict | None]): The original headers for each entrypoint.
+        trace_headers (Generator[dict | None, None, None]): The tracing headers to merge.
+
+    Returns:
+        list[dict]: A list of merged headers with tracing information included.
+    """
+    return [
+        {**(h or {}), **(t or {})}
+        for h, t in zip(
+            headers,
+            trace_headers,
+            strict=True,
+        )
+    ]

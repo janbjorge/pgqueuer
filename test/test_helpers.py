@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Generator
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 
@@ -9,7 +10,7 @@ import pytest
 from pgqueuer.helpers import (
     ExponentialBackoff,
     add_schema_to_dsn,
-    normalize_cron_expression,
+    merge_tracing_headers,
     retry_timer_buffer_timeout,
     timeout_with_jitter,
     timer,
@@ -102,14 +103,36 @@ def test_jitter_span_validation(span: tuple[float, float], raises: bool) -> None
 
 
 @pytest.mark.parametrize(
-    "expression, expected",
-    (
-        ("@hourly", "0 * * * *"),
-        ("@midnight", "0 0 * * *"),
-    ),
+    "headers, trace_headers, expected",
+    [
+        (
+            [{"key1": "value1"}],
+            [{"trace_key": "trace_value"}],
+            [{"key1": "value1", "trace_key": "trace_value"}],
+        ),
+        (
+            [None],
+            [{"trace_key": "trace_value"}],
+            [{"trace_key": "trace_value"}],
+        ),
+        (
+            [{"key1": "value1"}],
+            [None],
+            [{"key1": "value1"}],
+        ),
+        (
+            [None],
+            [None],
+            [{}],
+        ),
+    ],
 )
-def test_normalize_cron_expression(expression: str, expected: str) -> None:
-    assert normalize_cron_expression(expression) == expected
+def test_merge_tracing_headers(
+    headers: list[dict | None],
+    trace_headers: Generator[dict | None, None, None],
+    expected: list[dict],
+) -> None:
+    assert merge_tracing_headers(headers, trace_headers) == expected
 
 
 def test_timer() -> None:
