@@ -455,5 +455,14 @@ def main(
 
 
 if __name__ == "__main__":
+    if os.environ.get("LOGFIRE", "0") == "1":
+        import logfire
+
+        from pgqueuer import tracing
+
+        logfire.configure(service_name="pgqueuer")
+
+        tracing.set_tracing_class(tracing.LogfireTracing())
+
     with suppress(KeyboardInterrupt):
         app()
