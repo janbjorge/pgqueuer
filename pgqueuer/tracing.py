@@ -78,7 +78,7 @@ class LogfireTracing(TracingProtocol):
     @contextmanager
     def trace_process(self, job: Job) -> Generator[None, None, None]:
         """
-        Async context manager for tracing queue consumer job processing.
+        Synchronous context manager for tracing queue consumer job processing.
 
         Args:
             job (Job): The job being processed, containing headers and metadata.
