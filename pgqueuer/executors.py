@@ -7,7 +7,6 @@ import dataclasses
 import functools
 import random
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import (
     Awaitable,
@@ -24,7 +23,7 @@ import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
-from . import db, errors, helpers, models, queries, tracing
+from . import db, errors, helpers, models, queries
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
@@ -113,14 +112,10 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        trace_context = (
-            tracing.TRACER.tracer.trace_process(job) if tracing.TRACER.tracer else nullcontext()
-        )
-        with trace_context:
-            if self.is_async:
-                await cast(AsyncEntrypoint, self.parameters.func)(job)
-            else:
-                await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+        if self.is_async:
+            await cast(AsyncEntrypoint, self.parameters.func)(job)
+        else:
+            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
 
 
 @dataclasses.dataclass

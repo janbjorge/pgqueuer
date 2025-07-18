@@ -35,6 +35,7 @@ from . import (
     qb,
     queries,
     tm,
+    tracing,
     types,
 )
 
@@ -580,7 +581,11 @@ class QueueManager:
 
         # Send heartbeats several times within ``retry_timer`` to keep the job
         # alive while it is running.
+        trace_context = (
+            tracing.TRACER.tracer.trace_process(job) if tracing.TRACER.tracer else nullcontext()
+        )
         async with (
+            trace_context,
             heartbeat.Heartbeat(
                 job.id,
                 executor.parameters.retry_timer / 2,
