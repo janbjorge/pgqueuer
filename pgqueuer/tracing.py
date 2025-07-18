@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Final, Generator, Protocol
+from typing import AsyncContextManager, AsyncIterator, Final, Generator, Protocol
 
 try:
     import logfire
@@ -50,8 +50,7 @@ class TracingProtocol(Protocol):
         """
         ...
 
-    @contextmanager
-    def trace_process(self, job: Job) -> Generator[None, None, None]:
+    def trace_process(self, job: Job) -> AsyncContextManager[None]:
         """
         Async context manager for tracing queue consumer job processing.
 
@@ -75,8 +74,8 @@ class LogfireTracing(TracingProtocol):
                 with logfire.span("Enqueued: {entrypoint=}", entrypoint=entrypoint):
                     yield {"logfire": dict(logfire.propagate.get_context())}
 
-    @contextmanager
-    def trace_process(self, job: Job) -> Generator[None, None, None]:
+    @asynccontextmanager
+    async def trace_process(self, job: Job) -> AsyncIterator[None]:
         """
         Synchronous context manager for tracing queue consumer job processing.
 
