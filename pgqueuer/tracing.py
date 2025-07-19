@@ -119,7 +119,7 @@ class SentryTracing(TracingProtocol):
         with sentry_sdk.start_transaction(
             op="function",
             name="queue_producer_transaction",
-        ):
+        ) as transaction:
             for entrypoint in entrypoints:
                 with sentry_sdk.start_span(
                     op="queue.publish",
@@ -132,6 +132,7 @@ class SentryTracing(TracingProtocol):
                             "baggage": sentry_sdk.get_baggage(),
                         }
                     }
+            transaction.set_status("ok")
 
     @asynccontextmanager
     async def trace_process(self, job: Job) -> AsyncIterator[None]:
