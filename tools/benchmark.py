@@ -20,7 +20,7 @@ from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
-from pgqueuer import PgQueuer, types
+from pgqueuer import PgQueuer, logconfig, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
@@ -455,6 +455,9 @@ def main(
 
 
 if __name__ == "__main__":
+    from pgqueuer import logconfig
+
+    logconfig.setup_fancy_logger(logconfig.LogLevel.INFO)
     if os.environ.get("LOGFIRE", "0") == "1":
         import logfire
 
@@ -463,6 +466,18 @@ if __name__ == "__main__":
         logfire.configure(service_name="pgqueuer")
 
         tracing.set_tracing_class(tracing.LogfireTracing())
+
+    if sentry_dsn := os.environ.get("SENTRY_DSN"):
+        import sentry_sdk
+
+        from pgqueuer import tracing
+
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            sample_rate=1,
+            traces_sample_rate=1.0,
+        )
+        tracing.set_tracing_class(tracing.SentryTracing())
 
     with suppress(KeyboardInterrupt):
         app()
