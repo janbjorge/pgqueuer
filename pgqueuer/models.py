@@ -149,6 +149,18 @@ class Job(BaseModel):
         BeforeValidator(lambda x: None if x is None else from_json(x)),
     ]
 
+    def logfire_headers(self) -> dict[str, Any] | None:
+        """
+        Extracts logfire headers from the job headers if available.
+        """
+        return None if self.headers is None else self.headers.get("logfire")
+
+    def sentry_headers(self) -> dict[str, Any] | None:
+        """
+        Extracts logfire headers from the job headers if available.
+        """
+        return None if self.headers is None else self.headers.get("sentry")
+
 
 ###### Log ######
 
