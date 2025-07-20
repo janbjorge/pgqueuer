@@ -176,6 +176,3 @@ def test_preserve_other_options_and_add_search_path() -> None:
     schema = "myschema"
     expected = "postgresql://user:password@host:port/dbname?options=-cother_option%3Dfoo&options=-csearch_path%3Dmyschema"
     assert add_schema_to_dsn(dsn, schema) == expected
-
-
-

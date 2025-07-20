@@ -193,7 +193,6 @@ class TimedOverflowBuffer(Generic[T]):
         else:
             return
 
-
     async def flush(self) -> None:
         await self._flush_with_settings(self.retry_settings)
 
