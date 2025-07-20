@@ -25,3 +25,21 @@ Performs a more thorough cleanup by removing containers, networks, volumes, and 
 ## Using Docker Compose Directly
 
 All of these Makefile targets delegate work to Docker Compose. If you prefer controlling the process yourself or passing extra flags, you can run commands like `docker compose -f docker-compose.yml build` or `docker compose -f docker-compose.yml up -d db`. Running Docker Compose commands directly can be particularly useful for advanced scenarios that extend beyond the defaults offered by the Makefile.
+
+## Runner Docker Image
+
+PGQueuer also ships a lightweight Dockerfile for running workers. Build the image and mount your application code when starting a container:
+
+```bash
+# Build the image
+docker build -f docker/runner/Dockerfile -t pgqueuer-runner .
+
+# Run the worker
+docker run --rm -v $(pwd):/app pgqueuer-runner myapp.create_pgqueuer
+```
+
+You can provide the factory path via the `PGQUEUER_FACTORY` environment variable instead of a command-line argument:
+
+```bash
+docker run --rm -v $(pwd):/app -e PGQUEUER_FACTORY='myapp.create_pgqueuer' pgqueuer-runner
+```

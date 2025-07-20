@@ -141,6 +141,8 @@ This design minimizes disruptions and ensures job integrity.
     # Using the traditional approach
     python3 -m pgqueuer run <module+factory-function>
 
+You can also set the factory path via the ``PGQUEUER_FACTORY`` environment variable instead of passing it as an argument.
+
 ### Queue Execution Modes
 
 The `run` command supports two execution modes:

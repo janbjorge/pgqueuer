@@ -368,8 +368,7 @@ def listen(
 @app.command(help="Start a PGQueuer.")
 def run(
     factory_fn: str = typer.Argument(
-        ...,
-        help="Path to a function returning a Queries instance.",
+        ..., envvar="PGQUEUER_FACTORY", help="Path to a function returning a Queries instance."
     ),
     dequeue_timeout: float = typer.Option(
         30.0,
@@ -416,6 +415,7 @@ def run(
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
     """
+
     logconfig.setup_fancy_logger(log_level)
 
     asyncio_run(
