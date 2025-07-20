@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -19,48 +18,6 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from croniter import croniter
 
 from . import listeners, models
-
-
-@dataclass
-class ExponentialBackoff:
-    """
-    A utility class for calculating exponential backoff delays.
-
-    Attributes:
-        start_delay (float): The starting delay for the backoff.
-        multiplier (float): The factor by which the delay increases on each step.
-        max_delay (timedelta): The maximum sleep duration allowed in the backoff sequence.
-        current_delay (float): The current delay in the backoff sequence.
-    """
-
-    start_delay: timedelta = field(default=timedelta(seconds=0.01))
-    multiplier: float = field(default=2)
-    max_delay: timedelta = field(default=timedelta(seconds=10))
-    current_delay: timedelta = field(init=False)
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the delay to the starting delay value.
-        """
-        if self.multiplier <= 1:
-            raise ValueError(f"Multiplier must be greater than 1, but got {self.multiplier}.")
-        self.current_delay = self.start_delay
-
-    def next_delay(self) -> timedelta:
-        """
-        Calculate and return the next delay in the backoff sequence.
-
-        Returns:
-            float: The updated delay value, capped at max_limit.
-        """
-        self.current_delay = min(self.current_delay * self.multiplier, self.max_delay)
-        return self.current_delay
-
-    def reset(self) -> None:
-        """
-        Reset the delay to the starting delay value.
-        """
-        self.current_delay = self.start_delay
 
 
 @contextlib.contextmanager
