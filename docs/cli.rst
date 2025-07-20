@@ -48,12 +48,9 @@ Ensure PGQueuer tables, triggers, and functions exist (or not).
 - **Options**:
   - ``--expect``: ``present`` (default) or ``absent`` to check for object
     presence.
-  - ``--fail/--no-fail``: exit with a non-zero status when mismatches are
-    detected (default ``--fail``).
 
 The command prints a message for each missing or unexpected object as it is
-found. When ``--fail`` is enabled, the command exits with code ``1`` if any
-mismatches are detected. Otherwise it always exits with ``0``.
+found. The command exits with code ``1`` if any mismatches are detected. Otherwise it always exits with ``0``.
 
 **Example**::
 

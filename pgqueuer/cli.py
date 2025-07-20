@@ -5,6 +5,7 @@ import contextlib
 import os
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import Enum
 from typing import Awaitable, Callable
 
 import typer
@@ -27,7 +28,15 @@ app = typer.Typer(
     epilog="Explore documentation and examples: https://github.com/janbjorge/pgqueuer",
     no_args_is_help=True,
     pretty_exceptions_show_locals=False,
+    add_completion=False,
 )
+
+
+class VerifyMode(Enum):
+    """Enumeration for expected object state in verification."""
+
+    PRESENT = "present"
+    ABSENT = "absent"
 
 
 @dataclass
@@ -288,21 +297,15 @@ def install(
 @app.command(help="Verify PGQueuer database objects.")
 def verify(
     ctx: Context,
-    expect: str = typer.Option(
-        "present",
-        "--expect",
+    expect: VerifyMode = typer.Option(
+        ...,
         help="Expected object state: 'present' or 'absent'.",
-    ),
-    fail: bool = typer.Option(
-        True,
-        "--fail/--no-fail",
-        help="Exit with status 1 when mismatches are found.",
     ),
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            expect_present = expect.lower() == "present"
-            mismatched = False
+            expect_present = expect == VerifyMode.PRESENT
+            divergence = list[str]()
 
             required_tables = [
                 q.qbe.settings.queue_table,
@@ -314,26 +317,25 @@ def verify(
             for table in required_tables:
                 exists = await q.has_table(table)
                 if expect_present != exists:
-                    mismatched = True
                     state = "missing" if expect_present else "unexpected"
-                    print(f"{state} table '{table}'")
+                    divergence.append(f"{state} table '{table}'")
 
             func_exists = await q.has_function(q.qbe.settings.function)
             if expect_present != func_exists:
-                mismatched = True
                 state = "missing" if expect_present else "unexpected"
-                print(f"{state} function '{q.qbe.settings.function}'")
+                divergence.append(f"{state} function '{q.qbe.settings.function}'")
 
             trig_exists = await q.has_trigger(q.qbe.settings.trigger)
             if expect_present != trig_exists:
-                mismatched = True
                 state = "missing" if expect_present else "unexpected"
-                print(f"{state} trigger '{q.qbe.settings.trigger}'")
+                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
 
-            if not mismatched:
-                print("all database objects as expected")
-            if mismatched and fail:
-                raise SystemExit(1)
+            if divergence:
+                print("\n".join(divergence))
+            else:
+                print("PGQueuer structure is in place.")
+
+            exit(1 if divergence else 0)
 
     asyncio_run(run())
 
