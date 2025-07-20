@@ -68,3 +68,4 @@ Start a short-lived producer that will enqueue 10,000 jobs.
    celery-comparison
    prometheus-metrics-service
    tracing
+   runner

@@ -31,4 +31,5 @@ def test_run_factory_envvar(monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["run"], env={"PGQUEUER_FACTORY": "mod:create"})
     assert result.exit_code == 0
     assert called["ref"] == "mod:create"
+    assert callable(called["factory"])
 

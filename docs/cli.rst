@@ -183,3 +183,4 @@ Durability determines the logging behavior of PGQueuer tables, affecting perform
 - **Use Case**: Ideal for production environments where data integrity is critical.
 
 Choosing a durability level involves trade-offs between performance and data safety. The ``volatile`` level maximizes performance but risks data loss during crashes. The ``balanced`` level offers a compromise, with critical data protected while auxiliary data is optimized for speed. The ``durable`` level ensures full data safety at the expense of performance.
+

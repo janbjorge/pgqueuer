@@ -43,3 +43,5 @@ You can provide the factory path via the `PGQUEUER_FACTORY` environment variable
 ```bash
 docker run --rm -v $(pwd):/app -e PGQUEUER_FACTORY='myapp.create_pgqueuer' pgqueuer-runner
 ```
+
+See [Runner Docker Image](runner.md) for more details.
