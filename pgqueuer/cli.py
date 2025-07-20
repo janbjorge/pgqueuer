@@ -293,11 +293,16 @@ def verify(
         "--expect",
         help="Expected object state: 'present' or 'absent'.",
     ),
+    fail: bool = typer.Option(
+        True,
+        "--fail/--no-fail",
+        help="Exit with status 1 when mismatches are found.",
+    ),
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             expect_present = expect.lower() == "present"
-            divisions: list[str] = []
+            mismatched = False
 
             required_tables = [
                 q.qbe.settings.queue_table,
@@ -309,23 +314,26 @@ def verify(
             for table in required_tables:
                 exists = await q.has_table(table)
                 if expect_present != exists:
+                    mismatched = True
                     state = "missing" if expect_present else "unexpected"
-                    divisions.append(f"{state} table '{table}'")
+                    print(f"{state} table '{table}'")
 
             func_exists = await q.has_function(q.qbe.settings.function)
             if expect_present != func_exists:
+                mismatched = True
                 state = "missing" if expect_present else "unexpected"
-                divisions.append(f"{state} function '{q.qbe.settings.function}'")
+                print(f"{state} function '{q.qbe.settings.function}'")
 
             trig_exists = await q.has_trigger(q.qbe.settings.trigger)
             if expect_present != trig_exists:
+                mismatched = True
                 state = "missing" if expect_present else "unexpected"
-                divisions.append(f"{state} trigger '{q.qbe.settings.trigger}'")
+                print(f"{state} trigger '{q.qbe.settings.trigger}'")
 
-            if divisions:
-                print("; ".join(sorted(divisions)))
+            if not mismatched:
+                print("all database objects as expected")
+            if mismatched and fail:
                 raise SystemExit(1)
-            print("all database objects as expected")
 
     asyncio_run(run())
 
