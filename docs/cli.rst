@@ -41,6 +41,22 @@ Apply database schema upgrades to PGQueuer.
 
     pgq upgrade --durability durable
 
+``verify``
+~~~~~~~~~~
+Ensure PGQueuer tables, triggers, and functions exist (or not).
+
+- **Options**:
+  - ``--expect``: ``present`` (default) or ``absent`` to check for object
+    presence.
+
+The command prints a single summary of any divisions (missing or unexpected
+objects depending on the verify mode) and returns a non-zero exit code when the
+database state differs from the expectation.
+
+**Example**::
+
+    pgq verify --expect present
+
 ``durability``
 ~~~~~~~~~~~~~~
 Change the durability level of existing PGQueuer tables without data loss.

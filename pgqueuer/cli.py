@@ -285,6 +285,51 @@ def install(
         asyncio_run(run())
 
 
+@app.command(help="Verify PGQueuer database objects.")
+def verify(
+    ctx: Context,
+    expect: str = typer.Option(
+        "present",
+        "--expect",
+        help="Expected object state: 'present' or 'absent'.",
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            expect_present = expect.lower() == "present"
+            divisions: list[str] = []
+
+            required_tables = [
+                q.qbe.settings.queue_table,
+                q.qbe.settings.statistics_table,
+                q.qbe.settings.schedules_table,
+                q.qbe.settings.queue_table_log,
+            ]
+
+            for table in required_tables:
+                exists = await q.has_table(table)
+                if expect_present != exists:
+                    state = "missing" if expect_present else "unexpected"
+                    divisions.append(f"{state} table '{table}'")
+
+            func_exists = await q.has_function(q.qbe.settings.function)
+            if expect_present != func_exists:
+                state = "missing" if expect_present else "unexpected"
+                divisions.append(f"{state} function '{q.qbe.settings.function}'")
+
+            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
+            if expect_present != trig_exists:
+                state = "missing" if expect_present else "unexpected"
+                divisions.append(f"{state} trigger '{q.qbe.settings.trigger}'")
+
+            if divisions:
+                print("; ".join(sorted(divisions)))
+                raise SystemExit(1)
+            print("all database objects as expected")
+
+    asyncio_run(run())
+
+
 @app.command(help="Remove the PGQueuer schema from the database.")
 def uninstall(
     ctx: Context,
