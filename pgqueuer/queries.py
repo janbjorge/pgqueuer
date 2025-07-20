@@ -207,6 +207,24 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def has_function(self, function: str) -> bool:
+        rows = await self.driver.fetch(
+            self.qbe.build_has_function_query(),
+            function,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
+    async def has_trigger(self, trigger: str) -> bool:
+        rows = await self.driver.fetch(
+            self.qbe.build_has_trigger_query(),
+            trigger,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def dequeue(
         self,
         batch_size: int,

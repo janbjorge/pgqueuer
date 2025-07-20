@@ -501,6 +501,27 @@ class QueryBuilderEnvironment:
             AND table_name = $1
         );"""
 
+    def build_has_function_query(self) -> str:
+        """SQL to check if a function exists in the current schema."""
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = current_schema()
+              AND p.proname = $1
+        );"""
+
+    def build_has_trigger_query(self) -> str:
+        """SQL to check if a trigger exists in the current schema."""
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_trigger t
+            JOIN pg_class c ON t.tgrelid = c.oid
+            JOIN pg_namespace n ON c.relnamespace = n.oid
+            WHERE n.nspname = current_schema()
+              AND t.tgname = $1
+        );"""
+
     def build_user_types_query(self) -> str:
         """
         A query to list user-defined ENUM types and their labels.

@@ -266,11 +266,14 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: PGQueuer install and upgrade
+      - name: PGQueuer install, upgrade and uninstall
         run: |
           uv sync --extra asyncpg --frozen --python ${{ matrix.python-version }}
           uv run --frozen pgq install
+          uv run --frozen pgq verify --expect present
           uv run --frozen pgq upgrade
+          uv run --frozen pgq uninstall
+          uv run --frozen pgq verify --expect absent
 
   run-tests:
     if: github.event_name != 'schedule'
