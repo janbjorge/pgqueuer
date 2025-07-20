@@ -14,19 +14,24 @@ import dataclasses
 import time
 from contextlib import suppress
 from datetime import timedelta
-from typing import (
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Generic,
-    TypeVar,
-)
+from typing import AsyncGenerator, Awaitable, Callable, Generic, TypeVar
 
+import tenacity
 from typing_extensions import Self
 
 from . import helpers, logconfig, models, tm
 
 T = TypeVar("T")
+
+
+@dataclasses.dataclass(slots=True)
+class RetrySettings:
+    """Configuration for exponential backoff retries."""
+
+    start_delay: float = 0.01
+    base: float = 2.0
+    max_delay: float = 10.0
+    max_time: float = float("inf")
 
 
 @dataclasses.dataclass
@@ -48,10 +53,9 @@ class TimedOverflowBuffer(Generic[T]):
             the buffer, regardless of size.
         callback (Callable[[list[T]], Awaitable[None]]): The asynchronous callable invoked
             during a flush operation to process the buffered items.
-        retry_backoff (helpers.ExponentialBackoff): A backoff strategy used to retry
-            failed flush operations during normal operation.
-        shutdown_backoff (helpers.ExponentialBackoff): A backoff strategy used during
-            shutdown to ensure all items are flushed before the process exits.
+        retry_settings (RetrySettings): Configuration for retrying failed flush operations.
+        shutdown_settings (RetrySettings): Retry configuration used during shutdown
+            to ensure all items are flushed before the process exits.
         shutdown (asyncio.Event): An event that signals when the buffer should stop
             operations, such as during shutdown.
         events (asyncio.Queue[T]): An asynchronous queue holding the buffered items.
@@ -65,17 +69,15 @@ class TimedOverflowBuffer(Generic[T]):
     timeout: timedelta = dataclasses.field(
         default_factory=lambda: timedelta(seconds=0.1),
     )
-    retry_backoff: helpers.ExponentialBackoff = dataclasses.field(
-        default_factory=lambda: helpers.ExponentialBackoff(
-            start_delay=timedelta(seconds=0.01),
-            max_delay=timedelta(seconds=10),
-        ),
+    retry_settings: RetrySettings = dataclasses.field(
+        default_factory=RetrySettings,
     )
-    shutdown_backoff: helpers.ExponentialBackoff = dataclasses.field(
-        default_factory=lambda: helpers.ExponentialBackoff(
-            start_delay=timedelta(milliseconds=1),
-            max_delay=timedelta(milliseconds=100),
-        )
+    shutdown_settings: RetrySettings = dataclasses.field(
+        default_factory=lambda: RetrySettings(
+            start_delay=0.001,
+            max_delay=0.1,
+            max_time=0.1,
+        ),
     )
 
     shutdown: asyncio.Event = dataclasses.field(
@@ -143,16 +145,8 @@ class TimedOverflowBuffer(Generic[T]):
         while not self.events.empty() and time.time() < deadline:
             yield await self.events.get()
 
-    async def flush(self) -> None:
-        """
-        Flush the accumulated items in the buffer by invoking the provided asynchronous callable.
-
-        Collects all items currently in the buffer by consuming the events from
-        the internal queue using `pop_until`. If there are any events, it attempts to invoke the
-        provided asynchronous callable with the events. If an exception occurs during the invocation
-        of the callable, it logs the exception, re-adds the items to the queue, and schedules
-        a retry. This helps in handling transient errors without losing items.
-        """
+    async def _flush_with_settings(self, settings: RetrySettings) -> None:
+        """Flush accumulated items with exponential backoff retries."""
 
         if self.lock.locked():
             return
@@ -160,31 +154,48 @@ class TimedOverflowBuffer(Generic[T]):
         async with self.lock:
             items = [item async for item in self.pop_until()]
 
-            if not items:
+        if not items:
+            return
+
+        def _log(retry_state: tenacity.RetryCallState) -> None:
+            if retry_state.outcome is None or retry_state.next_action is None:
                 return
-
-            try:
-                await self.callback(items)
-            except Exception as e:
-                delay = self.retry_backoff.next_delay()
+            if retry_state.outcome.failed:
+                exc = retry_state.outcome.exception()
                 logconfig.logger.warning(
-                    "Unable to flush(%s): %s\nRetry in: %r",
+                    "Unable to flush(%s): %s\nRetry in: %.2fs",
                     self.callback.__name__,
-                    str(e),
-                    delay,
-                )
-                # Re-add the items to the queue for retry
-                for item in items:
-                    self.events.put_nowait(item)
-
-                await asyncio.sleep(
-                    0
-                    if self.shutdown.is_set()
-                    else helpers.timeout_with_jitter(delay).total_seconds()
+                    str(exc),
+                    retry_state.next_action.sleep,
                 )
 
-            else:
-                self.retry_backoff.reset()
+        try:
+            async for attempt in tenacity.AsyncRetrying(
+                wait=tenacity.wait.wait_exponential(
+                    multiplier=settings.start_delay,
+                    min=settings.start_delay,
+                    max=settings.max_delay,
+                    exp_base=settings.base,
+                ),
+                stop=(
+                    tenacity.stop.stop_after_delay(settings.max_time)
+                    if settings.max_time != float("inf")
+                    else tenacity.stop.stop_never
+                ),
+                reraise=True,
+                before_sleep=_log,
+            ):
+                with attempt:
+                    await self.callback(items)
+        except Exception:  # pragma: no cover - rare failure path
+            for item in items:
+                self.events.put_nowait(item)
+        else:
+            return
+
+
+    async def flush(self) -> None:
+        await self._flush_with_settings(self.retry_settings)
 
     async def __aenter__(self) -> Self:
         """
@@ -209,10 +220,10 @@ class TimedOverflowBuffer(Generic[T]):
 
         1. Signals the buffer to stop periodic operations by setting the `shutdown` event.
         2. Waits for all ongoing tasks managed by the buffer to complete.
-        3. Attempts to flush any remaining items in the buffer using the `shutdown_backoff`
-           strategy to handle transient failures, such as temporary database outages.
-        4. Stops retrying after the maximum backoff limit (`shutdown_backoff.max_limit`)
-           is reached. This ensures that the application does not hang indefinitely
+        3. Attempts to flush any remaining items in the buffer using the `shutdown_settings`
+           retry strategy to handle transient failures, such as temporary database outages.
+        4. Stops retrying after the maximum time defined in `shutdown_settings`
+           is reached. This prevents the application from hanging indefinitely
            during situations like prolonged database downtime or critical errors.
 
         Note:
@@ -225,11 +236,7 @@ class TimedOverflowBuffer(Generic[T]):
         self.shutdown.set()
         await self.tm.gather_tasks()
 
-        while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_delay:
-            await self.flush()
-            if self.events.empty():
-                break
-            await asyncio.sleep(self.shutdown_backoff.next_delay().total_seconds())
+        await self._flush_with_settings(self.shutdown_settings)
 
 
 class JobStatusLogBuffer(

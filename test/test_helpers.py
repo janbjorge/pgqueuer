@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 import pytest
 
 from pgqueuer.helpers import (
-    ExponentialBackoff,
     add_schema_to_dsn,
     merge_tracing_headers,
     retry_timer_buffer_timeout,
@@ -179,49 +178,4 @@ def test_preserve_other_options_and_add_search_path() -> None:
     assert add_schema_to_dsn(dsn, schema) == expected
 
 
-def test_exponential_backoff_initial_delay() -> None:
-    backoff = ExponentialBackoff(
-        start_delay=timedelta(1),
-        multiplier=2,
-        max_delay=timedelta(10),
-    )
-    assert backoff.current_delay == timedelta(1)
 
-
-def test_exponential_backoff_next_delay() -> None:
-    backoff = ExponentialBackoff(
-        start_delay=timedelta(1),
-        multiplier=2,
-        max_delay=timedelta(10),
-    )
-    assert backoff.next_delay() == timedelta(2)
-    assert backoff.next_delay() == timedelta(4)
-    assert backoff.next_delay() == timedelta(8)
-    assert backoff.next_delay() == timedelta(10)  # Capped at max_limit
-    assert backoff.next_delay() == timedelta(10)  # Capped at max_limit
-
-
-def test_exponential_backoff_max_limit() -> None:
-    backoff = ExponentialBackoff(
-        start_delay=timedelta(3),
-        multiplier=3,
-        max_delay=timedelta(20),
-    )
-    backoff.next_delay()
-    assert backoff.current_delay == timedelta(9)
-    backoff.next_delay()
-    assert backoff.current_delay == timedelta(20)  # Capped at max_limit
-    assert backoff.current_delay == timedelta(20)  # Capped at max_limit
-
-
-def test_exponential_backoff_reset() -> None:
-    backoff = ExponentialBackoff(
-        start_delay=timedelta(5),
-        multiplier=2,
-        max_delay=timedelta(50),
-    )
-    backoff.next_delay()
-    backoff.next_delay()
-    assert backoff.current_delay == timedelta(20)
-    backoff.reset()
-    assert backoff.current_delay == timedelta(5)
