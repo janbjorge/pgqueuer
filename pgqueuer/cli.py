@@ -333,7 +333,10 @@ def verify(
             if divergence:
                 print("\n".join(divergence))
             else:
-                print("PGQueuer structure is in place.")
+                if expect == VerifyMode.PRESENT:
+                    print("All required PGQueuer database objects are present.")
+                else:
+                    print("No PGQueuer database objects found")
 
             exit(1 if divergence else 0)
 
