@@ -33,7 +33,7 @@ async def test_backoff_sequence_matches_native() -> None:
 
     intervals = [calls[i + 1] - calls[i] for i in range(len(calls) - 1)]
     # Old implementation used `start_delay` before multiplying by the base.
-    expected = native_backoff_delays(0.01, settings.base, settings.max_delay, 3)
+    expected = native_backoff_delays(settings.start_delay, settings.base, settings.max_delay, 3)
     for actual, exp in zip(intervals, expected):
         assert actual == pytest.approx(exp, rel=0.3)
     assert len(calls) == 4

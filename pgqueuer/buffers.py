@@ -187,7 +187,13 @@ class TimedOverflowBuffer(Generic[T]):
             ):
                 with attempt:
                     await self.callback(items)
-        except Exception:  # pragma: no cover - rare failure path
+        except Exception as exc:  # pragma: no cover - rare failure path
+            logconfig.logger.error(
+                "Exception occurred during flush(%s): %s",
+                self.callback.__name__,
+                str(exc),
+                exc_info=True,
+            )
             for item in items:
                 self.events.put_nowait(item)
         else:
