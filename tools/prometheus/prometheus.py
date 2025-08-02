@@ -47,13 +47,13 @@ def aggregated_queue_statistics(
     queue_statistics: list[QueueStatistics],
 ) -> Generator[str, None, None]:
     """Generate Prometheus-formatted strings for aggregated queue statistics."""
-    aggregated = [
+    aggregated = (
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(
             sorted(queue_statistics, key=lambda x: (x.entrypoint, x.status)),
             key=lambda x: (x.entrypoint, x.status),
         )
-    ]
+    )
     for entrypoint, status, items in aggregated:
         yield prometheus_format(
             metric_name="pgqueuer_queue_count",
@@ -67,18 +67,18 @@ def aggregated_log_statistics(
 ) -> Generator[str, None, None]:
     """Generate Prometheus-formatted strings for aggregated log
     statistics, including time in queue metrics."""
-    aggregated_log_statistics = [
+    aggregated_log_statistics = (
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(
             sorted(log_statistics, key=lambda x: (x.entrypoint, x.status)),
             key=lambda x: (x.entrypoint, x.status),
         )
-    ]
+    )
 
     for entrypoint, status, items in aggregated_log_statistics:
         yield prometheus_format(
             metric_name="pgqueuer_logs_count",
-            labels={"aggregation": "sum", "entrypoini": entrypoint, "status": status},
+            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
             value=sum(x.count for x in items),
         )
 
@@ -107,6 +107,10 @@ def create_metrics_router() -> APIRouter:
             content="\n".join(aggregated_statistics(queue_statistics, log_statistics)),
             media_type="text/plain",
         )
+
+    @router.get("/health", response_class=Response)
+    async def health() -> Response:
+        return Response(status_code=200)
 
     return router
 
