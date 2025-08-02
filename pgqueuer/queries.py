@@ -497,7 +497,7 @@ class Queries:
             for x in await self.driver.fetch(
                 self.qbq.build_log_statistics_query(),
                 tail,
-                None if last is None else last.total_seconds(),
+                last,
             )
         ]
 
