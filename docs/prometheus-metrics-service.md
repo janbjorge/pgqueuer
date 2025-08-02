@@ -1,18 +1,36 @@
 Prometheus Metrics Integration
 ==============================
-PGQueuer now includes an integration with Prometheus, enabling robust monitoring and metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
+PGQueuer includes an integration with Prometheus, enabling metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
 
-Example of Running the Service
-------------------------------
+Until there is a sufficient demand, no container image for the metrics service is published. Users must build and host the image themselves.
 
-Here's a quick example to demonstrate how to run the Prometheus metrics service using the prebuilt image:
+Building the Image
+------------------
 
 ```bash
-# Pull the latest image
-docker pull ghcr.io/janbjorge/pgq-prometheus-service:latest
-
-# Run the service
-docker run -p 8000:8000 -e PGHOST=your-postgres-host -e PGDATABASE=your-database -e PGPASSWORD=your-password -e PGUSER=your-username -e PGPORT=5432 ghcr.io/janbjorge/pgqueuer/pgq-prometheus-service
+docker build -t pgq-prometheus-service -f tools/prometheus/Dockerfile .
 ```
 
-This command pulls the prebuilt image from GitHub Container Registry and starts the service, making the metrics endpoint available at `http://localhost:8000/metrics` for Prometheus to scrape. You can access this endpoint directly using any HTTP client to verify the metrics being exposed.
+Running the Service
+-------------------
+
+```bash
+docker run -p 8000:8000 \
+  -e PGHOST=your-postgres-host \
+  -e PGDATABASE=your-database \
+  -e PGPASSWORD=your-password \
+  -e PGUSER=your-username \
+  -e PGPORT=5432 \
+  pgq-prometheus-service
+```
+
+Docker Compose
+--------------
+
+A docker-compose file `docker-compose.prometheus-metrics.yml` is provided:
+
+```bash
+docker compose -f docker-compose.prometheus-metrics.yml up
+```
+
+After the service starts, the metrics endpoint will be available at `http://localhost:8000/metrics` for Prometheus to scrape.
