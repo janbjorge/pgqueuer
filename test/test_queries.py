@@ -448,6 +448,43 @@ async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     assert dedupe_key in raised.value.dedupe_key
 
 
+@pytest.mark.parametrize("tail", (None, 10))
+@pytest.mark.parametrize("last", (None, timedelta(minutes=5)))
+@pytest.mark.parametrize("N", (2, 10))
+async def test_log_statistics(
+    apgdriver: db.Driver,
+    tail: int | None,
+    last: timedelta | None,
+    N: int,
+) -> None:
+    q = queries.Queries(apgdriver)
+    # N = 10
+
+    # Enqueue jobs
+    await q.enqueue(["placeholder"] * N, [None] * N, [0] * N)
+
+    # Log jobs
+    jobs = await q.dequeue(
+        entrypoints={
+            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
+        },
+        batch_size=N,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+    )
+    assert len(jobs) == N
+    for job in jobs:
+        await q.log_jobs([(job, "successful", None)])
+
+    # Fetch statistics
+    stats = await q.log_statistics(tail=tail, last=last)
+
+    assert sum(x.count for x in stats if x.status == "queued") == N
+    assert sum(x.count for x in stats if x.status == "picked") == N
+    assert sum(x.count for x in stats if x.status == "successful") == N
+    assert sum(x.count for x in stats) == 3 * N
+
+
 async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     q = queries.Queries(apgdriver)
     headers = {"trace": "abc"}
