@@ -85,6 +85,7 @@ dev = [
     "types-tabulate",
     "uvicorn",
     "time-machine>=2.16.0",
+    "testcontainers>=4.12.0",
 ]
 docs = [
     "myst-parser",
@@ -132,5 +133,5 @@ explicit_package_bases = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
 timeout = "20"
+timeout_func_only = true
