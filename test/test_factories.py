@@ -118,8 +118,8 @@ def test_load_factory_sys_path_modified(monkeypatch: pytest.MonkeyPatch) -> None
         sys.path = original_sys_path
 
 
-def test_load_factory_with_callable():
-    def factory_function(arg) -> Any:
+def test_load_factory_with_callable() -> None:
+    def factory_function(arg: Any) -> Any:
         return arg
 
     factory_callable = partial(factory_function, arg=42)
