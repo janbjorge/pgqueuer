@@ -6,7 +6,6 @@ from typing import AsyncContextManager, AsyncGenerator, Callable
 import asyncpg
 import psycopg
 import pytest
-from conftest import dsn
 
 from pgqueuer.db import (
     AsyncpgDriver,
@@ -17,6 +16,7 @@ from pgqueuer.db import (
     SyncPsycopgDriver,
     _named_parameter,
     _replace_dollar_named_parameter,
+    dsn,
 )
 from pgqueuer.helpers import utc_now
 from pgqueuer.listeners import (
