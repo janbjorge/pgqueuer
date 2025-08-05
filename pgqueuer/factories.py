@@ -9,18 +9,26 @@ from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar
 T = TypeVar("T")
 
 
-def load_factory(factory_path: str) -> Callable[..., Any]:
+def load_factory(factory: str | Callable[..., Any]) -> Callable[..., Any]:
     """
-    Load factory function from a given module path or factory-style path.
+    Load factory function.
 
     Args:
-        factory_path (str): Module path to the factory function or factory-style path.
+        factory (str | Callable): Factory function specification. It may be one of the
+        following:
+          - Module path to the factory function
+          - Factory-style path
+          - Callable factory function
+
 
     Returns: A callable
     """
     sys.path.insert(0, os.getcwd())
 
-    module_name, factory_name = factory_path.split(":", 1)
+    if callable(factory):
+        return factory
+
+    module_name, factory_name = factory.split(":", 1)
     module = importlib.import_module(module_name)
     return getattr(module, factory_name)
 

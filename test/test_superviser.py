@@ -5,6 +5,7 @@ import logging
 import signal
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from functools import partial
 from unittest.mock import ANY, MagicMock, patch
 
 import async_timeout
@@ -101,6 +102,44 @@ async def test_runit_normal_operation(
     runit_task = asyncio.create_task(
         supervisor.runit(
             factory=foo,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            restart_delay=timedelta(seconds=2),
+            restart_on_failure=False,
+            shutdown=shutdown_event,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
+        )
+    )
+
+    # Allow some time for runit to start
+    await asyncio.sleep(0.1)
+
+    # Signal shutdown
+    shutdown_event.set()
+
+    # Allow some time for runit to handle shutdown
+    await asyncio.sleep(0.2)
+
+    # Ensure runit_task is completed
+    async with async_timeout.timeout(1):
+        await runit_task
+    assert runit_task.done()
+
+
+async def test_runit_with_partial_function(
+    pg_queuer: PgQueuer,
+    shutdown_event: asyncio.Event,
+) -> None:
+    @asynccontextmanager
+    async def foo(arg):  # type: ignore
+        yield pg_queuer
+
+    # Run runit in the background
+    runit_task = asyncio.create_task(
+        supervisor.runit(
+            factory=partial(foo, arg=42),
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             restart_delay=timedelta(seconds=2),
