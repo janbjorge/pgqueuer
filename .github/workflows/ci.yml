@@ -156,9 +156,11 @@ jobs:
             --output-json benchmark.json
 
       - name: Commit and Push Benchmark to Artifact Repository
+        if: ${{ env.HAS_ARTIFACTS_REPO_PAT == 'true' }}
         env:
           ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
           ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
+          HAS_ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT != '' }}
         run: |
           git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
           mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
