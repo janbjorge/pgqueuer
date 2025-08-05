@@ -138,6 +138,30 @@ Use ``--shutdown-on-listener-failure`` so a failing listener triggers a restart.
 To disable the periodic status poll, pass ``refresh_interval=None`` to
 ``CompletionWatcher`` when your notification channel is stable.
 
+## Development and Testing
+
+PGQueuer provides a Docker Compose configuration and a Makefile to help you get a
+local database up and run the test suite.
+
+1. **Build images (optional after the first time)**:
+   ```bash
+   make build
+   ```
+2. **Start and populate the database**:
+   ```bash
+   make db
+   ```
+3. **Run the tests**:
+   ```bash
+   make check      # run linting, type checks, dependency check, and tests
+   # or run only the tests
+   make pytest
+   ```
+4. **Tear down containers when finished**:
+   ```bash
+   make down       # or `make clean` to remove volumes and images
+   ```
+
 ## License
 
 PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
