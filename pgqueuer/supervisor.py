@@ -94,12 +94,15 @@ async def runit(
     Supervise and manage the lifecycle of a queue management instance.
 
     Args:
-        factory (FactoryType): Factory function or path to create an instance.
+        factory (ManagerFactory): Factory function or path to create an instance.
         dequeue_timeout (timedelta): Timeout duration for dequeuing jobs.
         batch_size (int): Number of jobs to process in each batch.
         restart_delay (timedelta): Delay before restarting on failure.
         restart_on_failure (bool): Whether to restart after a failure.
         shutdown (asyncio.Event): The event to signal shutdown.
+        mode (types.QueueExecutionMode): What mode to start the execution on
+        max_concurrent_tasks (int | None): How many concurrent tasks to allow.
+        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails
 
     Raises:
         ValueError: If restart_delay is negative.

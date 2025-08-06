@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from functools import partial
 from typing import Any, Callable
 from unittest.mock import Mock
 
@@ -115,6 +116,15 @@ def test_load_factory_sys_path_modified(monkeypatch: pytest.MonkeyPatch) -> None
     finally:
         # Restore sys.path to its original state
         sys.path = original_sys_path
+
+
+def test_load_factory_with_callable() -> None:
+    def factory_function(arg: Any) -> Any:
+        return arg
+
+    factory_callable = partial(factory_function, arg=42)
+    factory_function_ = load_factory(factory_callable)
+    assert factory_function_() == 42
 
 
 async def test_run_factory_with_async_context_manager() -> None:
