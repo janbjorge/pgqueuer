@@ -54,6 +54,17 @@ Start a short-lived producer that will enqueue 10,000 jobs.
 
     python3 examples/producer.py 10000
 
+Callable factory example
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+`examples/callable_factory <https://github.com/janbjorge/pgqueuer/tree/main/examples/callable_factory>`_
+shows how to pass a callable to ``pgqueuer.cli.run``.
+
+.. code-block:: bash
+
+    uv run python examples/callable_factory/consumer.py --components heart_beat,head_stand
+    uv run python examples/callable_factory/producer.py
+
 .. toctree::
    :maxdepth: 2
 
