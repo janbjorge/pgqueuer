@@ -100,7 +100,7 @@ async def runit(
         restart_delay (timedelta): Delay before restarting on failure.
         restart_on_failure (bool): Whether to restart after a failure.
         shutdown (asyncio.Event): The event to signal shutdown.
-        mode (types.QueueExecutionMode): What mode to start the exexution on
+        mode (types.QueueExecutionMode): What mode to start the execution on
         max_concurrent_tasks (int | None): How many concurrent tasks to allow.
         shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails
 
