@@ -29,6 +29,34 @@ Install PGQueuer via pip:
 pip install pgqueuer
 ```
 
+## Drivers
+
+PGQueuer supports both asynchronous and synchronous database connections. Async
+drivers integrate with PGQueuer's internals. Synchronous drivers are limited to
+enqueue operations and cannot run consumers or other internal components.
+
+- **AsyncpgDriver** and **AsyncpgPoolDriver** for applications running on
+  `asyncio`.
+- **PsycopgDriver** for psycopg's async interface.
+- **SyncPsycopgDriver** for enqueue-only scenarios when you are limited to
+  blocking code.
+
+Example of enqueuing with a synchronous driver:
+
+```python
+import psycopg
+from pgqueuer.db import SyncPsycopgDriver
+from pgqueuer.queries import Queries
+
+conn = psycopg.connect(dsn, autocommit=True)
+driver = SyncPsycopgDriver(conn)
+queries = Queries(driver)
+queries.enqueue("fetch", b"payload")
+```
+
+See [driver documentation](docs/driver.md) for usage guidance and best
+practices.
+
 ## Quick Start
 
 Below is a minimal example of how to use PGQueuer to process data.

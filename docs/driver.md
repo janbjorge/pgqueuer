@@ -26,10 +26,56 @@ To ensure smooth integration with PGQueuer, the following requirements must be m
    - Async drivers should support asyncio-compatible operations if required for the application setup.
   
 4. **Synchronous Operations** (if applicable):
-   - Sync drivers could be used as well but support a smaller set of operations.
+   - Sync drivers are intended only for enqueue operations and support a smaller
+     set of features.
 
 5. **Default Isolation Level**:
    - Connections should maintain the default PostgreSQL isolation level unless explicitly modified.
+
+## Choosing the Right Driver
+
+PGQueuer bundles several drivers to accommodate different application styles.
+
+### Asynchronous drivers
+
+- **AsyncpgDriver** – a thin wrapper around a single `asyncpg` connection.
+- **AsyncpgPoolDriver** – uses an `asyncpg` connection pool for improved
+  throughput.
+- **PsycopgDriver** – built on psycopg's async connection API. A minimal
+  setup looks like:
+
+  ```python
+  import psycopg
+  from pgqueuer.db import PsycopgDriver
+
+  conn = await psycopg.AsyncConnection.connect(dsn)
+  conn.autocommit = True
+  driver = PsycopgDriver(conn)
+  ```
+
+### Synchronous driver (enqueue only)
+
+- **SyncPsycopgDriver** – designed for blocking code or frameworks such as
+  Flask. It can only enqueue jobs; PGQueuer's consumers and other internals
+  require an async driver.
+
+  ```python
+  import psycopg
+  from pgqueuer.db import SyncPsycopgDriver
+  from pgqueuer.queries import Queries
+
+  conn = psycopg.connect(dsn, autocommit=True)
+  driver = SyncPsycopgDriver(conn)
+  queries = Queries(driver)
+  queries.enqueue("fetch", b"payload")
+  ```
+
+### Best practices
+
+- Prefer an async driver when your project already runs on asyncio.
+- Use the sync driver only to enqueue jobs from short-lived scripts or
+  WSGI-style applications.
+- Reuse connections or pools and keep autocommit enabled.
 
 ## Implementation Notes
 - PGQueuer includes runtime checks to verify critical connection properties, such as autocommit mode, and provides descriptive error messages when requirements are not met.
