@@ -287,30 +287,17 @@ jobs:
         os: [ubuntu-24.04]
 
     env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
+      CI: 1
+      PYTHONASYNCIODEBUG: 1
+      PYTHONDEBUG: 1
+      PYTHONFAULTHANDLER: 1
+      POSTGRES_VERSION: ${{ matrix.postgres-version }}
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      TESTCONTAINERS_HOST_OVERRIDE: "localhost"
 
     name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
-
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -319,15 +306,10 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Install PGQueuer
-        run: |
-          uv sync --all-extras  --frozen
-          uv run --frozen pgq install
+        run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
 
       - name: Run Full Test Suite
-        run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 uv run pytest -v
+        run: uv run pytest
 
   run-windows-tests:
     if: github.event_name != 'schedule'
@@ -336,6 +318,12 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
+
+    env:
+      CI: 1
+      PYTHONASYNCIODEBUG: 1
+      PYTHONDEBUG: 1
+      PYTHONFAULTHANDLER: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -350,7 +338,7 @@ jobs:
         run: uv sync --all-extras --frozen
 
       - name: Run Windows Shutdown Test
-        run: uv run pytest test/windows/test_shutdown.py -v
+        run: uv run pytest test/windows/test_shutdown.py
 
   run-ruff:
     if: github.event_name != 'schedule'
