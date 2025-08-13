@@ -1,151 +1,101 @@
-# 🚀 PGQueuer - Building Smoother Workflows One Queue at a Time 🚀
+# 🚀 PGQueuer – PostgreSQL‑powered job queues for Python
 
 [![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
----
+[📚 Documentation](https://pgqueuer.readthedocs.io/en/latest/) · [💻 Source](https://github.com/janbjorge/pgqueuer/) · [💬 Discord](https://discord.gg/C7YMBzcRMQ)
 
-- 📚 **Documentation**: [Explore the Docs](https://pgqueuer.readthedocs.io/en/latest/)
-- 🔍 **Source Code**: [View on GitHub](https://github.com/janbjorge/pgqueuer/)
-- 💬 **Join the Discussion**: [Discord Community](https://discord.gg/C7YMBzcRMQ)
-
----
-
-PGQueuer is a minimalist, high-performance job queue library for Python, leveraging PostgreSQL's robustness. Designed with simplicity and efficiency in mind, PGQueuer offers real-time, high-throughput processing for background jobs using PostgreSQL's LISTEN/NOTIFY and `FOR UPDATE SKIP LOCKED` mechanisms.
+PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. PGQueuer uses PostgreSQL features like `LISTEN/NOTIFY` and `FOR UPDATE SKIP LOCKED` to keep workers coordinated and throughput high.
 
 ## Features
 
-- **💡 Simple Integration**: Seamlessly integrates with Python applications using PostgreSQL, providing a clean and lightweight interface.
-- **⚛️ Efficient Concurrency Handling**: Supports `FOR UPDATE SKIP LOCKED` to ensure reliable concurrency control and smooth job processing without contention.
-- **🚧 Real-time Notifications**: Uses PostgreSQL's `LISTEN` and `NOTIFY` commands for real-time job status updates.
-- **👨‍🎓 Batch Processing**: Supports large job batches, optimizing enqueueing and dequeuing with minimal overhead.
-- **⏳ Graceful Shutdowns**: Built-in signal handling ensures safe job processing shutdown without data loss.
-- **⌛ Recurring Job Scheduling**: Register and manage recurring tasks using cron-like expressions for periodic execution.
+- 💡 **Minimal integration**: PGQueuer is a single Python package. Bring your existing PostgreSQL connection and start enqueueing jobs—no extra services to deploy.
+- ⚛️ **PostgreSQL-powered concurrency**: Workers lease jobs with `FOR UPDATE SKIP LOCKED`, allowing many processes to pull from the same queue without stepping on each other.
+- 🚧 **Instant notifications**: `LISTEN/NOTIFY` wakes idle workers as soon as a job arrives. A periodic poll backs it up for robustness.
+- 👨‍🎓 **Batch friendly**: Designed for throughput; enqueue or acknowledge thousands of jobs per round trip.
+- ⏳ **Scheduling & graceful shutdown**: Register cron-like recurring jobs and let PGQueuer stop workers cleanly when your service exits.
 
 ## Installation
 
-Install PGQueuer via pip:
+PGQueuer targets Python 3.11+ and any PostgreSQL 12+ server. Install the package and initialize the database schema with the CLI:
 
 ```bash
 pip install pgqueuer
+pgq install        # create tables and functions in your database
 ```
 
-## Drivers
-
-PGQueuer supports both asynchronous and synchronous database connections. Async
-drivers integrate with PGQueuer's internals. Synchronous drivers are limited to
-enqueue operations and cannot run consumers or other internal components.
-
-- **AsyncpgDriver** and **AsyncpgPoolDriver** for applications running on
-  `asyncio`.
-- **PsycopgDriver** for psycopg's async interface.
-- **SyncPsycopgDriver** for enqueue-only scenarios when you are limited to
-  blocking code.
-
-Example of enqueuing with a synchronous driver:
-
-```python
-import psycopg
-from pgqueuer.db import SyncPsycopgDriver
-from pgqueuer.queries import Queries
-
-conn = psycopg.connect(dsn, autocommit=True)
-driver = SyncPsycopgDriver(conn)
-queries = Queries(driver)
-queries.enqueue("fetch", b"payload")
-```
-
-See [driver documentation](docs/driver.md) for usage guidance and best
-practices.
+The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and friends to know where to install. Use `pgq install --dry-run` to preview SQL or `pgq uninstall` to remove the structure when you're done experimenting.
 
 ## Quick Start
 
-Below is a minimal example of how to use PGQueuer to process data.
+The API revolves around **consumers** that process jobs and **producers** that enqueue them. Follow the steps below to see both sides.
 
-### Step 1: Write a consumer
+### 1. Create a consumer
+
+The consumer declares entrypoints and scheduled tasks. PGQueuer wires these up to the worker process that polls for jobs.
 
 ```python
-from __future__ import annotations
-
 from datetime import datetime
 
 import asyncpg
-
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Job, Schedule
 
-
 async def main() -> PgQueuer:
-    connection = await asyncpg.connect()
-    driver = AsyncpgDriver(connection)
+    conn = await asyncpg.connect()
+    driver = AsyncpgDriver(conn)
     pgq = PgQueuer(driver)
 
-    # Entrypoint for jobs whose entrypoint is named 'fetch'.
     @pgq.entrypoint("fetch")
-    async def process_message(job: Job) -> None:
-        print(f"Processed message: {job!r}")
+    async def process(job: Job) -> None:
+        print(f"Processed: {job!r}")
 
-    # Define and register recurring tasks using cron expressions
-    # The cron expression "* * * * *" means the task will run every minute
-    @pgq.schedule("scheduled_every_minute", "* * * * *")
-    async def scheduled_every_minute(schedule: Schedule) -> None:
-        print(f"Executed every minute {schedule!r} {datetime.now()!r}")
+    @pgq.schedule("every_minute", "* * * * *")
+    async def every_minute(schedule: Schedule) -> None:
+        print(f"Ran at {datetime.now():%H:%M:%S}")
 
     return pgq
 ```
 
-The above example is located in the examples folder, and can be run by using the `pgq` cli.
+Run the consumer with the CLI so it begins listening for work:
+
 ```bash
 pgq run examples.consumer:main
 ```
 
-### Step 2: Write a producer
+### 2. Enqueue jobs
+
+In a separate process, create a `Queries` object and enqueue jobs targeted at your entrypoint:
 
 ```python
-from __future__ import annotations
-
-import sys
-
 import asyncpg
-import uvloop
-
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
-
-async def main(N: int) -> None:
-    connection = await asyncpg.connect()
-    driver = AsyncpgDriver(connection)
-    queries = Queries(driver)
-    await queries.enqueue(
-        ["fetch"] * N,
-        [f"this is from me: {n}".encode() for n in range(1, N + 1)],
-        [0] * N,
-    )
-
-
-if __name__ == "__main__":
-    N = 1_000 if len(sys.argv) == 1 else int(sys.argv[1])
-    uvloop.run(main(N))
+async def main() -> None:
+    conn = await asyncpg.connect()
+    driver = AsyncpgDriver(conn)
+    q = Queries(driver)
+    await q.enqueue(["fetch"], [b"hello world"], [0])
 ```
 
 Run the producer:
+
 ```bash
-python3 examples/producer.py 10000
+python examples/producer.py
 ```
 
-## Dashboard
-
-Monitor job processing statistics in real-time using the built-in dashboard:
+## Monitor your queues
 
 ```bash
 pgq dashboard --interval 10 --tail 25 --table-format grid
 ```
-This provides a real-time, refreshing view of job queues and their status.
+
+The dashboard is an interactive terminal UI that refreshes periodically. Use it to watch queue depth, processing times and job statuses in real time.
 
 Example output:
 
-```bash
+```text
 +---------------------------+-------+------------+--------------------------+------------+----------+
 |          Created          | Count | Entrypoint | Time in Queue (HH:MM:SS) |   Status   | Priority |
 +---------------------------+-------+------------+--------------------------+------------+----------+
@@ -154,45 +104,28 @@ Example output:
 +---------------------------+-------+------------+--------------------------+------------+----------+
 ```
 
-## Why Choose PGQueuer?
+## Drivers
 
-- **Built for Scale**: Handles thousands of jobs per second, making it ideal for high-throughput applications.
-- **PostgreSQL Native**: Utilizes advanced PostgreSQL features for robust job handling.
-- **Flexible Concurrency**: Offers rate and concurrency limiting to cater to different use-cases, from bursty workloads to critical resource-bound tasks.
+PGQueuer works with both async and sync PostgreSQL drivers:
 
-### Improving Notification Reliability
+- **AsyncpgDriver** / **AsyncpgPoolDriver** – integrate with [`asyncpg`](https://github.com/MagicStack/asyncpg) connections or pools for asyncio applications.
+- **PsycopgDriver** – built on psycopg's async interface for apps already using psycopg 3.
+- **SyncPsycopgDriver** – a thin wrapper around psycopg's blocking API so traditional scripts can enqueue work.
 
-Use ``--shutdown-on-listener-failure`` so a failing listener triggers a restart.
-To disable the periodic status poll, pass ``refresh_interval=None`` to
-``CompletionWatcher`` when your notification channel is stable.
+See the [driver documentation](docs/driver.md) for details.
 
 ## Development and Testing
 
-PGQueuer provides a Docker Compose configuration and a Makefile to help you get a
-local database up and run the test suite.
+PGQueuer ships with a Docker Compose setup for hacking on the project. The Makefile wraps common tasks so you can get a database up and run the test suite quickly:
 
-1. **Build images (optional after the first time)**:
-   ```bash
-   make build
-   ```
-2. **Start and populate the database**:
-   ```bash
-   make db
-   ```
-3. **Run the tests**:
-   ```bash
-   make check      # run linting, type checks, dependency check, and tests
-   # or run only the tests
-   make pytest
-   ```
-4. **Tear down containers when finished**:
-   ```bash
-   make down       # or `make clean` to remove volumes and images
-   ```
+1. `make build` – build images (first time only)
+2. `make db` – start PostgreSQL with the required schema
+3. `make check` – run lint, type checks, dependency checks and tests
+4. `make down` – stop containers (`make clean` to remove volumes)
 
 ## License
 
-PGQueuer is MIT licensed. See [LICENSE](LICENSE) for more information.
+PGQueuer is MIT licensed. See [LICENSE](LICENSE) for details.
 
 ---
-Ready to supercharge your workflows? Install PGQueuer today and take your job management to the next level!
+Ready to supercharge your workflows? Install PGQueuer today and start processing jobs with the database you already trust.
