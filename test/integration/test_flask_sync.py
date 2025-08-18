@@ -8,23 +8,28 @@ from typing import Generator
 import pytest
 from flask.testing import FlaskClient
 
-from pgqueuer.db import SyncPsycopgDriver
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from examples.flask_sync_usage import create_app
+from pgqueuer import db as pgq_db
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client() -> Generator[FlaskClient, None, None]:
     with create_app().test_client() as client:
         yield client
 
 
-def test_enqueue_and_size(
-    client: FlaskClient,
-    pgdriver: SyncPsycopgDriver,
+@pytest.fixture(autouse=True)
+async def patch_dsn_fn(
+    monkeypatch: pytest.MonkeyPatch,
+    dsn: str,
 ) -> None:
+    """Patch the DSN function to return the provided DSN."""
+    monkeypatch.setattr(pgq_db, "dsn", lambda: dsn)
+
+
+def test_enqueue_and_size(client: FlaskClient) -> None:
     # Initial size check
     r1 = client.get("/queue_size")
     assert r1.status_code == HTTPStatus.OK

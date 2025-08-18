@@ -116,12 +116,16 @@ See the [driver documentation](docs/driver.md) for details.
 
 ## Development and Testing
 
-PGQueuer ships with a Docker Compose setup for hacking on the project. The Makefile wraps common tasks so you can get a database up and run the test suite quickly:
+PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to launch an ephemeral PostgreSQL instance automatically for the integration test suite—no manual Docker Compose setup or pre‑provisioned database required. Just ensure Docker (or another supported container runtime) is running locally.
 
-1. `make build` – build images (first time only)
-2. `make db` – start PostgreSQL with the required schema
-3. `make check` – run lint, type checks, dependency checks and tests
-4. `make down` – stop containers (`make clean` to remove volumes)
+Typical development workflow:
+
+1. Install dependencies (including extras): `uv sync --all-extras`
+2. Run lint & type checks: `uv ruff check .` and `uv run mypy .`
+3. Run the test suite (will start/stop a disposable PostgreSQL container automatically): `uv run pytest`
+4. (Optional) Aggregate target (if you prefer the Makefile): `make check`
+
+The containerized database lifecycle is fully automatic; tests handle creation, migrations, and teardown. This keeps your local environment clean and ensures consistent, isolated runs.
 
 ## License
 

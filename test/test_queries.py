@@ -409,11 +409,12 @@ async def test_queue_log_queued_dedupe_key_raises_array(
 @pytest.mark.parametrize("batch_size", (2, 10))
 @pytest.mark.parametrize("loop_size", (2, 10))
 async def test_queue_log_queued_dedupe_key_raises_concurrent(
+    dsn: str,
     batch_size: int,
     loop_size: int,
     apgdriver: db.Driver,
 ) -> None:
-    async with asyncpg.create_pool() as pool:
+    async with asyncpg.create_pool(dsn=dsn) as pool:
         for _ in range(loop_size):
             with pytest.raises(errors.DuplicateJobError):
                 await asyncio.gather(

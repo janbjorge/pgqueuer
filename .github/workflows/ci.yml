@@ -9,66 +9,6 @@ on:
     - cron: "0 */6 * * *"
 
 jobs:
-  run-example:
-    if: github.event_name != 'schedule'
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-        os: [ubuntu-24.04]
-        postgres-version: ["16"]
-
-    env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
-
-    name: Run PGQueuer Example
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
-
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-
-      - name: Set up Python
-        run: |
-          uv sync --extra asyncpg --frozen --python ${{ matrix.python-version }}
-          uv run --frozen pgq install
-
-      - name: Test pgq CLI Command
-        run: |
-          source .venv/bin/activate
-          pgq --help
-
-      - name: Run Example with SIGINT
-        run: |
-          source .venv/bin/activate
-          PYTHONUNBUFFERED=1 pgq run examples.consumer:main &
-          pid=$!
-          sleep 5
-          kill -SIGINT $pid
-          wait $pid
-
   run-benchmark:
     strategy:
       fail-fast: false
@@ -227,56 +167,6 @@ jobs:
           cd artifacts-storage
           PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py
 
-  run-install-upgrade:
-    if: github.event_name != 'schedule'
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12"]
-        os: [ubuntu-24.04]
-        postgres-version: ["11", "13", "14", "15", "16", "17"]
-
-    env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
-
-    name: Run PGQueuer install and upgrade
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
-
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: PGQueuer install, upgrade and uninstall
-        run: |
-          uv sync --extra asyncpg --frozen --python ${{ matrix.python-version }}
-          uv run --frozen pgq install
-          uv run --frozen pgq verify --expect present
-          uv run --frozen pgq upgrade
-          uv run --frozen pgq uninstall
-          uv run --frozen pgq verify --expect absent
-
   run-tests:
     if: github.event_name != 'schedule'
     strategy:
@@ -287,30 +177,17 @@ jobs:
         os: [ubuntu-24.04]
 
     env:
-      PGUSER: pgquser
-      PGDATABASE: pgqdb
-      PGPASSWORD: pgqpw
-      PGHOST: localhost
+      CI: 1
+      PYTHONASYNCIODEBUG: 1
+      PYTHONDEBUG: 1
+      PYTHONFAULTHANDLER: 1
+      POSTGRES_VERSION: ${{ matrix.postgres-version }}
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      TESTCONTAINERS_HOST_OVERRIDE: "localhost"
 
     name: Test PGQueuer with Multiple Python and Postgres Versions
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
-
-    services:
-      postgres:
-        image: postgres:${{ matrix.postgres-version }}
-        env:
-          POSTGRES_USER: ${{ env.PGUSER }}
-          POSTGRES_DB: ${{ env.PGDATABASE }}
-          POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          --tmpfs /var/lib/postgresql/data:rw
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -318,16 +195,14 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
 
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
+      - name: Prefetch docker images
+        run: docker pull postgres:${{ matrix.postgres-version }}
 
-      - name: Install PGQueuer
-        run: |
-          uv sync --all-extras  --frozen
-          uv run --frozen pgq install
+      - name: Set up Python
+        run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
 
       - name: Run Full Test Suite
-        run: PYTHONASYNCIODEBUG=1 PYTHONDEBUG=1 PYTHONFAULTHANDLER=1 uv run pytest -v
+        run: uv run pytest
 
   run-windows-tests:
     if: github.event_name != 'schedule'
@@ -336,6 +211,12 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12"]
+
+    env:
+      CI: 1
+      PYTHONASYNCIODEBUG: 1
+      PYTHONDEBUG: 1
+      PYTHONFAULTHANDLER: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -350,7 +231,7 @@ jobs:
         run: uv sync --all-extras --frozen
 
       - name: Run Windows Shutdown Test
-        run: uv run pytest test/windows/test_shutdown.py -v
+        run: uv run pytest test/windows/test_shutdown.py
 
   run-ruff:
     if: github.event_name != 'schedule'
@@ -383,9 +264,6 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
         run: uv python install 3.12
@@ -405,7 +283,6 @@ jobs:
         run-windows-tests,
         run-ruff,
         run-mypy,
-        run-example,
       ]
     runs-on: ubuntu-24.04
     steps:

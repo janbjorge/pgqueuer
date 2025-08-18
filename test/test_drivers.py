@@ -16,7 +16,6 @@ from pgqueuer.db import (
     SyncPsycopgDriver,
     _named_parameter,
     _replace_dollar_named_parameter,
-    dsn,
 )
 from pgqueuer.helpers import utc_now
 from pgqueuer.listeners import (
@@ -43,8 +42,8 @@ def get_user_defined_functions(klass: object) -> list[str]:
 
 
 @asynccontextmanager
-async def asyncpg_connect() -> AsyncGenerator[asyncpg.Connection, None]:
-    conn = await asyncpg.connect(dsn=dsn())
+async def asyncpg_connect(dsn: str) -> AsyncGenerator[asyncpg.Connection, None]:
+    conn = await asyncpg.connect(dsn=dsn)
     try:
         yield conn
     finally:
@@ -52,28 +51,28 @@ async def asyncpg_connect() -> AsyncGenerator[asyncpg.Connection, None]:
 
 
 @asynccontextmanager
-async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
+async def apgdriver(dsn: str) -> AsyncGenerator[AsyncpgDriver, None]:
     async with (
-        asyncpg_connect() as conn,
+        asyncpg_connect(dsn) as conn,
         AsyncpgDriver(conn) as x,
     ):
         yield x
 
 
 @asynccontextmanager
-async def apgpooldriver() -> AsyncGenerator[AsyncpgPoolDriver, None]:
+async def apgpooldriver(dsn: str) -> AsyncGenerator[AsyncpgPoolDriver, None]:
     async with (
-        asyncpg.create_pool(dsn=dsn()) as pool,
+        asyncpg.create_pool(dsn=dsn) as pool,
         AsyncpgPoolDriver(pool) as x,
     ):
         yield x
 
 
 @asynccontextmanager
-async def psydriver() -> AsyncGenerator[PsycopgDriver, None]:
+async def psydriver(dsn: str) -> AsyncGenerator[PsycopgDriver, None]:
     async with (
         await psycopg.AsyncConnection.connect(
-            conninfo=dsn(),
+            conninfo=dsn,
             autocommit=True,
         ) as conn,
         PsycopgDriver(conn) as x,
@@ -91,27 +90,30 @@ def drivers() -> tuple[Callable[..., AsyncContextManager[Driver]], ...]:
 
 @pytest.mark.parametrize("driver", drivers())
 async def test_fetch(
+    dsn: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
-    async with driver() as d:
+    async with driver(dsn) as d:
         assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [{"one": 1, "two": 2}]
 
 
 @pytest.mark.parametrize("driver", drivers())
 async def test_execute(
+    dsn: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
-    async with driver() as d:
+    async with driver(dsn) as d:
         assert isinstance(await d.execute("SELECT 1 as one, 2 as two;"), str)
 
 
 @pytest.mark.parametrize("driver", drivers())
 async def test_notify(
+    dsn: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
     event = asyncio.Future[str | bytearray | bytes]()
 
-    async with driver() as d:
+    async with driver(dsn) as d:
         name = d.__class__.__name__.lower()
         payload = f"hello_from_{name}"
         channel = f"test_notify_{name}"
@@ -121,7 +123,7 @@ async def test_notify(
         # Seems psycopg does not pick up on
         # notifiys sent from its current connection.
         # Workaround by using asyncpg.
-        async with driver() as ad:
+        async with driver(dsn) as ad:
             await ad.execute(
                 QueryQueueBuilder(
                     DBSettings(channel=channel),
@@ -151,6 +153,7 @@ async def test_notify(
     ),
 )
 async def test_valid_query_syntax(
+    dsn: str,
     query: Callable[..., str],
     name: str,
     driver: Callable[..., AsyncContextManager[Driver]],
@@ -165,7 +168,7 @@ async def test_valid_query_syntax(
     def rolledback(sql: str) -> str:
         return f"BEGIN; {sql}; ROLLBACK;"
 
-    async with driver() as d:
+    async with driver(dsn) as d:
         if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
             with suppress(asyncpg.exceptions.UndefinedParameterError):
                 await d.execute(rolledback(sql))
@@ -181,9 +184,10 @@ async def test_valid_query_syntax(
 
 @pytest.mark.parametrize("driver", drivers())
 async def test_event_listener(
+    dsn: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
-    async with driver() as d:
+    async with driver(dsn) as d:
         name = d.__class__.__name__.lower()
         channel = Channel(f"test_event_listener_{name}")
         payload = TableChangedEvent(
@@ -209,7 +213,7 @@ async def test_event_listener(
         # Seems psycopg does not pick up on
         # notifiys sent from its current connection.
         # Workaround by using asyncpg.
-        async with driver() as dd:
+        async with driver(dsn) as dd:
             await dd.execute(
                 QueryQueueBuilder(DBSettings(channel=channel)).build_notify_query(),
                 payload.model_dump_json(),
@@ -325,9 +329,10 @@ def test_replace_dollar_named_parameter_large_numbers() -> None:
 
 @pytest.mark.parametrize("driver", drivers())
 async def test_recovery_after_failed_sql(
+    dsn: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
-    async with driver() as d:
+    async with driver(dsn) as d:
         with pytest.raises(Exception):
             await d.execute("SELECT 1 WHERE")
 
@@ -351,10 +356,10 @@ async def test_recovery_after_failed_sql_sync(
     assert result == [{"one": 1}]
 
 
-async def test_no_autocommit_raises() -> None:
+async def test_no_autocommit_raises(dsn: str) -> None:
     with pytest.raises(RuntimeError):
-        SyncPsycopgDriver(psycopg.connect(dsn()))
+        SyncPsycopgDriver(psycopg.connect(dsn))
 
     with pytest.raises(RuntimeError):
-        async with await psycopg.AsyncConnection.connect(conninfo=dsn()) as conn:
+        async with await psycopg.AsyncConnection.connect(conninfo=dsn) as conn:
             PsycopgDriver(conn)
