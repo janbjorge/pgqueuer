@@ -7,9 +7,7 @@ This example demonstrates passing a callable factory to `pgqueuer.cli.run`.
 1. Create the test database:
 
    ```bash
-   make clean
-   make up
-   make db
+   docker compose up populate
    ```
 
 2. Install dependencies from the project root:

@@ -32,8 +32,8 @@ def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
 
 @pytest.fixture(scope="session")
 async def postgres_container() -> AsyncGenerator[str, None]:
-    if exteral_postgres_dsn := os.environ.get("EXTERNAL_POSTGRES_DSN"):
-        yield exteral_postgres_dsn
+    if external_postgres_dsn := os.environ.get("EXTERNAL_POSTGRES_DSN"):
+        yield external_postgres_dsn
         return
 
     postgres_version = os.environ.get("POSTGRES_VERSION", "16")
@@ -76,7 +76,7 @@ async def postgres_container() -> AsyncGenerator[str, None]:
 
 
 @pytest.fixture(scope="session")
-async def migraged_db(postgres_container: str) -> AsyncGenerator[str, None]:
+async def migrated_db(postgres_container: str) -> AsyncGenerator[str, None]:
     """Ensure the database is migrated before running tests."""
 
     parent = f"parent_{uuid.uuid4().hex}"
@@ -96,15 +96,15 @@ def build_dsn_for(base_url: str, path: str) -> str:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def dsn(migraged_db: str) -> AsyncGenerator[str, None]:
-    parent = urlparse(migraged_db).path.strip("/")
+async def dsn(migrated_db: str) -> AsyncGenerator[str, None]:
+    parent = urlparse(migrated_db).path.strip("/")
     child = f"test_{uuid.uuid4().hex}"
 
-    async with asyncpg.create_pool(dsn=build_dsn_for(migraged_db, path="/postgres")) as pool:
+    async with asyncpg.create_pool(dsn=build_dsn_for(migrated_db, path="/postgres")) as pool:
         # Create a short-lived test db from the template dbname on the container
         await pool.execute(f"CREATE DATABASE {child} TEMPLATE {parent}")
 
-        yield build_dsn_for(migraged_db, path=f"/{child}")
+        yield build_dsn_for(migrated_db, path=f"/{child}")
 
         # Clean up the test db
         await pool.execute(f'DROP DATABASE IF EXISTS "{child}" WITH (FORCE)')
