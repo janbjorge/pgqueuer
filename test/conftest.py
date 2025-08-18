@@ -11,6 +11,9 @@ import psycopg
 import pytest
 import pytest_asyncio
 
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.queries import Queries
+
 try:  # pragma: no cover - uvloop not installed on Windows
     import uvloop
 except ModuleNotFoundError:
@@ -18,8 +21,7 @@ except ModuleNotFoundError:
 
 from testcontainers.postgres import PostgresContainer
 
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, SyncPsycopgDriver
-from pgqueuer.queries import Queries
+from pgqueuer.db import SyncPsycopgDriver
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -29,7 +31,11 @@ def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
 
 
 @pytest.fixture(scope="session")
-async def postgres_container() -> AsyncGenerator[PostgresContainer, None]:
+async def postgres_container() -> AsyncGenerator[str, None]:
+    if exteral_postgres_dsn := os.environ.get("EXTERNAL_POSTGRES_DSN"):
+        yield exteral_postgres_dsn
+        return
+
     postgres_version = os.environ.get("POSTGRES_VERSION", "16")
 
     # https://postgresqlco.nf/doc/en/param/vacuum_buffer_usage_limit/
@@ -66,13 +72,22 @@ async def postgres_container() -> AsyncGenerator[PostgresContainer, None]:
     )
 
     with container as running:
-        yield running
+        yield running.get_connection_url()
 
 
 @pytest.fixture(scope="session")
-async def install_pgq(postgres_container: PostgresContainer) -> None:
-    async with asyncpg.create_pool(dsn=postgres_container.get_connection_url()) as pool:
+async def migraged_db(postgres_container: str) -> AsyncGenerator[str, None]:
+    """Ensure the database is migrated before running tests."""
+
+    parent = f"parent_{uuid.uuid4().hex}"
+
+    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, "/postgres")) as pool:
+        await pool.execute(f"CREATE DATABASE {parent}")
+
+    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, f"/{parent}")) as pool:
         await Queries(AsyncpgPoolDriver(pool)).install()
+
+    yield build_dsn_for(postgres_container, f"/{parent}")
 
 
 def build_dsn_for(base_url: str, path: str) -> str:
@@ -80,30 +95,19 @@ def build_dsn_for(base_url: str, path: str) -> str:
     return urlunparse(urlparse(base_url)._replace(path=path))
 
 
-@pytest_asyncio.fixture()
-async def dsn(
-    postgres_container: PostgresContainer, install_pgq: None
-) -> AsyncGenerator[str, None]:
-    test_db_name = f"test_{uuid.uuid4().hex}"
+@pytest_asyncio.fixture(scope="function")
+async def dsn(migraged_db: str) -> AsyncGenerator[str, None]:
+    parent = urlparse(migraged_db).path.strip("/")
+    child = f"test_{uuid.uuid4().hex}"
 
-    async with asyncpg.create_pool(
-        dsn=build_dsn_for(
-            postgres_container.get_connection_url(),
-            path="/postgres",
-        )
-    ) as admin_pool:
+    async with asyncpg.create_pool(dsn=build_dsn_for(migraged_db, path="/postgres")) as pool:
         # Create a short-lived test db from the template dbname on the container
-        await admin_pool.execute(
-            f'CREATE DATABASE "{test_db_name}" TEMPLATE "{postgres_container.dbname}"'
-        )
+        await pool.execute(f"CREATE DATABASE {child} TEMPLATE {parent}")
 
-        yield build_dsn_for(
-            postgres_container.get_connection_url(),
-            path=f"/{test_db_name}",
-        )
+        yield build_dsn_for(migraged_db, path=f"/{child}")
 
         # Clean up the test db
-        await admin_pool.execute(f'DROP DATABASE IF EXISTS "{test_db_name}" WITH (FORCE)')
+        await pool.execute(f'DROP DATABASE IF EXISTS "{child}" WITH (FORCE)')
 
 
 @pytest_asyncio.fixture(scope="function")
