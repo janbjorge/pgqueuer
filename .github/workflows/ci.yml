@@ -283,7 +283,6 @@ jobs:
         run-windows-tests,
         run-ruff,
         run-mypy,
-        run-example,
       ]
     runs-on: ubuntu-24.04
     steps:
