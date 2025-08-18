@@ -340,7 +340,7 @@ async def test_queue_log_queued_picked_exception(
 
 async def test_queue_log_queued_dedupe_key_raises(
     apgdriver: db.Driver,
-    pgdriver: db.SyncDriver,
+    sync_psycopg_driver: db.SyncDriver,
 ) -> None:
     aq = queries.Queries(apgdriver)
 
@@ -359,7 +359,7 @@ async def test_queue_log_queued_dedupe_key_raises(
         )
     assert sum(x.count for x in await aq.queue_size()) == 1
 
-    sq = queries.SyncQueries(pgdriver)
+    sq = queries.SyncQueries(sync_psycopg_driver)
     with pytest.raises(errors.DuplicateJobError):
         sq.enqueue(
             "test_queue_log_queued_dedupe_key_raises",
@@ -372,7 +372,7 @@ async def test_queue_log_queued_dedupe_key_raises(
 
 async def test_queue_log_queued_dedupe_key_raises_array(
     apgdriver: db.Driver,
-    pgdriver: db.SyncDriver,
+    sync_psycopg_driver: db.SyncDriver,
 ) -> None:
     aq = queries.Queries(apgdriver)
 
@@ -394,7 +394,7 @@ async def test_queue_log_queued_dedupe_key_raises_array(
 
     assert sum(x.count for x in await aq.queue_size()) == 1
 
-    sq = queries.SyncQueries(pgdriver)
+    sq = queries.SyncQueries(sync_psycopg_driver)
     with pytest.raises(errors.DuplicateJobError):
         sq.enqueue(
             ["test_queue_log_queued_dedupe_key_raises_array"],
@@ -433,7 +433,7 @@ async def test_queue_log_queued_dedupe_key_raises_concurrent(
 
 async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     apgdriver: db.Driver,
-    pgdriver: db.SyncDriver,
+    sync_psycopg_driver: db.SyncDriver,
 ) -> None:
     dedupe_key = "test_queue_log_queued_dedupe_key_raises_contains_dedupe_key"
     await queries.Queries(apgdriver).enqueue("...", None, dedupe_key=dedupe_key)
@@ -444,7 +444,7 @@ async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     assert dedupe_key in raised.value.dedupe_key
 
     with pytest.raises(errors.DuplicateJobError) as raised:
-        queries.SyncQueries(pgdriver).enqueue("...", None, dedupe_key=dedupe_key)
+        queries.SyncQueries(sync_psycopg_driver).enqueue("...", None, dedupe_key=dedupe_key)
     assert dedupe_key in raised.value.dedupe_key
 
 

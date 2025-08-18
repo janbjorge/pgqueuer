@@ -342,12 +342,12 @@ async def test_recovery_after_failed_sql(
 
 
 async def test_recovery_after_failed_sql_sync(
-    pgdriver: SyncDriver,
+    sync_psycopg_driver: SyncDriver,
 ) -> None:
     with pytest.raises(Exception):
-        pgdriver.fetch("SELECT 1 WHERE")
+        sync_psycopg_driver.fetch("SELECT 1 WHERE")
 
-    result = pgdriver.fetch("SELECT 1 as one")
+    result = sync_psycopg_driver.fetch("SELECT 1 as one")
     assert result == [{"one": 1}]
 
 

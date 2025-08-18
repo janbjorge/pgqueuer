@@ -23,7 +23,7 @@ def client() -> Generator[FlaskClient, None, None]:
 
 def test_enqueue_and_size(
     client: FlaskClient,
-    pgdriver: SyncPsycopgDriver,
+    sync_psycopg_driver: SyncPsycopgDriver,
 ) -> None:
     # Initial size check
     r1 = client.get("/queue_size")

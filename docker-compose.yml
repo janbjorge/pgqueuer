@@ -18,18 +18,18 @@ services:
       POSTGRES_DB: pgqdb
       POSTGRES_PASSWORD: pgqpw
       PGDATA: /var/lib/pg/data
-      POSTGRES_INITDB_ARGS: >
-        --encoding=UTF8
-        -c jit=off
-        -c synchronous_commit=off
-        -c full_page_writes=off
-        -c fsync=off
-        -c checkpoint_timeout=30min
-        -c max_wal_size=4GB
-        -c checkpoint_completion_target=0.9
-        -c shared_buffers=256MB
-        -c vacuum_buffer_usage_limit=8MB
-        -c autovacuum_naptime=5s
+      # POSTGRES_INITDB_ARGS: >
+      #   --encoding=UTF8
+      #   -c jit=off
+      #   -c synchronous_commit=off
+      #   -c full_page_writes=off
+      #   -c fsync=off
+      #   # -c checkpoint_timeout=30min
+      #   # -c max_wal_size=4GB
+      #   # -c checkpoint_completion_target=0.9
+      #   # -c shared_buffers=256MB
+      #   # -c vacuum_buffer_usage_limit=8MB
+      #   # -c autovacuum_naptime=5s
     ports:
       - "5432:5432"
     tmpfs:

@@ -10,7 +10,7 @@ try:  # pragma: no cover - uvloop not installed on Windows
 except ModuleNotFoundError:
     uvloop = None  # type: ignore[assignment]
 
-from pgqueuer.db import AsyncpgDriver, SyncPsycopgDriver, dsn
+from pgqueuer.db import AsyncpgDriver, PsycopgDriver, SyncPsycopgDriver, dsn
 from pgqueuer.queries import Queries
 
 
@@ -45,7 +45,13 @@ async def apgdriver() -> AsyncGenerator[AsyncpgDriver, None]:
 
 
 @pytest.fixture(scope="function")
-async def pgdriver(apgdriver: AsyncpgDriver) -> AsyncGenerator[SyncPsycopgDriver, None]:
+async def psycopg_driver(apgdriver: AsyncpgDriver) -> AsyncGenerator[PsycopgDriver, None]:
+    async with await psycopg.AsyncConnection.connect(conninfo=dsn(), autocommit=True) as conn:
+        yield PsycopgDriver(conn)
+
+
+@pytest.fixture(scope="function")
+async def sync_psycopg_driver(apgdriver: AsyncpgDriver) -> AsyncGenerator[SyncPsycopgDriver, None]:
     conn = psycopg.connect(dsn(), autocommit=True)
     try:
         yield SyncPsycopgDriver(conn)
