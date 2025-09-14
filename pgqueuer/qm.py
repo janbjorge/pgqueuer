@@ -14,6 +14,7 @@ import dataclasses
 import sys
 import uuid
 from collections import Counter, deque
+from collections.abc import MutableMapping
 from contextlib import nullcontext, suppress
 from datetime import timedelta
 from math import isfinite
@@ -59,6 +60,9 @@ class QueueManager:
         queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
             including cancellation scopes.
+        resources (MutableMapping[str, Any]): User-provided shared resources mapping
+            injected into each job Context. Pass at construction time to share
+            initialized pools/clients/models across jobs.
         shutdown_on_listener_failure
             If *True*, raise `FailingListenerError` and set the shutdown event when
             the periodic listener health‑check times out.
@@ -87,6 +91,10 @@ class QueueManager:
     queue_manager_id: uuid.UUID = dataclasses.field(
         init=False,
         default_factory=uuid.uuid4,
+    )
+    # Shared resources mapping propagated into each job Context.
+    resources: MutableMapping = dataclasses.field(
+        default_factory=dict,
     )
 
     # Per job.
@@ -513,7 +521,10 @@ class QueueManager:
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
                     await rpsbuff.add(job.entrypoint)
-                    self.job_context[job.id] = models.Context(cancellation=anyio.CancelScope())
+                    self.job_context[job.id] = models.Context(
+                        cancellation=anyio.CancelScope(),
+                        resources=self.resources,
+                    )
                     task_manager.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
 
                     with contextlib.suppress(asyncio.QueueEmpty):

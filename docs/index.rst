@@ -30,6 +30,7 @@ Features
 - **Efficient Concurrency Handling**: Utilizes PostgreSQL's `FOR UPDATE SKIP LOCKED` for reliable and concurrent job processing.
 - **Real-time Notifications**: Leverages `LISTEN` and `NOTIFY` for real-time updates on job status changes.
 - **Batch Processing**: Handles large job batches efficiently for both enqueueing and dequeueing.
+- **Shared Resources Context**: Reuse heavyweight objects (DB pools, HTTP clients, caches, ML models) via a process-wide `resources` mapping injected into every job's execution context, avoiding per-job reinitialization.
 
 Example Usage
 -------------

@@ -13,6 +13,7 @@ import dataclasses
 import traceback
 import uuid
 from collections import deque
+from collections.abc import MutableMapping
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, NamedTuple
@@ -209,7 +210,18 @@ class LogStatistics(BaseModel):
 
 @dataclasses.dataclass
 class Context:
+    """
+    Runtime context shared across components.
+
+    Attributes:
+        cancellation: The root CancelScope controlling shutdown of running tasks.
+        resources: A mutable mapping for user-provided, pre-initialized shared
+            resources (e.g. DB pools, HTTP clients, ML models, caches). Always a
+            mapping; never None. Users can mutate this at runtime if needed.
+    """
+
     cancellation: anyio.CancelScope
+    resources: MutableMapping = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass

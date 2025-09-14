@@ -103,7 +103,9 @@ async def test_handle_cancellation_event() -> None:
     canceled: MutableMapping[JobId, Context] = {}
     pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
 
-    cancellation_context = Context(cancellation=CancelScope())
+    cancellation_context = Context(
+        cancellation=CancelScope(), resources={"test_key": "listener_test"}
+    )
     job_id = JobId(123)
     canceled[job_id] = cancellation_context
 

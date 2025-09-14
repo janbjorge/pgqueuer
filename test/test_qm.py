@@ -29,12 +29,13 @@ async def test_job_queuing(
     apgdriver: db.Driver,
     N: int,
 ) -> None:
-    c = QueueManager(apgdriver)
+    c = QueueManager(apgdriver, resources={"test": "job_queuing"})
     seen = list[int]()
 
     @c.entrypoint("fetch")
     async def fetch(context: Job) -> None:
         assert context.payload is not None
+        assert c.resources["test"] == "job_queuing"
         seen.append(int(context.payload))
 
     await c.queries.enqueue(
@@ -59,7 +60,7 @@ async def test_job_fetch(
     concurrency: int,
 ) -> None:
     q = Queries(apgdriver)
-    qmpool = [QueueManager(apgdriver) for _ in range(concurrency)]
+    qmpool = [QueueManager(apgdriver, resources={"test": "job_fetch"}) for _ in range(concurrency)]
     seen = list[int]()
 
     for qm in qmpool:
@@ -67,6 +68,7 @@ async def test_job_fetch(
         @qm.entrypoint("fetch")
         async def fetch(context: Job) -> None:
             assert context.payload is not None
+            assert qm.resources["test"] == "job_fetch"
             seen.append(int(context.payload))
 
     await q.enqueue(
@@ -91,7 +93,9 @@ async def test_sync_entrypoint(
     concurrency: int,
 ) -> None:
     q = Queries(apgdriver)
-    qmpool = [QueueManager(apgdriver) for _ in range(concurrency)]
+    qmpool = [
+        QueueManager(apgdriver, resources={"test": "sync_entrypoint"}) for _ in range(concurrency)
+    ]
     seen = list[int]()
 
     for qm in qmpool:
@@ -100,6 +104,7 @@ async def test_sync_entrypoint(
         def fetch(context: Job) -> None:
             time.sleep(1)  # Sim. heavy CPU/IO.
             assert context.payload is not None
+            assert qm.resources["test"] == "sync_entrypoint"
             seen.append(int(context.payload))
 
     await q.enqueue(
@@ -120,12 +125,13 @@ async def test_pick_local_entrypoints(
     N: int = 100,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(apgdriver, resources={"test": "pick_local"})
     pikced_by = list[str]()
 
     @qm.entrypoint("to_be_picked")
     async def to_be_picked(job: Job) -> None:
         pikced_by.append(job.entrypoint)
+        assert qm.resources["test"] == "pick_local"
 
     await q.enqueue(["to_be_picked"] * N, [None] * N, [0] * N)
     await q.enqueue(["not_picked"] * N, [None] * N, [0] * N)
@@ -150,12 +156,13 @@ async def test_pick_set_queue_manager_id(
     N: int = 100,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(apgdriver, resources={"test": "pick_qm_id"})
     qmids = set[uuid.UUID]()
 
     @qm.entrypoint("fetch")
     async def fetch(job: Job) -> None:
         assert job.queue_manager_id is not None
+        assert qm.resources["test"] == "pick_qm_id"
         qmids.add(job.queue_manager_id)
 
     await q.enqueue(["fetch"] * N, [None] * N, [0] * N)

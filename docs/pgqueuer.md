@@ -1,5 +1,172 @@
 # PgQueuer: Unified Job and Schedule Orchestrator
 
+## Shared Resources (`Context.resources`)
+
+PgQueuer lets you provide a single shared resources container that is injected into every job execution context. This makes it easy to initialize heavyweight or shared components (database pools, HTTP clients, caches, ML models, etc.) once at process startup and reuse them across all jobs.
+
+### Why Use Shared Resources?
+
+- Avoid re-initializing expensive objects per job (e.g. HTTP session pools, model weights)
+- Centralize lifecycle (create at startup, optionally close at shutdown)
+- Enable coordinated state (e.g. in‑memory counters, feature flags)
+- Provide a structured place for integrations (tracing, metrics, external APIs)
+
+### Providing Resources
+
+You pass a mutable mapping when constructing `PgQueuer` (or `QueueManager` directly):
+
+```python
+import asyncpg
+from pgqueuer import PgQueuer
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.models import Job
+
+async def build_pgqueuer() -> PgQueuer:
+    conn = await asyncpg.connect()
+    driver = AsyncpgDriver(conn)
+
+    resources = {
+        "http_client": build_http_client(),   # e.g. httpx.AsyncClient()
+        "vector_index": load_vector_index(),  # custom object
+        "feature_flags": {"beta_mode": True},
+    }
+
+    pgq = PgQueuer(driver, resources=resources)
+
+    @pgq.entrypoint("process_user")
+    async def process_user(job: Job) -> None:
+        ctx = pgq.qm.get_context(job.id)
+        http = ctx.resources["http_client"]
+        flags = ctx.resources["feature_flags"]
+        # Use shared objects without recreating them
+        ...
+
+    return pgq
+```
+
+Internally this mapping is passed into each `Context` as `context.resources`. All jobs receive the SAME object (it is not copied), so mutations are visible across jobs.
+
+### Access Inside Custom Executors
+
+If you implement a custom executor (`AbstractEntrypointExecutor`), the `execute(self, job, context)` method receives the `Context`:
+
+```python
+from pgqueuer.executors import AbstractEntrypointExecutor
+from pgqueuer.models import Job, Context
+
+class LoggingExecutor(AbstractEntrypointExecutor):
+    async def execute(self, job: Job, context: Context) -> None:
+        logger = context.resources.get("logger")
+        if logger:
+            logger.info("Processing job %s", job.id)
+        # Call wrapped function (if delegating) or implement logic directly
+```
+
+### Mutating Resources
+
+Because `resources` is a shared mutable mapping:
+
+```python
+context.resources.setdefault("metrics", {}).setdefault("processed", 0)
+context.resources["metrics"]["processed"] += 1
+```
+
+If you need stricter control (immutability, lifecycle hooks), you can later replace the mapping with a custom registry class; the public contract is simply "object with mapping semantics."
+
+### Scheduled (Cron) Tasks
+
+Currently, scheduled tasks do NOT automatically receive `resources` as a second argument. You can still access them via closure:
+
+```python
+pgq = PgQueuer(driver, resources={"http": http_client})
+
+@pgq.schedule("refresh_cache", "*/5 * * * *")
+async def refresh_cache(schedule):
+    http = pgq.resources["http"]
+    await http.get("https://api.example.com/ping")
+```
+
+A future enhancement (see project TODO) may allow optional arity-based injection or a `ScheduleContext`.
+
+### Testing With Resources
+
+In tests you can assert propagation:
+
+```python
+qm = QueueManager(driver, resources={"flag": "test"})
+
+@qm.entrypoint("demo")
+async def demo(job: Job) -> None:
+    assert qm.get_context(job.id).resources["flag"] == "test"
+```
+
+### Summary
+
+| Aspect        | Behavior |
+|---------------|----------|
+| Initialization | Passed at construction: `PgQueuer(..., resources=...)` |
+| Scope          | Shared across all jobs in the same process |
+| Mutation       | Visible to subsequent jobs |
+| Scheduled jobs | Use closure access (for now) |
+| Custom executors | Receive via `context.resources` |
+
+### Using Async Resources in Sync Entrypoints
+
+Sync entrypoints (declared with `def`, not `async def`) are executed in a worker thread via `anyio.to_thread.run_sync`. Async / event‑loop bound resources (e.g. asyncpg pools, `httpx.AsyncClient`, async factories) must NOT be called directly inside these sync functions. Doing so just returns an un‑awaited coroutine object (or may raise loop/thread errors), and the I/O never actually runs.
+
+Recommended approaches:
+1. Prefer making I/O entrypoints async:
+   ```python
+   @pgq.entrypoint("process_user")
+   async def process_user(job: Job) -> None:
+       pool = pgq.qm.get_context(job.id).resources["pg_pool"]
+        await pool.execute("SELECT 1")
+   ```
+2. If you must stay sync (e.g. CPU work) but still need async calls, bridge them back to the loop:
+   ```python
+   @pgq.entrypoint("resize_then_store")
+   def resize_then_store(job: Job) -> None:
+       ctx = pgq.qm.get_context(job.id)
+       img = cpu_resize(job.payload)
+       # Bridge async store using anyio.from_thread.run
+       anyio.from_thread.run(store_image, img, ctx.resources["pg_pool"])
+
+   async def store_image(data: bytes, pool: asyncpg.Pool) -> None:
+        await pool.execute("INSERT INTO images(data) VALUES($1)", data)
+   ```
+3. Wrap async clients in a small synchronous facade that internally uses `anyio.from_thread.run` for each call.
+
+Misuse example (DO NOT DO):
+```python
+@pgq.entrypoint("bad")
+def bad(job: Job) -> None:
+    ctx = pgq.qm.get_context(job.id)
+    async_func = ctx.resources["async_func"]          # async def ...
+    coro = async_func("value")                        # Returns coroutine, not result
+    # Never awaited -> lost work / warnings
+```
+
+Correct bridging:
+```python
+@pgq.entrypoint("good")
+def good(job: Job) -> None:
+    ctx = pgq.qm.get_context(job.id)
+    async_func = ctx.resources["async_func"]
+    result = anyio.from_thread.run(async_func, "value")  # Properly awaited
+```
+
+Testing reference:
+See `test_sync_async_resources.py` for:
+- Misuse detection (coroutine leakage)
+- Proper bridging with `anyio.from_thread.run`
+- Shared mutation behavior when bridging
+
+Guidance:
+- Mark entrypoints async whenever they perform network / DB / other async I/O.
+- Limit sync entrypoints to CPU or pure transformations plus optional bridged calls.
+- Consider adding your own wrappers or guards if your team wants to forbid direct async resource access in sync entrypoints.
+
+
 PgQueuer is a comprehensive library designed to manage job queues and recurring tasks efficiently using PostgreSQL. By integrating `QueueManager` and `SchedulerManager`, it offers a unified solution for handling both queued jobs and periodic tasks seamlessly.
 
 ---

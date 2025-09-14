@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from datetime import timedelta
-from typing import Callable
+from typing import Callable, MutableMapping
 
 from .db import Driver
 from .executors import (
@@ -36,11 +36,20 @@ class PgQueuer:
 
     This class provides a unified interface for job queue management and task scheduling,
     leveraging PostgreSQL for managing job states and distributed processing.
+
+    Resources:
+        resources: Mutable mapping for user‑provided shared objects (DB pools, HTTP
+            clients, caches, ML models) created once at startup and injected into
+            each job Context via QueueManager.
     """
 
     connection: Driver
     channel: Channel = dataclasses.field(
         default=Channel(DBSettings().channel),
+    )
+    # Shared resources mapping passed to QueueManager and propagated into each job Context.
+    resources: MutableMapping = dataclasses.field(
+        default_factory=dict,
     )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -54,7 +63,7 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
-        self.qm = QueueManager(self.connection, self.channel)
+        self.qm = QueueManager(self.connection, self.channel, resources=self.resources)
         self.sm = SchedulerManager(self.connection)
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown

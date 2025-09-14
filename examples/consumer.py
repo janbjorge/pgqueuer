@@ -15,16 +15,35 @@ from pgqueuer.models import Job, Schedule
 async def create_pgqueuer() -> PgQueuer:
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
-    pgq = PgQueuer(driver)
+
+    # Initialize shared resources once. These are injected into every job Context.
+    # Examples: HTTP clients, ML models, connection pools, caches, feature flags.
+    resources: dict[str, object] = {
+        "feature_flags": {"beta_mode": True},
+        "startup_timestamp": datetime.now(),
+    }
+
+    pgq = PgQueuer(driver, resources=resources)
 
     # Setup the 'fetch' entrypoint
     @pgq.entrypoint("fetch")
     async def process_message(job: Job) -> None:
-        print(f"Processed message: {job!r}")
+        # Access the shared resources via the Context
+        ctx = pgq.qm.get_context(job.id)
+        processed = ctx.resources.setdefault("processed_jobs", 0) + 1
+        ctx.resources["processed_jobs"] = processed
+        print(
+            f"Processed message: {job!r} "
+            f"(processed_jobs={processed}, beta_mode={ctx.resources['feature_flags']['beta_mode']})"
+        )
 
     @pgq.schedule("scheduled_every_minute", "* * * * *")
     async def scheduled_every_minute(schedule: Schedule) -> None:
-        print(f"Executed every minute {schedule!r} {datetime.now()!r}")
+        # Scheduled tasks currently access shared resources via closure
+        print(
+            f"Executed every minute {schedule!r} {datetime.now()!r} "
+            f"(processed_jobs={pgq.resources.get('processed_jobs', 0)})"
+        )
 
     return pgq
 
