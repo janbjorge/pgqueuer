@@ -54,6 +54,12 @@ class SchedulerManager:
         """
         self.queries = queries.Queries(self.connection)
 
+    # TODO: Propagate shared 'resources' mapping into scheduled job execution.
+    # Consider approaches:
+    #   A) Allow schedule functions to optionally accept (schedule, resources)
+    #      via arity inspection (backward compatible).
+    #   B) Introduce a ScheduleContext dataclass with a .resources field mirroring job Context.
+    # Current workaround: users close over PgQueuer.resources when defining scheduled functions.
     def schedule(
         self,
         entrypoint: str,

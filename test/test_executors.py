@@ -21,6 +21,9 @@ from pgqueuer.models import Channel, Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
+# NOTE: Resources feature branch (pseudo-branch: feature/context-resources)
+# Tests updated to explicitly pass a resources mapping to Context to document new API.
+
 
 class MultiprocessingExecutor(AbstractEntrypointExecutor):
     def __init__(self) -> None:
@@ -65,7 +68,7 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
 
     await executor.execute(
         job,
-        Context(anyio.CancelScope()),
+        Context(anyio.CancelScope(), resources={"test_key": "sync_executor"}),
     )
 
     assert result == [b"test_payload"]
@@ -95,7 +98,7 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
 
     await executor.execute(
         job,
-        Context(anyio.CancelScope()),
+        Context(anyio.CancelScope(), resources={"test_key": "async_executor"}),
     )
     assert result == [b"test_payload"]
 
@@ -122,7 +125,7 @@ async def test_custom_threading_executor() -> None:
 
     await executor.execute(
         job,
-        Context(anyio.CancelScope()),
+        Context(anyio.CancelScope(), resources={"test_key": "threading_executor"}),
     )
 
     assert executor.result == [b"thread_payload"]
@@ -134,7 +137,7 @@ async def test_custom_multiprocessing_executor() -> None:
 
     await executor.execute(
         job,
-        Context(anyio.CancelScope()),
+        Context(anyio.CancelScope(), resources={"test_key": "multiprocessing_executor"}),
     )
     result = executor.queue.get()
 
@@ -239,14 +242,18 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
     exc.max_time = timedelta(seconds=300)
     mj = mocked_job()
     with pytest.raises(MaxRetriesExceeded):
-        await exc.execute(mj, Context(anyio.CancelScope()))
+        await exc.execute(
+            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_attempts_2"})
+        )
     assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
 
     exc.max_attempts = 10
     exc.max_time = timedelta(seconds=300)
     mj = mocked_job()
     with pytest.raises(MaxRetriesExceeded):
-        await exc.execute(mj, Context(anyio.CancelScope()))
+        await exc.execute(
+            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_time_1"})
+        )
     assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
 
 
@@ -279,7 +286,9 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
         timer() as elp,
         pytest.raises(MaxTimeExceeded),
     ):
-        await exc.execute(mj, Context(anyio.CancelScope()))
+        await exc.execute(
+            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_time_2"})
+        )
 
     leeway = 1.1
     assert elp() * leeway >= exc.max_time
@@ -291,7 +300,9 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
         timer() as elp,
         pytest.raises(MaxTimeExceeded),
     ):
-        await exc.execute(mj, Context(anyio.CancelScope()))
+        await exc.execute(
+            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_until_pass"})
+        )
 
     assert elp() * leeway >= exc.max_time
 
