@@ -144,9 +144,6 @@ jobs:
             - name: Install uv
               uses: astral-sh/setup-uv@v3
 
-            - name: Set up Python
-              run: uv python install ${{ matrix.python-version }}
-
             - name: Set Branch or Tag Name
               id: get_ref
               run: |
@@ -158,9 +155,6 @@ jobs:
 
             - name: Clone Artifact Repository
               run: git clone https://github.com/janbjorge/artifacts-storage.git
-
-            - name: Install Dependencies
-              run: uv venv && uv pip install pydantic
 
             - name: Validate RPS Against Main
               run: |
