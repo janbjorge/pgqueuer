@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-import warnings
 from typing import Any, AsyncGenerator
 from urllib.parse import quote, urlparse, urlunparse
 
@@ -14,12 +13,6 @@ import pytest_asyncio
 
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.queries import Queries
-
-warnings.filterwarnings(
-    "ignore",
-    message="The @wait_container_is_ready decorator is deprecated",
-    module="testcontainers.core.waiting_utils",
-)
 
 try:  # pragma: no cover - uvloop not installed on Windows
     import uvloop
@@ -57,9 +50,7 @@ class PGQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        self.waiting_for(
-            LogMessageWaitStrategy("database system is ready to accept connections")
-        )
+        self.waiting_for(LogMessageWaitStrategy("database system is ready to accept connections"))
 
     def get_connection_url(self, host: str | None = None) -> str:
         if self._container is None:
