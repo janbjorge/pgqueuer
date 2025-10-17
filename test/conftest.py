@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import AsyncGenerator
-from urllib.parse import urlparse, urlunparse
+from typing import Any, AsyncGenerator
+from urllib.parse import quote, urlparse, urlunparse
 
 import asyncpg
 import psycopg
@@ -19,9 +19,51 @@ try:  # pragma: no cover - uvloop not installed on Windows
 except ModuleNotFoundError:
     uvloop = None  # type: ignore[assignment]
 
-from testcontainers.postgres import PostgresContainer
+from testcontainers.core.container import DockerContainer
+from testcontainers.core.wait_strategies import LogMessageWaitStrategy
 
 from pgqueuer.db import SyncPsycopgDriver
+
+
+class PGQueuerPostgresContainer(DockerContainer):
+    """Postgres container with modern wait strategy support."""
+
+    def __init__(
+        self,
+        image: str = "postgres:latest",
+        port: int = 5432,
+        username: str | None = None,
+        password: str | None = None,
+        dbname: str | None = None,
+        *,
+        driver: str | None = "psycopg2",
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(image=image, **kwargs)
+        self.port = port
+        self.username = username or os.environ.get("POSTGRES_USER", "test")
+        self.password = password or os.environ.get("POSTGRES_PASSWORD", "test")
+        self.dbname = dbname or os.environ.get("POSTGRES_DB", "test")
+        self.driver_suffix = f"+{driver}" if driver else ""
+
+        self.with_exposed_ports(port)
+        self.with_env("POSTGRES_USER", self.username)
+        self.with_env("POSTGRES_PASSWORD", self.password)
+        self.with_env("POSTGRES_DB", self.dbname)
+        self.waiting_for(LogMessageWaitStrategy("database system is ready to accept connections"))
+
+    def get_connection_url(self, host: str | None = None) -> str:
+        if self._container is None:
+            msg = "container has not been started"
+            raise RuntimeError(msg)
+
+        host = host or self.get_container_host_ip()
+        port = self.get_exposed_port(self.port)
+        quoted_password = quote(self.password, safe=" +")
+        return (
+            f"postgresql{self.driver_suffix}://{self.username}:{quoted_password}"
+            f"@{host}:{port}/{self.dbname}"
+        )
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -63,7 +105,7 @@ async def postgres_container() -> AsyncGenerator[str, None]:
     ] + (["-c", "vacuum_buffer_usage_limit=8MB"] if int(postgres_version) >= 16 else [])
 
     container = (
-        PostgresContainer(f"postgres:{postgres_version}", driver=None)
+        PGQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
         .with_command(commands)
         .with_kwargs(tmpfs={"/var/lib/pg/data": "rw"})
         .with_envs(PGDATA="/var/lib/pg/data")
