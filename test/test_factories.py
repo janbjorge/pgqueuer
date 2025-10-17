@@ -188,6 +188,11 @@ async def test_run_factory_with_invalid_input() -> None:
     """
     invalid_input: str = "not a valid input"
 
-    with pytest.raises(TypeError, match="object str can't be used in 'await' expression"):
+    with pytest.raises(TypeError) as exc_info:
         async with run_factory(invalid_input):  # type: ignore[arg-type]
             pass  # This line should not be reached
+
+    assert str(exc_info.value) in {
+        "object str can't be used in 'await' expression",
+        "'str' object can't be awaited",
+    }

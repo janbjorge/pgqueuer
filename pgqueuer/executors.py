@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import functools
+import inspect
 import random
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
@@ -49,8 +50,8 @@ def is_async_callable(obj: object) -> bool:
     while isinstance(obj, functools.partial):
         obj = obj.func
 
-    return asyncio.iscoroutinefunction(obj) or (
-        callable(obj) and asyncio.iscoroutinefunction(obj.__call__)
+    return inspect.iscoroutinefunction(obj) or (
+        callable(obj) and inspect.iscoroutinefunction(getattr(obj, "__call__", None))
     )
 
 
