@@ -3,7 +3,7 @@ import asyncio.selector_events
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
-from pgqueuer import db
+from pgqueuer import db, queries
 from pgqueuer.models import Job
 from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
@@ -326,3 +326,67 @@ async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
 
     # Expect only a single execution
     assert calls == 1
+
+
+async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver) -> None:
+    """
+    Reproduce #472: after a worker crash with retry_timer > 0 and a positive concurrency_limit,
+    a new worker should reclaim the stale picked job but currently does not.
+    """
+
+    retry_timer = timedelta(milliseconds=200)
+    concurrency_limit = 1_000
+    entrypoint = "crash_recovery"
+
+    async def noop(_: Job) -> None:
+        return None
+
+    crashed_manager = QueueManager(apgdriver)
+
+    crashed_manager.entrypoint(
+        entrypoint,
+        retry_timer=retry_timer,
+        concurrency_limit=concurrency_limit,
+    )(noop)
+
+    (job_id,) = await crashed_manager.queries.enqueue([entrypoint], [None], [0])
+
+    execution_params = {
+        entrypoint: queries.EntrypointExecutionParameter(
+            retry_after=retry_timer,
+            serialized=False,
+            concurrency_limit=concurrency_limit,
+        )
+    }
+
+    first_claim = await crashed_manager.queries.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=crashed_manager.queue_manager_id,
+        global_concurrency_limit=None,
+    )
+    assert len(first_claim) == 1
+    assert first_claim[0].id == job_id
+
+    # Wait long enough so the heartbeat becomes stale relative to retry_timer.
+    await asyncio.sleep(retry_timer.total_seconds() * 2)
+
+    queued_rows = await inspect_queued_jobs([job_id], apgdriver)
+    assert queued_rows[0].status == "picked"
+    assert queued_rows[0].queue_manager_id == crashed_manager.queue_manager_id
+
+    recovery_manager = QueueManager(apgdriver)
+
+    recovery_manager.entrypoint(
+        entrypoint,
+        retry_timer=retry_timer,
+        concurrency_limit=concurrency_limit,
+    )(noop)
+
+    second_claim = await recovery_manager.queries.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=recovery_manager.queue_manager_id,
+        global_concurrency_limit=None,
+    )
+    assert second_claim, "expected new worker to reclaim stale picked job after retry_timer elapsed"

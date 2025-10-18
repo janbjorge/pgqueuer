@@ -749,11 +749,15 @@ class QueryQueueBuilder:
             -- Also enforce concurrency_limit on retry
             AND (
                 entrypoint_execution_params.concurrency_limit <= 0
-                OR EXISTS(
-                    SELECT 1 FROM jobs_by_queue_manager_entrypoint j
-                    WHERE j.entrypoint = {self.settings.queue_table}.entrypoint
-                      AND j.count < entrypoint_execution_params.concurrency_limit
-                )
+                OR COALESCE(
+                    (
+                        -- SUM() guards against future grouping changes returning >1 row
+                        SELECT SUM(j.count)
+                        FROM jobs_by_queue_manager_entrypoint j
+                        WHERE j.entrypoint = {self.settings.queue_table}.entrypoint
+                    ),
+                    0
+                ) < entrypoint_execution_params.concurrency_limit
             )
         ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
         FOR UPDATE SKIP LOCKED
