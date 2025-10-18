@@ -14,17 +14,11 @@ import dataclasses
 import time
 from contextlib import suppress
 from datetime import timedelta
-from typing import (
-    AsyncGenerator,
-    Awaitable,
-    Callable,
-    Generic,
-    TypeVar,
-)
+from typing import AsyncGenerator, Awaitable, Callable, Generic, TypeVar
 
 from typing_extensions import Self
 
-from . import helpers, logconfig, models, tm
+from . import helpers, models, retries, tm
 
 T = TypeVar("T")
 
@@ -94,6 +88,14 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=tm.TaskManager,
     )
+    retry_manager: retries.RetryManager[list[T]] = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.retry_manager = retries.RetryManager(
+            retry_backoff=self.retry_backoff,
+            shutdown_backoff=self.shutdown_backoff,
+        )
+        self.retry_manager.shutdown = self.shutdown
 
     async def periodic_flush(self) -> None:
         while not self.shutdown.is_set():
@@ -148,43 +150,40 @@ class TimedOverflowBuffer(Generic[T]):
         Flush the accumulated items in the buffer by invoking the provided asynchronous callable.
 
         Collects all items currently in the buffer by consuming the events from
-        the internal queue using `pop_until`. If there are any events, it attempts to invoke the
-        provided asynchronous callable with the events. If an exception occurs during the invocation
-        of the callable, it logs the exception, re-adds the items to the queue, and schedules
-        a retry. This helps in handling transient errors without losing items.
+        the internal queue using `pop_until`. Once a batch is available, a
+        `RetryManager` attempts to invoke the provided asynchronous callable.
+        Failures cause the batch to be re-queued while the manager handles the
+        appropriate backoff strategy outside of the flush lock.
         """
 
         if self.lock.locked():
             return
 
         async with self.lock:
-            items = [item async for item in self.pop_until()]
+            items = await self._collect_batch()
 
-            if not items:
-                return
+        if not items:
+            return
 
-            try:
-                await self.callback(items)
-            except Exception as e:
-                delay = self.retry_backoff.next_delay()
-                logconfig.logger.warning(
-                    "Unable to flush(%s): %s\nRetry in: %r",
-                    self.callback.__name__,
-                    str(e),
-                    delay,
-                )
-                # Re-add the items to the queue for retry
-                for item in items:
-                    self.events.put_nowait(item)
+        succeeded = await self.retry_manager.execute_with_retry(
+            self.callback,
+            items,
+            use_shutdown_backoff=self.shutdown.is_set(),
+        )
 
-                await asyncio.sleep(
-                    0
-                    if self.shutdown.is_set()
-                    else helpers.timeout_with_jitter(delay).total_seconds()
-                )
+        if succeeded:
+            return
 
-            else:
-                self.retry_backoff.reset()
+        self._requeue_batch(items)
+
+    async def _collect_batch(self) -> list[T]:
+        """Gather items for the next flush attempt."""
+        return [item async for item in self.pop_until()]
+
+    def _requeue_batch(self, items: list[T]) -> None:
+        """Push items back on the queue after a failed flush."""
+        for item in items:
+            self.events.put_nowait(item)
 
     async def __aenter__(self) -> Self:
         """
@@ -223,13 +222,15 @@ class TimedOverflowBuffer(Generic[T]):
         """
 
         self.shutdown.set()
+        self.retry_manager.set_shutdown()
         await self.tm.gather_tasks()
 
-        while self.shutdown_backoff.current_delay < self.shutdown_backoff.max_delay:
+        while not self.events.empty():
             await self.flush()
             if self.events.empty():
                 break
-            await asyncio.sleep(self.shutdown_backoff.next_delay().total_seconds())
+            if self.shutdown_backoff.current_delay >= self.shutdown_backoff.max_delay:
+                break
 
 
 class JobStatusLogBuffer(

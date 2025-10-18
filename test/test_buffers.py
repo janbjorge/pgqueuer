@@ -6,8 +6,9 @@ from itertools import count
 import pytest
 from helpers import mocked_job
 
+from pgqueuer import helpers as pg_helpers
 from pgqueuer.buffers import JobStatusLogBuffer
-from pgqueuer.models import JOB_STATUS, Job
+from pgqueuer.models import JOB_STATUS, Job, TracebackRecord
 
 
 def job_faker(
@@ -324,3 +325,91 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
 
     # Was uanble to flush at exit, buffer should have all elements.
     assert buffer.events.qsize() == N
+
+
+async def test_job_buffer_retry_uses_jitter(monkeypatch: pytest.MonkeyPatch) -> None:
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    jitter_calls: list[timedelta] = []
+
+    def fake_jitter(delay: timedelta) -> timedelta:
+        jitter_calls.append(delay)
+        return timedelta(milliseconds=5)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(pg_helpers, "timeout_with_jitter", fake_jitter)
+
+    async def failing_callback(_: list[LogEntry]) -> None:
+        raise RuntimeError("flush failed")
+
+    buffer = JobStatusLogBuffer(
+        max_size=2,
+        timeout=timedelta(seconds=1),
+        callback=failing_callback,
+    )
+
+    await buffer.add((job_faker(), "successful", None))
+    await buffer.flush()
+
+    assert jitter_calls
+    # fake_jitter returns 5ms which should be forwarded to asyncio.sleep
+    assert sleep_calls == [pytest.approx(timedelta(milliseconds=5).total_seconds())]
+
+
+async def test_job_buffer_retry_skips_jitter_on_shutdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sleep_calls: list[float] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    def fail_if_called(_: timedelta) -> timedelta:
+        raise AssertionError("timeout_with_jitter should not be used when shutdown")
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr(pg_helpers, "timeout_with_jitter", fail_if_called)
+
+    async def failing_callback(_: list[LogEntry]) -> None:
+        raise RuntimeError("flush failed")
+
+    buffer = JobStatusLogBuffer(
+        max_size=2,
+        timeout=timedelta(seconds=1),
+        callback=failing_callback,
+    )
+
+    await buffer.add((job_faker(), "successful", None))
+    buffer.shutdown.set()
+    await buffer.flush()
+
+    assert sleep_calls == [0]
+
+
+async def test_job_buffer_flush_returns_when_lock_held() -> None:
+    helper_calls: list[list[LogEntry]] = []
+
+    async def helper(items: list[LogEntry]) -> None:
+        helper_calls.append(items)
+
+    buffer = JobStatusLogBuffer(
+        max_size=1,
+        timeout=timedelta(seconds=1),
+        callback=helper,
+    )
+
+    await buffer.add((job_faker(), "successful", None))
+    await buffer.lock.acquire()
+    try:
+        await buffer.flush()
+    finally:
+        buffer.lock.release()
+
+    assert helper_calls == []
+    assert buffer.events.qsize() == 1
+
+
+LogEntry = tuple[Job, JOB_STATUS, TracebackRecord | None]
