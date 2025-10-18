@@ -6,7 +6,7 @@ from itertools import count
 import pytest
 from helpers import mocked_job
 
-from pgqueuer.buffers import JobStatusLogBuffer
+from pgqueuer.buffers import JobStatusLogBuffer, TimedOverflowBuffer
 from pgqueuer.models import JOB_STATUS, Job
 
 
@@ -324,3 +324,187 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
 
     # Was uanble to flush at exit, buffer should have all elements.
     assert buffer.events.qsize() == N
+
+
+# Additional tests for the refactored TimedOverflowBuffer
+
+
+async def test_buffer_retry_manager_integration() -> None:
+    """Test that the buffer correctly integrates with the retry manager."""
+    helper_buffer = []
+    retry_attempts = []
+
+    async def flaky_callback(items: list[str]) -> None:
+        retry_attempts.append(len(items))
+        if len(retry_attempts) == 1:
+            raise ConnectionError("Simulated connection failure")
+        helper_buffer.extend(items)
+
+    async with TimedOverflowBuffer(
+        max_size=2,
+        timeout=timedelta(seconds=0.01),
+        callback=flaky_callback,
+    ) as buffer:
+        await buffer.add("item1")
+        await buffer.add("item2")  # Should trigger flush and fail once
+        await asyncio.sleep(0.02)  # Give time for retry
+
+    assert len(retry_attempts) == 2  # Original attempt + 1 retry
+    assert len(helper_buffer) == 2  # Items should eventually be processed
+
+
+async def test_buffer_shutdown_behavior() -> None:
+    """Test that the buffer properly handles shutdown with pending items."""
+    helper_buffer = []
+    call_count = 0
+
+    async def slow_callback(items: list[str]) -> None:
+        nonlocal call_count
+        call_count += 1
+        # Simulate some processing time
+        await asyncio.sleep(0.001)
+        helper_buffer.extend(items)
+
+    async with TimedOverflowBuffer(
+        max_size=10,  # Large size so items accumulate
+        timeout=timedelta(seconds=10),  # Long timeout
+        callback=slow_callback,
+    ) as buffer:
+        await buffer.add("item1")
+        await buffer.add("item2")
+        await buffer.add("item3")
+
+    # All items should be flushed during shutdown
+    assert len(helper_buffer) == 3
+    assert call_count >= 1
+
+
+async def test_buffer_concurrent_flush_prevention() -> None:
+    """Test that concurrent flushes are prevented by the lock."""
+    flush_order = []
+    
+    async def slow_callback(items: list[str]) -> None:
+        flush_order.append(f"start-{len(items)}")
+        await asyncio.sleep(0.01)  # Simulate slow processing
+        flush_order.append(f"end-{len(items)}")
+
+    async with TimedOverflowBuffer(
+        max_size=2,
+        timeout=timedelta(seconds=0.005),
+        callback=slow_callback,
+    ) as buffer:
+        # Add items quickly to trigger multiple potential flushes
+        await buffer.add("item1")
+        await buffer.add("item2")  # Triggers flush
+        await buffer.add("item3")
+        await buffer.add("item4")  # Triggers flush
+        
+        # Wait for all flushes to complete
+        await asyncio.sleep(0.1)
+
+    # Should have at least 2 complete flush cycles
+    assert len([x for x in flush_order if x.startswith("start")]) >= 2
+    assert len([x for x in flush_order if x.startswith("end")]) >= 2
+
+
+async def test_buffer_pop_until_deadline() -> None:
+    """Test that pop_until respects the deadline."""
+    items_popped = []
+    
+    async def test_callback(items: list[str]) -> None:
+        items_popped.extend(items)
+
+    buffer = TimedOverflowBuffer(
+        max_size=100,  # Large size to avoid auto-flush
+        timeout=timedelta(seconds=10),
+        callback=test_callback,
+    )
+
+    # Add many items
+    for i in range(10):
+        await buffer.add(f"item{i}")
+
+    # Test pop_until with a short deadline
+    popped = []
+    async for item in buffer.pop_until(timedelta(milliseconds=1)):
+        popped.append(item)
+
+    # Should pop some items but not necessarily all due to deadline
+    assert len(popped) <= 10
+    assert len(popped) > 0
+
+
+async def test_buffer_periodic_flush_shutdown() -> None:
+    """Test that periodic flush stops when shutdown is set."""
+    helper_buffer = []
+    flush_count = 0
+
+    async def counting_callback(items: list[str]) -> None:
+        nonlocal flush_count
+        flush_count += 1
+        helper_buffer.extend(items)
+
+    buffer = TimedOverflowBuffer(
+        max_size=100,  # Large size to avoid overflow flush
+        timeout=timedelta(milliseconds=10),  # Short timeout for periodic flush
+        callback=counting_callback,
+    )
+
+    async with buffer:
+        await buffer.add("item1")
+        await asyncio.sleep(0.05)  # Let a few periodic flushes happen
+        
+    # Should have had at least one flush during the sleep period
+    assert flush_count >= 1
+
+
+async def test_buffer_empty_pop_until() -> None:
+    """Test pop_until behavior when buffer is empty."""
+    async def dummy_callback(items: list[str]) -> None:
+        pass
+
+    buffer = TimedOverflowBuffer(
+        max_size=10,
+        timeout=timedelta(seconds=1),
+        callback=dummy_callback,
+    )
+
+    # Test pop_until on empty buffer
+    popped = []
+    async for item in buffer.pop_until():
+        popped.append(item)
+
+    assert len(popped) == 0
+
+
+async def test_buffer_retry_manager_backoff_reset() -> None:
+    """Test that successful operations reset the retry backoff."""
+    helper_buffer = []
+    attempt_count = 0
+
+    async def sometimes_failing_callback(items: list[str]) -> None:
+        nonlocal attempt_count
+        attempt_count += 1
+        if attempt_count == 1:
+            raise RuntimeError("First failure")
+        helper_buffer.extend(items)
+
+    async with TimedOverflowBuffer(
+        max_size=1,
+        timeout=timedelta(seconds=10),
+        callback=sometimes_failing_callback,
+    ) as buffer:
+        # First batch - will fail then succeed
+        await buffer.add("item1")
+        await asyncio.sleep(0.02)  # Wait for retry
+        
+        # Check that backoff was reset after success
+        initial_delay = buffer.retry_manager.retry_backoff.start_delay
+        current_delay = buffer.retry_manager.retry_backoff.current_delay
+        assert current_delay == initial_delay  # Should be reset
+        
+        # Second batch - should succeed immediately
+        await buffer.add("item2")
+
+    assert len(helper_buffer) == 2
+    assert attempt_count == 3  # 1 fail + 1 success + 1 success

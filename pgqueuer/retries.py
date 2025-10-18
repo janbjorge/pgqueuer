@@ -11,7 +11,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, Awaitable, Callable, Generic, TypeVar
+from typing import Awaitable, Callable, Generic, TypeVar
 
 from . import helpers, logconfig
 
@@ -22,17 +22,17 @@ T = TypeVar("T")
 class RetryManager(Generic[T]):
     """
     Manages retry logic with configurable backoff strategies.
-    
+
     This class handles the retry behavior for operations that may fail temporarily,
     using exponential backoff to avoid overwhelming the target system.
-    
+
     Attributes:
         retry_backoff (helpers.ExponentialBackoff): Backoff strategy for regular retries.
         shutdown_backoff (helpers.ExponentialBackoff): Backoff strategy during shutdown.
         shutdown (asyncio.Event): Event that signals when retries should stop.
         logger (logging.Logger): Logger for retry operations.
     """
-    
+
     retry_backoff: helpers.ExponentialBackoff = field(
         default_factory=lambda: helpers.ExponentialBackoff(
             start_delay=timedelta(seconds=0.01),
@@ -57,18 +57,18 @@ class RetryManager(Generic[T]):
     ) -> bool:
         """
         Execute an operation with retry logic.
-        
+
         Args:
             operation: The async operation to execute.
             data: The data to pass to the operation.
             operation_name: Name of the operation for logging.
             use_shutdown_backoff: Whether to use shutdown backoff strategy.
-            
+
         Returns:
             bool: True if operation succeeded, False if failed after retries.
         """
         backoff = self.shutdown_backoff if use_shutdown_backoff else self.retry_backoff
-        
+
         try:
             await operation(data)
             backoff.reset()
@@ -81,12 +81,12 @@ class RetryManager(Generic[T]):
                 str(e),
                 delay,
             )
-            
+
             if not self.shutdown.is_set():
                 await asyncio.sleep(
                     helpers.timeout_with_jitter(delay).total_seconds()
                 )
-            
+
             return False
 
     async def retry_until_success_or_limit(
@@ -98,31 +98,31 @@ class RetryManager(Generic[T]):
     ) -> bool:
         """
         Retry an operation until it succeeds or reaches the backoff limit.
-        
+
         Args:
             operation: The async operation to execute.
             data: The data to pass to the operation.
             operation_name: Name of the operation for logging.
             use_shutdown_backoff: Whether to use shutdown backoff strategy.
-            
+
         Returns:
             bool: True if operation eventually succeeded, False if limit reached.
         """
         backoff = self.shutdown_backoff if use_shutdown_backoff else self.retry_backoff
-        
+
         while backoff.current_delay < backoff.max_delay:
             if await self.execute_with_retry(operation, data, operation_name, use_shutdown_backoff):
                 return True
-            
+
             if self.shutdown.is_set():
                 break
-                
+
         return False
 
     def reset_backoff(self) -> None:
         """Reset the retry backoff to initial values."""
         self.retry_backoff.reset()
-        
+
     def reset_shutdown_backoff(self) -> None:
         """Reset the shutdown backoff to initial values."""
         self.shutdown_backoff.reset()

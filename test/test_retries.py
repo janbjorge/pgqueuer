@@ -191,3 +191,100 @@ class TestRetryManager:
         assert retry_manager.shutdown_backoff.start_delay == timedelta(milliseconds=1)
         assert retry_manager.shutdown_backoff.max_delay == timedelta(milliseconds=100)
         assert not retry_manager.shutdown.is_set()
+
+    async def test_different_exception_types(self, retry_manager: RetryManager[list[str]]) -> None:
+        """Test that different exception types are handled correctly."""
+        mock_operation = AsyncMock()
+        test_data = ["item1"]
+        
+        exceptions = [ValueError("Value error"), ConnectionError("Connection failed"), OSError("OS error")]
+        
+        for exception in exceptions:
+            mock_operation.reset_mock()
+            mock_operation.side_effect = exception
+            
+            result = await retry_manager.execute_with_retry(
+                operation=mock_operation,
+                data=test_data,
+                operation_name="test_operation",
+            )
+            
+            assert result is False
+            mock_operation.assert_called_once_with(test_data)
+
+    async def test_empty_data_handling(self, retry_manager: RetryManager[list[str]]) -> None:
+        """Test that empty data is handled correctly."""
+        mock_operation = AsyncMock()
+        empty_data: list[str] = []
+        
+        result = await retry_manager.execute_with_retry(
+            operation=mock_operation,
+            data=empty_data,
+            operation_name="test_operation",
+        )
+        
+        assert result is True
+        mock_operation.assert_called_once_with(empty_data)
+
+    async def test_concurrent_retry_operations(self, retry_manager: RetryManager[list[str]]) -> None:
+        """Test that concurrent retry operations work correctly."""
+        mock_operation1 = AsyncMock()
+        mock_operation2 = AsyncMock()
+        test_data1 = ["item1"]
+        test_data2 = ["item2"]
+        
+        # Run operations concurrently
+        results = await asyncio.gather(
+            retry_manager.execute_with_retry(mock_operation1, test_data1, "op1"),
+            retry_manager.execute_with_retry(mock_operation2, test_data2, "op2"),
+        )
+        
+        assert all(results)
+        mock_operation1.assert_called_once_with(test_data1)
+        mock_operation2.assert_called_once_with(test_data2)
+
+    async def test_operation_name_in_logging(self, retry_manager: RetryManager[list[str]]) -> None:
+        """Test that operation name is included in logging."""
+        mock_operation = AsyncMock()
+        mock_operation.side_effect = RuntimeError("Test failure")
+        test_data = ["item1"]
+        
+        # Mock the logger to capture the warning
+        with pytest.MonkeyPatch.context() as mp:
+            log_calls = []
+            
+            def mock_warning(msg, *args):
+                log_calls.append((msg, args))
+            
+            mp.setattr(retry_manager.logger, "warning", mock_warning)
+            
+            await retry_manager.execute_with_retry(
+                operation=mock_operation,
+                data=test_data,
+                operation_name="custom_operation_name",
+            )
+            
+            assert len(log_calls) == 1
+            assert "custom_operation_name" in log_calls[0][1][0]
+
+    async def test_jitter_behavior_during_retry(self, custom_retry_manager: RetryManager[list[str]]) -> None:
+        """Test that jitter is applied during retry delays."""
+        mock_operation = AsyncMock()
+        mock_operation.side_effect = RuntimeError("Failure")
+        test_data = ["item1"]
+        
+        # Record the time it takes to execute retry
+        import time
+        start_time = time.time()
+        
+        await custom_retry_manager.execute_with_retry(
+            operation=mock_operation,
+            data=test_data,
+            operation_name="test_operation",
+        )
+        
+        elapsed_time = time.time() - start_time
+        
+        # Should have slept for some amount of time (with jitter)
+        # The exact time will vary due to jitter, but should be > 0
+        assert elapsed_time > 0

@@ -24,7 +24,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from . import helpers, logconfig, models, retries, tm
+from . import helpers, models, retries, tm
 
 T = TypeVar("T")
 
@@ -149,7 +149,7 @@ class TimedOverflowBuffer(Generic[T]):
                 operation_name=self.callback.__name__,
                 use_shutdown_backoff=False,
             )
-            
+
             if not success:
                 # Re-add the items to the queue for retry
                 for item in items:
@@ -179,10 +179,11 @@ class TimedOverflowBuffer(Generic[T]):
         1. Signals the buffer to stop periodic operations by setting the shutdown event.
         2. Waits for all ongoing tasks managed by the buffer to complete.
         3. Attempts to flush any remaining items in the buffer using the retry manager's
-           shutdown backoff strategy to handle transient failures, such as temporary database outages.
-        4. Stops retrying after the maximum backoff limit is reached. This ensures that the 
-           application does not hang indefinitely during situations like prolonged database
-           downtime or critical errors.
+           shutdown backoff strategy to handle transient failures, such as temporary
+           database outages.
+        4. Stops retrying after the maximum backoff limit is reached. This ensures that
+           the application does not hang indefinitely during situations like prolonged
+           database downtime or critical errors.
 
         Note:
             This mechanism ensures that the application attempts to process all items
@@ -194,12 +195,15 @@ class TimedOverflowBuffer(Generic[T]):
         self.retry_manager.set_shutdown()
         await self.tm.gather_tasks()
 
-        while self.retry_manager.shutdown_backoff.current_delay < self.retry_manager.shutdown_backoff.max_delay:
+        while (self.retry_manager.shutdown_backoff.current_delay <
+               self.retry_manager.shutdown_backoff.max_delay):
             await self.flush_with_shutdown_retry()
             if self.events.empty():
                 break
-            await asyncio.sleep(self.retry_manager.shutdown_backoff.next_delay().total_seconds())
-                
+            await asyncio.sleep(
+                self.retry_manager.shutdown_backoff.next_delay().total_seconds()
+            )
+
     async def flush_with_shutdown_retry(self) -> None:
         """Flush items during shutdown with special retry handling."""
         if self.lock.locked():
