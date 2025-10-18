@@ -26,7 +26,8 @@ from pgqueuer.db import SyncPsycopgDriver
 
 
 class PGQueuerPostgresContainer(DockerContainer):
-    """Postgres container with modern wait strategy support."""
+    """Postgres container with modern wait strategy support
+    (libpq env defaults: PGUSER, PGPASSWORD, PGDATABASE, PGPORT)."""
 
     def __init__(
         self,
@@ -40,10 +41,10 @@ class PGQueuerPostgresContainer(DockerContainer):
         **kwargs: Any,
     ) -> None:
         super().__init__(image=image, **kwargs)
-        self.port = port
-        self.username = username or os.environ.get("POSTGRES_USER", "test")
-        self.password = password or os.environ.get("POSTGRES_PASSWORD", "test")
-        self.dbname = dbname or os.environ.get("POSTGRES_DB", "test")
+        self.port = port or int(os.environ.get("PGPORT", "5432"))
+        self.username = username or os.environ.get("PGUSER", "test")
+        self.password = password or os.environ.get("PGPASSWORD", "test")
+        self.dbname = dbname or os.environ.get("PGDATABASE", "test")
         self.driver_suffix = f"+{driver}" if driver else ""
 
         self.with_exposed_ports(port)
@@ -109,8 +110,6 @@ async def postgres_container() -> AsyncGenerator[str, None]:
         .with_command(commands)
         .with_kwargs(tmpfs={"/var/lib/pg/data": "rw"})
         .with_envs(PGDATA="/var/lib/pg/data")
-        .with_env("POSTGRES_USER", "test")
-        .with_env("POSTGRES_PASSWORD", "test")
     )
 
     with container as running:
