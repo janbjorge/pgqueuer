@@ -33,6 +33,11 @@ PGUSER=pgquser PGDATABASE=pgqdb PGPASSWORD=pgqpw PGHOST=localhost PGPORT=5432 uv
 PGUSER=pgquser PGDATABASE=pgqdb PGPASSWORD=pgqpw PGHOST=localhost PGPORT=5432 uv run pytest path/to/test-file.py
 ```
 
+## Local Database Setup
+
+* Use the root `docker-compose.yml` when you need a local Postgres instance.
+* Run `docker compose up db populate` to start the `db` service and seed it via the `populate` service before running tests or examples, and bring the stack down with `docker compose down` once you're done.
+
 ## Pull Request Guidelines
 
 When an AI agent helps create a PR, please ensure it:
