@@ -3,10 +3,10 @@ import functools
 import inspect
 from datetime import timedelta
 from multiprocessing import Process, Queue as MPQueue
+from typing import Awaitable, Callable
 
 import anyio
 import pytest
-from helpers import mocked_job
 
 from pgqueuer.db import Driver
 from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded
@@ -21,6 +21,7 @@ from pgqueuer.helpers import timer
 from pgqueuer.models import Channel, Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
+from test.helpers import mocked_job
 
 # NOTE: Resources feature branch (pseudo-branch: feature/context-resources)
 # Tests updated to explicitly pass a resources mapping to Context to document new API.
@@ -239,7 +240,7 @@ def test_is_async_callable_with_sync_callable_instance() -> None:
 
 def test_is_async_callable_with_multi_level_partial_async_callable_instance() -> None:
     class AsyncCallable:
-        async def __call__(self, job: Job) -> None:
+        async def __call__(self, job: Job) -> None:  # pragma: no cover - trivial
             await asyncio.sleep(0)
 
     inst = AsyncCallable()
@@ -285,7 +286,7 @@ def test_is_async_callable_with_async_decorator_wrapper() -> None:
     async def base(job: Job) -> None:
         await asyncio.sleep(0)
 
-    def async_decorator(f):
+    def async_decorator(f: Callable[[Job], Awaitable[None]]) -> Callable[[Job], Awaitable[None]]:
         @functools.wraps(f)
         async def wrapper(job: Job) -> None:
             await f(job)
@@ -300,9 +301,9 @@ def test_is_async_callable_with_sync_decorator_returning_coroutine() -> None:
     async def base(job: Job) -> None:
         await asyncio.sleep(0)
 
-    def sync_decorator(f):
+    def sync_decorator(f: Callable[[Job], Awaitable[None]]) -> Callable[[Job], Awaitable[None]]:
         @functools.wraps(f)
-        def wrapper(job: Job):
+        def wrapper(job: Job) -> Awaitable[None]:
             # Returns coroutine object but wrapper itself is sync
             return f(job)
 
@@ -317,8 +318,8 @@ def test_is_async_callable_with_deeply_nested_sync_wrappers_over_async_function(
     async def base(job: Job) -> None:
         await asyncio.sleep(0)
 
-    def wrap_sync(f):
-        def w(job: Job):
+    def wrap_sync(f: Callable[[Job], Awaitable[None]]) -> Callable[[Job], Awaitable[None]]:
+        def w(job: Job) -> Awaitable[None]:
             return f(job)
 
         return w
@@ -331,7 +332,7 @@ def test_is_async_callable_with_deeply_nested_sync_wrappers_over_async_function(
 
 
 def test_is_async_callable_with_deeply_nested_async_wrappers() -> None:
-    def make_async_wrapper(f):
+    def make_async_wrapper(f: Callable[[Job], Awaitable[None]]) -> Callable[[Job], Awaitable[None]]:
         async def w(job: Job) -> None:
             result = f(job)
             # If underlying returns coroutine, await it
@@ -353,7 +354,7 @@ def test_is_async_callable_with_function_returning_coroutine_object() -> None:
     async def base(job: Job) -> None:
         await asyncio.sleep(0)
 
-    def returns_coroutine(job: Job):
+    def returns_coroutine(job: Job) -> Awaitable[None]:
         # Synchronous function returning a coroutine object
         return base(job)
 
@@ -364,8 +365,8 @@ def test_is_async_callable_with_partial_wrapped_sync_function() -> None:
     def inner(job: Job) -> None:
         pass
 
-    def decorator(f):
-        def wrapper(job: Job):
+    def decorator(f: Callable[[Job], None]) -> Callable[[Job], None]:
+        def wrapper(job: Job) -> None:
             return f(job)
 
         return wrapper
@@ -381,7 +382,7 @@ def test_is_async_callable_with_sync_dunder_call_returning_coroutine() -> None:
 
     class HybridCallable:
         # Synchronous __call__ that returns a coroutine object
-        def __call__(self, job: Job):
+        def __call__(self, job: Job) -> Awaitable[None]:
             return async_inner(job)
 
     inst = HybridCallable()
