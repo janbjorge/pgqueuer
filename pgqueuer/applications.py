@@ -12,6 +12,7 @@ import dataclasses
 from datetime import timedelta
 from typing import Callable, MutableMapping
 
+from . import shutdown
 from .db import Driver
 from .executors import (
     AbstractEntrypointExecutor,
@@ -53,7 +54,7 @@ class PgQueuer:
     )
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
-        default_factory=asyncio.Event,
+        default_factory=shutdown.get_shutdown_event,
     )
     qm: QueueManager = dataclasses.field(
         init=False,
@@ -65,6 +66,7 @@ class PgQueuer:
     def __post_init__(self) -> None:
         self.qm = QueueManager(self.connection, self.channel, resources=self.resources)
         self.sm = SchedulerManager(self.connection)
+        shutdown.set_shutdown_event(self.shutdown)
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown
 

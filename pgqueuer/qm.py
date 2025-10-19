@@ -35,6 +35,7 @@ from . import (
     models,
     qb,
     queries,
+    shutdown,
     tm,
     tracing,
     types,
@@ -75,7 +76,7 @@ class QueueManager:
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
-        default_factory=asyncio.Event,
+        default_factory=shutdown.get_shutdown_event,
     )
     queries: queries.Queries = dataclasses.field(init=False)
 

@@ -9,7 +9,7 @@ from typing import Callable
 
 import croniter
 
-from . import db, executors, helpers, logconfig, models, queries, tm
+from . import db, executors, helpers, logconfig, models, queries, shutdown, tm
 
 warnings.simplefilter("default", DeprecationWarning)
 
@@ -34,7 +34,7 @@ class SchedulerManager:
     connection: db.Driver
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
-        default_factory=asyncio.Event,
+        default_factory=shutdown.get_shutdown_event,
     )
     queries: queries.Queries = dataclasses.field(
         init=False,
