@@ -107,13 +107,9 @@ async def runit(
         restart_delay (timedelta): Delay before restarting on failure.
         restart_on_failure (bool): Whether to restart after a failure.
         shutdown_event (asyncio.Event | None): Optional override for the shared shutdown event.
-        mode (types.QueueExecutionMode): What mode to start the execution on.
+        mode (types.QueueExecutionMode): What mode to start the execution on
         max_concurrent_tasks (int | None): How many concurrent tasks to allow.
-        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails.
-
-        .. deprecated:: 1.0
-            The ``shutdown`` keyword argument has been renamed to ``shutdown_event`` and
-            will be removed in a future release.
+        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails
 
     Raises:
         ValueError: If restart_delay is negative.
@@ -127,6 +123,10 @@ async def runit(
         )
         if shutdown_event is None:
             shutdown_event = deprecated
+
+    if deprecated_kwargs:
+        unexpected = ", ".join(deprecated_kwargs)
+        raise TypeError(f"Unexpected keyword argument(s): {unexpected}")
 
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
