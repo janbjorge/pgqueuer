@@ -194,10 +194,10 @@ jobs:
               run: docker pull postgres:${{ matrix.postgres-version }}
 
             - name: Set up Python
-              run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
+              run: uv sync --python ${{ matrix.python-version }} --all-extras --frozen
 
             - name: Run Full Test Suite
-              run: uv run pytest
+              run: uv run --with 'pytest-xdist' pytest -n auto
 
     run-windows-tests:
         if: github.event_name != 'schedule'
