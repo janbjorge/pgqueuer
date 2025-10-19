@@ -635,7 +635,7 @@ class QueueManager:
                 )
                 # If mark_as_failed is enabled, mark job as failed instead of logging it
                 if executor.parameters.mark_as_failed:
-                    await self.queries.mark_jobs_as_failed([job.id])
+                    await self.queries.mark_jobs_as_failed([job.id], [tbr])
                 else:
                     await jbuff.add((job, "exception", tbr))
             else:

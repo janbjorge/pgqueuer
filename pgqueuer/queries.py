@@ -649,15 +649,24 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
-    async def mark_jobs_as_failed(self, job_ids: list[models.JobId]) -> None:
+    async def mark_jobs_as_failed(
+        self, 
+        job_ids: list[models.JobId],
+        traceback_records: list[models.TracebackRecord | None] | None = None,
+    ) -> None:
         """
         Mark jobs as failed instead of moving them to the log table.
         
         This allows jobs to remain in the queue table for manual intervention.
         Failed jobs can later be re-queued using requeue_failed_jobs().
         
+        Note: Traceback information is not stored in the queue table. It's logged
+        to the application logs and can be viewed there for debugging.
+        
         Args:
             job_ids (list[models.JobId]): List of job IDs to mark as failed.
+            traceback_records (list[models.TracebackRecord | None] | None): 
+                Traceback records (for API consistency, but not stored).
         """
         await self.driver.execute(
             self.qbq.build_mark_jobs_as_failed_query(),
