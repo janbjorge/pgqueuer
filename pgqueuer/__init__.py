@@ -1,3 +1,4 @@
+from . import shutdown
 from .applications import PgQueuer
 from .db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
 from .models import Job, JobId
@@ -19,5 +20,6 @@ __all__ = [
     "PsycopgDriver",
     "Queries",
     "QueueManager",
+    "shutdown",
     "SchedulerManager",
 ]

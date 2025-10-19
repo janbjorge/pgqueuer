@@ -48,7 +48,7 @@ async def test_shutdown_without_signal(monkeypatch: pytest.MonkeyPatch) -> None:
             batch_size=1,
             restart_delay=timedelta(seconds=0),
             restart_on_failure=False,
-            shutdown=shutdown_event,
+            shutdown_event=shutdown_event,
             mode=types.QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,

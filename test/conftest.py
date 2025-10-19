@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Iterator
 from urllib.parse import quote, urlparse, urlunparse
 
 import asyncpg
@@ -11,6 +11,7 @@ import psycopg
 import pytest
 import pytest_asyncio
 
+from pgqueuer import shutdown
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.queries import Queries
 
@@ -71,6 +72,14 @@ class PGQueuerPostgresContainer(DockerContainer):
 def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
     """Provide uvloop if available; fallback to default policy."""
     return asyncio.DefaultEventLoopPolicy() if uvloop is None else uvloop.EventLoopPolicy()
+
+
+@pytest.fixture(autouse=True)
+def reset_global_shutdown() -> Iterator[None]:
+    """Ensure a fresh global shutdown event for every test."""
+    shutdown.reset_shutdown_event()
+    yield
+    shutdown.reset_shutdown_event()
 
 
 @pytest.fixture(scope="session")
