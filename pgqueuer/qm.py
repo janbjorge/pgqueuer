@@ -73,7 +73,6 @@ class QueueManager:
     channel: models.Channel = dataclasses.field(
         default=models.Channel(qb.DBSettings().channel),
     )
-
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=shutdown.get_shutdown_event,

@@ -43,15 +43,9 @@ def setup_shutdown_handlers(
         Exception: If an error occurs during instance creation or configuration.
     """
 
-    event = shutdown.set_shutdown_event(shutdown_event or shutdown.get_shutdown_event())
+    shutdown.set_shutdown_event(shutdown_event or shutdown.get_shutdown_event())
 
-    if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
-        manager.shutdown = event
-    elif isinstance(manager, applications.PgQueuer):
-        manager.shutdown = event
-        manager.qm.shutdown = event
-        manager.sm.shutdown = event
-    else:
+    if not isinstance(manager, (qm.QueueManager, sm.SchedulerManager, applications.PgQueuer)):
         raise NotImplementedError(
             f"Unsupported instance type: {type(manager).__name__}. This instance is "
             "not recognized as a valid QueueManager, SchedulerManager, or PgQueuer."
