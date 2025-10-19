@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import warnings
 from contextlib import suppress
 from datetime import timedelta
 from typing import AsyncContextManager, Awaitable, Callable, ContextManager, TypeAlias
@@ -90,10 +91,11 @@ async def runit(
     batch_size: int,
     restart_delay: timedelta,
     restart_on_failure: bool,
-    shutdown_event: asyncio.Event | None,
-    mode: types.QueueExecutionMode,
-    max_concurrent_tasks: int | None,
-    shutdown_on_listener_failure: bool,
+    shutdown_event: asyncio.Event | None = None,
+    mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
+    max_concurrent_tasks: int | None = None,
+    shutdown_on_listener_failure: bool = False,
+    **deprecated_kwargs: asyncio.Event,
 ) -> None:
     """
     Supervise and manage the lifecycle of a queue management instance.
@@ -105,13 +107,27 @@ async def runit(
         restart_delay (timedelta): Delay before restarting on failure.
         restart_on_failure (bool): Whether to restart after a failure.
         shutdown_event (asyncio.Event | None): Optional override for the shared shutdown event.
-        mode (types.QueueExecutionMode): What mode to start the execution on
+        mode (types.QueueExecutionMode): What mode to start the execution on.
         max_concurrent_tasks (int | None): How many concurrent tasks to allow.
-        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails
+        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails.
+
+        .. deprecated:: 1.0
+            The ``shutdown`` keyword argument has been renamed to ``shutdown_event`` and
+            will be removed in a future release.
 
     Raises:
         ValueError: If restart_delay is negative.
     """
+    if "shutdown" in deprecated_kwargs:
+        deprecated = deprecated_kwargs.pop("shutdown")
+        warnings.warn(
+            "The 'shutdown' keyword argument is deprecated; use 'shutdown_event' instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if shutdown_event is None:
+            shutdown_event = deprecated
+
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
 
