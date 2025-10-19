@@ -8,7 +8,6 @@ extracted from the TimedOverflowBuffer to separate concerns and improve maintain
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Awaitable, Callable, Generic, TypeVar
@@ -30,7 +29,7 @@ class RetryManager(Generic[T]):
         retry_backoff (helpers.ExponentialBackoff): Backoff strategy for regular retries.
         shutdown_backoff (helpers.ExponentialBackoff): Backoff strategy during shutdown.
         shutdown (asyncio.Event): Event that signals when retries should stop.
-        logger (logging.Logger): Logger for retry operations.
+
     """
 
     retry_backoff: helpers.ExponentialBackoff = field(
@@ -46,7 +45,6 @@ class RetryManager(Generic[T]):
         )
     )
     shutdown: asyncio.Event = field(init=False, default_factory=asyncio.Event)
-    logger: logging.Logger = field(default=logconfig.logger)
 
     async def execute_with_retry(
         self,
@@ -72,7 +70,7 @@ class RetryManager(Generic[T]):
             await operation(data)
         except Exception as exc:  # noqa: BLE001 - propagate via logging
             delay = backoff.next_delay()
-            self.logger.warning(
+            logconfig.logger.warning(
                 "Unable to execute %s: %s\nRetry in: %r",
                 getattr(operation, "__name__", operation.__class__.__name__),
                 str(exc),
