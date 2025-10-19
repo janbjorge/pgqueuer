@@ -11,7 +11,7 @@ from unittest.mock import ANY, MagicMock, patch
 import async_timeout
 import pytest
 
-from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager, shutdown, supervisor
+from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager, supervisor
 from pgqueuer.errors import FailingListenerError
 from pgqueuer.models import HealthCheckEvent
 from pgqueuer.types import QueueExecutionMode
@@ -65,7 +65,6 @@ async def test_setup_shutdown_handlers_pg_queuer(
     assert manager.shutdown is shutdown_event
     assert pg_queuer.qm.shutdown is shutdown_event
     assert pg_queuer.sm.shutdown is shutdown_event
-    assert shutdown.get_shutdown_event() is shutdown_event
 
 
 async def test_setup_shutdown_handlers_invalid_manager(
@@ -107,7 +106,7 @@ async def test_runit_normal_operation(
             batch_size=10,
             restart_delay=timedelta(seconds=2),
             restart_on_failure=False,
-            shutdown_event=shutdown_event,
+            shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
@@ -145,7 +144,7 @@ async def test_runit_with_partial_function(
             batch_size=10,
             restart_delay=timedelta(seconds=2),
             restart_on_failure=False,
-            shutdown_event=shutdown_event,
+            shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
@@ -191,7 +190,7 @@ async def test_runit_restart_on_failure(
             batch_size=10,
             restart_delay=timedelta(seconds=0.05),
             restart_on_failure=True,
-            shutdown_event=shutdown_event,
+            shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
@@ -231,7 +230,7 @@ async def test_runit_no_restart_on_failure(
             batch_size=10,
             restart_delay=timedelta(seconds=2),
             restart_on_failure=False,
-            shutdown_event=shutdown_event,
+            shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
@@ -246,7 +245,7 @@ async def test_runit_negative_restart_delay(shutdown_event: asyncio.Event) -> No
             batch_size=10,
             restart_delay=timedelta(seconds=-1),
             restart_on_failure=True,
-            shutdown_event=shutdown_event,
+            shutdown=shutdown_event,
             mode=QueueExecutionMode.continuous,
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
