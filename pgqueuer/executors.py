@@ -69,6 +69,7 @@ class EntrypointExecutorParameters:
     retry_timer: timedelta
     serialized_dispatch: bool
     shutdown: asyncio.Event
+    mark_as_failed: bool = False
 
 
 @dataclasses.dataclass

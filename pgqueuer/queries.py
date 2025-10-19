@@ -649,6 +649,50 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
+    async def mark_jobs_as_failed(self, job_ids: list[models.JobId]) -> None:
+        """
+        Mark jobs as failed instead of moving them to the log table.
+        
+        This allows jobs to remain in the queue table for manual intervention.
+        Failed jobs can later be re-queued using requeue_failed_jobs().
+        
+        Args:
+            job_ids (list[models.JobId]): List of job IDs to mark as failed.
+        """
+        await self.driver.execute(
+            self.qbq.build_mark_jobs_as_failed_query(),
+            job_ids,
+        )
+
+    async def requeue_failed_jobs(self, job_ids: list[models.JobId]) -> list[models.JobId]:
+        """
+        Re-queue failed jobs back to 'queued' status for reprocessing.
+        
+        Only jobs with 'failed' status can be re-queued. The jobs will be
+        reset to 'queued' status with execute_after set to now.
+        
+        Args:
+            job_ids (list[models.JobId]): List of failed job IDs to re-queue.
+            
+        Returns:
+            list[models.JobId]: List of job IDs that were successfully re-queued.
+        """
+        rows = await self.driver.fetch(
+            self.qbq.build_requeue_failed_jobs_query(),
+            job_ids,
+        )
+        return [models.JobId(row["id"]) for row in rows]
+
+    async def list_failed_jobs(self) -> list[models.Job]:
+        """
+        List all jobs currently in 'failed' status.
+        
+        Returns:
+            list[models.Job]: List of failed jobs that can be manually re-queued.
+        """
+        rows = await self.driver.fetch(self.qbq.build_list_failed_jobs_query())
+        return [models.Job.model_validate(dict(row)) for row in rows]
+
 
 @dataclasses.dataclass
 class SyncQueries:

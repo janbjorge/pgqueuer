@@ -231,4 +231,4 @@ class CompletionWatcher:
     # ─────────────────────── helper methods ─────────────────────────
     def _is_terminal(self, status: models.JOB_STATUS) -> bool:
         """Return ``True`` if *status* is terminal."""
-        return status in ("canceled", "deleted", "exception", "successful")
+        return status in ("canceled", "deleted", "exception", "successful", "failed")

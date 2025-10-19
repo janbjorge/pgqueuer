@@ -600,5 +600,112 @@ def optimize_autovacuum(
         asyncio_run(run())
 
 
+@app.command(help="List jobs that have failed and are available for re-queueing.")
+def list_failed(ctx: Context) -> None:
+    """
+    Display all jobs with 'failed' status that can be manually re-queued.
+    
+    Args:
+        ctx: Context object with configuration information.
+    """
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            failed_jobs = await q.list_failed_jobs()
+            
+            if not failed_jobs:
+                typer.echo("No failed jobs found.")
+                return
+                
+            headers = ["ID", "Entrypoint", "Priority", "Created", "Updated", "Error Count"]
+            rows = []
+            
+            for job in failed_jobs:
+                rows.append([
+                    job.id,
+                    job.entrypoint,
+                    job.priority,
+                    job.created.strftime('%Y-%m-%d %H:%M:%S'),
+                    job.updated.strftime('%Y-%m-%d %H:%M:%S'),
+                    "N/A"  # Could be enhanced to track retry count
+                ])
+            
+            table = tabulate(rows, headers=headers, tablefmt="grid")
+            typer.echo(table)
+            typer.echo(f"\nTotal failed jobs: {len(failed_jobs)}")
+
+    asyncio_run(run())
+
+
+@app.command(help="Re-queue failed jobs back to the processing queue.")
+def requeue_failed(
+    ctx: Context,
+    job_ids: str = typer.Option(
+        ...,
+        "--job-ids",
+        "-j", 
+        help="Comma-separated list of job IDs to re-queue (e.g., '1,2,3')"
+    ),
+) -> None:
+    """
+    Re-queue specific failed jobs back to 'queued' status for reprocessing.
+    
+    Args:
+        ctx: Context object with configuration information.
+        job_ids: Comma-separated string of job IDs to re-queue.
+    """
+    try:
+        parsed_ids = [models.JobId(int(id.strip())) for id in job_ids.split(",")]
+    except ValueError as e:
+        typer.echo(f"Error: Invalid job ID format: {e}", err=True)
+        raise typer.Exit(1)
+    
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            requeued_ids = await q.requeue_failed_jobs(parsed_ids)
+            
+            if not requeued_ids:
+                typer.echo("No jobs were re-queued. Make sure the job IDs exist and have 'failed' status.")
+                return
+            
+            typer.echo(f"Successfully re-queued {len(requeued_ids)} job(s):")
+            for job_id in requeued_ids:
+                typer.echo(f"  - Job ID: {job_id}")
+
+    asyncio_run(run())
+
+
+@app.command(help="Mark jobs as failed without moving them to the log table.")
+def mark_failed(
+    ctx: Context,
+    job_ids: str = typer.Option(
+        ...,
+        "--job-ids",
+        "-j",
+        help="Comma-separated list of job IDs to mark as failed (e.g., '1,2,3')"
+    ),
+) -> None:
+    """
+    Mark specific jobs as failed for manual intervention.
+    
+    Args:
+        ctx: Context object with configuration information.
+        job_ids: Comma-separated string of job IDs to mark as failed.
+    """
+    try:
+        parsed_ids = [models.JobId(int(id.strip())) for id in job_ids.split(",")]
+    except ValueError as e:
+        typer.echo(f"Error: Invalid job ID format: {e}", err=True)
+        raise typer.Exit(1)
+    
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            await q.mark_jobs_as_failed(parsed_ids)
+            typer.echo(f"Successfully marked {len(parsed_ids)} job(s) as failed:")
+            for job_id in parsed_ids:
+                typer.echo(f"  - Job ID: {job_id}")
+
+    asyncio_run(run())
+
+
 if __name__ == "__main__":
     app(prog_name="pgqueuer")

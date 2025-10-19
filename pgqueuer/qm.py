@@ -216,6 +216,7 @@ class QueueManager:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
+        mark_as_failed: bool = False,
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
@@ -234,6 +235,8 @@ class QueueManager:
             concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
+            mark_as_failed (bool): If True, failed jobs are marked as 'failed' instead 
+                of being moved to the log table, allowing for manual re-queueing.
 
         Returns:
             Callable[[T], T]: A decorator that registers the function as an entrypoint.
@@ -264,6 +267,10 @@ class QueueManager:
         if not isinstance(serialized_dispatch, bool):
             raise ValueError("Serialized dispatch must be boolean")
 
+        # Check mark_as_failed type.
+        if not isinstance(mark_as_failed, bool):
+            raise ValueError("Mark as failed must be boolean")
+
         executor_factory = executor_factory or executors.EntrypointExecutor
 
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
@@ -280,6 +287,7 @@ class QueueManager:
                         retry_timer=retry_timer,
                         serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
+                        mark_as_failed=mark_as_failed,
                     )
                 ),
             )
@@ -625,7 +633,11 @@ class QueueManager:
                         "queue_manager_id": self.queue_manager_id,
                     },
                 )
-                await jbuff.add((job, "exception", tbr))
+                # If mark_as_failed is enabled, mark job as failed instead of logging it
+                if executor.parameters.mark_as_failed:
+                    await self.queries.mark_jobs_as_failed([job.id])
+                else:
+                    await jbuff.add((job, "exception", tbr))
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",

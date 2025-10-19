@@ -31,6 +31,7 @@ JOB_STATUS = Literal[
     "canceled",
     "deleted",
     "exception",
+    "failed",
 ]
 
 
