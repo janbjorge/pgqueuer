@@ -67,6 +67,8 @@ class PgQueuer:
         self.qm = QueueManager(self.connection, self.channel, resources=self.resources)
         self.sm = SchedulerManager(self.connection)
         shutdown.set_shutdown_event(self.shutdown)
+        self.qm.shutdown = self.shutdown
+        self.sm.shutdown = self.shutdown
 
     async def run(
         self,
