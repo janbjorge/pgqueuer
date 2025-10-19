@@ -74,6 +74,7 @@ shows how to pass a callable to ``pgqueuer.cli.run``.
    pgqueuer
    architecture
    driver
+   postgres-driver-troubleshooting
    dashboard
    development
    benchmark
