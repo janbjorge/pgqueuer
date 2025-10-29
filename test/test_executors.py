@@ -539,3 +539,99 @@ def test_is_async_callable_with_inspect_vs_call_attribute() -> None:
     # Helper should classify both as async callables.
     assert is_async_callable(af) is True
     assert is_async_callable(async_inst) is True
+
+
+async def test_entrypoint_executor_detects_context_async(apgdriver: Driver) -> None:
+    """Test that EntrypointExecutor correctly detects Context parameter in async functions."""
+    context_received = []
+
+    async def async_with_context(job: Job, context: Context) -> None:
+        context_received.append(context)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("test_context_detection"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=async_with_context,
+        )
+    )
+
+    assert executor.accepts_context is True
+    assert executor.is_async is True
+
+    job = mocked_job(payload=b"test")
+    ctx = Context(anyio.CancelScope(), resources={"test": "value"})
+    await executor.execute(job, ctx)
+
+    assert len(context_received) == 1
+    assert context_received[0] is ctx
+
+
+async def test_entrypoint_executor_detects_context_sync(apgdriver: Driver) -> None:
+    """Test that EntrypointExecutor correctly detects Context parameter in sync functions."""
+    context_received = []
+
+    def sync_with_context(job: Job, context: Context) -> None:
+        context_received.append(context)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("test_context_detection_sync"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=sync_with_context,
+        )
+    )
+
+    assert executor.accepts_context is True
+    assert executor.is_async is False
+
+    job = mocked_job(payload=b"test")
+    ctx = Context(anyio.CancelScope(), resources={"test": "value"})
+    await executor.execute(job, ctx)
+
+    assert len(context_received) == 1
+    assert context_received[0] is ctx
+
+
+async def test_entrypoint_executor_without_context(apgdriver: Driver) -> None:
+    """Test that EntrypointExecutor correctly detects when Context parameter is NOT present."""
+    jobs_received = []
+
+    async def async_without_context(job: Job) -> None:
+        jobs_received.append(job)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("test_no_context"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=async_without_context,
+        )
+    )
+
+    assert executor.accepts_context is False
+    assert executor.is_async is True
+
+    job = mocked_job(payload=b"test")
+    ctx = Context(anyio.CancelScope(), resources={"test": "value"})
+    await executor.execute(job, ctx)
+
+    assert len(jobs_received) == 1
+    assert jobs_received[0] is job

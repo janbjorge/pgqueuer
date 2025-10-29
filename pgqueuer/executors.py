@@ -16,6 +16,7 @@ from typing import (
     TypeGuard,
     TypeVar,
     cast,
+    get_type_hints,
     overload,
 )
 
@@ -27,7 +28,9 @@ from croniter import croniter
 from . import db, errors, helpers, models, queries
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
+AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
+SyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], None]
 Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
 EntrypointTypeVar = TypeVar("EntrypointTypeVar", bound=Entrypoint)
 
@@ -101,9 +104,18 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
     """
 
     is_async: bool = dataclasses.field(init=False)
+    accepts_context: bool = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
         self.is_async = is_async_callable(self.parameters.func)
+
+        # Check if the entrypoint accepts a Context parameter
+        sig = inspect.signature(self.parameters.func)
+        params = list(sig.parameters.keys())
+        self.accepts_context = (
+            len(params) == 2
+            and get_type_hints(self.parameters.func).get(params[1]) is models.Context
+        )
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
@@ -113,10 +125,18 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        if self.is_async:
-            await cast(AsyncEntrypoint, self.parameters.func)(job)
+        if self.accepts_context:
+            if self.is_async:
+                await cast(AsyncContextEntrypoint, self.parameters.func)(job, context)
+            else:
+                await anyio.to_thread.run_sync(
+                    cast(SyncContextEntrypoint, self.parameters.func), job, context
+                )
         else:
-            await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
+            if self.is_async:
+                await cast(AsyncEntrypoint, self.parameters.func)(job)
+            else:
+                await anyio.to_thread.run_sync(cast(SyncEntrypoint, self.parameters.func), job)
 
 
 @dataclasses.dataclass
