@@ -31,7 +31,9 @@ AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
 SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
 SyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], None]
-Entrypoint: TypeAlias = AsyncEntrypoint | SyncEntrypoint
+Entrypoint: TypeAlias = (
+    AsyncEntrypoint | AsyncContextEntrypoint | SyncEntrypoint | SyncContextEntrypoint
+)
 EntrypointTypeVar = TypeVar("EntrypointTypeVar", bound=Entrypoint)
 
 
@@ -44,6 +46,14 @@ def is_async_callable(obj: AsyncEntrypoint) -> TypeGuard[AsyncEntrypoint]: ...
 
 @overload
 def is_async_callable(obj: SyncEntrypoint) -> TypeGuard[SyncEntrypoint]: ...
+
+
+@overload
+def is_async_callable(obj: AsyncContextEntrypoint) -> TypeGuard[AsyncContextEntrypoint]: ...
+
+
+@overload
+def is_async_callable(obj: SyncContextEntrypoint) -> TypeGuard[SyncContextEntrypoint]: ...
 
 
 def is_async_callable(obj: object) -> bool:

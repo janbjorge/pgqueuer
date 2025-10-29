@@ -219,6 +219,101 @@ This command initializes the PgQueuer instance, manages job queues, schedules ta
 
 ---
 
+## **Context Parameter Injection**
+
+Entrypoints can optionally accept a `Context` parameter as their second argument. The context provides access to cancellation scopes and shared resources for the current job.
+
+### Using Context in Entrypoints
+
+PgQueuer automatically detects whether your entrypoint accepts a `Context` parameter by inspecting its type hints. If detected, the context is automatically injected:
+
+```python
+from pgqueuer.models import Job, Context
+
+# Without context (standard approach)
+@pgq.entrypoint("simple_job")
+async def simple_job(job: Job) -> None:
+    print(f"Processing: {job.payload}")
+
+# With context (get cancellation and resources)
+@pgq.entrypoint("job_with_context")
+async def job_with_context(job: Job, context: Context) -> None:
+    # Access shared resources
+    http_client = context.resources.get("http_client")
+    db_pool = context.resources.get("db_pool")
+    
+    # Access cancellation scope for graceful shutdown
+    with context.cancellation:
+        result = await http_client.get("https://api.example.com/data")
+        await db_pool.execute("INSERT INTO results(data) VALUES($1)", result)
+```
+
+### Context Attributes
+
+The `Context` object provides:
+
+- **`cancellation`**: An `anyio.CancelScope` that allows graceful handling of job cancellation. When the parent process is shutting down or the job is explicitly cancelled, this scope will be cancelled.
+- **`resources`**: A mutable mapping containing shared resources initialized at startup (see [Shared Resources](#shared-resources-contextresources) section).
+
+### Works with Both Async and Sync Entrypoints
+
+Context injection works with both async and sync entrypoints:
+
+```python
+# Async entrypoint with context
+@pgq.entrypoint("async_with_context")
+async def async_with_context(job: Job, context: Context) -> None:
+    ctx = context.resources["some_resource"]
+    await process(ctx, job.payload)
+
+# Sync entrypoint with context
+@pgq.entrypoint("sync_with_context")
+def sync_with_context(job: Job, context: Context) -> None:
+    ctx = context.resources["some_resource"]
+    process_sync(ctx, job.payload)
+```
+
+### Custom Executors
+
+When implementing custom executors, you have full access to the context:
+
+```python
+from pgqueuer.executors import AbstractEntrypointExecutor
+
+class CustomExecutor(AbstractEntrypointExecutor):
+    async def execute(self, job: Job, context: Context) -> None:
+        # Always receives the context
+        logger = context.resources.get("logger")
+        with context.cancellation:
+            # Your custom execution logic
+            pass
+```
+
+### How Detection Works
+
+PgQueuer uses Python's `inspect.signature()` and `typing.get_type_hints()` to detect if your entrypoint accepts a `Context` parameter. This means:
+
+- ✅ The parameter must be explicitly type-hinted as `Context`
+- ✅ Works with `from __future__ import annotations`
+- ✅ Works with any import style (`from pgqueuer.models import Context` or `models.Context`)
+- ❌ Positional-only without type hints will NOT be detected
+
+```python
+# ✅ Detected - explicit type hint
+async def job(job: Job, context: Context) -> None:
+    pass
+
+# ✅ Detected - even with future annotations
+async def job(job: Job, context: models.Context) -> None:
+    pass
+
+# ❌ Not detected - missing type hint
+async def job(job: Job, context) -> None:
+    pass
+```
+
+---
+
 ## **Key Features**
 
 ### Execute After
