@@ -75,7 +75,7 @@ class PgQueuer:
     @classmethod
     def from_asyncpg_connection(
         cls,
-        connection: asyncpg.Connection,
+        connection: "asyncpg.Connection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> PgQueuer:
@@ -98,7 +98,7 @@ class PgQueuer:
     @classmethod
     def from_asyncpg_pool(
         cls,
-        pool: asyncpg.Pool,
+        pool: "asyncpg.Pool",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> PgQueuer:
@@ -121,7 +121,7 @@ class PgQueuer:
     @classmethod
     def from_psycopg_connection(
         cls,
-        connection: psycopg.AsyncConnection,
+        connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> PgQueuer:
