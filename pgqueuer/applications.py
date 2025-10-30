@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 from datetime import timedelta
-from typing import Callable, MutableMapping
+from typing import TYPE_CHECKING, Callable, MutableMapping
 
-from .db import Driver
+from .db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
 from .executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -27,6 +27,10 @@ from .qm import QueueManager
 from .sm import SchedulerManager
 from .tm import TaskManager
 from .types import QueueExecutionMode
+
+if TYPE_CHECKING:
+    import asyncpg
+    import psycopg
 
 
 @dataclasses.dataclass
@@ -67,6 +71,75 @@ class PgQueuer:
         self.sm = SchedulerManager(self.connection)
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown
+
+    @classmethod
+    def from_asyncpg_connection(
+        cls,
+        connection: asyncpg.Connection,
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> PgQueuer:
+        """
+        Create a PgQueuer instance from an asyncpg connection.
+
+        Args:
+            connection: An asyncpg connection object.
+            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
+            resources: Optional mutable mapping for shared resources.
+
+        Returns:
+            PgQueuer: A configured PgQueuer instance.
+        """
+        driver = AsyncpgDriver(connection)
+        channel = channel or Channel(DBSettings().channel)
+        resources = resources or {}
+        return cls(connection=driver, channel=channel, resources=resources)
+
+    @classmethod
+    def from_asyncpg_pool(
+        cls,
+        pool: asyncpg.Pool,
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> PgQueuer:
+        """
+        Create a PgQueuer instance from an asyncpg connection pool.
+
+        Args:
+            pool: An asyncpg connection pool object.
+            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
+            resources: Optional mutable mapping for shared resources.
+
+        Returns:
+            PgQueuer: A configured PgQueuer instance.
+        """
+        driver = AsyncpgPoolDriver(pool)
+        channel = channel or Channel(DBSettings().channel)
+        resources = resources or {}
+        return cls(connection=driver, channel=channel, resources=resources)
+
+    @classmethod
+    def from_psycopg_connection(
+        cls,
+        connection: psycopg.AsyncConnection,
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> PgQueuer:
+        """
+        Create a PgQueuer instance from a psycopg async connection.
+
+        Args:
+            connection: A psycopg async connection object. Must have autocommit enabled.
+            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
+            resources: Optional mutable mapping for shared resources.
+
+        Returns:
+            PgQueuer: A configured PgQueuer instance.
+        """
+        driver = PsycopgDriver(connection)
+        channel = channel or Channel(DBSettings().channel)
+        resources = resources or {}
+        return cls(connection=driver, channel=channel, resources=resources)
 
     async def run(
         self,
