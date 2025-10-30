@@ -3,6 +3,7 @@ import uuid
 from datetime import timedelta
 
 import asyncpg
+import psycopg
 import pytest
 
 from pgqueuer import db, errors, models, queries
@@ -503,3 +504,60 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     assert len(jobs) == 1
     assert jobs[0].headers == headers
     await q.log_jobs([(jobs[0], "successful", None)])
+
+
+# Tests for Queries classmethods
+
+
+async def test_queries_from_asyncpg_connection(dsn: str) -> None:
+    """Test creating Queries from an asyncpg connection."""
+    connection = await asyncpg.connect(dsn=dsn)
+    try:
+        q = queries.Queries.from_asyncpg_connection(connection)
+
+        # Verify the instance is properly configured
+        assert isinstance(q, queries.Queries)
+        assert isinstance(q.driver, db.AsyncpgDriver)
+
+        # Test that it can be used to enqueue jobs
+        await q.enqueue("test_job", b"payload")
+        queue_sizes = await q.queue_size()
+        assert sum(x.count for x in queue_sizes) > 0
+    finally:
+        await connection.close()
+
+
+async def test_queries_from_asyncpg_pool(dsn: str) -> None:
+    """Test creating Queries from an asyncpg connection pool."""
+    pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=5)
+    try:
+        q = queries.Queries.from_asyncpg_pool(pool)
+
+        # Verify the instance is properly configured
+        assert isinstance(q, queries.Queries)
+        assert isinstance(q.driver, db.AsyncpgPoolDriver)
+
+        # Test that it can be used to enqueue jobs
+        await q.enqueue("test_job", b"payload")
+        queue_sizes = await q.queue_size()
+        assert sum(x.count for x in queue_sizes) > 0
+    finally:
+        await pool.close()
+
+
+async def test_queries_from_psycopg_connection(dsn: str) -> None:
+    """Test creating Queries from a psycopg async connection."""
+    connection = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
+    try:
+        q = queries.Queries.from_psycopg_connection(connection)
+
+        # Verify the instance is properly configured
+        assert isinstance(q, queries.Queries)
+        assert isinstance(q.driver, db.PsycopgDriver)
+
+        # Test that it can be used to enqueue jobs
+        await q.enqueue("test_job", b"payload")
+        queue_sizes = await q.queue_size()
+        assert sum(x.count for x in queue_sizes) > 0
+    finally:
+        await connection.close()
