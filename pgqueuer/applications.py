@@ -78,7 +78,7 @@ class PgQueuer:
         connection: "asyncpg.Connection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
-    ) -> PgQueuer:
+    ) -> "PgQueuer":
         """
         Create a PgQueuer instance from an asyncpg connection.
 
@@ -101,7 +101,7 @@ class PgQueuer:
         pool: "asyncpg.Pool",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
-    ) -> PgQueuer:
+    ) -> "PgQueuer":
         """
         Create a PgQueuer instance from an asyncpg connection pool.
 
@@ -124,7 +124,7 @@ class PgQueuer:
         connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
-    ) -> PgQueuer:
+    ) -> "PgQueuer":
         """
         Create a PgQueuer instance from a psycopg async connection.
 

@@ -506,9 +506,6 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.log_jobs([(jobs[0], "successful", None)])
 
 
-# Tests for Queries classmethods
-
-
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:
     """Test creating Queries from an asyncpg connection."""
     connection = await asyncpg.connect(dsn=dsn)

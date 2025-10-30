@@ -107,7 +107,7 @@ class Queries:
     )
 
     @classmethod
-    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> Queries:
+    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
         """
         Create a Queries instance from an asyncpg connection.
 
@@ -121,7 +121,7 @@ class Queries:
         return cls(driver)
 
     @classmethod
-    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> Queries:
+    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> "Queries":
         """
         Create a Queries instance from an asyncpg connection pool.
 
@@ -135,7 +135,7 @@ class Queries:
         return cls(driver)
 
     @classmethod
-    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> Queries:
+    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> "Queries":
         """
         Create a Queries instance from a psycopg async connection.
 
