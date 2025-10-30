@@ -15,7 +15,11 @@ import dataclasses
 import uuid
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
-from typing import overload
+from typing import TYPE_CHECKING, overload
+
+if TYPE_CHECKING:
+    import asyncpg
+    import psycopg
 
 from pydantic_core import to_json
 
@@ -101,6 +105,48 @@ class Queries:
     qbs: qb.QuerySchedulerBuilder = dataclasses.field(
         default_factory=qb.QuerySchedulerBuilder,
     )
+
+    @classmethod
+    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
+        """
+        Create a Queries instance from an asyncpg connection.
+
+        Args:
+            connection: An asyncpg connection object.
+
+        Returns:
+            Queries: A configured Queries instance.
+        """
+        driver = db.AsyncpgDriver(connection)
+        return cls(driver)
+
+    @classmethod
+    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> "Queries":
+        """
+        Create a Queries instance from an asyncpg connection pool.
+
+        Args:
+            pool: An asyncpg connection pool object.
+
+        Returns:
+            Queries: A configured Queries instance.
+        """
+        driver = db.AsyncpgPoolDriver(pool)
+        return cls(driver)
+
+    @classmethod
+    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> "Queries":
+        """
+        Create a Queries instance from a psycopg async connection.
+
+        Args:
+            connection: A psycopg async connection object. Must have autocommit enabled.
+
+        Returns:
+            Queries: A configured Queries instance.
+        """
+        driver = db.PsycopgDriver(connection)
+        return cls(driver)
 
     async def install(self) -> None:
         """

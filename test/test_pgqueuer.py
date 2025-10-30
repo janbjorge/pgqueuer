@@ -278,9 +278,6 @@ async def test_schedule_storage_and_retrieval(
     assert received.expression == expression
 
 
-# Tests for PgQueuer classmethods
-
-
 async def test_pgqueuer_from_asyncpg_connection(dsn: str) -> None:
     """Test creating PgQueuer from an asyncpg connection."""
     import asyncpg
