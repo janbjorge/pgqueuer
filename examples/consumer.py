@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import asyncio
-import json
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import AsyncGenerator
 
 import asyncpg
@@ -10,36 +9,41 @@ import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.logconfig import logger
-from pgqueuer.models import Job
+from pgqueuer.models import Job, Schedule
 
 
 async def create_pgqueuer() -> PgQueuer:
-    """Create and configure a PgQueuer instance with job handlers."""
-    print("🔌 Connecting to Postgres...")
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
-    pgq = PgQueuer(driver)
 
-    # Counter to track processed jobs in this session
-    processed_count = {"count": 0}
+    # Initialize shared resources once. These are injected into every job Context.
+    # Examples: HTTP clients, ML models, connection pools, caches, feature flags.
+    resources: dict[str, object] = {
+        "feature_flags": {"beta_mode": True},
+        "startup_timestamp": datetime.now(),
+    }
 
-    # Setup the 'send_email' entrypoint handler
-    @pgq.entrypoint("send_email")
-    async def send_email(job: Job) -> None:
-        """Process an email job."""
-        payload = json.loads((job.payload or b"").decode())
-        processed_count["count"] += 1
+    pgq = PgQueuer(driver, resources=resources)
 
-        recipient = payload.get("recipient", "unknown")
-        subject = payload.get("subject", "no subject")
+    # Setup the 'fetch' entrypoint
+    @pgq.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
+        # Access the shared resources via the Context
+        ctx = pgq.qm.get_context(job.id)
+        processed = ctx.resources.setdefault("processed_jobs", 0) + 1
+        ctx.resources["processed_jobs"] = processed
+        print(
+            f"Processed message: {job!r} "
+            f"(processed_jobs={processed}, beta_mode={ctx.resources['feature_flags']['beta_mode']})"
+        )
 
-        # Simulate sending email (in real code, call your email service here)
-        print(f"  📧 Email #{processed_count['count']}: {recipient}")
-        print(f"     Subject: {subject}")
-        print(f"     Job ID: {job.id}")
-
-        # Small delay to simulate real work
-        await asyncio.sleep(0.01)
+    @pgq.schedule("scheduled_every_minute", "* * * * *")
+    async def scheduled_every_minute(schedule: Schedule) -> None:
+        # Scheduled tasks currently access shared resources via closure
+        print(
+            f"Executed every minute {schedule!r} {datetime.now()!r} "
+            f"(processed_jobs={pgq.resources.get('processed_jobs', 0)})"
+        )
 
     return pgq
 
@@ -47,41 +51,27 @@ async def create_pgqueuer() -> PgQueuer:
 @asynccontextmanager
 async def main() -> AsyncGenerator[PgQueuer, None]:
     """
-    Context manager for setting up and tearing down the PgQueuer instance.
+    A context manager for setting up and tearing down the PgQueuer instance.
 
-    This ensures proper initialization and cleanup of database connections
-    and job handlers when the consumer is running.
+    This function manages the lifecycle of the PgQueuer instance, ensuring proper setup and teardown
+    when used in an asynchronous context. It includes the following steps:
+
+    Setup:
+        - Logs the start of the setup process.
+        - Creates and configures a PgQueuer instance by connecting to the database and initializing
+          entrypoints and schedules.
+
+    Teardown:
+        - Logs the start of the teardown process.
+        - Ensures cleanup actions for the PgQueuer instance, releasing resources like database
+          connections.
 
     Yields:
-        PgQueuer: The configured consumer instance.
+        PgQueuer: The configured instance ready for processing jobs and schedules.
     """
-    logger.info("🚀 Starting PgQueuer consumer...")
+    logger.info("setup")
     try:
         pgq = await create_pgqueuer()
-        print("📡 Consumer ready, listening for jobs...")
-        print("-" * 50)
         yield pgq
     finally:
-        logger.info("🛑 Shutting down consumer...")
-        print("-" * 50)
-        print("✅ Consumer stopped")
-
-
-if __name__ == "__main__":
-    import uvloop
-
-    async def run() -> None:
-        async with main() as pgq:
-            # Run the consumer - it will process jobs continuously
-            # Press Ctrl+C to stop
-            await pgq.run(batch_size=10)
-
-    print("=" * 50)
-    print("PgQueuer Consumer Example")
-    print("=" * 50)
-    print("💡 Press Ctrl+C to stop\n")
-
-    try:
-        uvloop.run(run())
-    except KeyboardInterrupt:
-        print("\n👋 Consumer interrupted by user")
+        logger.info("teardown")
