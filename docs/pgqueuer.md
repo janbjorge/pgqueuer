@@ -175,22 +175,22 @@ PgQueuer is a comprehensive library designed to manage job queues and recurring 
 
 ### Setting Up PgQueuer
 
-To start using PgQueuer, establish a connection to PostgreSQL with `asyncpg` or `psycopg`. Wrap the connection in a `Driver` instance and initialize PgQueuer. Below is a complete example:
+To start using PgQueuer, establish a connection to PostgreSQL with `asyncpg` or `psycopg`. You can then create a PgQueuer instance using one of the convenient classmethods. Below is a complete example:
+
+#### Using asyncpg connection
 
 ```python
 from datetime import datetime
 import asyncpg
 from pgqueuer import PgQueuer
-from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Job, Schedule
 
 async def main() -> PgQueuer:
     # Establish database connection
     connection = await asyncpg.connect()
-    driver = AsyncpgDriver(connection)
 
-    # Initialize PgQueuer instance
-    pgq = PgQueuer(driver)
+    # Initialize PgQueuer instance using the classmethod
+    pgq = PgQueuer.from_asyncpg_connection(connection)
 
     # Define a job entrypoint
     @pgq.entrypoint("fetch")
@@ -205,7 +205,68 @@ async def main() -> PgQueuer:
     return pgq
 ```
 
-This example demonstrates how to define both a job entrypoint (`fetch`) and a recurring task (`scheduled_every_minute`) with cron-like scheduling.
+#### Using asyncpg pool
+
+```python
+from datetime import datetime
+import asyncpg
+from pgqueuer import PgQueuer
+from pgqueuer.models import Job, Schedule
+
+async def main() -> PgQueuer:
+    # Create a connection pool
+    pool = await asyncpg.create_pool("postgresql://user:password@localhost/dbname")
+
+    # Initialize PgQueuer instance from pool
+    pgq = PgQueuer.from_asyncpg_pool(pool)
+
+    # Define a job entrypoint
+    @pgq.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
+        print(f"Processed message: {job!r}")
+
+    # Define a scheduled task
+    @pgq.schedule("scheduled_every_minute", "* * * * *")
+    async def scheduled_every_minute(schedule: Schedule) -> None:
+        print(f"Executed every minute: {schedule!r}, {datetime.now()!r}")
+
+    return pgq
+```
+
+#### Using psycopg async connection
+
+```python
+from datetime import datetime
+import psycopg
+from pgqueuer import PgQueuer
+from pgqueuer.models import Job, Schedule
+
+async def main() -> PgQueuer:
+    # Establish database connection with autocommit enabled
+    connection = await psycopg.AsyncConnection.connect(
+        "postgresql://user:password@localhost/dbname",
+        autocommit=True
+    )
+
+    # Initialize PgQueuer instance using the classmethod
+    pgq = PgQueuer.from_psycopg_connection(connection)
+
+    # Define a job entrypoint
+    @pgq.entrypoint("fetch")
+    async def process_message(job: Job) -> None:
+        print(f"Processed message: {job!r}")
+
+    # Define a scheduled task
+    @pgq.schedule("scheduled_every_minute", "* * * * *")
+    async def scheduled_every_minute(schedule: Schedule) -> None:
+        print(f"Executed every minute: {schedule!r}, {datetime.now()!r}")
+
+    return pgq
+```
+
+These examples demonstrate how to define both a job entrypoint (`fetch`) and a recurring task (`scheduled_every_minute`) with cron-like scheduling. The PgQueuer classmethods simplify the setup by handling driver initialization automatically.
+
+**Note:** For psycopg connections, always ensure `autocommit=True` is set when creating the connection.
 
 ### Starting PgQueuer with CLI
 
