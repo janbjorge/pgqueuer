@@ -105,6 +105,123 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     assert result == [b"test_payload"]
 
 
+async def test_entrypoint_executor_sync_with_context(apgdriver: Driver) -> None:
+    contexts: list[Context] = []
+
+    def sync_function(job: Job, ctx: Context) -> None:
+        contexts.append(ctx)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=sync_function,
+            accepts_context=True,
+        )
+    )
+    job = mocked_job(payload=b"context_payload")
+    job_context = Context(anyio.CancelScope(), resources={"marker": "sync"})
+
+    await executor.execute(job, job_context)
+
+    assert contexts and contexts[0] is job_context
+
+
+async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None:
+    markers: list[str] = []
+
+    async def async_function(job: Job, ctx: Context) -> None:
+        marker = ctx.resources.get("marker")
+        if marker:
+            markers.append(marker)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=async_function,
+            accepts_context=True,
+        )
+    )
+    job = mocked_job(payload=b"context_payload")
+    job_context = Context(anyio.CancelScope(), resources={"marker": "async"})
+
+    await executor.execute(job, job_context)
+
+    assert markers == ["async"]
+
+
+async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver) -> None:
+    contexts: list[Context] = []
+
+    def sync_function(job: Job, context: "Context") -> None:
+        contexts.append(context)
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=sync_function,
+            accepts_context=True,
+        )
+    )
+    job = mocked_job(payload=b"context_forward_ref")
+    job_context = Context(anyio.CancelScope(), resources={"marker": "forward"})
+
+    assert executor.accepts_context
+    assert executor.parameters.accepts_context
+
+    await executor.execute(job, job_context)
+    assert contexts and contexts[0] is job_context
+
+
+async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) -> None:
+    calls: list[tuple[Job, bytes | None]] = []
+
+    def sync_function(job: Job, extra: bytes | None = None) -> None:
+        calls.append((job, extra))
+
+    executor = EntrypointExecutor(
+        EntrypointExecutorParameters(
+            channel=Channel("foo"),
+            concurrency_limit=10,
+            connection=apgdriver,
+            queries=Queries(apgdriver),
+            requests_per_second=float("+inf"),
+            retry_timer=timedelta(seconds=300),
+            serialized_dispatch=False,
+            shutdown=asyncio.Event(),
+            func=sync_function,
+        )
+    )
+    job = mocked_job(payload=b"no_context")
+    job_context = Context(anyio.CancelScope(), resources={"marker": "unused"})
+
+    assert not executor.accepts_context
+    assert not executor.parameters.accepts_context
+
+    await executor.execute(job, job_context)
+    assert calls == [(job, None)]
+
+
 async def test_custom_threading_executor() -> None:
     class ThreadingExecutor(AbstractEntrypointExecutor):
         def __init__(self) -> None:

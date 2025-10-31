@@ -88,6 +88,25 @@ async def refresh_cache(schedule):
 
 A future enhancement (see project TODO) may allow optional arity-based injection or a `ScheduleContext`.
 
+### Enabling Context Injection
+
+Entry points only receive the runtime `Context` when registered with `accepts_context=True`. This opt-in flag applies whether the callable is synchronous, asynchronous, or a callable object.
+
+```python
+@pgq.entrypoint("process_with_context", accepts_context=True)
+async def process_with_context(job: Job, ctx: Context) -> None:
+    logger = ctx.resources.get("logger")
+    ...
+```
+
+Entry points registered without the flag are invoked with the job only:
+
+```python
+@pgq.entrypoint("process_without_context")
+async def process_without_context(job: Job) -> None:
+    ...
+```
+
 ### Testing With Resources
 
 In tests you can assert propagation:

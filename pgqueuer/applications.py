@@ -182,6 +182,7 @@ class PgQueuer:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
+        accepts_context: bool = False,
         executor_factory: Callable[
             [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
@@ -194,6 +195,7 @@ class PgQueuer:
             concurrency_limit=concurrency_limit,
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
+            accepts_context=accepts_context,
             executor_factory=executor_factory,
         )
 
