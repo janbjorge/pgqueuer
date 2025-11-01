@@ -216,6 +216,7 @@ class QueueManager:
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
+        accepts_context: bool = False,
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
@@ -234,6 +235,7 @@ class QueueManager:
             concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
+            accepts_context (bool): When True, invoke the entrypoint with both job and context.
 
         Returns:
             Callable[[T], T]: A decorator that registers the function as an entrypoint.
@@ -264,6 +266,9 @@ class QueueManager:
         if not isinstance(serialized_dispatch, bool):
             raise ValueError("Serialized dispatch must be boolean")
 
+        if not isinstance(accepts_context, bool):
+            raise ValueError("accepts_context must be boolean")
+
         executor_factory = executor_factory or executors.EntrypointExecutor
 
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
@@ -280,6 +285,7 @@ class QueueManager:
                         retry_timer=retry_timer,
                         serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
+                        accepts_context=accepts_context,
                     )
                 ),
             )
