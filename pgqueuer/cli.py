@@ -31,6 +31,11 @@ app = typer.Typer(
     add_completion=False,
 )
 
+rpc_app = typer.Typer(
+    help="Manage RPC enqueue functions for PostgREST integration.",
+    no_args_is_help=True,
+)
+
 
 class VerifyMode(Enum):
     """Enumeration for expected object state in verification."""
@@ -289,6 +294,43 @@ def install(
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
             await q.install()
+
+    if not dry_run:
+        asyncio_run(run())
+
+
+@rpc_app.command(
+    "install",
+    help="Install the RPC enqueue function for PostgREST integration.",
+)
+def rpc_install(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
+    qbe = qb.QueryBuilderEnvironment()
+    sql = qbe.build_rpc_enqueue_function_query()
+    print(sql)
+
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            await q.install_rpc()
+
+    if not dry_run:
+        asyncio_run(run())
+
+
+@rpc_app.command("uninstall", help="Uninstall the RPC enqueue function.")
+def rpc_uninstall(
+    ctx: Context,
+    dry_run: bool = typer.Option(False, help="Print SQL only."),
+) -> None:
+    qbe = qb.QueryBuilderEnvironment()
+    sql = f"DROP FUNCTION IF EXISTS {qbe.settings.enqueue_function};"
+    print(sql)
+
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            await q.driver.execute(sql)
 
     if not dry_run:
         asyncio_run(run())
@@ -599,6 +641,9 @@ def optimize_autovacuum(
     if not dry_run:
         asyncio_run(run())
 
+
+# Add RPC subcommand group to main app
+app.add_typer(rpc_app, name="rpc")
 
 if __name__ == "__main__":
     app(prog_name="pgqueuer")
