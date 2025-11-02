@@ -97,14 +97,20 @@ To enable the RPC enqueue function, use the RPC subcommand:
 pgq rpc install
 ```
 
-This creates a PostgreSQL function `fn_pgqueuer_enqueue` that can be called via PostgREST's RPC endpoint.
+This creates a PostgreSQL function (prefixed with `PGQUEUER_PREFIX` if set, e.g., `pgq_fn_pgqueuer_enqueue`) that can be called via PostgREST's RPC endpoint.
+
+The function is granted `EXECUTE` to `PUBLIC` by default. Ensure the database role used by PostgREST has `USAGE` on the schema containing it. For example:
+
+```sql
+GRANT USAGE ON SCHEMA public TO postgrest_role;
+```
 
 ### Using with PostgREST
 
 Once installed, you can enqueue jobs by sending POST requests to PostgREST's RPC endpoint:
 
 ```bash
-curl -X POST "http://localhost:3000/rpc/fn_pgqueuer_enqueue" \
+curl -X POST "http://localhost:3000/rpc/pgq_fn_pgqueuer_enqueue" \
   -H "Content-Type: application/json" \
   -d '{
     "entrypoint": "my_job",

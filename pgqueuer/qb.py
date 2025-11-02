@@ -362,7 +362,9 @@ class QueryBuilderEnvironment:
     DECLARE
         job_id BIGINT;
     BEGIN
-        INSERT INTO {self.settings.queue_table} (priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
+        INSERT INTO {self.settings.queue_table} (
+            priority, entrypoint, payload, execute_after, dedupe_key, headers, status
+        )
         VALUES (priority, entrypoint, payload, NOW() + execute_after, dedupe_key, headers, 'queued')
         RETURNING id INTO job_id;
 
@@ -372,6 +374,10 @@ class QueryBuilderEnvironment:
         RETURN job_id;
     END;
     $$ LANGUAGE plpgsql;
+
+    GRANT EXECUTE ON FUNCTION {self.settings.enqueue_function}(
+        TEXT, BYTEA, INT, INTERVAL, TEXT, JSONB
+    ) TO PUBLIC;
         """
 
     def build_uninstall_query(self) -> str:
