@@ -87,54 +87,7 @@ python examples/producer.py
 
 ## PostgREST Integration
 
-PGQueuer supports enqueuing jobs directly via SQL functions, enabling integration with [PostgREST](https://postgrest.org/) for HTTP-based job submission.
-
-### Installing the RPC Function
-
-To enable the RPC enqueue function, use the RPC subcommand:
-
-```bash
-pgq rpc install
-```
-
-This creates a PostgreSQL function (prefixed with `PGQUEUER_PREFIX` if set, e.g., `pgq_fn_pgqueuer_enqueue`) that can be called via PostgREST's RPC endpoint.
-
-The function is granted `EXECUTE` to `PUBLIC` by default. Ensure the database role used by PostgREST has `USAGE` on the schema containing it. For example:
-
-```sql
-GRANT USAGE ON SCHEMA public TO postgrest_role;
-```
-
-### Using with PostgREST
-
-Once installed, you can enqueue jobs by sending POST requests to PostgREST's RPC endpoint:
-
-```bash
-curl -X POST "http://localhost:3000/rpc/pgq_fn_pgqueuer_enqueue" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "entrypoint": "my_job",
-    "payload": "SGVsbG8gV29ybGQ=",
-    "priority": 0,
-    "execute_after": "0 seconds",
-    "dedupe_key": null,
-    "headers": null
-  }'
-```
-
-Parameters:
-- `entrypoint` (required): The job entrypoint name.
-- `payload` (optional): Base64-encoded binary payload.
-- `priority` (optional): Job priority (default 0).
-- `execute_after` (optional): Interval to delay execution (default '0 seconds').
-- `dedupe_key` (optional): Unique key to prevent duplicate jobs.
-- `headers` (optional): JSON object for job headers.
-
-The function returns the job ID as a bigint.
-
-### Example with PostgREST
-
-Assuming PostgREST is running on port 3000, the above curl command will enqueue a job that your PGQueuer consumer can process.
+PGQueuer can be integrated with [PostgREST](https://postgrest.org/) for HTTP-based job enqueuing. See `examples/postgrest_setup.py` for a complete example of setting up RPC functions.
 
 ## Monitor your queues
 

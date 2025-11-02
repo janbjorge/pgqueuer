@@ -344,42 +344,6 @@ class QueryBuilderEnvironment:
     EXECUTE FUNCTION {self.settings.function}();
         """  # noqa: E501
 
-    def build_rpc_enqueue_function_query(self) -> str:
-        """
-        Generate SQL to create the RPC enqueue function for PostgREST integration.
-
-        Returns:
-            str: The SQL command to create the enqueue function.
-        """
-        return f"""CREATE FUNCTION {self.settings.enqueue_function}(
-        entrypoint TEXT,
-        payload BYTEA DEFAULT NULL,
-        priority INT DEFAULT 0,
-        execute_after INTERVAL DEFAULT '0'::INTERVAL,
-        dedupe_key TEXT DEFAULT NULL,
-        headers JSONB DEFAULT NULL
-    ) RETURNS BIGINT AS $$
-    DECLARE
-        job_id BIGINT;
-    BEGIN
-        INSERT INTO {self.settings.queue_table} (
-            priority, entrypoint, payload, execute_after, dedupe_key, headers, status
-        )
-        VALUES (priority, entrypoint, payload, NOW() + execute_after, dedupe_key, headers, 'queued')
-        RETURNING id INTO job_id;
-
-        INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority)
-        VALUES (job_id, 'queued', entrypoint, priority);
-
-        RETURN job_id;
-    END;
-    $$ LANGUAGE plpgsql;
-
-    GRANT EXECUTE ON FUNCTION {self.settings.enqueue_function}(
-        TEXT, BYTEA, INT, INTERVAL, TEXT, JSONB
-    ) TO PUBLIC;
-        """
-
     def build_uninstall_query(self) -> str:
         """
         Generate SQL statements to uninstall the job queue schema.

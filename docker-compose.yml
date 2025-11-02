@@ -1,65 +1,65 @@
 x-app-environment: &app-environment
-  PGUSER: pgquser
-  PGDATABASE: pgqdb
-  PGPASSWORD: pgqpw
-  PGHOST: db
-  PGPORT: 5432
+    PGUSER: pgquser
+    PGDATABASE: pgqdb
+    PGPASSWORD: pgqpw
+    PGHOST: db
+    PGPORT: 5432
 
 x-app-base: &app-base
-  build: .
-  working_dir: /app
-  environment: *app-environment
+    build: .
+    working_dir: /app
+    environment: *app-environment
 
 services:
-  db:
-    image: postgres:${POSTGRES_VERSION:-16}
-    environment:
-      POSTGRES_USER: pgquser
-      POSTGRES_DB: pgqdb
-      POSTGRES_PASSWORD: pgqpw
-      PGDATA: /var/lib/pg/data
-      POSTGRES_INITDB_ARGS: >
-        --encoding=UTF8
-        -c jit=off
-        -c synchronous_commit=off
-        -c full_page_writes=off
-        -c fsync=off
-        -c checkpoint_timeout=30min
-        -c max_wal_size=4GB
-        -c checkpoint_completion_target=0.9
-        -c shared_buffers=256MB
-        -c vacuum_buffer_usage_limit=8MB
-        -c autovacuum_naptime=5s
-    ports:
-      - "5432:5432"
-    tmpfs:
-      - /var/lib/pg/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pgquser -d pgqdb || exit 1"]
-      interval: 250ms
-      retries: 10
-    restart: "no"
+    db:
+        image: postgres:${POSTGRES_VERSION:-16}
+        environment:
+            POSTGRES_USER: pgquser
+            POSTGRES_DB: pgqdb
+            POSTGRES_PASSWORD: pgqpw
+            PGDATA: /var/lib/pg/data
+            POSTGRES_INITDB_ARGS: >
+                --encoding=UTF8
+                -c jit=off
+                -c synchronous_commit=off
+                -c full_page_writes=off
+                -c fsync=off
+                -c checkpoint_timeout=30min
+                -c max_wal_size=4GB
+                -c checkpoint_completion_target=0.9
+                -c shared_buffers=256MB
+                -c vacuum_buffer_usage_limit=8MB
+                -c autovacuum_naptime=5s
+        ports:
+            - "5432:5432"
+        tmpfs:
+            - /var/lib/pg/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U pgquser -d pgqdb || exit 1"]
+            interval: 250ms
+            retries: 10
+        restart: "no"
 
-  populate:
-    <<: *app-base
-    depends_on:
-      db:
-        condition: service_healthy
-    command: /bin/sh -c "(uv -n run --frozen pgq install || uv -n run --frozen pgq autovac); exit 0"
-    restart: "no"
+    populate:
+        <<: *app-base
+        depends_on:
+            db:
+                condition: service_healthy
+        command: /bin/sh -c "(uv -n run --frozen pgq install || uv -n run --frozen pgq autovac); exit 0"
+        restart: "no"
 
-  test:
-    <<: *app-base
-    depends_on:
-      populate:
-        condition: service_completed_successfully
-    command: uv -n run --frozen pytest
-    restart: "no"
+    test:
+        <<: *app-base
+        depends_on:
+            populate:
+                condition: service_completed_successfully
+        command: uv -n run --frozen pytest
+        restart: "no"
 
-  benchmark:
-    <<: *app-base
-    depends_on:
-      populate:
-        condition: service_completed_successfully
-    command: uv -n run --frozen tools/benchmark.py
-    restart: "no"
+    benchmark:
+        <<: *app-base
+        depends_on:
+            populate:
+                condition: service_completed_successfully
+        command: uv -n run --frozen tools/benchmark.py
+        restart: "no"

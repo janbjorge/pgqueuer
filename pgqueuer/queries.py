@@ -160,14 +160,6 @@ class Queries:
         """
         await self.driver.execute(self.qbe.build_install_query())
 
-    async def install_rpc(self) -> None:
-        """
-        Install the RPC enqueue function for PostgREST integration.
-
-        Creates the database function that allows enqueuing jobs via SQL RPC calls.
-        """
-        await self.driver.execute(self.qbe.build_rpc_enqueue_function_query())
-
     async def uninstall(self) -> None:
         """
         Uninstall the job queue schema from the database.
