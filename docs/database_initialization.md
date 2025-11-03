@@ -16,12 +16,6 @@ PGQueuer provides a command-line interface for easy management of installation a
 pgq install
 ```
 
-To include the RPC enqueue function for PostgREST integration:
-
-```bash
-pgq rpc install
-```
-
 ### Uninstalling PGQueuer database components:
 ```bash
 pgq uninstall

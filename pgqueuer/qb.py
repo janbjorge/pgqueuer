@@ -174,9 +174,6 @@ class DBSettings(BaseSettings):
     # table, used to notify subscribers.
     function: str = Field(default=add_prefix("fn_pgqueuer_changed"))
 
-    # Name of the database function for enqueuing jobs via RPC.
-    enqueue_function: str = Field(default=add_prefix("fn_pgqueuer_enqueue"))
-
     # Name of the table that logs statistics about job processing,
     # e.g., processing times and outcomes.
     statistics_table: str = Field(default=add_prefix("pgqueuer_statistics"))
@@ -357,7 +354,6 @@ class QueryBuilderEnvironment:
         """
         return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
     DROP FUNCTION   IF EXISTS   {self.settings.function};
-    DROP FUNCTION   IF EXISTS   {self.settings.enqueue_function};
     DROP TABLE      IF EXISTS   {self.settings.queue_table};
     DROP TABLE      IF EXISTS   {self.settings.statistics_table};
     DROP TABLE      IF EXISTS   {self.settings.schedules_table};
