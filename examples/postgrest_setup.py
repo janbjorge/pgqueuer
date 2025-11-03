@@ -19,11 +19,13 @@ import asyncio
 import os
 from textwrap import dedent
 
+import asyncpg
+
 from pgqueuer.db import dsn
 from pgqueuer.qb import QueryBuilderEnvironment
 
 
-def get_enqueue_function_sql() -> str:
+def enqueue_function_sql() -> str:
     """Generate SQL for the overloaded enqueue functions."""
     qbe = QueryBuilderEnvironment()
 
@@ -50,11 +52,11 @@ def get_enqueue_function_sql() -> str:
                 UNNEST(dedupe_keys),
                 UNNEST(headers),
                 'queued'
-            RETURNING id, entrypoint, status, priority
+            RETURNING {qbe.settings.queue_table}.id, entrypoint, status, priority
         )
         INSERT INTO {qbe.settings.queue_table_log}
         (job_id, status, entrypoint, priority)
-        SELECT id, 'queued', entrypoint, priority
+        SELECT inserted.id, 'queued', entrypoint, priority
         FROM inserted
         RETURNING job_id AS id;
     END;
@@ -103,20 +105,12 @@ async def main() -> None:
         host=os.environ.get("PGHOST", "localhost"),
     )
 
-    # Import here to avoid circular imports
-    import asyncpg
-
-    from pgqueuer.db import AsyncpgDriver
-
-    # Connect and execute
     conn = await asyncpg.connect(db_dsn)
-    driver = AsyncpgDriver(conn)
-
     try:
-        sql = get_enqueue_function_sql()
+        sql = enqueue_function_sql()
         print("Creating PostgREST RPC functions...")
         print(sql)
-        await driver.execute(sql)
+        await conn.execute(sql)
         print("✅ PostgREST RPC functions created successfully!")
         print("\nTo use with PostgREST:")
         print("1. Configure PostgREST to connect to your database")
