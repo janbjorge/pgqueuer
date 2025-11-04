@@ -85,10 +85,6 @@ Run the producer:
 python examples/producer.py
 ```
 
-## PostgREST Integration
-
-PGQueuer can be integrated with [PostgREST](https://postgrest.org/) for HTTP-based job enqueuing. See `examples/postgrest_setup.py` for a complete example of setting up RPC functions.
-
 ## Monitor your queues
 
 ```bash
