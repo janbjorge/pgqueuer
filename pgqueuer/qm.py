@@ -448,7 +448,7 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
-        trigger_checks = (
+        for table, trigger in (
             (
                 self.queries.qbe.settings.queue_table,
                 self.queries.qbe.settings.trigger,
@@ -457,28 +457,12 @@ class QueueManager:
                 self.queries.qbe.settings.queue_table,
                 f"{self.queries.qbe.settings.trigger}_truncate",
             ),
-        )
-
-        missing_triggers = [
-            (table, trigger)
-            for table, trigger in trigger_checks
-            if not (await self.queries.table_has_trigger(table, trigger))
-        ]
-
-        if missing_triggers:
-            await self.queries.ensure_notify_triggers()
-            missing_triggers = [
-                (table, trigger)
-                for table, trigger in trigger_checks
-                if not (await self.queries.table_has_trigger(table, trigger))
-            ]
-
-        if missing_triggers:
-            table, trigger = missing_triggers[0]
-            raise RuntimeError(
-                f"The required trigger '{trigger}' is missing on the '{table}' table. "
-                f"Please run 'pgq upgrade' to ensure all schema changes are applied."
-            )
+        ):
+            if not (await self.queries.table_has_trigger(table, trigger)):
+                raise RuntimeError(
+                    f"The required trigger '{trigger}' is missing on the '{table}' table. "
+                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+                )
 
     async def run(
         self,
