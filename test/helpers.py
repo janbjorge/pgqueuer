@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from itertools import count
+from typing import Protocol
+
+import async_timeout
 
 from pgqueuer.models import Job
+from pgqueuer.queries import Queries
+
+
+class ShutdownCapable(Protocol):
+    shutdown: asyncio.Event
 
 
 def mocked_job(
@@ -34,3 +44,21 @@ def mocked_job(
         queue_manager_id=queue_manager_id or uuid.uuid4(),
         headers=headers,
     )
+
+
+async def wait_until_empty_queue(
+    queries: Queries,
+    managers: Sequence[ShutdownCapable],
+    *,
+    timeout_seconds: float = 15.0,
+    poll_interval: float = 0.01,
+) -> None:
+    """
+    Block until the queue is empty or the timeout elapses, then signal shutdown.
+    """
+    async with async_timeout.timeout(timeout_seconds):
+        while sum(result.count for result in await queries.queue_size()) > 0:
+            await asyncio.sleep(poll_interval)
+
+    for manager in managers:
+        manager.shutdown.set()

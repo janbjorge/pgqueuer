@@ -11,17 +11,7 @@ from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
-
-
-async def wait_until_empty_queue(
-    q: Queries,
-    qms: list[QueueManager],
-) -> None:
-    while sum(x.count for x in await q.queue_size()) > 0:
-        await asyncio.sleep(0.01)
-
-    for qm in qms:
-        qm.shutdown.set()
+from test.helpers import wait_until_empty_queue
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))

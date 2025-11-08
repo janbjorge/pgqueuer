@@ -12,14 +12,7 @@ from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
 from pgqueuer.models import CronExpressionEntrypoint, Job, Schedule
 from pgqueuer.qb import DBSettings
 from pgqueuer.queries import Queries
-
-
-async def wait_until_empty_queue(q: Queries, pgqs: list[PgQueuer]) -> None:
-    while sum(x.count for x in await q.queue_size()) > 0:
-        await asyncio.sleep(0.01)
-
-    for qm in pgqs:
-        qm.shutdown.set()
+from test.helpers import wait_until_empty_queue
 
 
 @pytest.mark.parametrize("N", (1, 2, 32))
