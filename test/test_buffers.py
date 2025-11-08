@@ -4,11 +4,11 @@ from datetime import timedelta
 from itertools import count
 
 import pytest
-from helpers import mocked_job
 
 from pgqueuer import helpers as pg_helpers
 from pgqueuer.buffers import JobStatusLogBuffer
 from pgqueuer.models import JOB_STATUS, Job, TracebackRecord
+from test.helpers import mocked_job
 
 
 def job_faker(

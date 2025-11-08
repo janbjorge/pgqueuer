@@ -7,7 +7,6 @@ from typing import Awaitable, Callable
 
 import anyio
 import pytest
-from helpers import mocked_job
 
 from pgqueuer.db import Driver
 from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded
@@ -22,6 +21,7 @@ from pgqueuer.helpers import timer
 from pgqueuer.models import Channel, Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
+from test.helpers import mocked_job
 
 # NOTE: Resources feature branch (pseudo-branch: feature/context-resources)
 # Tests updated to explicitly pass a resources mapping to Context to document new API.
