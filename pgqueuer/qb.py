@@ -174,6 +174,9 @@ class DBSettings(BaseSettings):
     # table, used to notify subscribers.
     function: str = Field(default=add_prefix("fn_pgqueuer_changed"))
 
+    # Name of the database function used exclusively by the truncate trigger.
+    function_truncate: str = Field(default=add_prefix("fn_pgqueuer_changed_truncate"))
+
     # Name of the table that logs statistics about job processing,
     # e.g., processing times and outcomes.
     statistics_table: str = Field(default=add_prefix("pgqueuer_statistics"))
@@ -213,6 +216,93 @@ class QueryBuilderEnvironment:
     """
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+
+    def build_notify_triggers_reinstall_query(self) -> str:
+        """Return SQL that ensures the queue notification triggers are installed."""
+
+        return f"""DROP TRIGGER IF EXISTS {self.settings.trigger}_truncate ON {self.settings.queue_table};
+DROP TRIGGER IF EXISTS {self.settings.trigger} ON {self.settings.queue_table};
+
+CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
+DECLARE
+    -- Assume the row change matters; UPDATE below can veto if only the heartbeat moved.
+    notify_change BOOLEAN := TRUE;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        -- Track whether any meaningful column changed while ignoring heartbeat churn.
+        notify_change := ROW(
+            NEW.priority,
+            NEW.queue_manager_id,
+            NEW.created,
+            NEW.updated,
+            NEW.execute_after,
+            NEW.status,
+            NEW.entrypoint,
+            NEW.dedupe_key,
+            NEW.payload,
+            NEW.headers
+        ) IS DISTINCT FROM ROW(
+            OLD.priority,
+            OLD.queue_manager_id,
+            OLD.created,
+            OLD.updated,
+            OLD.execute_after,
+            OLD.status,
+            OLD.entrypoint,
+            OLD.dedupe_key,
+            OLD.payload,
+            OLD.headers
+        );
+    END IF;
+
+    IF NOT notify_change THEN
+        RETURN NULL; -- Nothing changed beyond the heartbeat; skip NOTIFY spam.
+    END IF;
+
+    PERFORM pg_notify(
+        '{self.settings.channel}',
+        json_build_object(
+            'channel', '{self.settings.channel}',
+            'operation', lower(TG_OP),
+            'sent_at', NOW(),
+            'table', TG_TABLE_NAME,
+            'type', 'table_changed_event'
+        )::text
+    );
+
+    RETURN NULL; -- AFTER triggers ignore the return value; keep it explicit.
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION {self.settings.function_truncate}() RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify(
+        '{self.settings.channel}',
+        json_build_object(
+            'channel', '{self.settings.channel}',
+            'operation', lower(TG_OP),
+            'sent_at', NOW(),
+            'table', TG_TABLE_NAME,
+            'type', 'table_changed_event'
+        )::text
+    );
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER {self.settings.trigger}
+AFTER INSERT OR UPDATE OR DELETE ON {self.settings.queue_table}
+FOR EACH ROW
+EXECUTE FUNCTION {self.settings.function}();
+
+CREATE TRIGGER {self.settings.trigger}_truncate
+AFTER TRUNCATE ON {self.settings.queue_table}
+FOR EACH STATEMENT
+EXECUTE FUNCTION {self.settings.function_truncate}();
+"""
+
+
 
     def build_install_query(self) -> str:
         """
@@ -295,50 +385,8 @@ class QueryBuilderEnvironment:
         UNIQUE (expression, entrypoint)
     );
 
-    CREATE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
-    DECLARE
-        to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
-    BEGIN
-        -- Check operation type and set the emit flag accordingly
-        IF TG_OP = 'UPDATE' AND OLD IS DISTINCT FROM NEW THEN
-            to_emit := true;
-        ELSIF TG_OP = 'DELETE' THEN
-            to_emit := true;
-        ELSIF TG_OP = 'INSERT' THEN
-            to_emit := true;
-        ELSIF TG_OP = 'TRUNCATE' THEN
-            to_emit := true;
-        END IF;
 
-        -- Perform notification if the emit flag is set
-        IF to_emit THEN
-            PERFORM pg_notify(
-                '{self.settings.channel}',
-                json_build_object(
-                    'channel', '{self.settings.channel}',
-                    'operation', lower(TG_OP),
-                    'sent_at', NOW(),
-                    'table', TG_TABLE_NAME,
-                    'type', 'table_changed_event'
-                )::text
-            );
-        END IF;
-
-        -- Return appropriate value based on the operation
-        IF TG_OP IN ('INSERT', 'UPDATE') THEN
-            RETURN NEW;
-        ELSIF TG_OP = 'DELETE' THEN
-            RETURN OLD;
-        ELSE
-            RETURN NULL; -- For TRUNCATE and other non-row-specific contexts
-        END IF;
-
-    END;
-    $$ LANGUAGE plpgsql;
-
-    CREATE TRIGGER {self.settings.trigger}
-    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {self.settings.queue_table}
-    EXECUTE FUNCTION {self.settings.function}();
+{self.build_notify_triggers_reinstall_query()}
         """  # noqa: E501
 
     def build_uninstall_query(self) -> str:
@@ -352,7 +400,9 @@ class QueryBuilderEnvironment:
         Returns:
             str: A string containing the SQL commands to uninstall the schema.
         """
-        return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
+        return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger}_truncate ON {self.settings.queue_table};
+    DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
+    DROP FUNCTION   IF EXISTS   {self.settings.function_truncate};
     DROP FUNCTION   IF EXISTS   {self.settings.function};
     DROP TABLE      IF EXISTS   {self.settings.queue_table};
     DROP TABLE      IF EXISTS   {self.settings.statistics_table};
@@ -375,85 +425,9 @@ class QueryBuilderEnvironment:
         """
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
-        yield f"""CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
-    DECLARE
-        to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
-    BEGIN
-        -- Check operation type and set the emit flag accordingly
-        IF TG_OP = 'UPDATE' AND OLD IS DISTINCT FROM NEW THEN
-            to_emit := true;
-        ELSIF TG_OP = 'DELETE' THEN
-            to_emit := true;
-        ELSIF TG_OP = 'INSERT' THEN
-            to_emit := true;
-        ELSIF TG_OP = 'TRUNCATE' THEN
-            to_emit := true;
-        END IF;
+        yield self.build_notify_triggers_reinstall_query()
 
-        -- Perform notification if the emit flag is set
-        IF to_emit THEN
-            PERFORM pg_notify(
-                '{self.settings.channel}',
-                json_build_object(
-                    'channel', '{self.settings.channel}',
-                    'operation', lower(TG_OP),
-                    'sent_at', NOW(),
-                    'table', TG_TABLE_NAME,
-                    'type', 'table_changed_event'
-                )::text
-            );
-        END IF;
-
-        -- Return appropriate value based on the operation
-        IF TG_OP IN ('INSERT', 'UPDATE') THEN
-            RETURN NEW;
-        ELSIF TG_OP = 'DELETE' THEN
-            RETURN OLD;
-        ELSE
-            RETURN NULL; -- For TRUNCATE and other non-row-specific contexts
-        END IF;
-
-    END;
-    $$ LANGUAGE plpgsql;"""
-        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_heartbeat_id_id1_idx ON {self.settings.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
-        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id) WHERE queue_manager_id IS NOT NULL;"  # noqa: E501
-        yield f"""CREATE TABLE IF NOT EXISTS {self.settings.schedules_table} (
-        id SERIAL PRIMARY KEY,
-        expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
-        entrypoint TEXT NOT NULL,
-        heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        updated TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        next_run TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        last_run TIMESTAMP WITH TIME ZONE,
-        status {self.settings.queue_status_type} DEFAULT 'queued',
-        UNIQUE (expression, entrypoint)
-    );"""
-        yield f"""ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
-        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'successful';"  # noqa: E501
-        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'exception';"  # noqa: E501
-        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'canceled';"  # noqa: E501
-        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'deleted';"  # noqa: E501
-        yield f"ALTER TABLE {self.settings.statistics_table} ALTER COLUMN status TYPE {self.settings.queue_status_type} USING status::TEXT::pgqueuer_status;"  # noqa
-        yield f"""CREATE UNLOGGED TABLE IF NOT EXISTS {self.settings.queue_table_log} (
-        id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-        created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        job_id BIGINT NOT NULL,
-        status {self.settings.queue_status_type} NOT NULL,
-        priority INT NOT NULL,
-        entrypoint TEXT NOT NULL,
-        aggregated BOOLEAN DEFAULT FALSE
-    );"""
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"  # noqa
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"  # noqa
-        yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
-        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL;"  # noqa: E501
-        yield f"CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
-        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
+    # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -484,6 +458,23 @@ class QueryBuilderEnvironment:
                     tablename  = $1
                 AND indexname  = $2
                 AND schemaname = current_schema()
+        );
+        """
+
+    def build_table_has_trigger_query(self) -> str:
+        """
+        A query to check if a specific trigger exists on a table.
+
+        Returns:
+            str: The SQL query to check for a trigger's existence.
+        """
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.triggers
+            WHERE
+                    trigger_schema = current_schema()
+                AND event_object_table = $1
+                AND trigger_name = $2
         );
         """
 
