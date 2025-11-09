@@ -100,33 +100,10 @@ class MigrationManager:
         )
 
     async def apply_migration(self, migration: Migration) -> None:
-        """Apply a single migration after validating it contains one SQL statement."""
+        """Apply a single migration and record it."""
         sql = migration.sql_generator()
-        self._validate_single_statement(sql)
         await self.driver.execute(sql)
         await self.record_migration(migration)
-
-    def _validate_single_statement(self, sql: str) -> None:
-        """Validate SQL contains exactly one statement (enforces atomic migrations)."""
-        statement_count = 0
-        
-        for line in sql.split("\n"):
-            stripped = line.strip()
-            if not stripped or stripped.startswith("--"):
-                continue
-            statement_count += stripped.count(";")
-
-        if statement_count == 0:
-            raise ValueError(
-                "Migration must contain exactly one SQL statement ending with semicolon. "
-                f"Found 0 statements."
-            )
-        elif statement_count > 1:
-            raise ValueError(
-                f"Migration must contain exactly one SQL statement. "
-                f"Found {statement_count} statements. "
-                f"Split complex migrations into multiple separate migrations."
-            )
 
     async def run_migrations(self, migrations: list[Migration]) -> list[str]:
         """Run all pending migrations in order."""

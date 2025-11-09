@@ -70,31 +70,43 @@ Migration(
 )
 ```
 
-### Rules
+### Best Practices
 
-1. **One SQL statement per migration** (enforced by validation)
-2. **Sequential versions** - no gaps (001, 002, 003...)
+1. **Keep migrations focused** - Each migration should perform a single logical change
+2. **Sequential versions** - No gaps (001, 002, 003...)
 3. **Never modify existing migrations** once released
-4. **Use IF NOT EXISTS** for safety
+4. **Use IF NOT EXISTS** for safety when appropriate
 5. **Test on a copy first**
+6. **Complex migrations** - Functions, triggers, and stored procedures can span multiple SQL statements within a single migration
 
 ### Examples
 
 ```python
-# ✓ Valid - single statement
+# ✓ Simple migration
 Migration(
     version="024",
     description="Add column",
     sql_generator=lambda: "ALTER TABLE queue ADD COLUMN col TEXT;"
 )
 
-# ✗ Invalid - multiple statements (raises ValueError)
+# ✓ Complex migration (function definition with multiple semicolons)
 Migration(
-    version="024",
-    description="Two changes",
-    sql_generator=lambda: "ALTER TABLE queue ADD COLUMN a TEXT; ALTER TABLE queue ADD COLUMN b TEXT;"
+    version="025",
+    description="Create notification function",
+    sql_generator=lambda: f"""
+        CREATE FUNCTION notify_changes() RETURNS TRIGGER AS $$
+        BEGIN
+            IF TG_OP = 'INSERT' THEN
+                PERFORM pg_notify('changes', 'inserted');
+            END IF;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    """
 )
 ```
+
+**Note**: While migrations can contain complex SQL (like functions with internal semicolons), it's recommended to keep each migration focused on a single logical change for easier troubleshooting.
 
 ## Troubleshooting
 
