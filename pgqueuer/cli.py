@@ -5,15 +5,26 @@ import contextlib
 import os
 from dataclasses import dataclass
 from datetime import timedelta
-from enum import Enum
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, Sequence
 
 import typer
 from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator
 
-from . import db, factories, helpers, listeners, logconfig, models, qb, queries, supervisor, types
+from . import (
+    db,
+    factories,
+    helpers,
+    listeners,
+    logconfig,
+    migrations,
+    models,
+    qb,
+    queries,
+    supervisor,
+    types,
+)
 
 try:
     from uvloop import run as asyncio_run
@@ -30,13 +41,6 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
     add_completion=False,
 )
-
-
-class VerifyMode(Enum):
-    """Enumeration for expected object state in verification."""
-
-    PRESENT = "present"
-    ABSENT = "absent"
 
 
 @dataclass
@@ -270,12 +274,57 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
+def _print_migration_preview(
+    title: str,
+    migration_list: Sequence[migrations.Migration],
+    empty_message: str,
+) -> None:
+    """Pretty-print migration plans for dry-run commands."""
+    if not migration_list:
+        print(empty_message)
+        return
+
+    print(title)
+    print("-" * 80)
+    for migration in migration_list:
+        print(f"Version: {migration.version}")
+        print(f"Description: {migration.description}")
+        print(f"Checksum: {migration.checksum()[:16]}...")
+        print("-" * 80)
+    print(f"\nTotal: {len(migration_list)} migrations would be applied")
+    print("\nDry-run mode: No changes were made to the database.")
+
+
+async def _collect_migration_state(
+    q: queries.Queries,
+    manager: migrations.MigrationManager,
+) -> tuple[list[migrations.Migration], set[str], list[migrations.Migration]]:
+    """Return all migrations, applied versions, and pending ones."""
+    all_migrations = list(migrations.create_migrations_list(q.qbe.settings))
+    applied_versions = await manager.get_applied_migrations()
+    pending = [m for m in all_migrations if m.version not in applied_versions]
+    return all_migrations, applied_versions, pending
+
+
+# ============================================================================
+# Schema Management Commands
+# ============================================================================
+# Core commands for managing PGQueuer database schema through migrations:
+#   - install:     Fresh installation (applies all migrations)
+#   - upgrade:     Apply pending migrations to existing installation
+#   - uninstall:   Remove PGQueuer schema completely
+#   - migrations:  View migration status and history
+#
+# All schema changes are tracked via the migration framework for consistency.
+# ============================================================================
+
+
 @app.command(help="Install the necessary database schema for PGQueuer.")
 def install(
     ctx: Context,
     dry_run: bool = typer.Option(
         False,
-        help="Print SQL only.",
+        help="Print migration info only (don't install).",
     ),
     durability: qb.Durability = typer.Option(
         qb.Durability.durable.value,
@@ -284,63 +333,26 @@ def install(
         help="Durability level for tables.",
     ),
 ) -> None:
-    print(qb.QueryBuilderEnvironment(qb.DBSettings(durability=durability)).build_install_query())
+    settings = qb.DBSettings(durability=durability)
+    migration_list = list(migrations.create_migrations_list(settings))
+
+    if dry_run:
+        _print_migration_preview(
+            "Migrations that would be applied during installation:",
+            migration_list,
+            "No migrations are defined for installation.",
+        )
+        return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
+        async with yield_queries(ctx, settings) as q:
             await q.install()
 
-    if not dry_run:
-        asyncio_run(run())
-
-
-@app.command(help="Verify PGQueuer database objects.")
-def verify(
-    ctx: Context,
-    expect: VerifyMode = typer.Option(
-        ...,
-        help="Expected object state: 'present' or 'absent'.",
-    ),
-) -> None:
-    async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
-            expect_present = expect == VerifyMode.PRESENT
-            divergence = list[str]()
-
-            required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
-            ]
-
-            for table in required_tables:
-                exists = await q.has_table(table)
-                if expect_present != exists:
-                    state = "missing" if expect_present else "unexpected"
-                    divergence.append(f"{state} table '{table}'")
-
-            func_exists = await q.has_function(q.qbe.settings.function)
-            if expect_present != func_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
-
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
-            if expect_present != trig_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
-
-            if divergence:
-                print("\n".join(divergence))
-            else:
-                if expect == VerifyMode.PRESENT:
-                    print("All required PGQueuer database objects are present.")
-                else:
-                    print("No PGQueuer database objects found")
-
-            exit(1 if divergence else 0)
-
     asyncio_run(run())
+    print(f"✓ PGQueuer schema installed successfully ({len(migration_list)} migrations applied).")
+
+
+# Removed verify command - use 'pgq migrations' to check migration status
 
 
 @app.command(help="Remove the PGQueuer schema from the database.")
@@ -351,14 +363,20 @@ def uninstall(
         help="Print SQL only.",
     ),
 ) -> None:
-    print(qb.QueryBuilderEnvironment().build_uninstall_query())
+    if dry_run:
+        print("SQL commands that would be executed to uninstall PGQueuer:")
+        print("-" * 80)
+        print(qb.QueryBuilderEnvironment().build_uninstall_query())
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             await q.uninstall()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+    print("✓ PGQueuer schema removed successfully.")
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
@@ -366,7 +384,7 @@ def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(
         False,
-        help="Print SQL only.",
+        help="Print migration info only (don't apply).",
     ),
     durability: qb.Durability = typer.Option(
         qb.Durability.durable.value,
@@ -375,14 +393,96 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
+    settings = qb.DBSettings(durability=durability)
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
+        async with yield_queries(ctx, settings) as q:
+            manager = migrations.MigrationManager(q.driver)
+            await manager.ensure_migrations_table()
+
+            _, applied_before, pending = await _collect_migration_state(q, manager)
+
+            if dry_run:
+                _print_migration_preview(
+                    "Pending migrations that would be applied:",
+                    pending,
+                    "No pending migrations. Database is up to date.",
+                )
+                return
+
+            if not pending:
+                print("No pending migrations. Database is already up to date.")
+                return
+
             await q.upgrade()
 
-    if not dry_run:
-        asyncio_run(run())
+            applied_after = await manager.get_applied_migrations()
+            newly_applied = len(applied_after) - len(applied_before)
+
+            if newly_applied > 0:
+                print(f"✓ Database upgraded successfully ({newly_applied} migrations applied).")
+            else:
+                print("No pending migrations. Database is already up to date.")
+
+    asyncio_run(run())
+
+
+@app.command(
+    name="migrations",
+    help="Show migration status and history.",
+)
+def migrations_cmd(ctx: Context) -> None:
+    """Display all migrations with their status (applied or pending)."""
+
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            manager = migrations.MigrationManager(q.driver)
+
+            try:
+                await manager.ensure_migrations_table()
+            except Exception:
+                print(
+                    tabulate(
+                        [["Error: Could not access migration table. Has 'pgq install' been run?"]],
+                        tablefmt="plain",
+                    )
+                )
+                return
+
+            # Get all migration records
+            records = await manager.get_all_migration_records()
+            applied = {record["version"] for record in records}
+            all_migrations = list(migrations.create_migrations_list(q.qbe.settings))
+
+            if not all_migrations:
+                print(tabulate([["No migrations defined."]], tablefmt="plain"))
+                return
+
+            # Always show all migrations with status
+            data = []
+            for m in all_migrations:
+                status = "✓ Applied" if m.version in applied else "○ Pending"
+                data.append([m.version, status, m.description])
+
+            print(
+                tabulate(
+                    data,
+                    headers=["Version", "Status", "Description"],
+                    tablefmt="simple",
+                )
+            )
+            print(
+                tabulate(
+                    [
+                        [f"Total: {len(all_migrations)} migrations"],
+                        [f"Applied: {len(applied)}"],
+                        [f"Pending: {len(all_migrations) - len(applied)}"],
+                    ],
+                    tablefmt="plain",
+                )
+            )
+
+    asyncio_run(run())
 
 
 @app.command(help="Display a live dashboard showing job statistics.")
@@ -536,6 +636,15 @@ def queue(
     asyncio_run(run_async())
 
 
+# ============================================================================
+# Table Optimization Commands
+# ============================================================================
+# Commands for optimizing table performance characteristics:
+#   - durability: Change logging/durability level of tables
+#   - autovac:    Optimize or reset autovacuum settings
+# ============================================================================
+
+
 @app.command(help="Alter the logging durability for PGQueuer tables.")
 def durability(
     ctx: Context,
@@ -559,20 +668,26 @@ def durability(
         durability: The desired durability level ('volatile', 'balanced', or 'durable').
         dry_run: Whether to print SQL commands without executing them.
     """
-    print(
-        "\n".join(
-            qb.QueryBuilderEnvironment(
-                qb.DBSettings(durability=durability)
-            ).build_alter_durability_query()
+    if dry_run:
+        print("SQL commands that would be executed:")
+        print("-" * 80)
+        print(
+            "\n".join(
+                qb.QueryBuilderEnvironment(
+                    qb.DBSettings(durability=durability)
+                ).build_alter_durability_query()
+            )
         )
-    )
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
             await q.alter_durability()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+    print(f"✓ Durability successfully changed to '{durability.value}'.")
 
 
 @app.command(name="autovac", help="Optimize autovacuum settings for PGQueuer tables.")
@@ -590,14 +705,24 @@ def optimize_autovacuum(
         else qbe.build_optimize_autovacuum_query()
     )
 
-    print(query)
+    if dry_run:
+        action = "reset to defaults" if rollback else "optimize"
+        print(f"SQL commands that would be executed to {action} autovacuum settings:")
+        print("-" * 80)
+        print(query)
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+    if rollback:
+        print("✓ Autovacuum settings reset to PostgreSQL defaults.")
+    else:
+        print("✓ Autovacuum settings optimized for PGQueuer tables.")
 
 
 if __name__ == "__main__":
