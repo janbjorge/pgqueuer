@@ -289,6 +289,171 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     assert len(evnets) == 0
 
 
+async def test_trigger_notifies_on_insert(apgdriver: db.Driver) -> None:
+    """Test that INSERT operations trigger notifications."""
+    evnets = list[AnyEvent]()
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+
+    await Queries(apgdriver).enqueue("test_insert", None)
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    assert evnets[0].root.type == "table_changed_event"
+    assert evnets[0].root.operation == "insert"
+
+
+async def test_trigger_notifies_on_delete(apgdriver: db.Driver) -> None:
+    """Test that DELETE operations trigger notifications."""
+    evnets = list[AnyEvent]()
+    queries = Queries(apgdriver)
+
+    (job_id,) = await queries.enqueue("test_delete", None)
+    await asyncio.sleep(0.1)
+
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+
+    await queries.driver.execute(
+        f"DELETE FROM {queries.qbe.settings.queue_table} WHERE id = $1", job_id
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    assert evnets[0].root.type == "table_changed_event"
+    assert evnets[0].root.operation == "delete"
+
+
+async def test_trigger_notifies_on_meaningful_update(apgdriver: db.Driver) -> None:
+    """Test that meaningful UPDATE operations (non-heartbeat) trigger notifications."""
+    evnets = list[AnyEvent]()
+    queries = Queries(apgdriver)
+
+    (job_id,) = await queries.enqueue("test_update", None)
+    await asyncio.sleep(0.1)
+
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+
+    # Update a meaningful column (status)
+    await queries.driver.execute(
+        f"UPDATE {queries.qbe.settings.queue_table} SET status = 'picked' WHERE id = $1",
+        job_id,
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    assert evnets[0].root.type == "table_changed_event"
+    assert evnets[0].root.operation == "update"
+
+
+async def test_trigger_ignores_multiple_heartbeat_updates(apgdriver: db.Driver) -> None:
+    """Test that multiple consecutive heartbeat updates don't trigger notifications."""
+    evnets = list[AnyEvent]()
+    queries = Queries(apgdriver)
+
+    (job_id,) = await queries.enqueue("test_multi_heartbeat", None)
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+    evnets.clear()
+
+    # Perform 20 heartbeat updates
+    for _ in range(20):
+        await queries.update_heartbeat([job_id])
+        await asyncio.sleep(0.01)
+
+    await asyncio.sleep(0.2)
+    assert len(evnets) == 0
+
+
+async def test_trigger_notifies_on_update_after_heartbeat(apgdriver: db.Driver) -> None:
+    """Test that meaningful updates are notified even after heartbeat updates."""
+    evnets = list[AnyEvent]()
+    queries = Queries(apgdriver)
+
+    (job_id,) = await queries.enqueue("test_mixed", None)
+    await asyncio.sleep(0.1)
+
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+    evnets.clear()
+
+    # Do some heartbeat updates (should not trigger notifications)
+    await queries.update_heartbeat([job_id])
+    await queries.update_heartbeat([job_id])
+    await asyncio.sleep(0.1)
+    assert len(evnets) == 0
+
+    # Now do a meaningful update (should trigger notification)
+    await queries.driver.execute(
+        f"UPDATE {queries.qbe.settings.queue_table} SET priority = 10 WHERE id = $1",
+        job_id,
+    )
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    assert evnets[0].root.type == "table_changed_event"
+    assert evnets[0].root.operation == "update"
+
+
+async def test_trigger_notifies_on_truncate(apgdriver: db.Driver) -> None:
+    """Test that TRUNCATE operations trigger notifications."""
+    evnets = list[AnyEvent]()
+    queries = Queries(apgdriver)
+
+    await queries.enqueue("test_truncate", None)
+    await asyncio.sleep(0.1)
+
+    await initialize_notice_event_listener(
+        apgdriver,
+        Channel(DBSettings().channel),
+        evnets.append,
+    )
+    evnets.clear()
+
+    await queries.clear_queue()
+
+    async with timeout(1):
+        while len(evnets) < 1:
+            await asyncio.sleep(0)
+
+    assert len(evnets) == 1
+    assert evnets[0].root.type == "table_changed_event"
+    assert evnets[0].root.operation == "truncate"
+
+
 def test_event_router_dispatches_correct_handler() -> None:
     router = EventRouter()
     called = {"flag": False}
