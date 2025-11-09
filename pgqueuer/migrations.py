@@ -105,48 +105,54 @@ class MigrationManager:
             migration: The migration to apply
 
         Raises:
+            ValueError: If the migration contains multiple SQL statements
             Exception: If the migration fails to apply
         """
         sql = migration.sql_generator()
+        # Validate that the migration contains exactly one SQL statement
+        self._validate_single_statement(sql)
+        
         # Execute the migration SQL
-        # Note: Some migrations may contain multiple statements
-        # For complex migrations, we split and execute them one by one
-        for statement in self._split_sql_statements(sql):
-            if statement.strip():
-                await self.driver.execute(statement)
+        await self.driver.execute(sql)
 
         # Record the migration
         await self.record_migration(migration)
 
-    def _split_sql_statements(self, sql: str) -> list[str]:
+    def _validate_single_statement(self, sql: str) -> None:
         """
-        Split a SQL script into individual statements.
+        Validate that SQL contains exactly one statement.
 
-        This is a simple implementation that splits on semicolons.
-        For more complex SQL, this might need enhancement.
+        Enforces that each migration contains only a single SQL command.
+        This ensures migrations are atomic and easy to reason about.
+
+        Args:
+            sql: The SQL to validate
+
+        Raises:
+            ValueError: If the SQL contains zero or multiple statements
         """
-        # Simple split - may need improvement for complex cases
-        statements = []
-        current = []
-
+        statement_count = 0
+        
         for line in sql.split("\n"):
             stripped = line.strip()
             # Skip empty lines and comments
             if not stripped or stripped.startswith("--"):
                 continue
 
-            current.append(line)
+            # Count semicolons (statement terminators)
+            statement_count += stripped.count(";")
 
-            # Check if line ends with semicolon (simple heuristic)
-            if stripped.endswith(";"):
-                statements.append("\n".join(current))
-                current = []
-
-        # Add any remaining content
-        if current:
-            statements.append("\n".join(current))
-
-        return statements
+        if statement_count == 0:
+            raise ValueError(
+                "Migration must contain exactly one SQL statement ending with semicolon. "
+                f"Found 0 statements."
+            )
+        elif statement_count > 1:
+            raise ValueError(
+                f"Migration must contain exactly one SQL statement. "
+                f"Found {statement_count} statements (semicolons). "
+                f"Split complex migrations into multiple separate migrations."
+            )
 
     async def run_migrations(self, migrations: list[Migration]) -> list[str]:
         """

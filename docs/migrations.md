@@ -93,22 +93,43 @@ Migration(
 
 ### Migration SQL Guidelines
 
-1. **Use IF NOT EXISTS**: Makes migrations safer if partially applied
+1. **One statement per migration**: Each migration must contain exactly ONE SQL statement
+   ```python
+   # ✓ Good - single statement
+   Migration(
+       version="024",
+       description="Add column",
+       sql_generator=lambda: "ALTER TABLE queue ADD COLUMN col TEXT;"
+   )
+   
+   # ✗ Bad - multiple statements (will raise error)
+   Migration(
+       version="024",
+       description="Multiple statements",
+       sql_generator=lambda: "ALTER TABLE queue ADD COLUMN col1 TEXT; ALTER TABLE queue ADD COLUMN col2 TEXT;"
+   )
+   
+   # If you need multiple changes, create separate migrations:
+   Migration(version="024", ..., sql_generator=lambda: "ALTER TABLE queue ADD COLUMN col1 TEXT;")
+   Migration(version="025", ..., sql_generator=lambda: "ALTER TABLE queue ADD COLUMN col2 TEXT;")
+   ```
+
+2. **Use IF NOT EXISTS**: Makes migrations safer if partially applied
    ```sql
    ALTER TABLE queue ADD COLUMN IF NOT EXISTS col TEXT;
    CREATE INDEX IF NOT EXISTS idx_name ON table (col);
    ```
 
-2. **Keep migrations small**: Each migration should do one logical thing
+3. **Keep migrations small**: Each migration should do one logical thing
 
-3. **Add columns with defaults**: Ensures existing rows get values
+4. **Add columns with defaults**: Ensures existing rows get values
    ```sql
    ALTER TABLE queue ADD COLUMN status TEXT DEFAULT 'pending';
    ```
 
-4. **Test on a copy**: Always test migrations on a database copy first
+5. **Test on a copy**: Always test migrations on a database copy first
 
-5. **Document side effects**: If a migration affects data, document it clearly
+6. **Document side effects**: If a migration affects data, document it clearly
 
 ### Version Numbering
 

@@ -199,11 +199,11 @@ async def test_create_migrations_list() -> None:
         assert len(sql) > 0
 
 
-async def test_split_sql_statements(apgdriver: db.Driver) -> None:
-    """Test that SQL statements are properly split."""
+async def test_validate_single_statement_rejects_multiple(apgdriver: db.Driver) -> None:
+    """Test that multiple SQL statements are rejected."""
     manager = migrations.MigrationManager(apgdriver)
 
-    sql = """
+    sql_multi = """
     -- Comment line
     SELECT 1;
 
@@ -212,10 +212,33 @@ async def test_split_sql_statements(apgdriver: db.Driver) -> None:
     SELECT 3;
     """
 
-    statements = manager._split_sql_statements(sql)
+    # Should raise ValueError for multiple statements
+    with pytest.raises(ValueError, match="must contain exactly one SQL statement"):
+        manager._validate_single_statement(sql_multi)
 
-    # Should have 3 statements (comments and empty lines removed)
-    assert len(statements) == 3
-    assert "SELECT 1" in statements[0]
-    assert "SELECT 2" in statements[1]
-    assert "SELECT 3" in statements[2]
+
+async def test_validate_single_statement_accepts_single(apgdriver: db.Driver) -> None:
+    """Test that a single SQL statement is accepted."""
+    manager = migrations.MigrationManager(apgdriver)
+
+    sql_single = """
+    -- Comment line
+    CREATE TABLE test (id INT);
+    """
+
+    # Should not raise for single statement
+    manager._validate_single_statement(sql_single)
+
+
+async def test_validate_single_statement_rejects_zero(apgdriver: db.Driver) -> None:
+    """Test that zero SQL statements are rejected."""
+    manager = migrations.MigrationManager(apgdriver)
+
+    sql_empty = """
+    -- Just a comment
+    -- Another comment
+    """
+
+    # Should raise ValueError for zero statements
+    with pytest.raises(ValueError, match="Found 0 statements"):
+        manager._validate_single_statement(sql_empty)
