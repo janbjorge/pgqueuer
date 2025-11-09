@@ -455,7 +455,7 @@ class QueueManager:
             ),
             (
                 self.queries.qbe.settings.queue_table,
-                f"{self.queries.qbe.settings.trigger}_truncate",
+                self.queries.qbe.settings.trigger_truncate,
             ),
         ):
             if not (await self.queries.table_has_trigger(table, trigger)):

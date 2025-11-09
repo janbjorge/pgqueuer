@@ -199,6 +199,9 @@ class DBSettings(BaseSettings):
     # after DML operations on the queue table.
     trigger: str = Field(default=add_prefix("tg_pgqueuer_changed"))
 
+    # Name of the trigger that invokes the function to notify on TRUNCATE operations.
+    trigger_truncate: str = Field(default=add_prefix("tg_pgqueuer_changed_truncate"))
+
     # Name of scheduler table
     schedules_table: str = Field(default=add_prefix("pgqueuer_schedules"))
 
@@ -220,7 +223,7 @@ class QueryBuilderEnvironment:
     def build_notify_triggers_reinstall_query(self) -> str:
         """Return SQL that ensures the queue notification triggers are installed."""
 
-        return f"""DROP TRIGGER IF EXISTS {self.settings.trigger}_truncate ON {self.settings.queue_table};
+        return f"""DROP TRIGGER IF EXISTS {self.settings.trigger_truncate} ON {self.settings.queue_table};
 DROP TRIGGER IF EXISTS {self.settings.trigger} ON {self.settings.queue_table};
 
 CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
@@ -294,7 +297,7 @@ AFTER INSERT OR UPDATE OR DELETE ON {self.settings.queue_table}
 FOR EACH ROW
 EXECUTE FUNCTION {self.settings.function}();
 
-CREATE TRIGGER {self.settings.trigger}_truncate
+CREATE TRIGGER {self.settings.trigger_truncate}
 AFTER TRUNCATE ON {self.settings.queue_table}
 FOR EACH STATEMENT
 EXECUTE FUNCTION {self.settings.function_truncate}();
@@ -398,7 +401,7 @@ EXECUTE FUNCTION {self.settings.function_truncate}();
         Returns:
             str: A string containing the SQL commands to uninstall the schema.
         """
-        return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger}_truncate ON {self.settings.queue_table};
+        return f"""DROP TRIGGER    IF EXISTS   {self.settings.trigger_truncate} ON {self.settings.queue_table};
     DROP TRIGGER    IF EXISTS   {self.settings.trigger} ON {self.settings.queue_table};
     DROP FUNCTION   IF EXISTS   {self.settings.function_truncate};
     DROP FUNCTION   IF EXISTS   {self.settings.function};
