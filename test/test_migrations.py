@@ -175,7 +175,7 @@ async def test_upgrade_with_legacy_database(apgdriver: db.Driver) -> None:
 
 async def test_create_migrations_list() -> None:
     """Test that the migration list is properly structured."""
-    migration_list = migrations.create_migrations_list()
+    migration_list = list(migrations.create_migrations_list())
 
     # Should have migrations
     assert len(migration_list) > 0
@@ -204,9 +204,9 @@ async def test_migration_versions_sequential() -> None:
     migration_list = migrations.create_migrations_list()
 
     versions = [int(m.version) for m in migration_list]
-    
+
     # Check that versions start at 1 and are sequential
     assert versions[0] == 1, "First migration should be version 001"
-    
+
     for i, version in enumerate(versions, start=1):
         assert version == i, f"Migration versions must be sequential. Expected {i}, got {version}"

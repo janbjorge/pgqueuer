@@ -13,7 +13,19 @@ from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator
 
-from . import db, factories, helpers, listeners, logconfig, migrations, models, qb, queries, supervisor, types
+from . import (
+    db,
+    factories,
+    helpers,
+    listeners,
+    logconfig,
+    migrations,
+    models,
+    qb,
+    queries,
+    supervisor,
+    types,
+)
 
 try:
     from uvloop import run as asyncio_run
@@ -284,7 +296,7 @@ def install(
         help="Durability level for tables.",
     ),
 ) -> None:
-    migration_list = migrations.create_migrations_list()
+    migration_list = list(migrations.create_migrations_list())
 
     if dry_run:
         print("Migrations to be applied during installation:")
@@ -386,7 +398,7 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    migration_list = migrations.create_migrations_list()
+    migration_list = list(migrations.create_migrations_list())
 
     if dry_run:
         print("Pending migrations to be applied:")
@@ -407,9 +419,13 @@ def upgrade(
     asyncio_run(run())
 
 
-@app.command(help="Show migration status and history.")
+@app.command(
+    name="migrations",
+    help="Show migration status and history.",
+)
 def migrations_cmd(ctx: Context) -> None:
     """Display all migrations with their status (applied or pending)."""
+
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             manager = migrations.MigrationManager(q.driver)
@@ -428,7 +444,7 @@ def migrations_cmd(ctx: Context) -> None:
             # Get all migration records
             records = await manager.get_all_migration_records()
             applied = {record["version"] for record in records}
-            all_migrations = migrations.create_migrations_list()
+            all_migrations = list(migrations.create_migrations_list())
 
             if not all_migrations:
                 print(tabulate([["No migrations defined."]], tablefmt="plain"))

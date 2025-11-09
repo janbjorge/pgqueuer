@@ -214,7 +214,6 @@ class QueryBuilderEnvironment:
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
-
     def build_uninstall_query(self) -> str:
         """
         Generate SQL statements to uninstall the job queue schema.

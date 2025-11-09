@@ -162,7 +162,7 @@ class Queries:
         await manager.ensure_migrations_table()
 
         # Run all migrations to install the schema
-        migration_list = migrations.create_migrations_list()
+        migration_list = list(migrations.create_migrations_list())
         await manager.run_migrations(migration_list)
 
     async def uninstall(self) -> None:
@@ -197,7 +197,7 @@ class Queries:
 
         # Create migration manager and run pending migrations
         manager = migrations.MigrationManager(self.driver)
-        migration_list = migrations.create_migrations_list()
+        migration_list = list(migrations.create_migrations_list())
         await manager.run_migrations(migration_list)
 
     async def _seed_migration_history(self) -> None:
@@ -227,7 +227,7 @@ class Queries:
         if has_log_table:
             # This is a legacy database that was upgraded with the old system
             # We need to mark all migrations as applied
-            migration_list = migrations.create_migrations_list()
+            migration_list = list(migrations.create_migrations_list())
 
             print("Detected legacy database - seeding migration history...")
 
