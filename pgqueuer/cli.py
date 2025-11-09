@@ -5,7 +5,6 @@ import contextlib
 import os
 from dataclasses import dataclass
 from datetime import timedelta
-from enum import Enum
 from typing import Awaitable, Callable
 
 import typer
@@ -42,13 +41,6 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
     add_completion=False,
 )
-
-
-class VerifyMode(Enum):
-    """Enumeration for expected object state in verification."""
-
-    PRESENT = "present"
-    ABSENT = "absent"
 
 
 @dataclass
@@ -282,6 +274,19 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
+# ============================================================================
+# Schema Management Commands
+# ============================================================================
+# Core commands for managing PGQueuer database schema through migrations:
+#   - install:     Fresh installation (applies all migrations)
+#   - upgrade:     Apply pending migrations to existing installation  
+#   - uninstall:   Remove PGQueuer schema completely
+#   - migrations:  View migration status and history
+#
+# All schema changes are tracked via the migration framework for consistency.
+# ============================================================================
+
+
 @app.command(help="Install the necessary database schema for PGQueuer.")
 def install(
     ctx: Context,
@@ -318,53 +323,7 @@ def install(
     print(f"✓ PGQueuer schema installed successfully ({len(migration_list)} migrations applied).")
 
 
-@app.command(help="Verify PGQueuer database objects.")
-def verify(
-    ctx: Context,
-    expect: VerifyMode = typer.Option(
-        ...,
-        help="Expected object state: 'present' or 'absent'.",
-    ),
-) -> None:
-    async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
-            expect_present = expect == VerifyMode.PRESENT
-            divergence = list[str]()
-
-            required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
-            ]
-
-            for table in required_tables:
-                exists = await q.has_table(table)
-                if expect_present != exists:
-                    state = "missing" if expect_present else "unexpected"
-                    divergence.append(f"{state} table '{table}'")
-
-            func_exists = await q.has_function(q.qbe.settings.function)
-            if expect_present != func_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
-
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
-            if expect_present != trig_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
-
-            if divergence:
-                print("\n".join(divergence))
-            else:
-                if expect == VerifyMode.PRESENT:
-                    print("All required PGQueuer database objects are present.")
-                else:
-                    print("No PGQueuer database objects found")
-
-            exit(1 if divergence else 0)
-
-    asyncio_run(run())
+# Removed verify command - use 'pgq migrations' to check migration status
 
 
 @app.command(help="Remove the PGQueuer schema from the database.")
@@ -653,6 +612,15 @@ def queue(
             )
 
     asyncio_run(run_async())
+
+
+# ============================================================================
+# Table Optimization Commands  
+# ============================================================================
+# Commands for optimizing table performance characteristics:
+#   - durability: Change logging/durability level of tables
+#   - autovac:    Optimize or reset autovacuum settings
+# ============================================================================
 
 
 @app.command(help="Alter the logging durability for PGQueuer tables.")
