@@ -397,15 +397,8 @@ def upgrade(
 
 
 @app.command(help="Show migration status and history.")
-def migrations_cmd(
-    ctx: Context,
-    show_all: bool = typer.Option(
-        False,
-        "--all",
-        help="Show all migrations (applied and pending).",
-    ),
-) -> None:
-    """Display migration status, showing which migrations have been applied."""
+def migrations_cmd(ctx: Context) -> None:
+    """Display all migrations with their status (applied or pending)."""
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             manager = migrations.MigrationManager(q.driver)
@@ -426,58 +419,33 @@ def migrations_cmd(
             applied = {record["version"] for record in records}
             all_migrations = migrations.create_migrations_list()
 
-            if not applied and not all_migrations:
-                print(tabulate([["No migrations found."]], tablefmt="plain"))
+            if not all_migrations:
+                print(tabulate([["No migrations defined."]], tablefmt="plain"))
                 return
 
-            if show_all:
-                # Show all migrations with status
-                data = []
-                for m in all_migrations:
-                    status = "✓ Applied" if m.version in applied else "○ Pending"
-                    data.append([m.version, status, m.description])
+            # Always show all migrations with status
+            data = []
+            for m in all_migrations:
+                status = "✓ Applied" if m.version in applied else "○ Pending"
+                data.append([m.version, status, m.description])
 
-                print(
-                    tabulate(
-                        data,
-                        headers=["Version", "Status", "Description"],
-                        tablefmt="simple",
-                    )
+            print(
+                tabulate(
+                    data,
+                    headers=["Version", "Status", "Description"],
+                    tablefmt="simple",
                 )
-                print(
-                    tabulate(
-                        [
-                            [f"Total: {len(all_migrations)} migrations"],
-                            [f"Applied: {len(applied)}"],
-                            [f"Pending: {len(all_migrations) - len(applied)}"],
-                        ],
-                        tablefmt="plain",
-                    )
-                )
-            else:
-                # Show only applied migrations with timestamps
-                if not applied:
-                    print(tabulate([["No migrations have been applied yet."]], tablefmt="plain"))
-                    return
-
-                data = [
+            )
+            print(
+                tabulate(
                     [
-                        record["version"],
-                        record["description"],
-                        record["applied_at"].strftime("%Y-%m-%d %H:%M:%S"),
-                    ]
-                    for record in records
-                ]
-
-                print(
-                    tabulate(
-                        data,
-                        headers=["Version", "Description", "Applied At"],
-                        tablefmt="simple",
-                    )
+                        [f"Total: {len(all_migrations)} migrations"],
+                        [f"Applied: {len(applied)}"],
+                        [f"Pending: {len(all_migrations) - len(applied)}"],
+                    ],
+                    tablefmt="plain",
                 )
-                print(tabulate([[f"Total applied: {len(applied)}"]], tablefmt="plain"))
-                print(tabulate([["Use --all to see pending migrations"]], tablefmt="plain"))
+            )
 
     asyncio_run(run())
 

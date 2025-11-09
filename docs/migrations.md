@@ -32,8 +32,7 @@ pgq migrations
 ```bash
 pgq upgrade                # Apply pending migrations
 pgq upgrade --dry-run      # Preview without applying
-pgq migrations             # Show applied migrations
-pgq migrations --all       # Show applied + pending
+pgq migrations             # Show all migrations with status
 ```
 
 ## How It Works
