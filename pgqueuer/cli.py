@@ -275,7 +275,7 @@ def install(
     ctx: Context,
     dry_run: bool = typer.Option(
         False,
-        help="Print SQL only.",
+        help="Print migration info only (don't install).",
     ),
     durability: qb.Durability = typer.Option(
         qb.Durability.durable.value,
@@ -284,14 +284,24 @@ def install(
         help="Durability level for tables.",
     ),
 ) -> None:
-    print(qb.QueryBuilderEnvironment(qb.DBSettings(durability=durability)).build_install_query())
+    migration_list = migrations.create_migrations_list()
+
+    if dry_run:
+        print("Migrations to be applied during installation:")
+        print("-" * 80)
+        for migration in migration_list:
+            print(f"Version: {migration.version}")
+            print(f"Description: {migration.description}")
+            print(f"Checksum: {migration.checksum()[:16]}...")
+            print("-" * 80)
+        print(f"\nTotal: {len(migration_list)} migrations will be applied")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
             await q.install()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
 
 
 @app.command(help="Verify PGQueuer database objects.")
@@ -351,14 +361,15 @@ def uninstall(
         help="Print SQL only.",
     ),
 ) -> None:
-    print(qb.QueryBuilderEnvironment().build_uninstall_query())
+    if dry_run:
+        print(qb.QueryBuilderEnvironment().build_uninstall_query())
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             await q.uninstall()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
