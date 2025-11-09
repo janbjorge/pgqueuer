@@ -366,7 +366,7 @@ def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(
         False,
-        help="Print SQL only.",
+        help="Print migration info only (don't apply).",
     ),
     durability: qb.Durability = typer.Option(
         qb.Durability.durable.value,
@@ -375,14 +375,120 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
+    from . import migrations
+
+    migration_list = migrations.create_migrations_list()
+
+    if dry_run:
+        print("Pending migrations to be applied:")
+        print("-" * 80)
+        for migration in migration_list:
+            print(f"Version: {migration.version}")
+            print(f"Description: {migration.description}")
+            print(f"Checksum: {migration.checksum()[:16]}...")
+            print("-" * 80)
+        print(f"\nTotal: {len(migration_list)} migrations defined")
+        print("\nNote: Only unapplied migrations will be executed.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
             await q.upgrade()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+
+
+@app.command(help="Show migration status and history.")
+def migrations_cmd(
+    ctx: Context,
+    show_all: bool = typer.Option(
+        False,
+        "--all",
+        help="Show all migrations (applied and pending).",
+    ),
+) -> None:
+    """Display migration status, showing which migrations have been applied."""
+    from . import migrations
+
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            manager = migrations.MigrationManager(q.driver)
+
+            # Ensure table exists
+            try:
+                await manager.ensure_migrations_table()
+            except Exception:
+                print("Error: Could not access migration table. Has 'pgq install' been run?")
+                return
+
+            # Get applied migrations
+            applied = await manager.get_applied_migrations()
+
+            # Get all defined migrations
+            all_migrations = migrations.create_migrations_list()
+
+            if not applied and not all_migrations:
+                print("No migrations found.")
+                return
+
+            # Display results
+            print("\n" + "=" * 100)
+            print("MIGRATION STATUS")
+            print("=" * 100)
+
+            if show_all:
+                # Show all migrations with status
+                data = []
+                for m in all_migrations:
+                    status = "✓ Applied" if m.version in applied else "○ Pending"
+                    data.append([m.version, status, m.description])
+
+                print(
+                    tabulate(
+                        data,
+                        headers=["Version", "Status", "Description"],
+                        tablefmt="simple",
+                    )
+                )
+                print(f"\nTotal: {len(all_migrations)} migrations")
+                print(f"Applied: {len(applied)}")
+                print(f"Pending: {len(all_migrations) - len(applied)}")
+            else:
+                # Show only applied migrations with timestamps
+                if not applied:
+                    print("No migrations have been applied yet.")
+                    return
+
+                rows = await q.driver.fetch(
+                    f"""
+                    SELECT version, description, applied_at 
+                    FROM {manager.migrations_table}
+                    ORDER BY version
+                    """
+                )
+
+                data = [
+                    [
+                        row["version"],
+                        row["description"],
+                        row["applied_at"].strftime("%Y-%m-%d %H:%M:%S"),
+                    ]
+                    for row in rows
+                ]
+
+                print(
+                    tabulate(
+                        data,
+                        headers=["Version", "Description", "Applied At"],
+                        tablefmt="simple",
+                    )
+                )
+                print(f"\nTotal applied: {len(applied)}")
+                print("Use --all to see pending migrations")
+
+            print("=" * 100 + "\n")
+
+    asyncio_run(run())
 
 
 @app.command(help="Display a live dashboard showing job statistics.")

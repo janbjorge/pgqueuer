@@ -28,6 +28,20 @@ pgq upgrade
 
 The upgrade system uses a lightweight migration framework that tracks which schema changes have been applied. This ensures migrations are only run once and provides better maintainability as the schema evolves.
 
+**View migration status:**
+```bash
+# Show applied migrations
+pgq migrations
+
+# Show all migrations (applied and pending)
+pgq migrations --all
+```
+
+**Dry run to see what will be applied:**
+```bash
+pgq upgrade --dry-run
+```
+
 **Key features of the migration system:**
 - Each migration is tracked in the `pgqueuer_migrations` table
 - Migrations are versioned and executed in order

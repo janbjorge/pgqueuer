@@ -31,6 +31,22 @@ When you run `pgq upgrade`:
 4. Each successful migration is recorded in the tracking table
 5. Future upgrades only run new migrations
 
+**View what migrations will be applied:**
+
+```bash
+pgq upgrade --dry-run
+```
+
+**Check migration status:**
+
+```bash
+# Show applied migrations
+pgq migrations
+
+# Show all migrations (applied and pending)
+pgq migrations --all
+```
+
 ### Legacy Database Detection
 
 The framework automatically detects databases that were upgraded using the old system (pre-migration framework). When detected:
