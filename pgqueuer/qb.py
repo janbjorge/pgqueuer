@@ -366,13 +366,21 @@ class QueryBuilderEnvironment:
         """
         Generate SQL queries required to upgrade the existing schema.
 
-        Yields SQL commands needed to modify the existing database schema to
-        a newer version, such as adding columns, indexes, or modifying functions.
-        This is useful when the application schema evolves over time.
+        .. deprecated::
+            This method is deprecated. The migration framework in pgqueuer.migrations
+            should be used instead via the `pgq upgrade` command.
 
         Yields:
             Generator[str, None, None]: A generator that yields SQL commands.
         """
+        import warnings
+
+        warnings.warn(
+            "build_upgrade_queries is deprecated. Use the migration framework "
+            "(pgqueuer.migrations) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"""CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$

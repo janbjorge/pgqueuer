@@ -43,7 +43,7 @@ pgq migrations --all       # Show applied + pending
 Each migration is stored in `pgqueuer_migrations` table with:
 - **version**: Unique identifier (e.g., "001", "002")
 - **description**: What the migration does
-- **checksum**: SHA-256 hash for integrity
+- **checksum**: MD5 hash for integrity
 - **applied_at**: Timestamp
 
 ### Upgrade Process
@@ -140,7 +140,7 @@ class Migration:
     sql_generator: Callable[[], str]
     
     def checksum(self) -> str:
-        """Calculate SHA-256 checksum."""
+        """Calculate MD5 checksum."""
 ```
 
 ### MigrationManager Class

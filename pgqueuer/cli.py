@@ -410,27 +410,25 @@ def migrations_cmd(
         async with yield_queries(ctx, qb.DBSettings()) as q:
             manager = migrations.MigrationManager(q.driver)
 
-            # Ensure table exists
             try:
                 await manager.ensure_migrations_table()
             except Exception:
-                print("Error: Could not access migration table. Has 'pgq install' been run?")
+                print(
+                    tabulate(
+                        [["Error: Could not access migration table. Has 'pgq install' been run?"]],
+                        tablefmt="plain",
+                    )
+                )
                 return
 
-            # Get applied migrations
-            applied = await manager.get_applied_migrations()
-
-            # Get all defined migrations
+            # Get all migration records
+            records = await manager.get_all_migration_records()
+            applied = {record["version"] for record in records}
             all_migrations = migrations.create_migrations_list()
 
             if not applied and not all_migrations:
-                print("No migrations found.")
+                print(tabulate([["No migrations found."]], tablefmt="plain"))
                 return
-
-            # Display results
-            print("\n" + "=" * 100)
-            print("MIGRATION STATUS")
-            print("=" * 100)
 
             if show_all:
                 # Show all migrations with status
@@ -446,30 +444,29 @@ def migrations_cmd(
                         tablefmt="simple",
                     )
                 )
-                print(f"\nTotal: {len(all_migrations)} migrations")
-                print(f"Applied: {len(applied)}")
-                print(f"Pending: {len(all_migrations) - len(applied)}")
+                print(
+                    tabulate(
+                        [
+                            [f"Total: {len(all_migrations)} migrations"],
+                            [f"Applied: {len(applied)}"],
+                            [f"Pending: {len(all_migrations) - len(applied)}"],
+                        ],
+                        tablefmt="plain",
+                    )
+                )
             else:
                 # Show only applied migrations with timestamps
                 if not applied:
-                    print("No migrations have been applied yet.")
+                    print(tabulate([["No migrations have been applied yet."]], tablefmt="plain"))
                     return
-
-                rows = await q.driver.fetch(
-                    f"""
-                    SELECT version, description, applied_at 
-                    FROM {manager.migrations_table}
-                    ORDER BY version
-                    """
-                )
 
                 data = [
                     [
-                        row["version"],
-                        row["description"],
-                        row["applied_at"].strftime("%Y-%m-%d %H:%M:%S"),
+                        record["version"],
+                        record["description"],
+                        record["applied_at"].strftime("%Y-%m-%d %H:%M:%S"),
                     ]
-                    for row in rows
+                    for record in records
                 ]
 
                 print(
@@ -479,10 +476,8 @@ def migrations_cmd(
                         tablefmt="simple",
                     )
                 )
-                print(f"\nTotal applied: {len(applied)}")
-                print("Use --all to see pending migrations")
-
-            print("=" * 100 + "\n")
+                print(tabulate([[f"Total applied: {len(applied)}"]], tablefmt="plain"))
+                print(tabulate([["Use --all to see pending migrations"]], tablefmt="plain"))
 
     asyncio_run(run())
 

@@ -26,9 +26,39 @@ class Migration:
     sql_generator: Callable[[], str]
 
     def checksum(self) -> str:
-        """Calculate SHA-256 checksum for integrity verification."""
+        """Calculate MD5 checksum for integrity verification."""
         sql = self.sql_generator()
-        return hashlib.sha256(sql.encode()).hexdigest()
+        return hashlib.md5(sql.encode()).hexdigest()
+
+
+@dataclasses.dataclass
+class MigrationQueries:
+    """Builds SQL queries for migration management."""
+
+    migrations_table: str = "pgqueuer_migrations"
+
+    def build_create_table(self) -> str:
+        """Build query to create migrations tracking table."""
+        return f"""
+        CREATE TABLE IF NOT EXISTS {self.migrations_table} (
+            version TEXT PRIMARY KEY,
+            description TEXT NOT NULL,
+            checksum TEXT NOT NULL,
+            applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+        """
+
+    def build_select_all(self) -> str:
+        """Build query to select all migrations."""
+        return f"SELECT version, description, checksum, applied_at FROM {self.migrations_table} ORDER BY version"
+
+    def build_select_versions(self) -> str:
+        """Build query to select all migration versions."""
+        return f"SELECT version FROM {self.migrations_table} ORDER BY version"
+
+    def build_insert_migration(self) -> str:
+        """Build query to insert a migration record."""
+        return f"INSERT INTO {self.migrations_table} (version, description, checksum) VALUES ($1, $2, $3)"
 
 
 @dataclasses.dataclass
@@ -38,36 +68,30 @@ class MigrationManager:
     driver: db.Driver
     migrations_table: str = "pgqueuer_migrations"
 
+    def __post_init__(self) -> None:
+        """Initialize query builder."""
+        self.queries = MigrationQueries(self.migrations_table)
+
     async def ensure_migrations_table(self) -> None:
         """Create the migrations tracking table if it doesn't exist."""
-        query = f"""
-        CREATE TABLE IF NOT EXISTS {self.migrations_table} (
-            version TEXT PRIMARY KEY,
-            description TEXT NOT NULL,
-            checksum TEXT NOT NULL,
-            applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
-        );
-        """
-        await self.driver.execute(query)
+        await self.driver.execute(self.queries.build_create_table())
+
+    async def get_all_migration_records(self) -> list[dict]:
+        """Get all migration records from database."""
+        try:
+            return await self.driver.fetch(self.queries.build_select_all())
+        except Exception:
+            return []
 
     async def get_applied_migrations(self) -> set[str]:
         """Get set of applied migration versions."""
-        try:
-            rows = await self.driver.fetch(
-                f"SELECT version FROM {self.migrations_table} ORDER BY version"
-            )
-            return {row["version"] for row in rows}
-        except Exception:
-            return set()
+        records = await self.get_all_migration_records()
+        return {record["version"] for record in records}
 
     async def record_migration(self, migration: Migration) -> None:
         """Record that a migration has been applied."""
-        query = f"""
-        INSERT INTO {self.migrations_table} (version, description, checksum)
-        VALUES ($1, $2, $3)
-        """
         await self.driver.execute(
-            query,
+            self.queries.build_insert_migration(),
             migration.version,
             migration.description,
             migration.checksum(),
