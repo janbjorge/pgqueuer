@@ -237,6 +237,63 @@ class QueryBuilderEnvironment:
     """  # noqa
 
 
+    def build_optimize_autovacuum_query(self) -> str:
+        """SQL for recommended autovacuum settings."""
+
+        return f"""ALTER TABLE {self.settings.queue_table} SET (
+    /* vacuum very early: after ~1 %% or 1 000 dead rows       */
+    autovacuum_vacuum_scale_factor   = 0.01,
+    autovacuum_vacuum_threshold      = 1000,
+
+    /* analyse even earlier so the planner keeps up-to-date   */
+    autovacuum_analyze_scale_factor  = 0.02,
+    autovacuum_analyze_threshold     = 500,
+
+    /* work fast: spend ≈10× the default IO budget            */
+    autovacuum_vacuum_cost_limit     = 10000,
+    autovacuum_vacuum_cost_delay     = 0,      -- no 20 ms naps
+
+    /* leave headroom for HOT updates so fewer dead tuples    */
+    fillfactor                       = 70
+);
+
+ALTER TABLE {self.settings.schedules_table} SET (
+/* vacuum very early: after ~1 %% or 1 000 dead rows       */
+autovacuum_vacuum_scale_factor   = 0.01,
+autovacuum_vacuum_threshold      = 1000,
+
+/* analyse even earlier so the planner keeps up-to-date   */
+autovacuum_analyze_scale_factor  = 0.02,
+autovacuum_analyze_threshold     = 500,
+
+/* work fast: spend ≈10× the default IO budget            */
+autovacuum_vacuum_cost_limit     = 10000,
+autovacuum_vacuum_cost_delay     = 0,      -- no 20 ms naps
+
+/* leave headroom for HOT updates so fewer dead tuples    */
+fillfactor                       = 70
+);
+
+ALTER TABLE {self.settings.queue_table_log} SET (
+    /* essentially disable vacuum (but keep freeze safety)    */
+    autovacuum_vacuum_scale_factor   = 0.95,
+    autovacuum_vacuum_threshold      = 1000000,
+
+    /* still analyse at ~5 %% growth so estimates stay OK      */
+    autovacuum_analyze_scale_factor  = 0.05,
+    autovacuum_analyze_threshold     = 10000
+);
+
+ALTER TABLE {self.settings.statistics_table} SET (
+    /* essentially disable vacuum (but keep freeze safety)    */
+    autovacuum_vacuum_scale_factor   = 0.95,
+    autovacuum_vacuum_threshold      = 1000000,
+
+    /* still analyse at ~5 %% growth so estimates stay OK      */
+    autovacuum_analyze_scale_factor  = 0.05,
+    autovacuum_analyze_threshold     = 10000
+);"""
+
     def build_optimize_autovacuum_rollback_query(self) -> str:
         """SQL to reset autovacuum settings."""
 
