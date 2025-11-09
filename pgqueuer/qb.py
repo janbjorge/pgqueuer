@@ -236,6 +236,71 @@ class QueryBuilderEnvironment:
     DROP TYPE       IF EXISTS   {self.settings.statistics_table_status_type};
     """  # noqa
 
+    def build_table_has_column_query(self) -> str:
+        """Check if a specific column exists in a table."""
+        return """SELECT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE
+                table_schema = current_schema()
+            AND table_name = $1
+            AND column_name = $2
+        );"""
+
+    def build_table_has_index_query(self) -> str:
+        """Check if a specific index exists in a table."""
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_indexes
+            WHERE
+                    tablename  = $1
+                AND indexname  = $2
+                AND schemaname = current_schema()
+        );
+        """
+
+    def build_has_table_query(self) -> str:
+        """Check if a specific table exists."""
+        return """SELECT EXISTS (
+        SELECT FROM information_schema.columns
+        WHERE
+                table_schema = current_schema()
+            AND table_name = $1
+        );"""
+
+    def build_has_function_query(self) -> str:
+        """Check if a function exists in the current schema."""
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_proc p
+            JOIN pg_namespace n ON p.pronamespace = n.oid
+            WHERE n.nspname = current_schema()
+              AND p.proname = $1
+        );"""
+
+    def build_has_trigger_query(self) -> str:
+        """Check if a trigger exists in the current schema."""
+        return """SELECT EXISTS (
+            SELECT 1
+            FROM pg_trigger t
+            JOIN pg_class c ON t.tgrelid = c.oid
+            JOIN pg_namespace n ON c.relnamespace = n.oid
+            WHERE n.nspname = current_schema()
+              AND t.tgname = $1
+        );"""
+
+    def build_user_types_query(self) -> str:
+        """List user-defined ENUM types and their labels."""
+        return """SELECT enumlabel, typname
+    FROM pg_enum
+    JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
+
+    def build_alter_durability_query(self) -> Generator[str, None, None]:
+        """Generate SQL to alter table durability settings."""
+        durability = self.settings.durability.config
+        yield f"""ALTER TABLE {self.settings.queue_table} SET {"LOGGED" if durability.queue_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.settings.queue_table_log} SET {"LOGGED" if durability.queue_log_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.settings.statistics_table} SET {"LOGGED" if durability.statistics_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.settings.schedules_table} SET {"LOGGED" if durability.schedules_table == "" else "UNLOGGED"};"""  # noqa: E501
 
     def build_optimize_autovacuum_query(self) -> str:
         """SQL for recommended autovacuum settings."""

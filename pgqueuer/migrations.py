@@ -50,7 +50,10 @@ class MigrationQueries:
 
     def build_select_all(self) -> str:
         """Build query to select all migrations."""
-        return f"SELECT version, description, checksum, applied_at FROM {self.migrations_table} ORDER BY version"
+        return (
+            f"SELECT version, description, checksum, applied_at "
+            f"FROM {self.migrations_table} ORDER BY version"
+        )
 
     def build_select_versions(self) -> str:
         """Build query to select all migration versions."""
@@ -58,7 +61,10 @@ class MigrationQueries:
 
     def build_insert_migration(self) -> str:
         """Build query to insert a migration record."""
-        return f"INSERT INTO {self.migrations_table} (version, description, checksum) VALUES ($1, $2, $3)"
+        return (
+            f"INSERT INTO {self.migrations_table} "
+            f"(version, description, checksum) VALUES ($1, $2, $3)"
+        )
 
 
 @dataclasses.dataclass
