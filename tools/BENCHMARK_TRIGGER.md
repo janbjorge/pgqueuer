@@ -12,8 +12,16 @@ The new trigger implementation filters out these heartbeat-only updates, sending
 
 ### Prerequisites
 
-1. Ensure PostgreSQL is running and accessible
-2. Set environment variables for database connection (or use defaults):
+1. Ensure PostgreSQL is running and accessible (via Docker or local installation)
+2. Install dependencies:
+   ```bash
+   # Using uv (recommended)
+   uv sync --all-extras
+   
+   # Or using pip
+   pip install -e ".[dev,asyncpg]"
+   ```
+3. Set environment variables for database connection (or use defaults):
    ```bash
    export PGHOST=localhost
    export PGPORT=5432
@@ -21,18 +29,25 @@ The new trigger implementation filters out these heartbeat-only updates, sending
    export PGPASSWORD=pgqpw
    export PGDATABASE=pgqdb
    ```
+4. Start the database (if using Docker):
+   ```bash
+   docker compose up -d db
+   ```
 
 ### Quick Start
 
 ```bash
 # Run with default settings (100 jobs, 1000 heartbeat operations)
+uv run python tools/benchmark_trigger_performance.py
+
+# Or if already in virtual environment
 python tools/benchmark_trigger_performance.py
 
 # Run with custom settings
-python tools/benchmark_trigger_performance.py --num-jobs 200 --num-heartbeats 2000
+uv run python tools/benchmark_trigger_performance.py --num-jobs 200 --num-heartbeats 2000
 
 # See all options
-python tools/benchmark_trigger_performance.py --help
+uv run python tools/benchmark_trigger_performance.py --help
 ```
 
 ### Options
