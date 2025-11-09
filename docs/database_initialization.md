@@ -4,7 +4,12 @@ PGQueuer requires some initial setup in your PostgreSQL database. This includes 
 
 ## Table Structure
 
-PGQueuer uses three primary tables: one for job queues, one for logging job statistics, and another for managing schedule definitions. 
+PGQueuer uses several primary tables: 
+- **Queue table**: For managing job queues
+- **Statistics table**: For logging job statistics
+- **Schedules table**: For managing schedule definitions
+- **Migrations table**: For tracking applied schema migrations
+- **Queue log table**: For detailed job execution history
 
 
 ## Database installation/uninstallation
@@ -15,6 +20,20 @@ PGQueuer provides a command-line interface for easy management of installation a
 ```bash
 pgq install
 ```
+
+### Upgrading PGQueuer database components:
+```bash
+pgq upgrade
+```
+
+The upgrade system uses a lightweight migration framework that tracks which schema changes have been applied. This ensures migrations are only run once and provides better maintainability as the schema evolves.
+
+**Key features of the migration system:**
+- Each migration is tracked in the `pgqueuer_migrations` table
+- Migrations are versioned and executed in order
+- Safe to run multiple times (idempotent)
+- Automatically handles upgrades from older PGQueuer installations
+- No external dependencies required
 
 ### Uninstalling PGQueuer database components:
 ```bash

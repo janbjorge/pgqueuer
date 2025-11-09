@@ -71,6 +71,7 @@ shows how to pass a callable to ``pgqueuer.cli.run``.
 
    cli
    database_initialization
+   migrations
    pgqueuer
    architecture
    driver
