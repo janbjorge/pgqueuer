@@ -239,6 +239,22 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def table_has_trigger(self, table: str, trigger: str) -> bool:
+        """
+        Check if the trigger exists on table.
+
+        Returns:
+            bool: True if the trigger exists, False otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qbe.build_table_has_trigger_query(),
+            table,
+            trigger,
+        )
+        assert len(rows) == 1
+        (row,) = rows
+        return row["exists"]
+
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
         rows = await self.driver.fetch(self.qbe.build_user_types_query())

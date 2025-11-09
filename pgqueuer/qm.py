@@ -448,6 +448,22 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
+        for table, trigger in (
+            (
+                self.queries.qbe.settings.queue_table,
+                self.queries.qbe.settings.trigger,
+            ),
+            (
+                self.queries.qbe.settings.queue_table,
+                self.queries.qbe.settings.trigger_truncate,
+            ),
+        ):
+            if not (await self.queries.table_has_trigger(table, trigger)):
+                raise RuntimeError(
+                    f"The required trigger '{trigger}' is missing on the '{table}' table. "
+                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+                )
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
