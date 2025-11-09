@@ -242,3 +242,16 @@ async def test_validate_single_statement_rejects_zero(apgdriver: db.Driver) -> N
     # Should raise ValueError for zero statements
     with pytest.raises(ValueError, match="Found 0 statements"):
         manager._validate_single_statement(sql_empty)
+
+
+async def test_migration_versions_sequential() -> None:
+    """Test that migration versions are sequential with no gaps."""
+    migration_list = migrations.create_migrations_list()
+
+    versions = [int(m.version) for m in migration_list]
+    
+    # Check that versions start at 1 and are sequential
+    assert versions[0] == 1, "First migration should be version 001"
+    
+    for i, version in enumerate(versions, start=1):
+        assert version == i, f"Migration versions must be sequential. Expected {i}, got {version}"

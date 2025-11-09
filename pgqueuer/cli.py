@@ -13,7 +13,7 @@ from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator
 
-from . import db, factories, helpers, listeners, logconfig, models, qb, queries, supervisor, types
+from . import db, factories, helpers, listeners, logconfig, migrations, models, qb, queries, supervisor, types
 
 try:
     from uvloop import run as asyncio_run
@@ -375,8 +375,6 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    from . import migrations
-
     migration_list = migrations.create_migrations_list()
 
     if dry_run:
@@ -408,8 +406,6 @@ def migrations_cmd(
     ),
 ) -> None:
     """Display migration status, showing which migrations have been applied."""
-    from . import migrations
-
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             manager = migrations.MigrationManager(q.driver)

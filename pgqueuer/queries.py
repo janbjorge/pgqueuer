@@ -25,7 +25,7 @@ from pydantic_core import to_json
 
 from pgqueuer.types import CronEntrypoint
 
-from . import db, errors, helpers, models, qb, query_helpers, tracing
+from . import db, errors, helpers, migrations, models, qb, query_helpers, tracing
 from .helpers import merge_tracing_headers
 
 
@@ -187,8 +187,6 @@ class Queries:
         This method should be called when updating the application to a new version
         that requires schema changes.
         """
-        from . import migrations
-
         # First, seed migration history if this is a legacy database
         await self._seed_migration_history()
 
@@ -207,8 +205,6 @@ class Queries:
 
         This is only needed once during the transition to the new migration framework.
         """
-        from . import migrations
-
         # Create migration manager
         manager = migrations.MigrationManager(self.driver)
         await manager.ensure_migrations_table()
