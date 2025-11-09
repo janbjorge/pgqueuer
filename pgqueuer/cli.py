@@ -299,14 +299,15 @@ def install(
     migration_list = list(migrations.create_migrations_list())
 
     if dry_run:
-        print("Migrations to be applied during installation:")
+        print("Migrations that would be applied during installation:")
         print("-" * 80)
         for migration in migration_list:
             print(f"Version: {migration.version}")
             print(f"Description: {migration.description}")
             print(f"Checksum: {migration.checksum()[:16]}...")
             print("-" * 80)
-        print(f"\nTotal: {len(migration_list)} migrations will be applied")
+        print(f"\nTotal: {len(migration_list)} migrations would be applied")
+        print("\nDry-run mode: No changes were made to the database.")
         return
 
     async def run() -> None:
@@ -314,6 +315,7 @@ def install(
             await q.install()
 
     asyncio_run(run())
+    print(f"✓ PGQueuer schema installed successfully ({len(migration_list)} migrations applied).")
 
 
 @app.command(help="Verify PGQueuer database objects.")
@@ -374,7 +376,11 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
+        print("SQL commands that would be executed to uninstall PGQueuer:")
+        print("-" * 80)
         print(qb.QueryBuilderEnvironment().build_uninstall_query())
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
         return
 
     async def run() -> None:
@@ -382,6 +388,7 @@ def uninstall(
             await q.uninstall()
 
     asyncio_run(run())
+    print("✓ PGQueuer schema removed successfully.")
 
 
 @app.command(help="Apply upgrades to the existing PGQueuer database schema.")
@@ -398,23 +405,43 @@ def upgrade(
         help="Durability level for tables.",
     ),
 ) -> None:
-    migration_list = list(migrations.create_migrations_list())
-
-    if dry_run:
-        print("Pending migrations to be applied:")
-        print("-" * 80)
-        for migration in migration_list:
-            print(f"Version: {migration.version}")
-            print(f"Description: {migration.description}")
-            print(f"Checksum: {migration.checksum()[:16]}...")
-            print("-" * 80)
-        print(f"\nTotal: {len(migration_list)} migrations defined")
-        print("\nNote: Only unapplied migrations will be executed.")
-        return
-
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
-            await q.upgrade()
+            if dry_run:
+                # Get pending migrations
+                manager = migrations.MigrationManager(q.driver, qb.DBSettings(durability=durability))
+                await manager.ensure_migration_table_exists()
+                applied_versions = await manager.get_applied_versions()
+                all_migrations = list(migrations.create_migrations_list())
+                pending = [m for m in all_migrations if m.version not in applied_versions]
+                
+                if pending:
+                    print("Pending migrations that would be applied:")
+                    print("-" * 80)
+                    for migration in pending:
+                        print(f"Version: {migration.version}")
+                        print(f"Description: {migration.description}")
+                        print(f"Checksum: {migration.checksum()[:16]}...")
+                        print("-" * 80)
+                    print(f"\nTotal: {len(pending)} pending migrations would be applied")
+                    print("\nDry-run mode: No changes were made to the database.")
+                else:
+                    print("No pending migrations. Database is up to date.")
+            else:
+                # Track migrations before and after
+                manager = migrations.MigrationManager(q.driver, qb.DBSettings(durability=durability))
+                await manager.ensure_migration_table_exists()
+                applied_before = await manager.get_applied_versions()
+                
+                await q.upgrade()
+                
+                applied_after = await manager.get_applied_versions()
+                newly_applied = len(applied_after) - len(applied_before)
+                
+                if newly_applied > 0:
+                    print(f"✓ Database upgraded successfully ({newly_applied} migrations applied).")
+                else:
+                    print("No pending migrations. Database is already up to date.")
 
     asyncio_run(run())
 
@@ -651,20 +678,26 @@ def durability(
         durability: The desired durability level ('volatile', 'balanced', or 'durable').
         dry_run: Whether to print SQL commands without executing them.
     """
-    print(
-        "\n".join(
-            qb.QueryBuilderEnvironment(
-                qb.DBSettings(durability=durability)
-            ).build_alter_durability_query()
+    if dry_run:
+        print("SQL commands that would be executed:")
+        print("-" * 80)
+        print(
+            "\n".join(
+                qb.QueryBuilderEnvironment(
+                    qb.DBSettings(durability=durability)
+                ).build_alter_durability_query()
+            )
         )
-    )
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
             await q.alter_durability()
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+    print(f"✓ Durability successfully changed to '{durability.value}'.")
 
 
 @app.command(name="autovac", help="Optimize autovacuum settings for PGQueuer tables.")
@@ -682,14 +715,24 @@ def optimize_autovacuum(
         else qbe.build_optimize_autovacuum_query()
     )
 
-    print(query)
+    if dry_run:
+        action = "reset to defaults" if rollback else "optimize"
+        print(f"SQL commands that would be executed to {action} autovacuum settings:")
+        print("-" * 80)
+        print(query)
+        print("-" * 80)
+        print("\nDry-run mode: No changes were made to the database.")
+        return
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
-    if not dry_run:
-        asyncio_run(run())
+    asyncio_run(run())
+    if rollback:
+        print("✓ Autovacuum settings reset to PostgreSQL defaults.")
+    else:
+        print("✓ Autovacuum settings optimized for PGQueuer tables.")
 
 
 if __name__ == "__main__":
