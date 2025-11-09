@@ -255,20 +255,18 @@ BEGIN
         );
     END IF;
 
-    IF NOT notify_change THEN
-        RETURN NULL; -- Nothing changed beyond the heartbeat; skip NOTIFY spam.
+    IF notify_change THEN
+        PERFORM pg_notify(
+            '{self.settings.channel}',
+            json_build_object(
+                'channel', '{self.settings.channel}',
+                'operation', lower(TG_OP),
+                'sent_at', NOW(),
+                'table', TG_TABLE_NAME,
+                'type', 'table_changed_event'
+            )::text
+        );
     END IF;
-
-    PERFORM pg_notify(
-        '{self.settings.channel}',
-        json_build_object(
-            'channel', '{self.settings.channel}',
-            'operation', lower(TG_OP),
-            'sent_at', NOW(),
-            'table', TG_TABLE_NAME,
-            'type', 'table_changed_event'
-        )::text
-    );
 
     RETURN NULL; -- AFTER triggers ignore the return value; keep it explicit.
 END;
