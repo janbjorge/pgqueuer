@@ -82,6 +82,22 @@ If a test run is interrupted (e.g., Ctrl+C) you may see leftover `parent_...` or
 
 Caution: Pointing at a shared production-like server may create load due to frequent database creation. Prefer a dedicated instance for this override.
 
+## Hot Reloading During Local Development
+
+PGQueuer does not currently include a built-in `--reload` or auto-restart mode.
+For local development, you can achieve a simple “hot reload” by wrapping `pgq run` in a file-watcher such as [`[entr](https://eradman.com/entrproject/)`](https://eradman.com/entrproject/).
+
+Example (Linux/macOS):
+
+```bash
+find . -name '*.py' | entr -rc pgq run main:main
+```
+
+This restarts the worker process whenever any Python file changes.
+You may remove `-c` if you prefer not to clear the screen on each restart.
+
+This approach is intended for development only and should not be used in production.
+
 ## Troubleshooting
 
 - Docker not running / cannot connect: Start your Docker daemon and rerun tests.
