@@ -200,6 +200,64 @@ async def await_shutdown_or_timeout(
         logconfig.logger.info("Attempting to restart...")
 
 
+def _build_reload_command(
+    factory_fn: str,
+    dequeue_timeout: timedelta,
+    batch_size: int,
+    restart_delay: timedelta,
+    restart_on_failure: bool,
+    mode: types.QueueExecutionMode,
+    max_concurrent_tasks: int | None,
+    shutdown_on_listener_failure: bool,
+) -> list[str]:
+    """Build the command to run the worker without --reload."""
+    import sys
+
+    cmd: list[str] = [
+        sys.executable,
+        "-m",
+        "pgqueuer.cli",
+        "run",
+        factory_fn,
+        "--dequeue-timeout",
+        str(dequeue_timeout.total_seconds()),
+        "--batch-size",
+        str(batch_size),
+        "--restart-delay",
+        str(restart_delay.total_seconds()),
+        "--log-level",
+        logging.getLevelName(logconfig.logger.level),
+        "--mode",
+        mode.name,
+    ]
+
+    if restart_on_failure:
+        cmd.append("--restart-on-failure")
+
+    if max_concurrent_tasks is not None:
+        cmd.extend(["--max-concurrent-tasks", str(max_concurrent_tasks)])
+
+    if shutdown_on_listener_failure:
+        cmd.append("--shutdown-on-listener-failure")
+
+    return cmd
+
+
+def _format_changed_files(changes, watch_dir) -> list[str]:
+    """Format changed file paths relative to watch directory."""
+    from pathlib import Path
+
+    changed_files = []
+    for _, path in changes:
+        try:
+            rel_path = Path(path).relative_to(watch_dir)
+            changed_files.append(str(rel_path))
+        except ValueError:
+            # File is outside watch directory (e.g., symlink target)
+            changed_files.append(str(path))
+    return changed_files
+
+
 def run_with_reload(
     factory_fn: str,
     dequeue_timeout: timedelta,
@@ -244,33 +302,16 @@ def run_with_reload(
         "--reload is for development only and should not be used in production"
     )
 
-    # Build the command to run without --reload
-    cmd: list[str] = [
-        sys.executable,
-        "-m",
-        "pgqueuer.cli",
-        "run",
+    cmd = _build_reload_command(
         factory_fn,
-        "--dequeue-timeout",
-        str(dequeue_timeout.total_seconds()),
-        "--batch-size",
-        str(batch_size),
-        "--restart-delay",
-        str(restart_delay.total_seconds()),
-        "--log-level",
-        logging.getLevelName(logconfig.logger.level),
-        "--mode",
-        mode.name,
-    ]
-
-    if restart_on_failure:
-        cmd.append("--restart-on-failure")
-
-    if max_concurrent_tasks is not None:
-        cmd.extend(["--max-concurrent-tasks", str(max_concurrent_tasks)])
-
-    if shutdown_on_listener_failure:
-        cmd.append("--shutdown-on-listener-failure")
+        dequeue_timeout,
+        batch_size,
+        restart_delay,
+        restart_on_failure,
+        mode,
+        max_concurrent_tasks,
+        shutdown_on_listener_failure,
+    )
 
     process: subprocess.Popen[bytes] | None = None
 
@@ -294,9 +335,11 @@ def run_with_reload(
     try:
         process = start_process()
 
-        for changes in watch(watch_dir, watch_filter=lambda change, path: path.endswith(".py")):
+        for changes in watch(
+            watch_dir, watch_filter=lambda change, path: Path(path).suffix == ".py"
+        ):
             if changes:
-                changed_files = [str(Path(path).relative_to(watch_dir)) for _, path in changes]
+                changed_files = _format_changed_files(changes, watch_dir)
                 logconfig.logger.info(
                     "Detected changes in: %s", ", ".join(changed_files)
                 )

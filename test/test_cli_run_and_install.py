@@ -145,8 +145,15 @@ def test_cli_run_with_reload_starts_and_stops(dsn: str, tmp_path) -> None:
     )
 
     try:
-        # Allow the watcher to start
-        time.sleep(3.0)
+        # Poll until process is running or timeout
+        max_wait = 5.0
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            if proc.poll() is None:
+                # Process is running, give it a moment to initialize
+                time.sleep(0.5)
+                break
+            time.sleep(0.1)
 
         # Verify process is running
         if proc.poll() is not None:
