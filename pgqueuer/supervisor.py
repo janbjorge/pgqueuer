@@ -9,6 +9,7 @@ using configurable factory paths.
 from __future__ import annotations
 
 import asyncio
+import logging
 import signal
 from contextlib import suppress
 from datetime import timedelta
@@ -197,3 +198,117 @@ async def await_shutdown_or_timeout(
 
     if not shutdown.is_set():
         logconfig.logger.info("Attempting to restart...")
+
+
+def run_with_reload(
+    factory_fn: str,
+    dequeue_timeout: timedelta,
+    batch_size: int,
+    restart_delay: timedelta,
+    restart_on_failure: bool,
+    mode: types.QueueExecutionMode,
+    max_concurrent_tasks: int | None,
+    shutdown_on_listener_failure: bool,
+    reload_dir: str | None,
+) -> None:
+    """
+    Run the worker with automatic reload on file changes.
+
+    Args:
+        factory_fn: Path to the factory function.
+        dequeue_timeout: Timeout duration for dequeuing jobs.
+        batch_size: Number of jobs to process in each batch.
+        restart_delay: Delay before restarting on failure.
+        restart_on_failure: Whether to restart after a failure.
+        mode: Queue execution mode.
+        max_concurrent_tasks: Maximum number of concurrent tasks.
+        shutdown_on_listener_failure: Shutdown if listener fails.
+        reload_dir: Directory to watch for changes (defaults to current directory).
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    try:
+        from watchfiles import watch
+    except ImportError:
+        logconfig.logger.error(
+            "watchfiles is required for --reload mode. "
+            "Install it with: pip install watchfiles"
+        )
+        sys.exit(1)
+
+    watch_dir = Path(reload_dir) if reload_dir else Path.cwd()
+    logconfig.logger.info("Starting with reload enabled, watching: %s", watch_dir)
+    logconfig.logger.warning(
+        "--reload is for development only and should not be used in production"
+    )
+
+    # Build the command to run without --reload
+    cmd: list[str] = [
+        sys.executable,
+        "-m",
+        "pgqueuer.cli",
+        "run",
+        factory_fn,
+        "--dequeue-timeout",
+        str(dequeue_timeout.total_seconds()),
+        "--batch-size",
+        str(batch_size),
+        "--restart-delay",
+        str(restart_delay.total_seconds()),
+        "--log-level",
+        logging.getLevelName(logconfig.logger.level),
+        "--mode",
+        mode.name,
+    ]
+
+    if restart_on_failure:
+        cmd.append("--restart-on-failure")
+
+    if max_concurrent_tasks is not None:
+        cmd.extend(["--max-concurrent-tasks", str(max_concurrent_tasks)])
+
+    if shutdown_on_listener_failure:
+        cmd.append("--shutdown-on-listener-failure")
+
+    process: subprocess.Popen[bytes] | None = None
+
+    def start_process() -> subprocess.Popen[bytes]:
+        """Start the worker process."""
+        logconfig.logger.info("Starting worker process...")
+        return subprocess.Popen(cmd)
+
+    def stop_process(proc: subprocess.Popen[bytes]) -> None:
+        """Stop the worker process gracefully."""
+        if proc.poll() is None:
+            logconfig.logger.info("Stopping worker process...")
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                logconfig.logger.warning("Process did not terminate, forcing kill...")
+                proc.kill()
+                proc.wait()
+
+    try:
+        process = start_process()
+
+        for changes in watch(watch_dir, watch_filter=lambda change, path: path.endswith(".py")):
+            if changes:
+                changed_files = [str(Path(path).relative_to(watch_dir)) for _, path in changes]
+                logconfig.logger.info(
+                    "Detected changes in: %s", ", ".join(changed_files)
+                )
+
+                if process:
+                    stop_process(process)
+
+                logconfig.logger.info("Restarting due to changes...")
+                process = start_process()
+
+    except KeyboardInterrupt:
+        logconfig.logger.info("Received shutdown signal")
+    finally:
+        if process:
+            stop_process(process)

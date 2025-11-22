@@ -470,25 +470,48 @@ def run(
         "--shutdown-on-listener-failure",
         help="Shutdown the manager if the listener fails.",
     ),
+    reload: bool = typer.Option(
+        False,
+        "--reload",
+        help="Enable auto-reload on code changes (development only).",
+    ),
+    reload_dir: str | None = typer.Option(
+        None,
+        "--reload-dir",
+        help="Directory to watch for changes (defaults to current directory).",
+    ),
 ) -> None:
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
     """
     logconfig.setup_fancy_logger(log_level)
 
-    asyncio_run(
-        supervisor.runit(
-            factories.load_factory(factory_fn),
+    if reload:
+        supervisor.run_with_reload(
+            factory_fn=factory_fn,
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
             restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
             restart_on_failure=restart_on_failure,
-            shutdown=asyncio.Event(),
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
+            reload_dir=reload_dir,
         )
-    )
+    else:
+        asyncio_run(
+            supervisor.runit(
+                factories.load_factory(factory_fn),
+                dequeue_timeout=timedelta(seconds=dequeue_timeout),
+                batch_size=batch_size,
+                restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
+                restart_on_failure=restart_on_failure,
+                shutdown=asyncio.Event(),
+                mode=mode,
+                max_concurrent_tasks=max_concurrent_tasks,
+                shutdown_on_listener_failure=shutdown_on_listener_failure,
+            )
+        )
 
 
 @app.command(help="Manage schedules in the PGQueuer system.")
