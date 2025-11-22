@@ -101,6 +101,95 @@ def test_cli_run_handles_sigint_gracefully(dsn: str) -> None:
             proc.kill()
 
 
+@pytest.mark.skipif(
+    sys.platform.startswith("win"), reason="File watching and process signaling differs on Windows"
+)
+def test_cli_run_with_reload_starts_and_stops(dsn: str, tmp_path) -> None:
+    """
+    Test that the --reload option starts the worker and responds to SIGINT.
+
+    This test verifies that:
+    1. The --reload flag is recognized and starts the file watcher
+    2. The worker process is spawned
+    3. The process responds to SIGINT and shuts down cleanly
+    """
+    env = os.environ.copy()
+    env.update(_env_from_dsn(dsn))
+    env["PYTHONUNBUFFERED"] = "1"
+
+    # Use a temporary directory for watching to avoid false positives
+    watch_dir = tmp_path / "watch"
+    watch_dir.mkdir()
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "pgqueuer.cli",
+        "run",
+        "examples.consumer:main",
+        "--dequeue-timeout",
+        "1",
+        "--batch-size",
+        "1",
+        "--reload",
+        "--reload-dir",
+        str(watch_dir),
+    ]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+
+    try:
+        # Allow the watcher to start
+        time.sleep(3.0)
+
+        # Verify process is running
+        if proc.poll() is not None:
+            stdout, stderr = proc.communicate()
+            pytest.fail(
+                f"CLI process exited prematurely.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            )
+
+        # Send SIGINT to stop the process
+        proc.send_signal(signal.SIGINT)
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            pytest.fail(
+                f"CLI process with --reload failed to exit after SIGINT.\n"
+                f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+            )
+
+        # Check that reload-related logging appears
+        combined_output = stdout + stderr
+        reload_check = (
+            "Starting with reload enabled" in combined_output
+            or "reload" in combined_output.lower()
+        )
+        assert reload_check, (
+            f"Expected reload-related output.\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+        )
+
+        # Accept 0 (graceful) or 130 (SIGINT)
+        exit_code = proc.returncode
+        if exit_code not in (0, 130):
+            pytest.fail(
+                f"Unexpected exit code {exit_code} (expected 0 or 130).\n"
+                f"STDOUT:\n{stdout}\n"
+                f"STDERR:\n{stderr}"
+            )
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
 def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     """
     Exercise the full install -> verify present -> upgrade -> uninstall -> verify absent flow.
