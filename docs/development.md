@@ -85,7 +85,7 @@ Caution: Pointing at a shared production-like server may create load due to freq
 ## Hot Reloading During Local Development
 
 PGQueuer does not currently include a built-in `--reload` or auto-restart mode.
-For local development, you can achieve a simple “hot reload” by wrapping `pgq run` in a file-watcher such as [`[entr](https://eradman.com/entrproject/)`](https://eradman.com/entrproject/).
+For local development, you can achieve a simple “hot reload” by wrapping `pgq run` in a file-watcher such as [entr](https://eradman.com/entrproject/).
 
 Example (Linux/macOS):
 
