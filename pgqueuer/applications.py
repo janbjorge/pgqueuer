@@ -90,10 +90,11 @@ class PgQueuer:
         Returns:
             PgQueuer: A configured PgQueuer instance.
         """
-        driver = AsyncpgDriver(connection)
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls._from_driver(
+            driver=AsyncpgDriver(connection),
+            channel=channel,
+            resources=resources,
+        )
 
     @classmethod
     def from_asyncpg_pool(
@@ -113,10 +114,11 @@ class PgQueuer:
         Returns:
             PgQueuer: A configured PgQueuer instance.
         """
-        driver = AsyncpgPoolDriver(pool)
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls._from_driver(
+            driver=AsyncpgPoolDriver(pool),
+            channel=channel,
+            resources=resources,
+        )
 
     @classmethod
     def from_psycopg_connection(
@@ -136,7 +138,19 @@ class PgQueuer:
         Returns:
             PgQueuer: A configured PgQueuer instance.
         """
-        driver = PsycopgDriver(connection)
+        return cls._from_driver(
+            driver=PsycopgDriver(connection),
+            channel=channel,
+            resources=resources,
+        )
+
+    @classmethod
+    def _from_driver(
+        cls,
+        driver: Driver,
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> "PgQueuer":
         channel = channel or Channel(DBSettings().channel)
         resources = resources or {}
         return cls(connection=driver, channel=channel, resources=resources)
