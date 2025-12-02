@@ -682,7 +682,7 @@ class Queries:
 
     async def queue_log(self) -> list[models.Log]:
         return [
-            models.Log.model_validate(x)
+            models.Log.model_validate(dict(x))
             for x in await self.driver.fetch(self.qbq.build_fetch_log_query())
         ]
 
