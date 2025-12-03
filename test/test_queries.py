@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import asyncpg
 import psycopg
@@ -299,6 +299,64 @@ async def test_queue_log_queued_picked_successful(
         await q.log_jobs([(job, "successful", None)])
 
     assert sum(x.status == "successful" for x in await q.queue_log()) == N
+
+
+async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+    await q.clear_queue_log()
+
+    created = datetime.now(timezone.utc)
+    entries = [
+        {
+            "created": created,
+            "job_id": 1,
+            "status": "queued",
+            "priority": 5,
+            "entrypoint": "inserted-entrypoint",
+            "traceback": None,
+            "aggregated": False,
+        },
+        {
+            "created": created + timedelta(seconds=1),
+            "job_id": 2,
+            "status": "successful",
+            "priority": 7,
+            "entrypoint": "inserted-entrypoint",
+            "traceback": None,
+            "aggregated": False,
+        },
+    ]
+
+    insert_log_sql = f"""
+        INSERT INTO {q.qbq.settings.queue_table_log} (
+            created,
+            job_id,
+            status,
+            priority,
+            entrypoint,
+            traceback,
+            aggregated
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+    """
+
+    for entry in entries:
+        await q.driver.execute(
+            insert_log_sql,
+            entry["created"],
+            entry["job_id"],
+            entry["status"],
+            entry["priority"],
+            entry["entrypoint"],
+            entry["traceback"],
+            entry["aggregated"],
+        )
+
+    logs = await q.queue_log()
+
+    assert sorted(logs, key=lambda log: log.job_id) == sorted(
+        [models.Log(**entry) for entry in entries], key=lambda log: log.job_id
+    )
 
 
 @pytest.mark.parametrize("N", (1, 3, 15))
