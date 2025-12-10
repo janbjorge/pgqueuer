@@ -386,7 +386,7 @@ def process_job(job: Job):
 PgQueuer provides configurable parameters to optimize job processing based on specific requirements:
 
 - **`dequeue_timeout`**: Maximum time to wait for jobs (default: 30 seconds).
-- **`retry_timer`**: Interval to retry unprocessed jobs.
+- **`retry_timer`**: Interval to retry unprocessed jobs (default: 0 i.e no retry_timer set).
 
 ---
 
