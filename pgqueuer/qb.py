@@ -260,12 +260,16 @@ class QueryBuilderEnvironment:
         priority INT NOT NULL,
         entrypoint TEXT NOT NULL,
         traceback JSONB DEFAULT NULL,
-        aggregated BOOLEAN DEFAULT FALSE
+        aggregated BOOLEAN DEFAULT FALSE,
+        payload BYTEA,
+        headers JSONB,
+        retried_as INTEGER
     );
     CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
     CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
     CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
     CREATE INDEX {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);
+    CREATE INDEX {self.settings.queue_table_log}_retried_as ON {self.settings.queue_table_log} (retried_as) WHERE retried_as IS NOT NULL;
 
     CREATE {durability_policy.statistics_table} TABLE {self.settings.statistics_table} (
         id SERIAL PRIMARY KEY,
@@ -454,6 +458,11 @@ class QueryBuilderEnvironment:
         yield f"CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
+        # Manual retry API: store payload and headers in log table for retry capability
+        yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS payload BYTEA;"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS retried_as INTEGER;"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_retried_as ON {self.settings.queue_table_log} (retried_as) WHERE retried_as IS NOT NULL;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         """
@@ -896,8 +905,9 @@ class QueryQueueBuilder:
         Constructs an SQL query that deletes specified jobs from the queue table
         and inserts corresponding entries into the statistics (log) table.
         It captures details such as priority, entrypoint, time in queue,
-        creation time, and final status. The query uses upsert logic to handle
-        conflicts and aggregate counts.
+        creation time, final status, payload, and headers. The query uses upsert
+        logic to handle conflicts and aggregate counts. Payload and headers are
+        preserved to support manual retry functionality.
 
         Returns:
             str: The SQL query string to log jobs.
@@ -905,7 +915,7 @@ class QueryQueueBuilder:
         return f"""WITH deleted AS (
             DELETE FROM {self.settings.queue_table}
             WHERE id = ANY($1::integer[])
-            RETURNING id, entrypoint, priority
+            RETURNING id, entrypoint, priority, payload, headers
         ), job_status AS (
             SELECT
                 UNNEST($1::integer[])                           AS id,
@@ -917,7 +927,9 @@ class QueryQueueBuilder:
                 job_status.status       AS status,
                 job_status.traceback    AS traceback,
                 deleted.entrypoint      AS entrypoint,
-                deleted.priority        AS priority
+                deleted.priority        AS priority,
+                deleted.payload         AS payload,
+                deleted.headers         AS headers
             FROM job_status
             INNER JOIN deleted
                 ON deleted.id = job_status.id
@@ -927,9 +939,11 @@ class QueryQueueBuilder:
             status,
             entrypoint,
             priority,
-            traceback
+            traceback,
+            payload,
+            headers
         )
-        SELECT id, status, entrypoint, priority, traceback FROM merged
+        SELECT id, status, entrypoint, priority, traceback, payload, headers FROM merged
         """
 
     def build_truncate_log_statistics_query(self) -> str:
@@ -1005,6 +1019,87 @@ class QueryQueueBuilder:
 
     def build_fetch_log_query(self) -> str:
         return f"SELECT * FROM {self.settings.queue_table_log}"
+
+    def build_get_failed_jobs_query(self) -> str:
+        """
+        Generate SQL query to retrieve failed jobs from the log table.
+
+        Returns failed jobs (status='exception') that have not been retried yet,
+        with optional filtering by entrypoint. Results are ordered by id descending
+        (newest first) and support cursor-based pagination via after_id.
+
+        Returns:
+            str: The SQL query string for fetching failed jobs.
+        """
+        return f"""
+        SELECT * FROM {self.settings.queue_table_log}
+        WHERE status = 'exception'
+        AND retried_as IS NULL
+        AND ($1::text[] IS NULL OR entrypoint = ANY($1))
+        AND ($2::bigint IS NULL OR id < $2)
+        ORDER BY id DESC
+        LIMIT $3
+        """
+
+    def build_get_log_entry_query(self) -> str:
+        """
+        Generate SQL query to retrieve a specific log entry by ID.
+
+        Returns:
+            str: The SQL query string for fetching a log entry.
+        """
+        return f"""
+        SELECT * FROM {self.settings.queue_table_log}
+        WHERE id = $1
+        """
+
+    def build_retry_from_log_query(self) -> str:
+        """
+        Generate SQL query to re-enqueue a single failed job from the log table.
+
+        This query:
+        1. Selects the log entry (must be 'exception' status and not already retried)
+        2. Inserts a new job into the queue table with the original payload/headers
+        3. Updates the log entry with the new job ID (retried_as column)
+
+        Args:
+            $1: log_id (bigint) - The log entry ID to retry
+            $2: priority (int or NULL) - Override priority, or NULL to use original
+            $3: execute_after (interval or NULL) - Delay before job is eligible
+
+        Returns:
+            str: The SQL query string for retrying a failed job.
+        """
+        return f"""
+        WITH log_entry AS (
+            SELECT id, entrypoint, priority, payload, headers
+            FROM {self.settings.queue_table_log}
+            WHERE id = $1
+            AND status = 'exception'
+            AND retried_as IS NULL
+        ),
+        inserted AS (
+            INSERT INTO {self.settings.queue_table} (
+                priority, status, entrypoint, payload, headers, execute_after
+            )
+            SELECT
+                COALESCE($2::int, priority),
+                'queued'::{self.settings.queue_status_type},
+                entrypoint,
+                payload,
+                headers,
+                NOW() + COALESCE($3::interval, interval '0')
+            FROM log_entry
+            RETURNING id
+        ),
+        updated AS (
+            UPDATE {self.settings.queue_table_log}
+            SET retried_as = inserted.id
+            FROM inserted
+            WHERE {self.settings.queue_table_log}.id = $1
+        )
+        SELECT id FROM inserted
+        """
 
     def build_aggregate_log_data_to_statistics_query(self) -> str:
         """
