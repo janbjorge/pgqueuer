@@ -308,6 +308,7 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
     created = datetime.now(timezone.utc)
     entries = [
         {
+            "id": 1,
             "created": created,
             "job_id": 1,
             "status": "queued",
@@ -315,8 +316,12 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
             "entrypoint": "inserted-entrypoint",
             "traceback": None,
             "aggregated": False,
+            "payload": None,
+            "headers": None,
+            "retried_as": None,
         },
         {
+            "id": 2,
             "created": created + timedelta(seconds=1),
             "job_id": 2,
             "status": "successful",
@@ -324,25 +329,33 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
             "entrypoint": "inserted-entrypoint",
             "traceback": None,
             "aggregated": False,
+            "payload": None,
+            "headers": None,
+            "retried_as": None,
         },
     ]
 
     insert_log_sql = f"""
         INSERT INTO {q.qbq.settings.queue_table_log} (
+            id,
             created,
             job_id,
             status,
             priority,
             entrypoint,
             traceback,
-            aggregated
+            aggregated,
+            payload,
+            headers,
+            retried_as
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     """
 
     for entry in entries:
         await q.driver.execute(
             insert_log_sql,
+            entry["id"],
             entry["created"],
             entry["job_id"],
             entry["status"],
@@ -350,6 +363,9 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
             entry["entrypoint"],
             entry["traceback"],
             entry["aggregated"],
+            entry["payload"],
+            entry["headers"],
+            entry["retried_as"],
         )
 
     logs = await q.queue_log()

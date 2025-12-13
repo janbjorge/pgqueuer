@@ -168,10 +168,15 @@ class Job(BaseModel):
 
 class Log(BaseModel):
     """
-    Represents a job with attributes such as ID, priority,
+    Represents a logged job with attributes such as ID, priority,
     creation time, status, entrypoint, and optional payload.
+
+    The payload and headers fields are preserved to support manual retry
+    functionality, allowing failed jobs to be re-enqueued with their
+    original data.
     """
 
+    id: int
     created: AwareDatetime
     job_id: JobId
     status: JOB_STATUS
@@ -182,6 +187,12 @@ class Log(BaseModel):
         BeforeValidator(lambda x: None if x is None else from_json(x)),
     ]
     aggregated: bool
+    payload: bytes | None = None
+    headers: Annotated[
+        dict[str, Any] | None,
+        BeforeValidator(lambda x: None if x is None else from_json(x)),
+    ] = None
+    retried_as: int | None = None
 
 
 ###### Statistics ######

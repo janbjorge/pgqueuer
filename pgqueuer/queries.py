@@ -695,6 +695,132 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
+    async def get_failed_jobs(
+        self,
+        *,
+        entrypoint: str | list[str] | None = None,
+        limit: int = 100,
+        after_id: int | None = None,
+    ) -> list[models.Log]:
+        """
+        Retrieve failed jobs from the log table that can be retried.
+
+        Returns jobs with status='exception' that have not yet been retried
+        (retried_as is NULL). Results are ordered by id descending (newest first).
+
+        Args:
+            entrypoint: Filter by entrypoint(s). If None, returns all entrypoints.
+            limit: Maximum number of results to return.
+            after_id: Cursor for pagination. Returns jobs with id < after_id.
+                Use the last id from the previous page to get the next page.
+
+        Returns:
+            list[models.Log]: A list of Log entries representing failed jobs.
+        """
+        entrypoints = (
+            None
+            if entrypoint is None
+            else [entrypoint]
+            if isinstance(entrypoint, str)
+            else entrypoint
+        )
+        return [
+            models.Log.model_validate(dict(x))
+            for x in await self.driver.fetch(
+                self.qbq.build_get_failed_jobs_query(),
+                entrypoints,
+                after_id,
+                limit,
+            )
+        ]
+
+    async def get_log_entry(self, log_id: int) -> models.Log | None:
+        """
+        Retrieve a specific log entry by its ID.
+
+        Args:
+            log_id: The log table ID (not the original job_id).
+
+        Returns:
+            models.Log | None: The log entry if found, None otherwise.
+        """
+        rows = await self.driver.fetch(
+            self.qbq.build_get_log_entry_query(),
+            log_id,
+        )
+        if not rows:
+            return None
+        return models.Log.model_validate(dict(rows[0]))
+
+    async def retry_failed_job(
+        self,
+        log_id: int,
+        *,
+        priority: int | None = None,
+        execute_after: timedelta | None = None,
+    ) -> models.JobId | None:
+        """
+        Re-enqueue a single failed job from the log table.
+
+        Creates a new job in the queue with the same payload and headers as the
+        original failed job. The log entry is updated with the new job ID in the
+        retried_as column.
+
+        Args:
+            log_id: The log table ID (not the original job_id) to retry.
+            priority: Override the original priority. If None, uses the original.
+            execute_after: Delay before the job becomes eligible for processing.
+                If None, the job is immediately eligible.
+
+        Returns:
+            models.JobId | None: The new job ID if successful, None if the log
+                entry was not found, not in 'exception' status, or already retried.
+        """
+        rows = await self.driver.fetch(
+            self.qbq.build_retry_from_log_query(),
+            log_id,
+            priority,
+            execute_after,
+        )
+        return models.JobId(rows[0]["id"]) if rows else None
+
+    async def retry_failed_jobs(
+        self,
+        log_ids: list[int],
+        *,
+        priority: int | None = None,
+        execute_after: timedelta | None = None,
+    ) -> list[models.JobId]:
+        """
+        Re-enqueue multiple failed jobs from the log table.
+
+        Creates new jobs in the queue with the same payloads and headers as the
+        original failed jobs. The log entries are updated with the new job IDs
+        in the retried_as column.
+
+        Args:
+            log_ids: List of log table IDs (not job_ids) to retry.
+            priority: Override the original priority for all jobs. If None,
+                uses each job's original priority.
+            execute_after: Delay before the jobs become eligible for processing.
+                If None, the jobs are immediately eligible.
+
+        Returns:
+            list[models.JobId]: List of new job IDs for successfully retried jobs.
+                Jobs that were not found, not in 'exception' status, or already
+                retried are silently skipped.
+        """
+        result = []
+        for log_id in log_ids:
+            job_id = await self.retry_failed_job(
+                log_id,
+                priority=priority,
+                execute_after=execute_after,
+            )
+            if job_id is not None:
+                result.append(job_id)
+        return result
+
 
 @dataclasses.dataclass
 class SyncQueries:
