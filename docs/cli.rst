@@ -196,3 +196,193 @@ Durability determines the logging behavior of PGQueuer tables, affecting perform
 - **Use Case**: Ideal for production environments where data integrity is critical.
 
 Choosing a durability level involves trade-offs between performance and data safety. The ``volatile`` level maximizes performance but risks data loss during crashes. The ``balanced`` level offers a compromise, with critical data protected while auxiliary data is optimized for speed. The ``durable`` level ensures full data safety at the expense of performance.
+
+Factory Call Cycle
+------------------
+
+The ``run`` command uses a factory pattern to instantiate and manage queue processors.
+This section explains how your factory function integrates with PGQueuer's execution stack.
+
+What is a Factory?
+~~~~~~~~~~~~~~~~~~
+
+A factory is a function you write that creates and configures a manager instance
+(``PgQueuer``, ``QueueManager``, or ``SchedulerManager``). The factory is responsible for:
+
+- Establishing the database connection
+- Creating the manager instance
+- Registering your entrypoints and schedules
+- Optionally setting up shared resources
+
+The CLI loads your factory, calls it, and runs the returned manager until shutdown.
+
+Execution Flow
+~~~~~~~~~~~~~~
+
+When you execute ``pgq run my_module:create_pgqueuer``, PGQueuer performs these steps:
+
+::
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                     pgq run my_module:factory                           │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 1. LOAD FACTORY                                                         │
+    │    Parse the factory path and import your function. If you pass a       │
+    │    callable directly (lambda, partial), it is used as-is.               │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 2. SETUP SIGNAL HANDLERS                                                │
+    │    Register handlers for SIGINT and SIGTERM so the process can          │
+    │    shut down gracefully when interrupted.                               │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 3. SUPERVISOR LOOP                                                      │
+    │    Enter a loop that continues until shutdown is signaled.              │
+    │    This loop enables automatic restarts if configured.                  │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                          ┌────────────┴────────────┐
+                          │      MAIN LOOP          │
+                          └────────────┬────────────┘
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 4. INVOKE YOUR FACTORY                                                  │
+    │    Your factory function runs, creating the database connection,        │
+    │    registering entrypoints, and returning a configured manager.         │
+    │                                                                         │
+    │    The result is wrapped uniformly regardless of whether you return     │
+    │    a simple value, a context manager, or an async context manager.      │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 5. LINK SHUTDOWN EVENT                                                  │
+    │    The supervisor connects its shutdown event to the manager so         │
+    │    that signals propagate correctly.                                    │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 6. RUN THE MANAGER                                                      │
+    │    The manager's run() method starts processing:                        │
+    │      • QueueManager fetches and dispatches jobs                         │
+    │      • SchedulerManager executes cron-scheduled tasks                   │
+    │      • PgQueuer runs both concurrently                                  │
+    └─────────────────────────────────────────────────────────────────────────┘
+                                       │
+                          ┌────────────┴────────────┐
+                          ▼                         ▼
+    ┌──────────────────────────────┐  ┌──────────────────────────────────────┐
+    │ 7a. GRACEFUL SHUTDOWN        │  │ 7b. RESTART ON FAILURE               │
+    │  Signal received (Ctrl+C)    │  │  Exception caught during execution   │
+    │  ↓                           │  │  ↓                                   │
+    │  Complete in-flight jobs     │  │  Wait the configured restart delay   │
+    │  ↓                           │  │  ↓                                   │
+    │  Run context manager cleanup │  │  Loop back to step 4 (re-invoke      │
+    │  ↓                           │  │  your factory fresh)                 │
+    │  Exit process                │  │                                      │
+    └──────────────────────────────┘  └──────────────────────────────────────┘
+
+Factory Input Types
+~~~~~~~~~~~~~~~~~~~
+
+The factory loader accepts two input types:
+
+**String path** (used with CLI):
+  A module path in the format ``module:function``. The loader imports the module
+  and retrieves the function. Example: ``my_app.workers:create_pgqueuer``
+
+**Callable** (used programmatically):
+  When calling ``run()`` directly from Python, you can pass a callable such as
+  a lambda or ``functools.partial``. This enables dynamic configuration without
+  needing a separate module. See ``examples/callable_factory/`` for this pattern.
+
+Factory Return Types
+~~~~~~~~~~~~~~~~~~~~
+
+Your factory can return the manager in three ways, and PGQueuer handles each uniformly:
+
+**Simple return value**:
+  An async function that returns the manager directly. Simple to write but
+  offers no cleanup hook when the manager shuts down.
+
+**Async context manager**:
+  Uses ``@asynccontextmanager`` to yield the manager. Code before ``yield`` runs
+  at startup; code after ``yield`` (in ``finally``) runs at shutdown. This is the
+  recommended pattern when you need to close connections or release resources.
+
+**Sync context manager**:
+  Same as above but synchronous. Useful when wrapping libraries that require
+  synchronous cleanup.
+
+The supervisor wraps all three types into a unified async context manager internally,
+so you can choose whichever pattern fits your use case.
+
+Restart Behavior
+~~~~~~~~~~~~~~~~
+
+When ``--restart-on-failure`` is enabled:
+
+1. If an exception occurs during manager execution, it is logged
+2. The supervisor waits for the configured ``--restart-delay``
+3. Your factory is called again fresh, creating new connections and state
+4. The manager runs again from the beginning
+
+This means your factory should be idempotent—safe to call multiple times.
+Each restart gets a completely fresh manager instance.
+
+Shutdown Behavior
+~~~~~~~~~~~~~~~~~
+
+When a shutdown signal is received (SIGINT or SIGTERM):
+
+1. The shutdown event is set, signaling the manager to stop
+2. The manager finishes processing any in-flight jobs
+3. If you used a context manager factory, the cleanup code runs
+4. The process exits cleanly
+
+This ensures jobs are not abandoned mid-execution and resources are properly released.
+
+Shared Resources
+~~~~~~~~~~~~~~~~
+
+Your factory can initialize expensive resources once (HTTP clients, connection pools,
+ML models) and pass them to the manager via the ``resources`` parameter. These are
+then accessible in your entrypoint functions through the job context.
+
+Resources are:
+
+- Created once when the factory runs
+- Shared across all job executions within that manager instance
+- Re-created on restart (since the factory runs again)
+- Cleaned up via context manager teardown
+
+See ``examples/consumer.py`` for a working example of shared resources.
+
+Key Points
+~~~~~~~~~~
+
+- **Factory runs on each restart**: With ``--restart-on-failure``, your factory
+  executes again after failures, creating fresh connections and state.
+
+- **Context managers enable cleanup**: Use async context managers when you need
+  to close connections or release resources on shutdown.
+
+- **Callables enable dynamic configuration**: Pass lambdas or partials when you
+  need runtime parameters without creating separate module files.
+
+- **Shutdown is graceful**: In-flight jobs complete before teardown runs,
+  preventing abandoned work.
+
+See Also
+~~~~~~~~
+
+- ``examples/consumer.py`` — Async context manager factory pattern
+- ``examples/callable_factory/`` — Callable factory with custom CLI and parameters
