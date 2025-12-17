@@ -147,10 +147,22 @@ All PgQueuer classmethods accept the following optional parameters:
 - Use the sync driver only to enqueue jobs from short-lived scripts or
   WSGI-style applications.
 - Reuse connections or pools and keep autocommit enabled.
+- Never wrap the same asyncpg connection in more than one `AsyncpgDriver`, and do not
+  share a single driver across multiple consumer processes. Give each consumer its own
+  driver/connection (or pool lease) so asyncpg never raises `InterfaceError: cannot perform
+  operation: another operation is in progress`.
 - Use the PgQueuer classmethods (`from_asyncpg_connection`, `from_asyncpg_pool`, 
   `from_psycopg_connection`) for simplified setup and cleaner code.
 - When using psycopg, always ensure autocommit is enabled on the connection before
   passing it to `PgQueuer.from_psycopg_connection()`.
+
+### Connection ownership and shared drivers
+Each async driver instance owns exactly one database connection. Wrapping the same
+`asyncpg.Connection` in more than one `AsyncpgDriver` (or sharing a single driver
+between multiple consumer tasks) bypasses the per-driver lock and allows concurrent
+queries, which surfaces as `asyncpg.InterfaceError: cannot perform operation: another
+operation is in progress`. Give every consumer its own driver or acquire a dedicated
+connection from a pool before constructing the driver.
 
 ## Implementation Notes
 - PGQueuer includes runtime checks to verify critical connection properties, such as autocommit mode, and provides descriptive error messages when requirements are not met.
