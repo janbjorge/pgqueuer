@@ -119,6 +119,11 @@ class CompletionWatcher:
         init=False,
         repr=False,
     )
+    refresh_pending: bool = field(
+        default=False,
+        init=False,
+        repr=False,
+    )
 
     # ───────────────────────── life-cycle ────────────────────────────
     def __post_init__(self) -> None:
@@ -171,25 +176,51 @@ class CompletionWatcher:
     # ────────────────── debounce / scheduling helpers ────────────────
     def _schedule_refresh_waiters(self) -> None:
         """
-        (Re)arm the debounce timer so that `_on_change` is executed at most once
-        in every ``debounce`` window irrespective of how many triggers arrive.
+        (Re)arm the debounce timer so that `_refresh_waiters` is executed at most
+        once per ``debounce`` window irrespective of how many triggers arrive.
+
+        If a debounce cycle is already active (task running), we set
+        ``refresh_pending`` so that a follow-up refresh is scheduled once the
+        current cycle completes. This prevents concurrent ``_refresh_waiters``
+        calls which would cause asyncpg errors (issue #510).
         """
-        if self.debounce_task and not self.debounce_task.done():
-            return  # timer already running
-        self.debounce_task = asyncio.create_task(self._debounced())
-        self.task_manager.add(self.debounce_task)
+        if self.debounce_task is not None and not self.debounce_task.done():
+            # A debounce cycle is active; mark that another refresh is needed
+            self.refresh_pending = True
+            return
+        self._start_debounce_task()
+
+    def _start_debounce_task(self) -> None:
+        """Create and register a new debounce task."""
+        task = asyncio.create_task(self._debounced())
+        self.debounce_task = task
+        self.task_manager.add(task)
 
     async def _debounced(self) -> None:
-        """Sleep for the debounce interval, then run the consolidated check."""
+        """
+        Sleep for the debounce interval, then run the consolidated check.
+
+        The ``debounce_task`` reference is kept alive until *after*
+        ``_refresh_waiters()`` completes. This ensures that any triggers
+        arriving during the refresh set ``refresh_pending`` instead of
+        starting a concurrent task (which would cause issue #510).
+
+        If ``refresh_pending`` is set when we finish, we start a new
+        debounce cycle to handle those triggers.
+        """
         try:
             with suppress(TimeoutError, asyncio.TimeoutError):
                 await asyncio.wait_for(
                     self.shutdown.wait(),
                     timeout=self.debounce.total_seconds(),
                 )
+            await self._refresh_waiters()
         finally:
             self.debounce_task = None
-        await self._refresh_waiters()
+            # If triggers arrived during refresh, start a new cycle
+            if self.refresh_pending:
+                self.refresh_pending = False
+                self._start_debounce_task()
 
     # ────────────────── event handlers & polling ─────────────────────
     def _is_relevant_event(self, payload: str | bytes | bytearray) -> None:

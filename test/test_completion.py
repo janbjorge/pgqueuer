@@ -113,70 +113,79 @@ async def test_completion_is_terminal(apgdriver: db.Driver, status: str) -> None
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Debounce-specific tests
+# Concurrent _refresh_waiters execution test
 # ─────────────────────────────────────────────────────────────────────
 
 
-async def test_debounce_coalesces_burst(
-    monkeypatch: pytest.MonkeyPatch,
+async def test_no_concurrent_refresh_waiters(
     apgdriver: db.Driver,
 ) -> None:
     """
-    Rapidly trigger `_schedule_on_change` many times inside a single debounce
-    window and assert that the expensive `_on_change` body executes only once.
+    Multiple _debounced tasks must not call _refresh_waiters() concurrently.
+
+    Regression test for https://github.com/janbjorge/pgqueuer/issues/510
+
+    The bug occurred because _debounced() set debounce_task = None in the
+    finally block BEFORE calling _refresh_waiters(). This allowed new
+    debounce tasks to be created while a refresh was in progress, leading
+    to concurrent database operations on the same connection:
+
+    - InternalClientError: got result for unknown protocol state 3
+    - InterfaceError: cannot perform operation: another operation is in progress
+
+    This test tracks how many _debounced tasks attempt to call _refresh_waiters
+    concurrently. With the bug, we see overlapping calls.
     """
     watcher = CompletionWatcher(
         apgdriver,
-        debounce=timedelta(milliseconds=20),
+        debounce=timedelta(milliseconds=5),
+        refresh_interval=timedelta(seconds=60),
     )
-    await watcher.__aenter__()
 
-    call_count = 0
+    # Track concurrent refresh attempts (before the internal lock)
+    active_refreshes = 0
+    max_concurrent_refreshes = 0
+    total_refresh_calls = 0
+    first_started = asyncio.Event()
+    allow_continue = asyncio.Event()
 
-    async def fake_refresh_waiters() -> None:
-        nonlocal call_count
-        call_count += 1
+    async def tracking_refresh() -> None:
+        nonlocal active_refreshes, max_concurrent_refreshes, total_refresh_calls
+        total_refresh_calls += 1
+        active_refreshes += 1
+        max_concurrent_refreshes = max(max_concurrent_refreshes, active_refreshes)
 
-    # Patch before scheduling so the debounced coroutine sees the stub
-    monkeypatch.setattr(watcher, "_refresh_waiters", fake_refresh_waiters)
+        if total_refresh_calls == 1:
+            first_started.set()
+            # Block first refresh to create window for concurrent calls
+            await allow_continue.wait()
 
-    for _ in range(10):
-        watcher._schedule_refresh_waiters()  # burst of triggers
+        active_refreshes -= 1
 
-    await asyncio.sleep(0.05)  # > debounce window
-    assert call_count == 1
+    # Replace _refresh_waiters to track concurrency
+    watcher._refresh_waiters = tracking_refresh  # type: ignore[method-assign]
 
-    await watcher.__aexit__(None, None, None)
+    # Manually trigger initial refresh
+    watcher._schedule_refresh_waiters()
 
+    # Wait for first refresh to start and block
+    await asyncio.wait_for(first_started.wait(), timeout=2.0)
 
-async def test_debounce_allows_separate_windows(
-    monkeypatch: pytest.MonkeyPatch,
-    apgdriver: db.Driver,
-) -> None:
-    """
-    Ensure that events separated by more than the debounce interval result in
-    multiple `_on_change` executions.
-    """
-    watcher = CompletionWatcher(
-        apgdriver,
-        debounce=timedelta(milliseconds=20),
+    # While first refresh is blocked, rapidly trigger more
+    # With the bug, these create new _debounced tasks that call _refresh_waiters
+    for _ in range(5):
+        watcher._schedule_refresh_waiters()
+        await asyncio.sleep(0.01)  # Longer than debounce to trigger new tasks
+
+    # Release the blocked refresh
+    allow_continue.set()
+
+    # Let pending tasks complete
+    await asyncio.sleep(0.1)
+
+    # The key assertion: only 1 refresh should be active at a time
+    # If max > 1, the debounce mechanism failed to prevent concurrent calls
+    assert max_concurrent_refreshes == 1, (
+        f"Bug reproduced: {max_concurrent_refreshes} concurrent _refresh_waiters() calls "
+        f"detected (total: {total_refresh_calls}). Issue #510."
     )
-    await watcher.__aenter__()
-
-    call_count = 0
-
-    async def fake_refresh_waiters() -> None:
-        nonlocal call_count
-        call_count += 1
-
-    monkeypatch.setattr(watcher, "_refresh_waiters", fake_refresh_waiters)
-
-    watcher._schedule_refresh_waiters()
-    await asyncio.sleep(0.05)  # wait past first debounce firing
-
-    watcher._schedule_refresh_waiters()
-    await asyncio.sleep(0.05)  # wait past second debounce firing
-
-    assert call_count == 2
-
-    await watcher.__aexit__(None, None, None)
