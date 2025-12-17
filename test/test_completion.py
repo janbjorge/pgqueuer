@@ -119,6 +119,7 @@ async def test_completion_is_terminal(apgdriver: db.Driver, status: str) -> None
 
 async def test_no_concurrent_refresh_waiters(
     apgdriver: db.Driver,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     Multiple _debounced tasks must not call _refresh_waiters() concurrently.
@@ -163,7 +164,7 @@ async def test_no_concurrent_refresh_waiters(
         active_refreshes -= 1
 
     # Replace _refresh_waiters to track concurrency
-    watcher._refresh_waiters = tracking_refresh  # type: ignore[method-assign]
+    monkeypatch.setattr(watcher, "_refresh_waiters", tracking_refresh)
 
     # Manually trigger initial refresh
     watcher._schedule_refresh_waiters()
@@ -175,7 +176,9 @@ async def test_no_concurrent_refresh_waiters(
     # With the bug, these create new _debounced tasks that call _refresh_waiters
     for _ in range(5):
         watcher._schedule_refresh_waiters()
-        await asyncio.sleep(0.01)  # Longer than debounce to trigger new tasks
+        # Sleep 10ms (> 5ms debounce) to allow debounce to expire and trigger new tasks.
+        # Note: This timing may be sensitive in slow CI environments.
+        await asyncio.sleep(0.01)
 
     # Release the blocked refresh
     allow_continue.set()
