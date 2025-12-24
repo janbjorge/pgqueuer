@@ -1,5 +1,6 @@
 from .applications import PgQueuer
 from .db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
+from .metrics import create_metrics_router
 from .models import Job, JobId
 from .qm import QueueManager
 from .queries import Queries
@@ -20,4 +21,5 @@ __all__ = [
     "Queries",
     "QueueManager",
     "SchedulerManager",
+    "create_metrics_router",
 ]
