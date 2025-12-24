@@ -2,31 +2,54 @@ Prometheus Metrics Integration
 ==============================
 PGQueuer includes an integration with Prometheus, enabling metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
 
-## Using the Metrics Router in Your Application
+## Using Metrics in Your Application
 
-Starting with version X.X.X, PGQueuer provides a built-in metrics router that can be directly imported and integrated into your FastAPI application.
+Starting with version X.X.X, PGQueuer provides a built-in `generate_metrics()` function that returns Prometheus-formatted metrics text. This can be integrated into any web framework (FastAPI, Flask, Django, etc.).
 
 ### Basic Usage
 
 ```python
 import asyncpg
-from fastapi import FastAPI
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer import create_metrics_router
-
-# Create your FastAPI app
-app = FastAPI()
+from pgqueuer import generate_metrics
 
 # Connect to your database and create a driver
-async def setup():
-    conn = await asyncpg.connect()
-    driver = AsyncpgDriver(conn)
-    
-    # Create and include the metrics router
-    metrics_router = create_metrics_router(driver)
-    app.include_router(metrics_router)
+conn = await asyncpg.connect()
+driver = AsyncpgDriver(conn)
 
-# Metrics will be available at /metrics endpoint
+# Generate metrics text
+metrics_text = await generate_metrics(driver)
+# Returns a string in Prometheus text format
+```
+
+### Integration with FastAPI
+
+```python
+from fastapi import FastAPI, Response
+from pgqueuer import generate_metrics
+from pgqueuer.db import AsyncpgDriver
+
+app = FastAPI()
+
+@app.get("/metrics")
+async def metrics(driver: AsyncpgDriver):  # Use dependency injection for driver
+    metrics_text = await generate_metrics(driver)
+    return Response(content=metrics_text, media_type="text/plain")
+```
+
+### Integration with Flask
+
+```python
+from flask import Flask, Response
+from pgqueuer import generate_metrics
+from pgqueuer.db import AsyncpgDriver
+
+app = Flask(__name__)
+
+@app.route("/metrics")
+async def metrics():
+    metrics_text = await generate_metrics(driver)
+    return Response(metrics_text, mimetype="text/plain")
 ```
 
 ### Custom Metric Names
@@ -36,7 +59,7 @@ You can customize the metric names to fit your naming conventions:
 ```python
 from datetime import timedelta
 
-metrics_router = create_metrics_router(
+metrics_text = await generate_metrics(
     driver,
     queue_count_metric_name="my_app_queue_count",
     logs_count_metric_name="my_app_logs_count",

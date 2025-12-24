@@ -5,15 +5,12 @@ from __future__ import annotations
 from datetime import timedelta
 from uuid import uuid4
 
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
-
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.metrics import (
     aggregated_log_statistics,
     aggregated_queue_statistics,
     aggregated_statistics,
-    create_metrics_router,
+    generate_metrics,
     prometheus_format,
 )
 from pgqueuer.models import LogStatistics, QueueStatistics
@@ -144,68 +141,52 @@ def test_aggregated_statistics() -> None:
     assert any("custom_logs_count" in r for r in results)
 
 
-async def test_create_metrics_router_basic(apgdriver: AsyncpgDriver) -> None:
-    """Test creating a basic metrics router."""
-    router = create_metrics_router(apgdriver)
+async def test_generate_metrics_basic(apgdriver: AsyncpgDriver) -> None:
+    """Test generating basic metrics."""
+    metrics_text = await generate_metrics(apgdriver)
 
-    assert router is not None
-
-    # Check that the router has the metrics endpoint
-    routes = [route.path for route in router.routes if hasattr(route, "path")]
-    assert "/metrics" in routes
+    assert isinstance(metrics_text, str)
+    # Metrics text can be empty if there's no data yet
+    assert metrics_text is not None
 
 
-async def test_metrics_endpoint_returns_data(apgdriver: AsyncpgDriver) -> None:
-    """Test that the /metrics endpoint returns valid data."""
+async def test_generate_metrics_returns_data(apgdriver: AsyncpgDriver) -> None:
+    """Test that generate_metrics returns valid prometheus data."""
     queries = Queries(apgdriver)
 
     # Enqueue some test jobs
     await queries.enqueue("test_entrypoint", b"test_payload")
 
-    # Create router and app
-    router = create_metrics_router(apgdriver)
-    app = FastAPI()
-    app.include_router(router)
+    # Generate metrics
+    metrics_text = await generate_metrics(apgdriver)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/metrics")
-
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "text/plain; charset=utf-8"
-
-        content = response.text
-        assert "pgqueuer_queue_count" in content or len(content) >= 0  # May be empty if no data
+    assert isinstance(metrics_text, str)
+    # Should contain queue metrics if there's data
+    assert "pgqueuer_queue_count" in metrics_text or len(metrics_text) >= 0
 
 
-async def test_metrics_endpoint_custom_metric_names(apgdriver: AsyncpgDriver) -> None:
+async def test_generate_metrics_custom_metric_names(apgdriver: AsyncpgDriver) -> None:
     """Test that custom metric names are used correctly."""
     queries = Queries(apgdriver)
 
     # Enqueue a test job
     await queries.enqueue("custom_test", b"payload")
 
-    # Create router with custom metric names
-    router = create_metrics_router(
+    # Generate metrics with custom names
+    metrics_text = await generate_metrics(
         apgdriver,
         queue_count_metric_name="my_custom_queue",
         logs_count_metric_name="my_custom_logs",
     )
-    app = FastAPI()
-    app.include_router(router)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/metrics")
-
-        assert response.status_code == 200
-        content = response.text
-
-        # Check that custom names might appear (depending on data)
-        # At minimum, the response should be valid
-        assert isinstance(content, str)
+    assert isinstance(metrics_text, str)
+    # Custom names should appear in the metrics if there's data
+    if metrics_text:
+        assert "my_custom_queue" in metrics_text or "my_custom_logs" in metrics_text
 
 
-async def test_metrics_endpoint_with_log_data(apgdriver: AsyncpgDriver) -> None:
-    """Test metrics endpoint with both queue and log data."""
+async def test_generate_metrics_with_log_data(apgdriver: AsyncpgDriver) -> None:
+    """Test generating metrics with both queue and log data."""
     queries = Queries(apgdriver)
 
     # Enqueue and process a job to generate log data
@@ -221,60 +202,27 @@ async def test_metrics_endpoint_with_log_data(apgdriver: AsyncpgDriver) -> None:
     if jobs:
         await queries.log_jobs([(jobs[0], "successful", None)])
 
-    # Create router
-    router = create_metrics_router(apgdriver)
-    app = FastAPI()
-    app.include_router(router)
+    # Generate metrics
+    metrics_text = await generate_metrics(apgdriver)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/metrics")
-
-        assert response.status_code == 200
-        content = response.text
-
-        # Should contain metrics data
-        assert isinstance(content, str)
-        # May contain queue or log metrics depending on timing
-        assert len(content) >= 0
+    assert isinstance(metrics_text, str)
+    # Should contain metrics data
+    assert len(metrics_text) >= 0
 
 
-async def test_metrics_router_custom_time_window(apgdriver: AsyncpgDriver) -> None:
-    """Test creating a metrics router with custom time window."""
-    router = create_metrics_router(
+async def test_generate_metrics_custom_time_window(apgdriver: AsyncpgDriver) -> None:
+    """Test generating metrics with custom time window."""
+    metrics_text = await generate_metrics(
         apgdriver,
         log_statistics_last=timedelta(minutes=10),
     )
 
-    app = FastAPI()
-    app.include_router(router)
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/metrics")
-
-        assert response.status_code == 200
-
-
-async def test_metrics_no_health_endpoint(apgdriver: AsyncpgDriver) -> None:
-    """Test that the metrics router does not include a /health endpoint."""
-    router = create_metrics_router(apgdriver)
-    app = FastAPI()
-    app.include_router(router)
-
-    routes = [route.path for route in router.routes if hasattr(route, "path")]
-
-    # Ensure /health is NOT in the routes
-    assert "/health" not in routes
-
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/health")
-
-        # Should return 404 since /health is not defined
-        assert response.status_code == 404
+    assert isinstance(metrics_text, str)
 
 
 async def test_import_from_pgqueuer() -> None:
-    """Test that create_metrics_router can be imported from pgqueuer package."""
-    from pgqueuer import create_metrics_router as imported_router
+    """Test that generate_metrics can be imported from pgqueuer package."""
+    from pgqueuer import generate_metrics as imported_func
 
-    assert imported_router is not None
-    assert callable(imported_router)
+    assert imported_func is not None
+    assert callable(imported_func)

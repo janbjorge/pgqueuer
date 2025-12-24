@@ -1,9 +1,9 @@
 """
 Prometheus metrics integration for PGQueuer.
 
-This module provides a FastAPI router factory for exposing Prometheus-compatible
-metrics about queue and log statistics. The router can be integrated into existing
-FastAPI applications.
+This module provides functions for generating Prometheus-compatible metrics
+about queue and log statistics. The metrics can be integrated into any web
+framework (FastAPI, Flask, Django, etc.).
 """
 
 from __future__ import annotations
@@ -11,9 +11,6 @@ from __future__ import annotations
 from datetime import timedelta
 from itertools import groupby
 from typing import Generator
-
-from fastapi import APIRouter
-from fastapi.responses import Response
 
 from pgqueuer.db import Driver
 from pgqueuer.models import LogStatistics, QueueStatistics
@@ -132,19 +129,19 @@ def aggregated_statistics(
     yield from aggregated_log_statistics(log_statistics, logs_count_metric_name)
 
 
-def create_metrics_router(
+async def generate_metrics(
     driver: Driver,
     *,
     queue_count_metric_name: str | None = None,
     logs_count_metric_name: str | None = None,
     log_statistics_last: timedelta = timedelta(minutes=5),
-) -> APIRouter:
+) -> str:
     """
-    Create a FastAPI router with a /metrics endpoint for Prometheus.
+    Generate Prometheus-formatted metrics text for queue and log statistics.
 
-    This function creates a router that exposes queue and log statistics
-    in Prometheus format. The driver parameter is used to query the database
-    for statistics.
+    This function queries the database for queue and log statistics and returns
+    them in Prometheus text format. The returned string can be used as a response
+    in any web framework.
 
     Args:
         driver: A database driver instance (e.g., AsyncpgDriver) for executing queries.
@@ -155,19 +152,32 @@ def create_metrics_router(
         log_statistics_last: Time window for log statistics (default: 5 minutes).
 
     Returns:
-        An APIRouter instance with the /metrics endpoint configured.
+        A string containing Prometheus-formatted metrics.
 
     Example:
         >>> import asyncpg
         >>> from pgqueuer.db import AsyncpgDriver
-        >>> from pgqueuer.metrics import create_metrics_router
+        >>> from pgqueuer.metrics import generate_metrics
         >>>
-        >>> # In your FastAPI app setup
-        >>> async def setup():
+        >>> # In your web framework endpoint
+        >>> async def metrics_endpoint():
         ...     conn = await asyncpg.connect()
         ...     driver = AsyncpgDriver(conn)
-        ...     metrics_router = create_metrics_router(driver)
-        ...     app.include_router(metrics_router)
+        ...     metrics_text = await generate_metrics(driver)
+        ...     return metrics_text  # Return as text/plain response
+        ...
+        >>> # With FastAPI
+        >>> from fastapi import Response
+        >>> @app.get("/metrics")
+        >>> async def metrics():
+        ...     metrics_text = await generate_metrics(driver)
+        ...     return Response(content=metrics_text, media_type="text/plain")
+        ...
+        >>> # With Flask
+        >>> @app.route("/metrics")
+        >>> async def metrics():
+        ...     metrics_text = await generate_metrics(driver)
+        ...     return metrics_text, 200, {"Content-Type": "text/plain"}
     """
     # Set default metric names with prefix support
     if queue_count_metric_name is None:
@@ -176,26 +186,17 @@ def create_metrics_router(
         logs_count_metric_name = add_prefix("pgqueuer_logs_count")
 
     queries = Queries(driver)
-    router = APIRouter()
+    queue_statistics = await queries.queue_size()
+    log_statistics = await queries.log_statistics(
+        tail=None,
+        last=log_statistics_last,
+    )
 
-    @router.get("/metrics", response_class=Response)
-    async def metrics() -> Response:
-        """Endpoint that returns Prometheus-formatted metrics."""
-        queue_statistics = await queries.queue_size()
-        log_statistics = await queries.log_statistics(
-            tail=None,
-            last=log_statistics_last,
+    return "\n".join(
+        aggregated_statistics(
+            queue_statistics,
+            log_statistics,
+            queue_count_metric_name,
+            logs_count_metric_name,
         )
-        return Response(
-            content="\n".join(
-                aggregated_statistics(
-                    queue_statistics,
-                    log_statistics,
-                    queue_count_metric_name,
-                    logs_count_metric_name,
-                )
-            ),
-            media_type="text/plain",
-        )
-
-    return router
+    )
