@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
-from fastapi.responses import Response
 from fastapi.testclient import TestClient
 from flask import Flask
 
 from pgqueuer.metrics import prometheus as metrics
+from pgqueuer.metrics.fastapi import create_metrics_router
+from pgqueuer.metrics.flask import create_metrics_blueprint
 from pgqueuer.models import LogStatistics, QueueStatistics
 
 
@@ -107,22 +106,12 @@ async def test_collect_metrics_with_statistics() -> None:
     )
 
 
-def test_fastapi_metrics_endpoint() -> None:
+def test_fastapi_create_metrics_router() -> None:
     queries = FakeQueries()
+    router = create_metrics_router(queries)
 
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        app.state.queries = queries
-        yield
-
-    app = FastAPI(lifespan=lifespan)
-
-    @app.get("/metrics")
-    async def get_metrics() -> Response:
-        return Response(
-            content=await metrics.collect_metrics(app.state.queries),
-            media_type="text/plain",
-        )
+    app = FastAPI()
+    app.include_router(router)
 
     with TestClient(app) as client:
         response = client.get("/metrics")
@@ -131,20 +120,41 @@ def test_fastapi_metrics_endpoint() -> None:
     assert response.headers["content-type"] == "text/plain; charset=utf-8"
 
 
-def test_flask_metrics_endpoint() -> None:
+def test_fastapi_create_metrics_router_custom_path() -> None:
     queries = FakeQueries()
+    router = create_metrics_router(queries, path="/custom/metrics")
+
+    app = FastAPI()
+    app.include_router(router)
+
+    with TestClient(app) as client:
+        response = client.get("/custom/metrics")
+
+    assert response.status_code == 200
+
+
+def test_flask_create_metrics_blueprint() -> None:
+    queries = FakeQueries()
+    blueprint = create_metrics_blueprint(queries)
 
     app = Flask(__name__)
-
-    @app.route("/metrics")
-    def get_metrics() -> tuple[str, int, dict[str, str]]:
-        import asyncio
-
-        content = asyncio.run(metrics.collect_metrics(queries))
-        return content, 200, {"Content-Type": "text/plain"}
+    app.register_blueprint(blueprint)
 
     with app.test_client() as client:
         response = client.get("/metrics")
 
     assert response.status_code == 200
     assert response.content_type == "text/plain"
+
+
+def test_flask_create_metrics_blueprint_with_prefix() -> None:
+    queries = FakeQueries()
+    blueprint = create_metrics_blueprint(queries, url_prefix="/monitoring")
+
+    app = Flask(__name__)
+    app.register_blueprint(blueprint)
+
+    with app.test_client() as client:
+        response = client.get("/monitoring/metrics")
+
+    assert response.status_code == 200
