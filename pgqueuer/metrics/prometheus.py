@@ -3,24 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from itertools import groupby
-from typing import Callable, Generator, Iterable, Protocol, TypeAlias
+from typing import Callable, Generator, Iterable, TypeAlias
 
 from pgqueuer.models import LogStatistics, QueueStatistics
-from pgqueuer.qb import add_prefix
+from pgqueuer.queries import Queries
 
 ReduceFn: TypeAlias = Callable[[Iterable[float]], float]
-
-
-class QueriesProtocol(Protocol):
-    """Protocol defining the interface required by collect_metrics."""
-
-    async def queue_size(self) -> list[QueueStatistics]: ...
-
-    async def log_statistics(
-        self,
-        tail: int | None,
-        last: timedelta | None = None,
-    ) -> list[LogStatistics]: ...
 
 
 @dataclass
@@ -56,7 +44,7 @@ def prometheus_format(
         'queue_size{entrypoint="send_email"} 42'
     """
     label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
-    return f"{add_prefix(metric_name)}{{{label_parts}}} {value}"
+    return f"{metric_name}{{{label_parts}}} {value}"
 
 
 def aggregated_queue_statistics(
@@ -122,7 +110,7 @@ def aggregated_statistics(
 
 
 async def collect_metrics(
-    queries: QueriesProtocol,
+    queries: Queries,
     *,
     metric_names: MetricNames | None = None,
     last: timedelta = timedelta(minutes=5),

@@ -71,7 +71,7 @@ def test_custom_metric_names_are_used() -> None:
 
 
 async def test_collect_metrics_returns_payload() -> None:
-    queries = FakeQueries()
+    queries = cast(Queries, FakeQueries())
 
     metrics_payload = await metrics.collect_metrics(queries)
 
@@ -92,7 +92,7 @@ async def test_collect_metrics_with_statistics() -> None:
         ),
     ]
 
-    queries = FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
+    queries = cast(Queries, FakeQueries(queue_stats=queue_stats, log_stats=log_stats))
 
     metrics_payload = await metrics.collect_metrics(queries)
 
