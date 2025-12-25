@@ -3,101 +3,83 @@ Prometheus Metrics Integration
 
 PGQueuer includes a framework-agnostic Prometheus integration for metrics collection. This allows you to monitor queue sizes and job processing statistics in real-time.
 
-The `collect_metrics` function returns a Prometheus-formatted string that you can serve from any web framework.
+Installation
+------------
 
-Usage
------
+The core metrics functionality has no extra dependencies. For plug-and-play framework integrations, install the optional extras:
 
-Import the metrics helper from `pgqueuer.metrics.prometheus`:
+```bash
+# For FastAPI integration
+pip install pgqueuer[fastapi]
 
-```python
-from pgqueuer.metrics.prometheus import collect_metrics, MetricNames
+# For Flask integration
+pip install pgqueuer[flask]
 ```
 
-The `collect_metrics` function takes a `Queries` instance and returns a string ready for Prometheus to scrape.
+Core Usage
+----------
 
-FastAPI
--------
+The `collect_metrics` function returns a Prometheus-formatted string that you can serve from any web framework:
 
 ```python
-from contextlib import asynccontextmanager
-
-import asyncpg
-from fastapi import FastAPI
-from fastapi.responses import Response
-
-from pgqueuer.db import AsyncpgDriver
 from pgqueuer.metrics.prometheus import collect_metrics
-from pgqueuer.queries import Queries
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.queries = Queries(AsyncpgDriver(await asyncpg.connect()))
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
-
-
-@app.get("/metrics")
-async def metrics() -> Response:
-    return Response(
-        content=await collect_metrics(app.state.queries),
-        media_type="text/plain",
-    )
+content = await collect_metrics(queries)
 ```
 
-Flask
------
+FastAPI Integration
+-------------------
+
+Use the plug-and-play router:
 
 ```python
-import asyncio
+from fastapi import FastAPI
 
-import asyncpg
+from pgqueuer.metrics.fastapi import create_metrics_router
+
+app = FastAPI()
+app.include_router(create_metrics_router(queries))
+```
+
+With custom path:
+
+```python
+app.include_router(create_metrics_router(queries, path="/custom/metrics"))
+```
+
+Flask Integration
+-----------------
+
+Use the plug-and-play blueprint:
+
+```python
 from flask import Flask
 
-from pgqueuer.db import AsyncpgDriver
-from pgqueuer.metrics.prometheus import collect_metrics
-from pgqueuer.queries import Queries
+from pgqueuer.metrics.flask import create_metrics_blueprint
 
 app = Flask(__name__)
-
-
-def get_queries() -> Queries:
-    conn = asyncio.run(asyncpg.connect())
-    return Queries(AsyncpgDriver(conn))
-
-
-queries = get_queries()
-
-
-@app.route("/metrics")
-def metrics():
-    content = asyncio.run(collect_metrics(queries))
-    return content, 200, {"Content-Type": "text/plain"}
+app.register_blueprint(create_metrics_blueprint(queries))
 ```
 
-Starlette
----------
+With URL prefix:
 
 ```python
-from contextlib import asynccontextmanager
+app.register_blueprint(create_metrics_blueprint(queries, url_prefix="/monitoring"))
+```
 
-import asyncpg
+Manual Integration
+------------------
+
+For other frameworks or custom setups, use `collect_metrics` directly:
+
+### Starlette
+
+```python
 from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from pgqueuer.db import AsyncpgDriver
 from pgqueuer.metrics.prometheus import collect_metrics
-from pgqueuer.queries import Queries
-
-
-@asynccontextmanager
-async def lifespan(app):
-    app.state.queries = Queries(AsyncpgDriver(await asyncpg.connect()))
-    yield
 
 
 async def metrics(request):
@@ -105,16 +87,29 @@ async def metrics(request):
     return PlainTextResponse(content)
 
 
-app = Starlette(lifespan=lifespan, routes=[Route("/metrics", metrics)])
+app = Starlette(routes=[Route("/metrics", metrics)])
+```
+
+### Any ASGI/WSGI Framework
+
+```python
+from pgqueuer.metrics.prometheus import collect_metrics
+
+# Async frameworks
+content = await collect_metrics(queries)
+
+# Sync frameworks
+import asyncio
+content = asyncio.run(collect_metrics(queries))
 ```
 
 Custom Metric Names
 -------------------
 
-You can customize the metric names to match your conventions:
+Customize metric names to match your conventions:
 
 ```python
-from pgqueuer.metrics.prometheus import collect_metrics, MetricNames
+from pgqueuer.metrics.prometheus import MetricNames, collect_metrics
 
 content = await collect_metrics(
     queries,
@@ -125,10 +120,22 @@ content = await collect_metrics(
 )
 ```
 
+Or with the framework integrations:
+
+```python
+from pgqueuer.metrics.fastapi import create_metrics_router
+from pgqueuer.metrics.prometheus import MetricNames
+
+router = create_metrics_router(
+    queries,
+    metric_names=MetricNames(queue_count="myapp_queue_size"),
+)
+```
+
 Time Window
 -----------
 
-By default, log statistics cover the last 5 minutes. You can adjust this:
+By default, log statistics cover the last 5 minutes. Adjust with the `last` parameter:
 
 ```python
 from datetime import timedelta
