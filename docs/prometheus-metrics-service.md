@@ -11,9 +11,6 @@ The core metrics functionality has no extra dependencies. For plug-and-play fram
 ```bash
 # For FastAPI integration
 pip install pgqueuer[fastapi]
-
-# For Flask integration
-pip install pgqueuer[flask]
 ```
 
 Core Usage
@@ -55,31 +52,6 @@ With custom path:
 
 ```python
 app.include_router(create_metrics_router(queries, path="/custom/metrics"))
-```
-
-Flask Integration
------------------
-
-```python
-import asyncio
-
-import asyncpg
-from flask import Flask
-
-from pgqueuer.db import AsyncpgDriver
-from pgqueuer.metrics.flask import create_metrics_blueprint
-from pgqueuer.queries import Queries
-
-queries = Queries(AsyncpgDriver(asyncio.run(asyncpg.connect())))
-
-app = Flask(__name__)
-app.register_blueprint(create_metrics_blueprint(queries))
-```
-
-With URL prefix:
-
-```python
-app.register_blueprint(create_metrics_blueprint(queries, url_prefix="/monitoring"))
 ```
 
 Manual Integration

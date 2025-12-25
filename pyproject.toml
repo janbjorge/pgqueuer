@@ -66,7 +66,6 @@ psycopg = ["psycopg>=3.2.0"]
 logfire = ["logfire>=3.0.0"]
 sentry = ["sentry-sdk>=2.0.0"]
 fastapi = ["fastapi>=0.100.0"]
-flask = ["flask>=2.0.0"]
 dev = [
     "async-timeout>=4.0.3",
     "asyncpg",

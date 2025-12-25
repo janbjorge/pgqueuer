@@ -5,11 +5,9 @@ from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from flask import Flask
 
 from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
-from pgqueuer.metrics.flask import create_metrics_blueprint
 from pgqueuer.models import LogStatistics, QueueStatistics
 from pgqueuer.queries import Queries
 
@@ -131,32 +129,5 @@ def test_fastapi_create_metrics_router_custom_path() -> None:
 
     with TestClient(app) as client:
         response = client.get("/custom/metrics")
-
-    assert response.status_code == 200
-
-
-def test_flask_create_metrics_blueprint() -> None:
-    queries = cast(Queries, FakeQueries())
-    blueprint = create_metrics_blueprint(queries)
-
-    app = Flask(__name__)
-    app.register_blueprint(blueprint)
-
-    with app.test_client() as client:
-        response = client.get("/metrics")
-
-    assert response.status_code == 200
-    assert response.content_type == "text/plain"
-
-
-def test_flask_create_metrics_blueprint_with_prefix() -> None:
-    queries = cast(Queries, FakeQueries())
-    blueprint = create_metrics_blueprint(queries, url_prefix="/monitoring")
-
-    app = Flask(__name__)
-    app.register_blueprint(blueprint)
-
-    with app.test_client() as client:
-        response = client.get("/monitoring/metrics")
 
     assert response.status_code == 200
