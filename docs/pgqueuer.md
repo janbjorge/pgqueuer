@@ -515,6 +515,93 @@ By integrating `RetryWithBackoffEntrypointExecutor`, you can build robust workfl
 
 ---
 
+### Manual Retry API
+
+For scenarios where you want jobs to execute **once** and let the client decide whether to retry on failure, PgQueuer provides a Manual Retry API. This is useful when:
+
+- You need human review before retrying failed jobs
+- External systems track job state using the job ID
+- Retry decisions depend on business logic not available at processing time
+
+#### Quick Example
+
+```python
+# Jobs run once with no automatic retries
+@pgq.entrypoint("process_order", retry_timer=timedelta(0))
+async def process_order(job: Job) -> None:
+    await do_order_processing(job.payload)
+
+# Later, review and retry failed jobs
+failed_jobs = await queries.get_failed_jobs(entrypoint="process_order")
+
+for log_entry in failed_jobs:
+    if should_retry(log_entry):
+        new_job_id = await queries.retry_failed_job(log_entry.id)
+        print(f"Job {log_entry.job_id} retried as {new_job_id}")
+```
+
+The failed job's payload and headers are preserved in the log table, so the retry uses the exact same data as the original job.
+
+#### API Reference
+
+**`get_failed_jobs`** - Retrieve failed jobs from the log table:
+
+```python
+failed = await queries.get_failed_jobs(
+    entrypoint="process_order",  # Filter by entrypoint (optional)
+    limit=100,                   # Max results (default: 100)
+    after_id=last_id,            # Cursor for pagination (optional)
+)
+```
+
+**`get_log_entry`** - Retrieve a specific log entry:
+
+```python
+log_entry = await queries.get_log_entry(log_id)
+```
+
+**`retry_failed_job`** - Re-enqueue a single failed job:
+
+```python
+new_job_id = await queries.retry_failed_job(
+    log_id,
+    priority=10,                          # Override priority (optional)
+    execute_after=timedelta(minutes=5),   # Delay before eligible (optional)
+)
+```
+
+**`retry_failed_jobs`** - Re-enqueue multiple failed jobs:
+
+```python
+new_job_ids = await queries.retry_failed_jobs(
+    [log.id for log in failed_jobs],
+    execute_after=timedelta(seconds=5),
+)
+```
+
+#### Accessing Error Details
+
+The `Log` model's `traceback` field contains exception information:
+
+```python
+if log_entry.traceback:
+    print(f"Exception: {log_entry.traceback.exception_type}")
+    print(f"Message: {log_entry.traceback.exception_message}")
+    print(f"Traceback:\n{log_entry.traceback.traceback}")
+```
+
+#### Best Practices
+
+1. **Use `log_id`, not `job_id`**: The `job_id` can appear multiple times in the log. Always use the log entry's `id` field for retry operations.
+
+2. **Double retries are prevented**: The API checks `retried_as IS NULL`, so a second retry attempt returns `None`.
+
+3. **Consider delayed retries**: For transient failures, add a delay with `execute_after=timedelta(minutes=5)`.
+
+4. **Schema upgrade required**: Run `await queries.upgrade()` or `pgq upgrade` to add the `payload`, `headers`, and `retried_as` columns to the log table.
+
+---
+
 ### Scheduler
 
 Manage recurring tasks with cron-like expressions.
