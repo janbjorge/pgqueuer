@@ -1,147 +1,51 @@
 Prometheus Metrics Integration
 ==============================
 
-PGQueuer includes a framework-agnostic Prometheus integration for metrics collection. This allows you to monitor queue sizes and job processing statistics in real-time.
+PGQueuer includes an integration with Prometheus, enabling metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
 
-Installation
-------------
+Usage
+-----
 
-The core metrics functionality has no extra dependencies. For plug-and-play framework integrations, install the optional extras:
+The `collect_metrics` function returns a Prometheus-formatted string:
+
+```python
+from pgqueuer.metrics.prometheus import collect_metrics
+
+content = await collect_metrics(queries)
+```
+
+### FastAPI
+
+Install the optional extra:
 
 ```bash
-# For FastAPI integration
 pip install pgqueuer[fastapi]
 ```
 
-Core Usage
-----------
-
-The `collect_metrics` function returns a Prometheus-formatted string that you can serve from any web framework:
-
-```python
-from pgqueuer.metrics.prometheus import collect_metrics
-
-content = await collect_metrics(queries)
-```
-
-FastAPI Integration
--------------------
-
-```python
-from contextlib import asynccontextmanager
-
-import asyncpg
-from fastapi import FastAPI
-
-from pgqueuer.db import AsyncpgDriver
-from pgqueuer.metrics.fastapi import create_metrics_router
-from pgqueuer.queries import Queries
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    app.state.queries = Queries(AsyncpgDriver(await asyncpg.connect()))
-    yield
-
-
-app = FastAPI(lifespan=lifespan)
-app.include_router(create_metrics_router(app.state.queries))
-```
-
-With custom path:
-
-```python
-app.include_router(create_metrics_router(queries, path="/custom/metrics"))
-```
-
-Manual Integration
-------------------
-
-For other frameworks or custom setups, use `collect_metrics` directly:
-
-### Starlette
-
-```python
-from starlette.applications import Starlette
-from starlette.responses import PlainTextResponse
-from starlette.routing import Route
-
-from pgqueuer.metrics.prometheus import collect_metrics
-
-
-async def metrics(request):
-    content = await collect_metrics(request.app.state.queries)
-    return PlainTextResponse(content)
-
-
-app = Starlette(routes=[Route("/metrics", metrics)])
-```
-
-### Any ASGI/WSGI Framework
-
-```python
-from pgqueuer.metrics.prometheus import collect_metrics
-
-# Async frameworks
-content = await collect_metrics(queries)
-
-# Sync frameworks
-import asyncio
-content = asyncio.run(collect_metrics(queries))
-```
-
-Custom Metric Names
--------------------
-
-Customize metric names to match your conventions:
-
-```python
-from pgqueuer.metrics.prometheus import MetricNames, collect_metrics
-
-content = await collect_metrics(
-    queries,
-    metric_names=MetricNames(
-        queue_count="myapp_queue_size",
-        log_count="myapp_jobs_processed",
-    ),
-)
-```
-
-Or with the framework integrations:
-
 ```python
 from pgqueuer.metrics.fastapi import create_metrics_router
-from pgqueuer.metrics.prometheus import MetricNames
 
-router = create_metrics_router(
-    queries,
-    metric_names=MetricNames(queue_count="myapp_queue_size"),
-)
+app.include_router(create_metrics_router(queries))
 ```
 
-Time Window
------------
+### Other Frameworks
 
-By default, log statistics cover the last 5 minutes. Adjust with the `last` parameter:
-
-```python
-from datetime import timedelta
-
-content = await collect_metrics(queries, last=timedelta(minutes=15))
-```
+Use `collect_metrics` directly and return as plain text.
 
 Standalone Metrics Service
 --------------------------
 
-If you prefer to run metrics as a separate service, a Docker setup is available in the `tools/prometheus` directory.
+A Docker setup is available in the `tools/prometheus` directory.
 
-### Building the Image
+Building the Image
+------------------
 
 ```bash
 docker build -t pgq-prometheus-service -f tools/prometheus/Dockerfile .
 ```
 
-### Running the Service
+Running the Service
+-------------------
 
 ```bash
 docker run -p 8000:8000 \
@@ -153,7 +57,8 @@ docker run -p 8000:8000 \
   pgq-prometheus-service
 ```
 
-### Docker Compose
+Docker Compose
+--------------
 
 A docker-compose file `docker-compose.prometheus-metrics.yml` is provided:
 
