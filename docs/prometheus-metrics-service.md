@@ -1,8 +1,41 @@
 Prometheus Metrics Integration
 ==============================
+
 PGQueuer includes an integration with Prometheus, enabling metrics collection. This feature allows users to gain insights into the performance and behavior of their job queues in real-time.
 
-Until there is a sufficient demand, no container image for the metrics service is published. Users must build and host the image themselves.
+Usage
+-----
+
+The `collect_metrics` function returns a Prometheus-formatted string:
+
+```python
+from pgqueuer.metrics.prometheus import collect_metrics
+
+content = await collect_metrics(queries)
+```
+
+### FastAPI
+
+Install the optional extra:
+
+```bash
+pip install pgqueuer[fastapi]
+```
+
+```python
+from pgqueuer.metrics.fastapi import create_metrics_router
+
+app.include_router(create_metrics_router(queries))
+```
+
+### Other Frameworks
+
+Use `collect_metrics` directly and return as plain text.
+
+Standalone Metrics Service
+--------------------------
+
+A Docker setup is available in the `tools/prometheus` directory.
 
 Building the Image
 ------------------
