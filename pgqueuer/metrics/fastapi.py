@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter
-from fastapi.responses import Response
+try:
+    from fastapi import APIRouter
+    from fastapi.responses import Response
+except ImportError as e:
+    raise ImportError("fastapi is required for this module.") from e
 
 from pgqueuer.metrics.prometheus import MetricNames, collect_metrics
 from pgqueuer.queries import Queries
