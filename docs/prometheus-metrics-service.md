@@ -30,15 +30,25 @@ content = await collect_metrics(queries)
 FastAPI Integration
 -------------------
 
-Use the plug-and-play router:
-
 ```python
+from contextlib import asynccontextmanager
+
+import asyncpg
 from fastapi import FastAPI
 
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.metrics.fastapi import create_metrics_router
+from pgqueuer.queries import Queries
 
-app = FastAPI()
-app.include_router(create_metrics_router(queries))
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.queries = Queries(AsyncpgDriver(await asyncpg.connect()))
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+app.include_router(create_metrics_router(app.state.queries))
 ```
 
 With custom path:
@@ -50,12 +60,17 @@ app.include_router(create_metrics_router(queries, path="/custom/metrics"))
 Flask Integration
 -----------------
 
-Use the plug-and-play blueprint:
-
 ```python
+import asyncio
+
+import asyncpg
 from flask import Flask
 
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.metrics.flask import create_metrics_blueprint
+from pgqueuer.queries import Queries
+
+queries = Queries(AsyncpgDriver(asyncio.run(asyncpg.connect())))
 
 app = Flask(__name__)
 app.register_blueprint(create_metrics_blueprint(queries))
