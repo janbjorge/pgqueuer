@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -10,6 +11,7 @@ from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
 from pgqueuer.metrics.flask import create_metrics_blueprint
 from pgqueuer.models import LogStatistics, QueueStatistics
+from pgqueuer.queries import Queries
 
 
 class FakeQueries:
@@ -107,7 +109,7 @@ async def test_collect_metrics_with_statistics() -> None:
 
 
 def test_fastapi_create_metrics_router() -> None:
-    queries = FakeQueries()
+    queries = cast(Queries, FakeQueries())
     router = create_metrics_router(queries)
 
     app = FastAPI()
@@ -121,7 +123,7 @@ def test_fastapi_create_metrics_router() -> None:
 
 
 def test_fastapi_create_metrics_router_custom_path() -> None:
-    queries = FakeQueries()
+    queries = cast(Queries, FakeQueries())
     router = create_metrics_router(queries, path="/custom/metrics")
 
     app = FastAPI()
@@ -134,7 +136,7 @@ def test_fastapi_create_metrics_router_custom_path() -> None:
 
 
 def test_flask_create_metrics_blueprint() -> None:
-    queries = FakeQueries()
+    queries = cast(Queries, FakeQueries())
     blueprint = create_metrics_blueprint(queries)
 
     app = Flask(__name__)
@@ -148,7 +150,7 @@ def test_flask_create_metrics_blueprint() -> None:
 
 
 def test_flask_create_metrics_blueprint_with_prefix() -> None:
-    queries = FakeQueries()
+    queries = cast(Queries, FakeQueries())
     blueprint = create_metrics_blueprint(queries, url_prefix="/monitoring")
 
     app = Flask(__name__)

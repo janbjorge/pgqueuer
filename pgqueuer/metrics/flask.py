@@ -5,11 +5,12 @@ from datetime import timedelta
 
 from flask import Blueprint, Response
 
-from pgqueuer.metrics.prometheus import MetricNames, QueriesProtocol, collect_metrics
+from pgqueuer.metrics.prometheus import MetricNames, collect_metrics
+from pgqueuer.queries import Queries
 
 
 def create_metrics_blueprint(
-    queries: QueriesProtocol,
+    queries: Queries,
     *,
     metric_names: MetricNames | None = None,
     last: timedelta = timedelta(minutes=5),
@@ -23,6 +24,7 @@ def create_metrics_blueprint(
         >>> from flask import Flask
         >>> from pgqueuer.metrics.flask import create_metrics_blueprint
         >>>
+        >>> queries = Queries(driver)
         >>> app = Flask(__name__)
         >>> app.register_blueprint(create_metrics_blueprint(queries))
     """
