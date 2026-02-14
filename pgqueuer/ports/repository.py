@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
-from typing import Protocol, overload
+from typing import TYPE_CHECKING, Protocol, overload
 
 from .. import models
-from ..queries import EntrypointExecutionParameter
 from ..types import CronEntrypoint
+
+if TYPE_CHECKING:
+    from ..queries import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
 # Queue persistence

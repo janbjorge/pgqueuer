@@ -13,8 +13,10 @@ from pgqueuer.ports import (
     QueueRepositoryPort,
     ScheduleRepositoryPort,
     SchemaManagementPort,
+    TracingProtocol,
 )
 from pgqueuer.queries import Queries
+from pgqueuer.tracing import LogfireTracing, SentryTracing
 
 if TYPE_CHECKING:
     # Static conformance: mypy will error if Queries doesn't match.
@@ -22,6 +24,8 @@ if TYPE_CHECKING:
     _s: ScheduleRepositoryPort = Queries.__new__(Queries)
     _n: NotificationPort = Queries.__new__(Queries)
     _m: SchemaManagementPort = Queries.__new__(Queries)
+    _tl: TracingProtocol = LogfireTracing.__new__(LogfireTracing)
+    _ts: TracingProtocol = SentryTracing.__new__(SentryTracing)
 
 
 def test_queries_has_queue_repository_methods() -> None:
@@ -69,3 +73,9 @@ def test_queries_has_schema_management_methods() -> None:
         "has_user_defined_enum",
     }
     assert required <= set(dir(Queries))
+
+
+def test_tracing_implementations_have_required_methods() -> None:
+    required = {"trace_publish", "trace_process"}
+    assert required <= set(dir(LogfireTracing))
+    assert required <= set(dir(SentryTracing))

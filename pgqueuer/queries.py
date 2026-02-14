@@ -106,6 +106,9 @@ class Queries:
         default_factory=qb.QuerySchedulerBuilder,
     )
 
+    # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
+    tracer: tracing.TracingProtocol | None = None
+
     @classmethod
     def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
         """
@@ -366,11 +369,12 @@ class Queries:
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
-        if tracing.TRACER.tracer:
+        active_tracer = self.tracer or tracing.TRACER.tracer
+        if active_tracer:
             normed_params.headers = list(
                 merge_tracing_headers(
                     normed_params.headers,
-                    tracing.TRACER.tracer.trace_publish(normed_params.entrypoint),
+                    active_tracer.trace_publish(normed_params.entrypoint),
                 )
             )
 
@@ -717,6 +721,9 @@ class SyncQueries:
         default_factory=qb.QueryQueueBuilder,
     )
 
+    # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
+    tracer: tracing.TracingProtocol | None = None
+
     @overload
     def enqueue(
         self,
@@ -775,11 +782,12 @@ class SyncQueries:
             headers,
         )
 
-        if tracing.TRACER.tracer:
+        active_tracer = self.tracer or tracing.TRACER.tracer
+        if active_tracer:
             normed_params.headers = list(
                 merge_tracing_headers(
                     normed_params.headers,
-                    tracing.TRACER.tracer.trace_publish(normed_params.entrypoint),
+                    active_tracer.trace_publish(normed_params.entrypoint),
                 )
             )
 
