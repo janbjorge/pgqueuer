@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncContextManager, AsyncIterator, Final, Generator, Protocol
+from typing import AsyncIterator, Final, Generator
 
 try:
     import logfire
@@ -16,6 +16,17 @@ except ImportError:
     sentry_sdk = None  # type: ignore[assignment]
 
 from pgqueuer.models import Job
+from pgqueuer.ports.tracing import TracingProtocol
+
+# Re-export so existing ``from pgqueuer.tracing import TracingProtocol`` keeps working.
+__all__ = [
+    "LogfireTracing",
+    "SentryTracing",
+    "TracingConfig",
+    "TracingProtocol",
+    "TRACER",
+    "set_tracing_class",
+]
 
 
 @dataclass
@@ -31,40 +42,6 @@ class TracingConfig:
 
 
 TRACER: Final[TracingConfig] = TracingConfig()
-
-
-class TracingProtocol(Protocol):
-    """
-    Protocol defining the interface for tracing operations in the PGQueuer system.
-
-    This protocol ensures that any tracing implementation provides methods for:
-    - Publishing tracing headers for queue producer operations.
-    - Managing tracing for queue consumer job processing.
-    """
-
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
-        """
-        Publishes tracing headers for queue producer operations.
-
-        Args:
-            entrypoints (list[str]): A list of entrypoints representing queue destinations.
-
-        Yields:
-            dict: A dictionary containing tracing headers for each entrypoint.
-        """
-        ...
-
-    def trace_process(self, job: Job) -> AsyncContextManager[None]:
-        """
-        Async context manager for tracing queue consumer job processing.
-
-        Args:
-            job (Job): The job being processed, containing headers and metadata.
-
-        Yields:
-            None: This context manager does not return a value but manages the tracing lifecycle.
-        """
-        ...
 
 
 class LogfireTracing(TracingProtocol):

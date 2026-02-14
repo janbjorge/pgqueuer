@@ -97,6 +97,9 @@ class QueueManager:
         default_factory=dict,
     )
 
+    # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
+    tracer: tracing.TracingProtocol | None = None
+
     # Per job.
     job_context: dict[models.JobId, models.Context] = dataclasses.field(
         init=False,
@@ -596,8 +599,9 @@ class QueueManager:
 
         # Send heartbeats several times within ``retry_timer`` to keep the job
         # alive while it is running.
+        active_tracer = self.tracer or tracing.TRACER.tracer
         trace_context = (
-            tracing.TRACER.tracer.trace_process(job) if tracing.TRACER.tracer else nullcontext()
+            active_tracer.trace_process(job) if active_tracer else nullcontext()
         )
         async with (
             trace_context,
