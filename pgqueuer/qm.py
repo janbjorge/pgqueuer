@@ -77,7 +77,7 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: queries.Queries = dataclasses.field(init=False)
+    queries: queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -166,9 +166,11 @@ class QueueManager:
         """
         Initialize the QueueManager after dataclass fields have been set.
 
-        Sets up the `queries` instance using the provided database connection.
+        Sets up the `queries` instance using the provided database connection
+        when no queries instance was injected.
         """
-        self.queries = queries.Queries(self.connection)
+        if self.queries is None:
+            self.queries = queries.Queries(self.connection)
 
     def get_context(self, job_id: models.JobId) -> models.Context:
         """
@@ -276,10 +278,6 @@ class QueueManager:
                 name,
                 executor_factory(
                     executors.EntrypointExecutorParameters(
-                        connection=self.connection,
-                        channel=self.channel,
-                        shutdown=self.shutdown,
-                        queries=self.queries,
                         func=func,
                         requests_per_second=requests_per_second,
                         retry_timer=retry_timer,

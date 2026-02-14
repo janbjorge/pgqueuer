@@ -30,6 +30,8 @@ The codebase is undergoing an incremental ports-and-adapters restructure (see `d
 
 * **Deprecated executor fields:** `EntrypointExecutorParameters` and `ScheduleExecutorFactoryParameters` no longer accept the infrastructure fields `connection`, `queries`, `channel`, or `shutdown`. Do not re-introduce them.
 * **Deprecation pattern:** When deprecating dataclass fields, use a module-level `_SENTINEL = object()` default combined with a `warnings.warn(..., DeprecationWarning, stacklevel=2)` check in `__post_init__`. Follow the existing pattern in `pgqueuer/executors.py` rather than inventing a new one.
+* **Port protocols:** `pgqueuer/ports/` defines `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPort`, and `SchemaManagementPort`. The existing `Queries` class satisfies all four via structural subtyping. Core code should depend on these protocols, not on `Queries` directly.
+* **Dependency injection:** `QueueManager` and `SchedulerManager` accept an optional `queries` argument (`default=None`). When omitted, they auto-create `Queries(self.connection)`. Prefer injecting a mock/alternative for unit tests.
 
 ### Branch and Commit Conventions
 

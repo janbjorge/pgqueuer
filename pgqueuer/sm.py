@@ -36,9 +36,7 @@ class SchedulerManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: queries.Queries = dataclasses.field(
-        init=False,
-    )
+    queries: queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
@@ -50,9 +48,11 @@ class SchedulerManager:
         """
         Initialize the Scheduler after dataclass fields have been set.
 
-        Sets up the `queries` instance using the provided database connection.
+        Sets up the `queries` instance using the provided database connection
+        when no queries instance was injected.
         """
-        self.queries = queries.Queries(self.connection)
+        if self.queries is None:
+            self.queries = queries.Queries(self.connection)
 
     # TODO: Propagate shared 'resources' mapping into scheduled job execution.
     # Consider approaches:
@@ -110,9 +110,6 @@ class SchedulerManager:
         def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
             self.registry[key] = executor_factory(
                 executors.ScheduleExecutorFactoryParameters(
-                    connection=self.connection,
-                    shutdown=self.shutdown,
-                    queries=self.queries,
                     entrypoint=entrypoint,
                     expression=expression,
                     func=func,
