@@ -18,7 +18,7 @@ from pgqueuer.executors import (
     is_async_callable,
 )
 from pgqueuer.helpers import timer
-from pgqueuer.models import Channel, Context, Job
+from pgqueuer.models import Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from test.helpers import mocked_job
@@ -55,14 +55,10 @@ async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=sync_function,
         )
     )
@@ -85,14 +81,10 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=async_function,
         )
     )
@@ -113,14 +105,10 @@ async def test_entrypoint_executor_sync_with_context(apgdriver: Driver) -> None:
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=sync_function,
             accepts_context=True,
         )
@@ -143,14 +131,10 @@ async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=async_function,
             accepts_context=True,
         )
@@ -171,14 +155,10 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=sync_function,
             accepts_context=True,
         )
@@ -201,14 +181,10 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
-            channel=Channel("foo"),
             concurrency_limit=10,
-            connection=apgdriver,
-            queries=Queries(apgdriver),
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            shutdown=asyncio.Event(),
             func=sync_function,
         )
     )
@@ -515,14 +491,10 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=Channel("test_retry_with_backoff_entrypoint_executor_max_attempts"),
         concurrency_limit=10,
-        connection=apgdriver,
-        queries=Queries(apgdriver),
         requests_per_second=float("+inf"),
         retry_timer=timedelta(seconds=300),
         serialized_dispatch=False,
-        shutdown=asyncio.Event(),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(
@@ -556,14 +528,10 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=Channel("test_retry_with_backoff_entrypoint_executor_max_time"),
         concurrency_limit=10,
-        connection=apgdriver,
-        queries=Queries(apgdriver),
         requests_per_second=float("+inf"),
         retry_timer=timedelta(seconds=300),
         serialized_dispatch=False,
-        shutdown=asyncio.Event(),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(
@@ -612,14 +580,10 @@ async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driv
         raise ValueError
 
     parameters = EntrypointExecutorParameters(
-        channel=Channel("test_retry_with_backoff_entrypoint_executor_until_pass"),
         concurrency_limit=10,
-        connection=apgdriver,
-        queries=Queries(apgdriver),
         requests_per_second=float("+inf"),
         retry_timer=timedelta(seconds=300),
         serialized_dispatch=False,
-        shutdown=asyncio.Event(),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(
