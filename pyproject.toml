@@ -78,6 +78,7 @@ dev = [
     "psycopg>=3.2.0",
     "pytest",
     "pytest-asyncio",
+    "pytest-cov",
     "pytest-mock>=3.14.0",
     "pytest-timeout>=2.3.1",
     "ruff",
@@ -139,6 +140,7 @@ explicit_package_bases = true
 asyncio_mode = "auto"
 timeout = "20"
 timeout_func_only = true
+addopts = "--durations=15"
 
 # ---------------------------------------------------------------------------
 # Import-linter: enforce hexagonal architecture boundaries
