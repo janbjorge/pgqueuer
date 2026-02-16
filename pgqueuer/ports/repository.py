@@ -89,6 +89,12 @@ class QueueRepositoryPort(Protocol):
 
     async def queue_log(self) -> list[models.Log]: ...
 
+    async def log_statistics(
+        self,
+        tail: int | None,
+        last: timedelta | None = None,
+    ) -> list[models.LogStatistics]: ...
+
     async def job_status(
         self,
         ids: list[models.JobId],

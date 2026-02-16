@@ -3,12 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from itertools import groupby
-from typing import Callable, Generator, Iterable, TypeAlias
+from typing import Generator
 
 from pgqueuer.models import LogStatistics, QueueStatistics
-from pgqueuer.queries import Queries
-
-ReduceFn: TypeAlias = Callable[[Iterable[float]], float]
+from pgqueuer.ports.repository import QueueRepositoryPort
 
 
 @dataclass
@@ -110,7 +108,7 @@ def aggregated_statistics(
 
 
 async def collect_metrics(
-    queries: Queries,
+    repository: QueueRepositoryPort,
     *,
     metric_names: MetricNames | None = None,
     last: timedelta = timedelta(minutes=5),
@@ -124,7 +122,7 @@ async def collect_metrics(
 
     Example:
         >>> from pgqueuer.db import AsyncpgDriver
-        >>> from pgqueuer.queries import Queries
+        >>> from pgqueuer.adapters.persistence.queries import Queries
         >>> import asyncpg
         >>>
         >>> async def get_metrics():
@@ -132,7 +130,7 @@ async def collect_metrics(
         ...     queries = Queries(AsyncpgDriver(conn))
         ...     return await collect_metrics(queries)
     """
-    queue_statistics = await queries.queue_size()
-    log_statistics = await queries.log_statistics(tail=None, last=last)
+    queue_statistics = await repository.queue_size()
+    log_statistics = await repository.log_statistics(tail=None, last=last)
     names = metric_names or MetricNames()
     return "\n".join(aggregated_statistics(queue_statistics, log_statistics, names))
