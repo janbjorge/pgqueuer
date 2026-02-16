@@ -168,9 +168,7 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             return queries.Queries(
-                PsycopgDriver(
-                    await psycopg.AsyncConnection.connect(config.dsn, autocommit=True)
-                ),
+                PsycopgDriver(await psycopg.AsyncConnection.connect(config.dsn, autocommit=True)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),

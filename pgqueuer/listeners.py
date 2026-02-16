@@ -1,4 +1,5 @@
 """Backward-compatibility shim. Canonical: pgqueuer.core.listeners"""
+
 from pgqueuer.core.listeners import (
     EventHandler,
     EventRouter,
