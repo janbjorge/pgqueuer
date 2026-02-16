@@ -32,13 +32,17 @@ Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIF
 
 ## Why PGQueuer?
 
-**vs Redis/RabbitMQ-based queues**: No extra infrastructure to deploy, monitor, or scale. Your jobs live alongside your data with ACID guarantees and familiar PostgreSQL tooling.
+PGQueuer is designed for teams who value simplicity and want to leverage PostgreSQL as their job queue infrastructure. If you're already running PostgreSQL, PGQueuer lets you add background job processing without introducing new services to deploy, monitor, or coordinate.
 
-**vs Celery**: Simpler architecture with fewer moving parts. No separate broker, no celery-beat process—just PostgreSQL. Built-in support for modern async Python with clean shutdown semantics.
+**Zero additional infrastructure**: Your jobs live in the same database as your application data, backed by ACID guarantees and familiar PostgreSQL tooling. No separate message broker to provision, scale, or keep in sync with your database.
 
-**vs polling solutions**: Real-time job processing through `LISTEN/NOTIFY` instead of wasteful polling loops. Sub-second latency without hammering your database.
+**Real-time with PostgreSQL primitives**: `LISTEN/NOTIFY` delivers sub-second job latency without polling loops. Workers wake instantly when jobs arrive, and `FOR UPDATE SKIP LOCKED` coordinates parallel workers without contention.
 
-See the full [Celery comparison](docs/celery-comparison.md) for detailed examples.
+**Built for modern Python**: First-class async/await support with clean shutdown semantics. Rate limiting, concurrency control, and scheduling are built in—not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
+
+**When PGQueuer shines**: Single database stack, microservices that share a database, applications where job data needs transactional consistency with business data, teams who prefer fewer moving parts over distributed systems complexity.
+
+For a detailed comparison with Celery and other approaches, see [docs/celery-comparison.md](docs/celery-comparison.md).
 
 ## Installation
 
