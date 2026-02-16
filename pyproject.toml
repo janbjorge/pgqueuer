@@ -142,6 +142,9 @@ timeout = "20"
 timeout_func_only = true
 addopts = "--durations=15"
 
+[tool.coverage.run]
+relative_files = true
+
 # ---------------------------------------------------------------------------
 # Import-linter: enforce hexagonal architecture boundaries
 # ---------------------------------------------------------------------------
