@@ -78,6 +78,7 @@ dev = [
     "psycopg>=3.2.0",
     "pytest",
     "pytest-asyncio",
+    "pytest-cov",
     "pytest-mock>=3.14.0",
     "pytest-timeout>=2.3.1",
     "ruff",
