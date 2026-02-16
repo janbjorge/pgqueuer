@@ -1,4 +1,5 @@
 """Backward-compatibility shim. Canonical: pgqueuer.adapters.tracing + pgqueuer.ports.tracing"""
+
 from pgqueuer.adapters.tracing import (
     TRACER,
     TracingConfig,

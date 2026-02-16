@@ -1,4 +1,5 @@
 """Backward-compatibility shim. Canonical: pgqueuer.adapters.cli.cli"""
+
 from pgqueuer.adapters.cli.cli import (
     AppConfig,
     VerifyMode,
