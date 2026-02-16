@@ -197,7 +197,15 @@ jobs:
               run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
 
             - name: Run Full Test Suite
-              run: uv run pytest
+              run: uv run pytest --cov=pgqueuer --cov-report=xml
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v3
+              with:
+                files: ./coverage.xml
+                flags: unittests
+                name: codecov-umbrella
+                fail_ci_if_error: false
 
     run-windows-tests:
         if: github.event_name != 'schedule'
@@ -226,7 +234,15 @@ jobs:
               run: uv sync --all-extras --frozen
 
             - name: Run Windows Shutdown Test
-              run: uv run pytest test/windows/test_shutdown.py
+              run: uv run pytest test/windows/test_shutdown.py --cov=pgqueuer --cov-report=xml
+
+            - name: Upload coverage to Codecov
+              uses: codecov/codecov-action@v3
+              with:
+                files: ./coverage.xml
+                flags: windows
+                name: codecov-windows
+                fail_ci_if_error: false
 
     run-ruff:
         if: github.event_name != 'schedule'
