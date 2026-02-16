@@ -6,7 +6,7 @@
 
 ## Overview
 
-PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, eliminating the need for external message brokers like Redis or RabbitMQ. Scale your job processing without adding new infrastructure.
+PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. No separate message broker required.
 
 Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with rate limiting, deferred execution, and job tracking—all backed by your existing database.
 
@@ -424,7 +424,7 @@ The dashboard shows queue depth, processing times, job statuses, and priorities.
 | [Architecture & Design](docs/architecture.md) | Clean architecture, ports and adapters, design decisions |
 | [Core Features Guide](docs/pgqueuer.md) | Shared resources, executors, cancellation, scheduling, tracking |
 | [Driver Selection](docs/driver.md) | Choosing and configuring asyncpg, psycopg, sync drivers |
-| [Celery Comparison](docs/celery-comparison.md) | Side-by-side examples vs Celery |
+| [Celery Comparison](docs/celery-comparison.md) | Comparison with other job queue approaches |
 | [Distributed Tracing](docs/tracing.md) | Logfire and Sentry integration |
 | [Prometheus Metrics](docs/prometheus-metrics-service.md) | Exposing queue metrics for monitoring |
 | [Dashboard](docs/dashboard.md) | CLI dashboard options and usage |
