@@ -167,7 +167,6 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
 async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
     N = 4
     retry_timer = timedelta(seconds=0.100)
-    event = asyncio.Event()
     qm = QueueManager(apgdriver)
     calls = Counter[JobId]()
 
@@ -176,20 +175,13 @@ async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
         calls[context.id] += 1
         if calls[context.id] < N:
             raise asyncio.CancelledError("Simulated cancellation")
-        await event.wait()
+        # Nth attempt succeeds — signal shutdown from inside the handler
+        # so no additional retry can sneak in before shutdown takes effect.
+        qm.shutdown.set()
 
     await qm.queries.enqueue(["fetch"], [None], [0])
 
-    async def entrypoint_waiter() -> None:
-        while sum(v for v in calls.values()) < N:
-            await asyncio.sleep(0.001)
-        event.set()
-        qm.shutdown.set()
-
-    await asyncio.gather(
-        qm.run(dequeue_timeout=timedelta(seconds=0)),
-        entrypoint_waiter(),
-    )
+    await qm.run(dequeue_timeout=timedelta(seconds=0))
 
     assert len(calls) == 1
     assert sum(v for v in calls.values()) == N

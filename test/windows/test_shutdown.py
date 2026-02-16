@@ -4,7 +4,8 @@ from typing import cast
 
 import pytest
 
-from pgqueuer import qm, supervisor, types
+from pgqueuer import qm, types
+from pgqueuer.adapters.cli import supervisor
 
 
 class DummyManager:
