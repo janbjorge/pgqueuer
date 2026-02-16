@@ -597,7 +597,9 @@ class QueueManager:
         # Send heartbeats several times within ``retry_timer`` to keep the job
         # alive while it is running.
         active_tracer = self.tracer or tracing.TRACER.tracer
-        trace_context = active_tracer.trace_process(job) if active_tracer else nullcontext()
+        trace_context = (
+            active_tracer.trace_process(job) if active_tracer else nullcontext()
+        )
         async with (
             trace_context,
             heartbeat.Heartbeat(

@@ -1,5 +1,4 @@
 """Backward-compatibility shim. Canonical: pgqueuer.core.executors"""
-
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,

@@ -1,5 +1,4 @@
 """Backward-compatibility shim. Canonical: pgqueuer.core.logconfig"""
-
 from pgqueuer.core.logconfig import (
     ISOFormatter,
     LogLevel,

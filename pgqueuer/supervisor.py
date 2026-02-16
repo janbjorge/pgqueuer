@@ -1,5 +1,4 @@
 """Backward-compatibility shim. Canonical: pgqueuer.adapters.cli.supervisor"""
-
 from pgqueuer.adapters.cli.supervisor import (
     Manager,
     ManagerFactory,
