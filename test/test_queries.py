@@ -7,39 +7,39 @@ import psycopg
 import pytest
 
 from pgqueuer import db, errors, models, queries
+from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+from pgqueuer.ports.repository import QueueRepositoryPort
+
+# ---------------------------------------------------------------------------
+# Parametrized tests (run against both postgres and inmemory)
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
-async def test_queries_put(apgdriver: db.Driver, N: int) -> None:
-    q = queries.Queries(apgdriver)
-
-    assert sum(x.count for x in await q.queue_size()) == 0
+async def test_queries_put(queries: QueueRepositoryPort, N: int) -> None:
+    assert sum(x.count for x in await queries.queue_size()) == 0
 
     for _ in range(N):
-        await q.enqueue("placeholder", None)
+        await queries.enqueue("placeholder", None)
 
-    assert sum(x.count for x in await q.queue_size()) == N
+    assert sum(x.count for x in await queries.queue_size()) == N
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queries_next_jobs(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
 ) -> None:
-    q = queries.Queries(apgdriver)
-
-    await q.enqueue(
+    await queries.enqueue(
         ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
     seen = list[int]()
-    while jobs := await q.dequeue(
+    while jobs := await queries.dequeue(
         batch_size=10,
-        entrypoints={
-            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
+        entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
     ):
@@ -47,7 +47,7 @@ async def test_queries_next_jobs(
             payoad = job.payload
             assert payoad is not None
             seen.append(int(payoad))
-            await q.log_jobs([(job, "successful", None)])
+            await queries.log_jobs([(job, "successful", None)])
 
     assert seen == list(range(N))
 
@@ -55,13 +55,11 @@ async def test_queries_next_jobs(
 @pytest.mark.parametrize("N", (1, 2, 64))
 @pytest.mark.parametrize("concurrency", (1, 2, 4, 16))
 async def test_queries_next_jobs_concurrent(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
     concurrency: int,
 ) -> None:
-    q = queries.Queries(apgdriver)
-
-    await q.enqueue(
+    await queries.enqueue(
         ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
@@ -70,10 +68,8 @@ async def test_queries_next_jobs_concurrent(
     seen = list[int]()
 
     async def consumer() -> None:
-        while jobs := await q.dequeue(
-            entrypoints={
-                "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 1)
-            },
+        while jobs := await queries.dequeue(
+            entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 1)},
             batch_size=10,
             queue_manager_id=uuid.uuid4(),
             global_concurrency_limit=1000,
@@ -82,7 +78,7 @@ async def test_queries_next_jobs_concurrent(
                 payload = job.payload
                 assert payload is not None
                 seen.append(int(payload))
-                await q.log_jobs([(job, "successful", None)])
+                await queries.log_jobs([(job, "successful", None)])
 
     await asyncio.wait_for(
         asyncio.gather(*[consumer() for _ in range(concurrency)]),
@@ -92,143 +88,305 @@ async def test_queries_next_jobs_concurrent(
     assert sorted(seen) == list(range(N))
 
 
-async def test_queries_clear(apgdriver: db.Driver) -> None:
-    q = queries.Queries(apgdriver)
-    await q.clear_queue()
-    assert sum(x.count for x in await q.queue_size()) == 0
+async def test_queries_clear(queries: QueueRepositoryPort) -> None:
+    await queries.clear_queue()
+    assert sum(x.count for x in await queries.queue_size()) == 0
 
-    await q.enqueue("placeholder", None)
-    assert sum(x.count for x in await q.queue_size()) == 1
+    await queries.enqueue("placeholder", None)
+    assert sum(x.count for x in await queries.queue_size()) == 1
 
-    await q.clear_queue()
-    assert sum(x.count for x in await q.queue_size()) == 0
+    await queries.clear_queue()
+    assert sum(x.count for x in await queries.queue_size()) == 0
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_move_job_log(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
 ) -> None:
-    q = queries.Queries(apgdriver)
-
-    await q.enqueue(
+    await queries.enqueue(
         ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         [0] * N,
     )
 
-    while jobs := await q.dequeue(
+    while jobs := await queries.dequeue(
         batch_size=10,
-        entrypoints={
-            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
+        entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
     ):
         for job in jobs:
-            await q.log_jobs([(job, "successful", None)])
+            await queries.log_jobs([(job, "successful", None)])
 
-    assert sum(x.status == "successful" for x in await q.queue_log()) == N
+    assert sum(x.status == "successful" for x in await queries.queue_log()) == N
 
 
 @pytest.mark.parametrize("N", (1, 2, 5))
 async def test_clear_queue(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
 ) -> None:
-    q = queries.Queries(apgdriver)
-
     # Test delete all by listing all
-    await q.enqueue(
+    await queries.enqueue(
         [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
 
-    assert all(x.count == 1 for x in await q.queue_size())
-    assert sum(x.count for x in await q.queue_size()) == N
-    await q.clear_queue([f"placeholder{n}" for n in range(N)])
-    assert sum(x.count for x in await q.queue_size()) == 0
+    assert all(x.count == 1 for x in await queries.queue_size())
+    assert sum(x.count for x in await queries.queue_size()) == N
+    await queries.clear_queue([f"placeholder{n}" for n in range(N)])
+    assert sum(x.count for x in await queries.queue_size()) == 0
 
     # Test delete all by None
-    await q.enqueue(
+    await queries.enqueue(
         [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
 
-    assert all(x.count == 1 for x in await q.queue_size())
-    assert sum(x.count for x in await q.queue_size()) == N
-    await q.clear_queue(None)
-    assert sum(x.count for x in await q.queue_size()) == 0
-    assert sum(x.status == "deleted" for x in await q.queue_log()) == N
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "deleted") == N
-    assert sum(x.status == "deleted" for x in await q.queue_log()) == N
+    assert all(x.count == 1 for x in await queries.queue_size())
+    assert sum(x.count for x in await queries.queue_size()) == N
+    await queries.clear_queue(None)
+    assert sum(x.count for x in await queries.queue_size()) == 0
+    assert sum(x.status == "deleted" for x in await queries.queue_log()) == N
+    assert (
+        sum(x.count for x in await queries.log_statistics(tail=None) if x.status == "deleted") == N
+    )
+    assert sum(x.status == "deleted" for x in await queries.queue_log()) == N
 
     # Test delete one(1).
-    await q.enqueue(
+    await queries.enqueue(
         [f"placeholder{n}" for n in range(N)],
         [None] * N,
         [0] * N,
     )
 
-    assert all(x.count == 1 for x in await q.queue_size())
-    assert sum(x.count for x in await q.queue_size()) == N
-    await q.clear_queue("placeholder0")
-    assert sum(x.count for x in await q.queue_size()) == N - 1
-    assert sum(x.status == "deleted" for x in await q.queue_log()) == N + 1
+    assert all(x.count == 1 for x in await queries.queue_size())
+    assert sum(x.count for x in await queries.queue_size()) == N
+    await queries.clear_queue("placeholder0")
+    assert sum(x.count for x in await queries.queue_size()) == N - 1
+    assert sum(x.status == "deleted" for x in await queries.queue_log()) == N + 1
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_priority(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
 ) -> None:
-    q = queries.Queries(apgdriver)
     jobs = list[models.Job]()
 
-    await q.enqueue(
+    await queries.enqueue(
         ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         list(range(N)),
     )
 
-    while next_jobs := await q.dequeue(
-        entrypoints={
-            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
+    while next_jobs := await queries.dequeue(
+        entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
     ):
         for job in next_jobs:
             jobs.append(job)
-            await q.log_jobs([(job, "successful", None)])
+            await queries.log_jobs([(job, "successful", None)])
 
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
 
 
+@pytest.mark.parametrize("N", (1, 3, 15))
+async def test_queue_log_queued_picked_successful(
+    queries: QueueRepositoryPort,
+    N: int,
+) -> None:
+    # Test delete all by listing all
+    await queries.enqueue(
+        ["test_queue_log_queued_picked_successful"] * N,
+        [None] * N,
+        [0] * N,
+    )
+    assert sum(x.status == "queued" for x in await queries.queue_log()) == N
+
+    # Pick all jobs
+    picked_jobs = []
+    queue_manager_id = uuid.uuid4()
+    while jobs := await queries.dequeue(
+        batch_size=10,
+        entrypoints={
+            "test_queue_log_queued_picked_successful": EntrypointExecutionParameter(
+                timedelta(days=1), False, 0
+            )
+        },
+        queue_manager_id=queue_manager_id,
+        global_concurrency_limit=1000,
+    ):
+        picked_jobs.extend(jobs)
+
+    assert sum(x.status == "picked" for x in await queries.queue_log()) == N
+
+    for job in picked_jobs:
+        await queries.log_jobs([(job, "successful", None)])
+
+    assert sum(x.status == "successful" for x in await queries.queue_log()) == N
+
+
+@pytest.mark.parametrize("N", (1, 3, 15))
+async def test_queue_log_queued_picked_exception(
+    queries: QueueRepositoryPort,
+    N: int,
+) -> None:
+    # Test delete all by listing all
+    await queries.enqueue(
+        ["test_queue_log_queued_picked_exception"] * N,
+        [None] * N,
+        [0] * N,
+    )
+    assert sum(x.status == "queued" for x in await queries.queue_log()) == N
+
+    # Pick all jobs
+    picked_jobs = []
+    queue_manager_id = uuid.uuid4()
+    while jobs := await queries.dequeue(
+        batch_size=10,
+        entrypoints={
+            "test_queue_log_queued_picked_exception": EntrypointExecutionParameter(
+                timedelta(days=1), False, 0
+            )
+        },
+        queue_manager_id=queue_manager_id,
+        global_concurrency_limit=1000,
+    ):
+        picked_jobs.extend(jobs)
+
+    assert sum(x.status == "picked" for x in await queries.queue_log()) == N
+
+    for job in picked_jobs:
+        await queries.log_jobs([(job, "exception", None)])
+
+    assert sum(x.status == "exception" for x in await queries.queue_log()) == N
+
+
+async def test_queue_log_queued_dedupe_key_raises(
+    queries: QueueRepositoryPort,
+) -> None:
+    await queries.enqueue(
+        "test_queue_log_queued_dedupe_key_raises",
+        None,
+        dedupe_key="test_queue_log_queued_dedupe_key_raises",
+    )
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+    with pytest.raises(errors.DuplicateJobError):
+        await queries.enqueue(
+            "test_queue_log_queued_dedupe_key_raises",
+            None,
+            dedupe_key="test_queue_log_queued_dedupe_key_raises",
+        )
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+
+async def test_queue_log_queued_dedupe_key_raises_array(
+    queries: QueueRepositoryPort,
+) -> None:
+    await queries.enqueue(
+        ["test_queue_log_queued_dedupe_key_raises_array"],
+        [None],
+        [0],
+        dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+    )
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+    with pytest.raises(errors.DuplicateJobError):
+        await queries.enqueue(
+            ["test_queue_log_queued_dedupe_key_raises_array"],
+            [None],
+            [0],
+            dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+        )
+
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+
+async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
+    queries: QueueRepositoryPort,
+) -> None:
+    dedupe_key = "test_queue_log_queued_dedupe_key_raises_contains_dedupe_key"
+    await queries.enqueue("...", None, dedupe_key=dedupe_key)
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+    with pytest.raises(errors.DuplicateJobError) as raised:
+        await queries.enqueue("...", None, dedupe_key=dedupe_key)
+    assert dedupe_key in raised.value.dedupe_key
+
+
+@pytest.mark.parametrize("tail", (None, 10))
+@pytest.mark.parametrize("last", (None, timedelta(minutes=5)))
+@pytest.mark.parametrize("N", (2, 10))
+async def test_log_statistics(
+    queries: QueueRepositoryPort,
+    tail: int | None,
+    last: timedelta | None,
+    N: int,
+) -> None:
+    # Enqueue jobs
+    await queries.enqueue(["placeholder"] * N, [None] * N, [0] * N)
+
+    # Log jobs
+    jobs = await queries.dequeue(
+        entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
+        batch_size=N,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+    )
+    assert len(jobs) == N
+    for job in jobs:
+        await queries.log_jobs([(job, "successful", None)])
+
+    # Fetch statistics
+    stats = await queries.log_statistics(tail=tail, last=last)
+
+    assert sum(x.count for x in stats if x.status == "queued") == N
+    assert sum(x.count for x in stats if x.status == "picked") == N
+    assert sum(x.count for x in stats if x.status == "successful") == N
+    assert sum(x.count for x in stats) == 3 * N
+
+
+async def test_enqueue_with_headers(queries: QueueRepositoryPort) -> None:
+    headers = {"trace": "abc"}
+    await queries.enqueue("header_task", None, headers=headers)
+
+    jobs = await queries.dequeue(
+        entrypoints={"header_task": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
+        batch_size=1,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+    )
+
+    assert len(jobs) == 1
+    assert jobs[0].headers == headers
+    await queries.log_jobs([(jobs[0], "successful", None)])
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
-    apgdriver: db.Driver,
+    queries: QueueRepositoryPort,
     N: int,
     retry_timer: timedelta = timedelta(seconds=0.1),
 ) -> None:
-    q = queries.Queries(apgdriver)
     jobs = list[models.Job]()
 
-    await q.enqueue(
+    await queries.enqueue(
         ["placeholder"] * N,
         [f"{n}".encode() for n in range(N)],
         list(range(N)),
     )
 
     # Pick all jobs, and mark then as "in progress"
-    while _ := await q.dequeue(
+    while _ := await queries.dequeue(
         batch_size=10,
-        entrypoints={
-            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
+        entrypoints={"placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
     ):
@@ -236,10 +394,10 @@ async def test_queue_retry_timer(
 
     assert (
         len(
-            await q.dequeue(
+            await queries.dequeue(
                 batch_size=10,
                 entrypoints={
-                    "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
+                    "placeholder": EntrypointExecutionParameter(timedelta(days=1), False, 0)
                 },
                 queue_manager_id=uuid.uuid4(),
                 global_concurrency_limit=1000,
@@ -252,8 +410,8 @@ async def test_queue_retry_timer(
     await asyncio.sleep(retry_timer.total_seconds())
 
     # Re-fetch, should get the same number of jobs as queued (N).
-    while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(retry_timer, False, 0)},
+    while next_jobs := await queries.dequeue(
+        entrypoints={"placeholder": EntrypointExecutionParameter(retry_timer, False, 0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -263,42 +421,9 @@ async def test_queue_retry_timer(
     assert len(jobs) == N
 
 
-@pytest.mark.parametrize("N", (1, 3, 15))
-async def test_queue_log_queued_picked_successful(
-    apgdriver: db.Driver,
-    N: int,
-) -> None:
-    q = queries.Queries(apgdriver)
-
-    # Test delete all by listing all
-    await q.enqueue(
-        ["test_queue_log_queued_picked_successful"] * N,
-        [None] * N,
-        [0] * N,
-    )
-    assert sum(x.status == "queued" for x in await q.queue_log()) == N
-
-    # Pick all jobs
-    picked_jobs = []
-    queue_manager_id = uuid.uuid4()
-    while jobs := await q.dequeue(
-        batch_size=10,
-        entrypoints={
-            "test_queue_log_queued_picked_successful": queries.EntrypointExecutionParameter(
-                timedelta(days=1), False, 0
-            )
-        },
-        queue_manager_id=queue_manager_id,
-        global_concurrency_limit=1000,
-    ):
-        picked_jobs.extend(jobs)
-
-    assert sum(x.status == "picked" for x in await q.queue_log()) == N
-
-    for job in picked_jobs:
-        await q.log_jobs([(job, "successful", None)])
-
-    assert sum(x.status == "successful" for x in await q.queue_log()) == N
+# ---------------------------------------------------------------------------
+# PostgreSQL-only tests (require driver / DSN / raw SQL / SyncQueries)
+# ---------------------------------------------------------------------------
 
 
 async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
@@ -359,110 +484,67 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
     )
 
 
-@pytest.mark.parametrize("N", (1, 3, 15))
-async def test_queue_log_queued_picked_exception(
-    apgdriver: db.Driver,
-    N: int,
-) -> None:
-    q = queries.Queries(apgdriver)
-
-    # Test delete all by listing all
-    await q.enqueue(
-        ["test_queue_log_queued_picked_exception"] * N,
-        [None] * N,
-        [0] * N,
-    )
-    assert sum(x.status == "queued" for x in await q.queue_log()) == N
-
-    # Pick all jobs
-    picked_jobs = []
-    queue_manager_id = uuid.uuid4()
-    while jobs := await q.dequeue(
-        batch_size=10,
-        entrypoints={
-            "test_queue_log_queued_picked_exception": queries.EntrypointExecutionParameter(
-                timedelta(days=1), False, 0
-            )
-        },
-        queue_manager_id=queue_manager_id,
-        global_concurrency_limit=1000,
-    ):
-        picked_jobs.extend(jobs)
-
-    assert sum(x.status == "picked" for x in await q.queue_log()) == N
-
-    for job in picked_jobs:
-        await q.log_jobs([(job, "exception", None)])
-
-    assert sum(x.status == "exception" for x in await q.queue_log()) == N
-
-
-async def test_queue_log_queued_dedupe_key_raises(
+async def test_queue_log_queued_dedupe_key_raises_sync(
     apgdriver: db.Driver,
     pgdriver: db.SyncDriver,
 ) -> None:
     aq = queries.Queries(apgdriver)
 
     await aq.enqueue(
-        "test_queue_log_queued_dedupe_key_raises",
+        "test_queue_log_queued_dedupe_key_raises_sync",
         None,
-        dedupe_key="test_queue_log_queued_dedupe_key_raises",
+        dedupe_key="test_queue_log_queued_dedupe_key_raises_sync",
     )
-    assert sum(x.count for x in await aq.queue_size()) == 1
-
-    with pytest.raises(errors.DuplicateJobError):
-        await aq.enqueue(
-            "test_queue_log_queued_dedupe_key_raises",
-            None,
-            dedupe_key="test_queue_log_queued_dedupe_key_raises",
-        )
     assert sum(x.count for x in await aq.queue_size()) == 1
 
     sq = queries.SyncQueries(pgdriver)
     with pytest.raises(errors.DuplicateJobError):
         sq.enqueue(
-            "test_queue_log_queued_dedupe_key_raises",
+            "test_queue_log_queued_dedupe_key_raises_sync",
             None,
-            dedupe_key="test_queue_log_queued_dedupe_key_raises",
+            dedupe_key="test_queue_log_queued_dedupe_key_raises_sync",
         )
 
     assert sum(x.count for x in sq.queue_size()) == 1
 
 
-async def test_queue_log_queued_dedupe_key_raises_array(
+async def test_queue_log_queued_dedupe_key_raises_array_sync(
     apgdriver: db.Driver,
     pgdriver: db.SyncDriver,
 ) -> None:
     aq = queries.Queries(apgdriver)
 
     await aq.enqueue(
-        ["test_queue_log_queued_dedupe_key_raises_array"],
+        ["test_queue_log_queued_dedupe_key_raises_array_sync"],
         [None],
         [0],
-        dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+        dedupe_key=["test_queue_log_queued_dedupe_key_raises_array_sync"],
     )
-    assert sum(x.count for x in await aq.queue_size()) == 1
-
-    with pytest.raises(errors.DuplicateJobError):
-        await aq.enqueue(
-            ["test_queue_log_queued_dedupe_key_raises_array"],
-            [None],
-            [0],
-            dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
-        )
-
     assert sum(x.count for x in await aq.queue_size()) == 1
 
     sq = queries.SyncQueries(pgdriver)
     with pytest.raises(errors.DuplicateJobError):
         sq.enqueue(
-            ["test_queue_log_queued_dedupe_key_raises_array"],
+            ["test_queue_log_queued_dedupe_key_raises_array_sync"],
             [None],
             [0],
-            dedupe_key=["test_queue_log_queued_dedupe_key_raises_array"],
+            dedupe_key=["test_queue_log_queued_dedupe_key_raises_array_sync"],
         )
 
     assert sum(x.count for x in sq.queue_size()) == 1
+
+
+async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key_sync(
+    apgdriver: db.Driver,
+    pgdriver: db.SyncDriver,
+) -> None:
+    dedupe_key = "test_queue_log_queued_dedupe_key_raises_contains_dedupe_key_sync"
+    await queries.Queries(apgdriver).enqueue("...", None, dedupe_key=dedupe_key)
+    assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
+
+    with pytest.raises(errors.DuplicateJobError) as raised:
+        queries.SyncQueries(pgdriver).enqueue("...", None, dedupe_key=dedupe_key)
+    assert dedupe_key in raised.value.dedupe_key
 
 
 @pytest.mark.parametrize("batch_size", (2, 10))
@@ -489,79 +571,6 @@ async def test_queue_log_queued_dedupe_key_raises_concurrent(
             assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
 
     assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
-
-
-async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
-    apgdriver: db.Driver,
-    pgdriver: db.SyncDriver,
-) -> None:
-    dedupe_key = "test_queue_log_queued_dedupe_key_raises_contains_dedupe_key"
-    await queries.Queries(apgdriver).enqueue("...", None, dedupe_key=dedupe_key)
-    assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
-
-    with pytest.raises(errors.DuplicateJobError) as raised:
-        await queries.Queries(apgdriver).enqueue("...", None, dedupe_key=dedupe_key)
-    assert dedupe_key in raised.value.dedupe_key
-
-    with pytest.raises(errors.DuplicateJobError) as raised:
-        queries.SyncQueries(pgdriver).enqueue("...", None, dedupe_key=dedupe_key)
-    assert dedupe_key in raised.value.dedupe_key
-
-
-@pytest.mark.parametrize("tail", (None, 10))
-@pytest.mark.parametrize("last", (None, timedelta(minutes=5)))
-@pytest.mark.parametrize("N", (2, 10))
-async def test_log_statistics(
-    apgdriver: db.Driver,
-    tail: int | None,
-    last: timedelta | None,
-    N: int,
-) -> None:
-    q = queries.Queries(apgdriver)
-    # N = 10
-
-    # Enqueue jobs
-    await q.enqueue(["placeholder"] * N, [None] * N, [0] * N)
-
-    # Log jobs
-    jobs = await q.dequeue(
-        entrypoints={
-            "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
-        batch_size=N,
-        queue_manager_id=uuid.uuid4(),
-        global_concurrency_limit=1000,
-    )
-    assert len(jobs) == N
-    for job in jobs:
-        await q.log_jobs([(job, "successful", None)])
-
-    # Fetch statistics
-    stats = await q.log_statistics(tail=tail, last=last)
-
-    assert sum(x.count for x in stats if x.status == "queued") == N
-    assert sum(x.count for x in stats if x.status == "picked") == N
-    assert sum(x.count for x in stats if x.status == "successful") == N
-    assert sum(x.count for x in stats) == 3 * N
-
-
-async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
-    q = queries.Queries(apgdriver)
-    headers = {"trace": "abc"}
-    await q.enqueue("header_task", None, headers=headers)
-
-    jobs = await q.dequeue(
-        entrypoints={
-            "header_task": queries.EntrypointExecutionParameter(timedelta(days=1), False, 0)
-        },
-        batch_size=1,
-        queue_manager_id=uuid.uuid4(),
-        global_concurrency_limit=1000,
-    )
-
-    assert len(jobs) == 1
-    assert jobs[0].headers == headers
-    await q.log_jobs([(jobs[0], "successful", None)])
 
 
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:

@@ -11,7 +11,9 @@ import psycopg
 import pytest
 import pytest_asyncio
 
+from pgqueuer.adapters.persistence.inmemory import InMemoryRepository
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.ports.repository import QueueRepositoryPort
 from pgqueuer.queries import Queries
 
 try:  # pragma: no cover - uvloop not installed on Windows
@@ -168,3 +170,17 @@ async def pgdriver(dsn: str) -> AsyncGenerator[SyncPsycopgDriver, None]:
         yield SyncPsycopgDriver(conn)
     finally:
         conn.close()
+
+
+@pytest_asyncio.fixture(
+    scope="function",
+    params=["postgres", "inmemory"],
+)
+async def queries(
+    request: pytest.FixtureRequest,
+) -> AsyncGenerator[QueueRepositoryPort, None]:
+    if request.param == "postgres":
+        apgdriver = await request.getfixturevalue("apgdriver")
+        yield Queries(apgdriver)
+    else:
+        yield InMemoryRepository()
