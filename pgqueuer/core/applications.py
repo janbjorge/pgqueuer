@@ -15,9 +15,6 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.persistence.qb import DBSettings
-from pgqueuer.domain.models import Channel
-from pgqueuer.domain.types import QueueExecutionMode
-from pgqueuer.ports.driver import Driver
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -29,6 +26,9 @@ from pgqueuer.core.executors import (
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.core.tm import TaskManager
+from pgqueuer.domain.models import Channel
+from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
     import asyncpg

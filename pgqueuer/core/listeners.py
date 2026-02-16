@@ -42,9 +42,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import MutableMapping, TypeAlias, TypeVar
 
+from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
-from pgqueuer.core import logconfig
 
 EventHandler: TypeAlias = Callable[[models.Event], None]
 HandlerTypeVar = TypeVar("HandlerTypeVar", bound=Callable[..., None])

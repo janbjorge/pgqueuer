@@ -18,8 +18,8 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from croniter import croniter
 
-from pgqueuer.domain import models
 from pgqueuer.core import listeners
+from pgqueuer.domain import models
 
 
 @dataclass
