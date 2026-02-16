@@ -14,9 +14,9 @@ from contextlib import suppress
 from datetime import timedelta
 from typing import AsyncContextManager, Awaitable, Callable, ContextManager, TypeAlias
 
+from pgqueuer.adapters.cli import factories
 from pgqueuer.core import applications, logconfig, qm, sm
 from pgqueuer.domain import types
-from pgqueuer.adapters.cli import factories
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
 ManagerFactory: TypeAlias = Callable[

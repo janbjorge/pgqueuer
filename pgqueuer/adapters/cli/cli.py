@@ -13,12 +13,12 @@ from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator
 
+from pgqueuer.adapters.cli import factories, supervisor
 from pgqueuer.adapters.drivers import dsn
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import helpers, listeners, logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
-from pgqueuer.adapters.cli import factories, supervisor
 
 try:
     from uvloop import run as asyncio_run

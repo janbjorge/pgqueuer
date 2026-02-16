@@ -24,8 +24,6 @@ import anyio
 
 from pgqueuer.adapters import tracing
 from pgqueuer.adapters.persistence import qb, queries
-from pgqueuer.domain import errors, models, types
-from pgqueuer.ports.driver import Driver
 from pgqueuer.core import (
     buffers,
     cache,
@@ -36,6 +34,8 @@ from pgqueuer.core import (
     logconfig,
     tm,
 )
+from pgqueuer.domain import errors, models, types
+from pgqueuer.ports.driver import Driver
 
 
 @dataclasses.dataclass

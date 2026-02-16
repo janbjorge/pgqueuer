@@ -8,9 +8,9 @@ from datetime import timedelta
 from itertools import chain
 
 from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.core import tm
 from pgqueuer.domain import models
 from pgqueuer.ports.driver import Driver
-from pgqueuer.core import tm
 
 
 @dataclass
