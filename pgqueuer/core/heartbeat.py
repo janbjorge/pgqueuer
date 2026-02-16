@@ -10,8 +10,7 @@ from datetime import timedelta
 from typing_extensions import Self
 
 from pgqueuer.domain import models
-
-from . import buffers, logconfig
+from pgqueuer.core import buffers, logconfig
 
 
 @dataclass

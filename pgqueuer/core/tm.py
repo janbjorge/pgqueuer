@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 
-from . import logconfig
+from pgqueuer.core import logconfig
 
 
 @dataclasses.dataclass

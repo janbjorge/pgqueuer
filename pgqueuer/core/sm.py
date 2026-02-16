@@ -12,8 +12,7 @@ import croniter
 from pgqueuer.adapters.persistence import queries
 from pgqueuer.domain import models
 from pgqueuer.ports.driver import Driver
-
-from . import executors, helpers, logconfig, tm
+from pgqueuer.core import executors, helpers, logconfig, tm
 
 warnings.simplefilter("default", DeprecationWarning)
 

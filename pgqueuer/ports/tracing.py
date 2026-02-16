@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import AsyncContextManager, Generator, Protocol
 
-from ..models import Job
+from pgqueuer.models import Job
 
 
 class TracingProtocol(Protocol):

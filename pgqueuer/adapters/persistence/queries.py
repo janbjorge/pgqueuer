@@ -30,8 +30,7 @@ from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.tracing import TracingProtocol
-
-from . import qb, query_helpers
+from pgqueuer.adapters.persistence import qb, query_helpers
 
 
 def is_unique_violation(exc: Exception) -> bool:

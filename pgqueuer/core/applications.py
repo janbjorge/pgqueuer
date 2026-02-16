@@ -18,8 +18,7 @@ from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.domain.models import Channel
 from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports.driver import Driver
-
-from .executors import (
+from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
     AsyncCrontab,
@@ -27,9 +26,9 @@ from .executors import (
     EntrypointTypeVar,
     ScheduleExecutorFactoryParameters,
 )
-from .qm import QueueManager
-from .sm import SchedulerManager
-from .tm import TaskManager
+from pgqueuer.core.qm import QueueManager
+from pgqueuer.core.sm import SchedulerManager
+from pgqueuer.core.tm import TaskManager
 
 if TYPE_CHECKING:
     import asyncpg

@@ -18,8 +18,7 @@ from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import helpers, listeners, logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
-
-from . import factories, supervisor
+from pgqueuer.adapters.cli import factories, supervisor
 
 try:
     from uvloop import run as asyncio_run
