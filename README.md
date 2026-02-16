@@ -8,12 +8,12 @@
 
 PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. No separate message broker required.
 
-Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with rate limiting, deferred execution, and job tracking—all backed by your existing database.
+Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with rate limiting, deferred execution, and job tracking-all backed by your existing database.
 
 ## Key Features
 
 ### Core Capabilities
-- 💡 **Minimal integration**: Single Python package—bring your existing PostgreSQL connection and start enqueueing jobs
+- 💡 **Minimal integration**: Single Python package-bring your existing PostgreSQL connection and start enqueueing jobs
 - ⚛️ **PostgreSQL-powered concurrency**: Workers coordinate using `FOR UPDATE SKIP LOCKED` without stepping on each other
 - 🚧 **Instant notifications**: `LISTEN/NOTIFY` wakes idle workers as soon as jobs arrive (with polling backup for robustness)
 - 📦 **Clean architecture**: Built on ports and adapters pattern with support for multiple drivers (asyncpg, psycopg sync/async)
@@ -38,7 +38,7 @@ PGQueuer is designed for teams who value simplicity and want to leverage Postgre
 
 **Real-time with PostgreSQL primitives**: `LISTEN/NOTIFY` delivers sub-second job latency without polling loops. Workers wake instantly when jobs arrive, and `FOR UPDATE SKIP LOCKED` coordinates parallel workers without contention.
 
-**Built for modern Python**: First-class async/await support with clean shutdown semantics. Rate limiting, concurrency control, and scheduling are built in—not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
+**Built for modern Python**: First-class async/await support with clean shutdown semantics. Rate limiting, concurrency control, and scheduling are built in-not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
 
 **When PGQueuer shines**: Single database stack, microservices that share a database, applications where job data needs transactional consistency with business data, teams who prefer fewer moving parts over distributed systems complexity.
 
@@ -87,7 +87,7 @@ async def main() -> PgQueuer:
     return pgq
 ```
 
-Run the consumer with the CLI—it will start listening for work:
+Run the consumer with the CLI-it will start listening for work:
 
 ```bash
 pgq run examples.consumer:main
@@ -336,7 +336,7 @@ async def morning_report(schedule: Schedule) -> None:
     await generate_and_send_report()
 ```
 
-Schedules are stored in PostgreSQL and survive restarts. For schedule-only workers (no job processing), use `SchedulerManager` directly—see [examples/scheduler.py](examples/scheduler.py).
+Schedules are stored in PostgreSQL and survive restarts. For schedule-only workers (no job processing), use `SchedulerManager` directly-see [examples/scheduler.py](examples/scheduler.py).
 
 ## Advanced Features
 
@@ -431,7 +431,7 @@ The dashboard shows queue depth, processing times, job statuses, and priorities.
 
 ## Development and Testing
 
-PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to launch an ephemeral PostgreSQL instance automatically for the integration test suite—no manual Docker Compose setup or pre‑provisioned database required. Just ensure Docker (or another supported container runtime) is running locally.
+PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to launch an ephemeral PostgreSQL instance automatically for the integration test suite-no manual Docker Compose setup or pre‑provisioned database required. Just ensure Docker (or another supported container runtime) is running locally.
 
 Typical development workflow:
 
