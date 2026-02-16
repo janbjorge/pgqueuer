@@ -8,9 +8,11 @@ from pgqueuer.ports.repository import (
 from pgqueuer.ports.tracing import TracingProtocol
 
 __all__ = [
+    "Driver",
     "NotificationPort",
     "QueueRepositoryPort",
     "ScheduleRepositoryPort",
     "SchemaManagementPort",
+    "SyncDriver",
     "TracingProtocol",
 ]

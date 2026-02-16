@@ -1,5 +1,4 @@
 """Backward-compatibility shim. Canonical: pgqueuer.adapters.persistence.qb"""
-
 from pgqueuer.adapters.persistence.qb import (
     DBSettings,
     Durability,
