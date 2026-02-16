@@ -6,9 +6,7 @@
 
 ## Overview
 
-PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, eliminating the need for external message brokers like Redis or RabbitMQ. Scale your job processing without adding new infrastructure.
-
-Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with rate limiting, deferred execution, and job tracking—all backed by your existing database.
+PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. PGQueuer uses PostgreSQL features like `LISTEN/NOTIFY` and `FOR UPDATE SKIP LOCKED` to keep workers coordinated and throughput high. Beyond basic job processing, it handles batch operations, rate limiting, deferred execution, scheduled tasks, and real-time job tracking—all with the database you already trust.
 
 ## Key Features
 
