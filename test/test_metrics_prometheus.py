@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -9,7 +8,7 @@ from fastapi.testclient import TestClient
 from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
 from pgqueuer.models import LogStatistics, QueueStatistics
-from pgqueuer.queries import Queries
+from pgqueuer.ports.repository import QueueRepositoryPort
 
 
 class FakeQueries:
@@ -71,9 +70,9 @@ def test_custom_metric_names_are_used() -> None:
 
 
 async def test_collect_metrics_returns_payload() -> None:
-    queries = cast(Queries, FakeQueries())
+    repository: QueueRepositoryPort = FakeQueries()
 
-    metrics_payload = await metrics.collect_metrics(queries)
+    metrics_payload = await metrics.collect_metrics(repository)
 
     assert isinstance(metrics_payload, str)
 
@@ -92,9 +91,9 @@ async def test_collect_metrics_with_statistics() -> None:
         ),
     ]
 
-    queries = cast(Queries, FakeQueries(queue_stats=queue_stats, log_stats=log_stats))
+    repository: QueueRepositoryPort = FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
 
-    metrics_payload = await metrics.collect_metrics(queries)
+    metrics_payload = await metrics.collect_metrics(repository)
 
     assert (
         'pgqueuer_queue_count{aggregation="sum",entrypoint="worker",status="queued"} 10'
@@ -107,8 +106,8 @@ async def test_collect_metrics_with_statistics() -> None:
 
 
 def test_fastapi_create_metrics_router() -> None:
-    queries = cast(Queries, FakeQueries())
-    router = create_metrics_router(queries)
+    repository: QueueRepositoryPort = FakeQueries()
+    router = create_metrics_router(repository)
 
     app = FastAPI()
     app.include_router(router)
@@ -121,8 +120,8 @@ def test_fastapi_create_metrics_router() -> None:
 
 
 def test_fastapi_create_metrics_router_custom_path() -> None:
-    queries = cast(Queries, FakeQueries())
-    router = create_metrics_router(queries, path="/custom/metrics")
+    repository: QueueRepositoryPort = FakeQueries()
+    router = create_metrics_router(repository, path="/custom/metrics")
 
     app = FastAPI()
     app.include_router(router)
