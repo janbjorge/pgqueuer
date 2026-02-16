@@ -10,9 +10,9 @@ from typing import Callable
 import croniter
 
 from pgqueuer.adapters.persistence import queries
+from pgqueuer.core import executors, helpers, logconfig, tm
 from pgqueuer.domain import models
 from pgqueuer.ports.driver import Driver
-from pgqueuer.core import executors, helpers, logconfig, tm
 
 warnings.simplefilter("default", DeprecationWarning)
 

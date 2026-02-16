@@ -121,7 +121,6 @@ max-complexity = 15
 combine-as-imports = true
 relative-imports-order = "furthest-to-closest"
 force-single-line = false
-force-absolute-imports = true
 
 [tool.mypy]
 disallow_untyped_defs = true

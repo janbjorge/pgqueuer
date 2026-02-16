@@ -24,13 +24,13 @@ if TYPE_CHECKING:
 from pydantic_core import to_json
 
 from pgqueuer.adapters import tracing
+from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core import helpers
 from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.tracing import TracingProtocol
-from pgqueuer.adapters.persistence import qb, query_helpers
 
 
 def is_unique_violation(exc: Exception) -> bool:
