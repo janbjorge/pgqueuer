@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -74,9 +75,9 @@ def test_custom_metric_names_are_used() -> None:
 
 
 async def test_collect_metrics_returns_payload() -> None:
-    fake_repo = FakeQueries()
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
 
-    metrics_payload = await metrics.collect_metrics(fake_repo)  # type: ignore[arg-type]
+    metrics_payload = await metrics.collect_metrics(fake_repo)
 
     assert isinstance(metrics_payload, str)
 
@@ -95,9 +96,9 @@ async def test_collect_metrics_with_statistics() -> None:
         ),
     ]
 
-    fake_repo = FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
+    fake_repo = cast(QueueRepositoryPort, FakeQueries(queue_stats=queue_stats, log_stats=log_stats))
 
-    metrics_payload = await metrics.collect_metrics(fake_repo)  # type: ignore[arg-type]
+    metrics_payload = await metrics.collect_metrics(fake_repo)
 
     assert (
         'pgqueuer_queue_count{aggregation="sum",entrypoint="worker",status="queued"} 10'
@@ -110,8 +111,8 @@ async def test_collect_metrics_with_statistics() -> None:
 
 
 def test_fastapi_create_metrics_router() -> None:
-    fake_repo = FakeQueries()
-    router = create_metrics_router(fake_repo)  # type: ignore[arg-type]
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
+    router = create_metrics_router(fake_repo)
 
     app = FastAPI()
     app.include_router(router)
@@ -124,8 +125,8 @@ def test_fastapi_create_metrics_router() -> None:
 
 
 def test_fastapi_create_metrics_router_custom_path() -> None:
-    fake_repo = FakeQueries()
-    router = create_metrics_router(fake_repo, path="/custom/metrics")  # type: ignore[arg-type]  # type: ignore[arg-type]
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
+    router = create_metrics_router(fake_repo, path="/custom/metrics")
 
     app = FastAPI()
     app.include_router(router)

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol, runtime_checkable, overload
+from typing import TYPE_CHECKING, Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.types import CronEntrypoint
@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-@runtime_checkable
 class QueueRepositoryPort(Protocol):
     """Persistence operations for the job queue."""
 
