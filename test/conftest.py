@@ -172,15 +172,22 @@ async def pgdriver(dsn: str) -> AsyncGenerator[SyncPsycopgDriver, None]:
         conn.close()
 
 
-@pytest_asyncio.fixture(
-    scope="function",
-    params=["postgres", "inmemory"],
-)
+@pytest_asyncio.fixture(scope="function", params=["postgres", "inmemory"])
 async def queries(
-    request: pytest.FixtureRequest,
+    request: pytest.FixtureRequest, dsn: str
 ) -> AsyncGenerator[QueueRepositoryPort, None]:
+    """Queries implementation - parametrized to test both backends.
+
+    Note: dsn is always set up even for inmemory tests. This is a minor
+    inefficiency but avoids complex conditional fixture setup logic.
+    For inmemory tests, dsn is simply not used.
+    """
     if request.param == "postgres":
-        apgdriver = await request.getfixturevalue("apgdriver")
-        yield Queries(apgdriver)
+        conn = await asyncpg.connect(dsn=dsn)
+        driver = AsyncpgDriver(conn)
+        try:
+            yield Queries(driver)
+        finally:
+            await conn.close()
     else:
         yield InMemoryRepository()
