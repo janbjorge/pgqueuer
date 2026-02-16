@@ -22,7 +22,7 @@ import anyio
 from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel
 from pydantic_core import from_json
 
-from .types import (
+from pgqueuer.domain.types import (
     EVENT_TYPES,
     JOB_STATUS,
     OPERATIONS,

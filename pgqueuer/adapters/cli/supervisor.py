@@ -16,8 +16,7 @@ from typing import AsyncContextManager, Awaitable, Callable, ContextManager, Typ
 
 from pgqueuer.core import applications, logconfig, qm, sm
 from pgqueuer.domain import types
-
-from . import factories
+from pgqueuer.adapters.cli import factories
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
 ManagerFactory: TypeAlias = Callable[

@@ -10,8 +10,7 @@ from itertools import chain
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.domain import models
 from pgqueuer.ports.driver import Driver
-
-from . import tm
+from pgqueuer.core import tm
 
 
 @dataclass

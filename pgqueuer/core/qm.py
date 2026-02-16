@@ -26,8 +26,7 @@ from pgqueuer.adapters import tracing
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.domain import errors, models, types
 from pgqueuer.ports.driver import Driver
-
-from . import (
+from pgqueuer.core import (
     buffers,
     cache,
     executors,

@@ -18,8 +18,7 @@ import async_timeout
 from croniter import croniter
 
 from pgqueuer.domain import errors, models
-
-from . import helpers
+from pgqueuer.core import helpers
 
 _SENTINEL = object()
 

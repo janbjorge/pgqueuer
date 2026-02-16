@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Awaitable, Callable, Generic, TypeVar
 
-from . import helpers, logconfig
+from pgqueuer.core import helpers, logconfig
 
 T = TypeVar("T")
 

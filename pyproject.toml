@@ -119,6 +119,9 @@ max-complexity = 15
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
+relative-imports-order = "furthest-to-closest"
+force-single-line = false
+force-absolute-imports = true
 
 [tool.mypy]
 disallow_untyped_defs = true

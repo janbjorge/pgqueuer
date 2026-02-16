@@ -251,6 +251,24 @@ jobs:
               if: ${{ always() }}
               run: uv run ruff format . --check
 
+    run-import-linter:
+        if: github.event_name != 'schedule'
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install 3.12
+
+            - name: Install Dev Environment
+              run: uv sync --all-extras --frozen
+
+            - name: Run Import Linter (Hexagonal Architecture Validation)
+              run: uv run lint-imports
+
     run-mypy:
         if: github.event_name != 'schedule'
         runs-on: ubuntu-24.04
@@ -277,6 +295,7 @@ jobs:
                 run-tests,
                 run-windows-tests,
                 run-ruff,
+                run-import-linter,
                 run-mypy,
             ]
         runs-on: ubuntu-24.04

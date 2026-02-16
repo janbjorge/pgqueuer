@@ -19,8 +19,7 @@ from typing import AsyncGenerator, Awaitable, Callable, Generic, TypeVar
 from typing_extensions import Self
 
 from pgqueuer.domain import models
-
-from . import helpers, retries, tm
+from pgqueuer.core import helpers, retries, tm
 
 T = TypeVar("T")
 
