@@ -58,7 +58,7 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
 
 async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
-        "pgqueuer.helpers.utc_now",
+        "pgqueuer.core.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
     executed = False
@@ -81,7 +81,7 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
 
 async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocker.patch(
-        "pgqueuer.helpers.utc_now",
+        "pgqueuer.core.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
 
@@ -106,7 +106,7 @@ async def test_schedule_storage_and_retrieval(
     mocker: Mock,
 ) -> None:
     mocker.patch(
-        "pgqueuer.helpers.utc_now",
+        "pgqueuer.core.helpers.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
     expression = "* * * * *"

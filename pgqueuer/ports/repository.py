@@ -12,11 +12,11 @@ import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Protocol, overload
 
-from .. import models
-from ..types import CronEntrypoint
+from pgqueuer.domain import models
+from pgqueuer.domain.types import CronEntrypoint
 
 if TYPE_CHECKING:
-    from ..queries import EntrypointExecutionParameter
+    from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
 # Queue persistence

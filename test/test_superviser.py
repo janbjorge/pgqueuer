@@ -80,7 +80,7 @@ async def test_setup_shutdown_handlers_invalid_manager(
 async def test_setup_signal_handlers(
     shutdown_event: asyncio.Event,
 ) -> None:
-    with patch("pgqueuer.supervisor.asyncio.get_event_loop") as mock_get_event_loop:
+    with patch("pgqueuer.adapters.cli.supervisor.asyncio.get_event_loop") as mock_get_event_loop:
         mock_loop = MagicMock()
         mock_get_event_loop.return_value = mock_loop
 

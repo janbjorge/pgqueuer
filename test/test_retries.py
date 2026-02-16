@@ -3,7 +3,8 @@ from datetime import timedelta
 
 import pytest
 
-from pgqueuer import helpers, retries
+from pgqueuer import retries
+from pgqueuer.core import helpers
 
 
 @pytest.mark.asyncio

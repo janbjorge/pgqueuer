@@ -167,7 +167,6 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
 async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
     N = 4
     retry_timer = timedelta(seconds=0.100)
-    event = asyncio.Event()
     qm = QueueManager(apgdriver)
     calls = Counter[JobId]()
 

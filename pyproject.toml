@@ -2,8 +2,8 @@
 build-backend = "setuptools.build_meta"
 requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
 
-[tool.setuptools]
-packages = ["pgqueuer"]
+[tool.setuptools.packages.find]
+include = ["pgqueuer*"]
 
 [tool.setuptools_scm]
 version_scheme= "only-version"
@@ -87,6 +87,7 @@ dev = [
     "uvicorn",
     "time-machine>=2.16.0",
     "testcontainers>=4.12.0",
+    "import-linter>=2.0",
 ]
 docs = [
     "myst-parser",
@@ -136,3 +137,46 @@ explicit_package_bases = true
 asyncio_mode = "auto"
 timeout = "20"
 timeout_func_only = true
+
+# ---------------------------------------------------------------------------
+# Import-linter: enforce hexagonal architecture boundaries
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["pgqueuer"]
+
+[[tool.importlinter.contracts]]
+name = "Domain must not import from adapters or core"
+type = "forbidden"
+source_modules = ["pgqueuer.domain"]
+forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
+
+[[tool.importlinter.contracts]]
+name = "Ports must not import from adapters or core"
+type = "forbidden"
+source_modules = ["pgqueuer.ports"]
+forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
+ignore_imports = [
+    # ports/driver.py needs TaskManager from core for the protocol definition
+    "pgqueuer.ports.driver -> pgqueuer.core.tm",
+    # TYPE_CHECKING import for protocol type hint
+    "pgqueuer.ports.repository -> pgqueuer.adapters.persistence.queries",
+]
+
+[[tool.importlinter.contracts]]
+name = "Core must not import from adapters"
+type = "forbidden"
+source_modules = ["pgqueuer.core"]
+forbidden_modules = ["pgqueuer.adapters"]
+ignore_imports = [
+    # These core modules legitimately depend on adapter implementations
+    # during the migration period. Future work will further decouple these.
+    "pgqueuer.core.qm -> pgqueuer.adapters.persistence.qb",
+    "pgqueuer.core.qm -> pgqueuer.adapters.persistence.queries",
+    "pgqueuer.core.qm -> pgqueuer.adapters.tracing",
+    "pgqueuer.core.sm -> pgqueuer.adapters.persistence.queries",
+    "pgqueuer.core.completion -> pgqueuer.adapters.persistence.qb",
+    "pgqueuer.core.completion -> pgqueuer.adapters.persistence.queries",
+    "pgqueuer.core.applications -> pgqueuer.adapters.drivers.asyncpg",
+    "pgqueuer.core.applications -> pgqueuer.adapters.drivers.psycopg",
+    "pgqueuer.core.applications -> pgqueuer.adapters.persistence.qb",
+]
