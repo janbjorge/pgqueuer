@@ -12,7 +12,11 @@ from pgqueuer.ports.repository import QueueRepositoryPort
 
 
 class FakeQueries:
-    """A fake Queries implementation for testing without database access."""
+    """A minimal repository stub for testing the metrics module.
+
+    Only implements the methods needed by collect_metrics, satisfying
+    the QueueRepositoryPort protocol via structural subtyping.
+    """
 
     def __init__(
         self,
@@ -70,9 +74,9 @@ def test_custom_metric_names_are_used() -> None:
 
 
 async def test_collect_metrics_returns_payload() -> None:
-    repository: QueueRepositoryPort = FakeQueries()
+    fake_repo = FakeQueries()
 
-    metrics_payload = await metrics.collect_metrics(repository)
+    metrics_payload = await metrics.collect_metrics(fake_repo)  # type: ignore[arg-type]
 
     assert isinstance(metrics_payload, str)
 
@@ -91,9 +95,9 @@ async def test_collect_metrics_with_statistics() -> None:
         ),
     ]
 
-    repository: QueueRepositoryPort = FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
+    fake_repo = FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
 
-    metrics_payload = await metrics.collect_metrics(repository)
+    metrics_payload = await metrics.collect_metrics(fake_repo)  # type: ignore[arg-type]
 
     assert (
         'pgqueuer_queue_count{aggregation="sum",entrypoint="worker",status="queued"} 10'
@@ -106,8 +110,8 @@ async def test_collect_metrics_with_statistics() -> None:
 
 
 def test_fastapi_create_metrics_router() -> None:
-    repository: QueueRepositoryPort = FakeQueries()
-    router = create_metrics_router(repository)
+    fake_repo = FakeQueries()
+    router = create_metrics_router(fake_repo)  # type: ignore[arg-type]
 
     app = FastAPI()
     app.include_router(router)
@@ -120,8 +124,8 @@ def test_fastapi_create_metrics_router() -> None:
 
 
 def test_fastapi_create_metrics_router_custom_path() -> None:
-    repository: QueueRepositoryPort = FakeQueries()
-    router = create_metrics_router(repository, path="/custom/metrics")
+    fake_repo = FakeQueries()
+    router = create_metrics_router(fake_repo, path="/custom/metrics")  # type: ignore[arg-type]  # type: ignore[arg-type]
 
     app = FastAPI()
     app.include_router(router)
