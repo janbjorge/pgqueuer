@@ -7,6 +7,7 @@ import dataclasses
 import functools
 import inspect
 import random
+import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
@@ -16,7 +17,9 @@ import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
-from . import db, errors, helpers, models, queries
+from . import errors, helpers, models
+
+_SENTINEL = object()
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
@@ -45,16 +48,33 @@ def is_async_callable(obj: Callable[..., object] | object) -> bool:
 
 @dataclasses.dataclass
 class EntrypointExecutorParameters:
-    channel: models.Channel
     concurrency_limit: int
-    connection: db.Driver
     func: Entrypoint
-    queries: queries.Queries
     requests_per_second: float
     retry_timer: timedelta
     serialized_dispatch: bool
-    shutdown: asyncio.Event
     accepts_context: bool = False
+
+    # Deprecated fields -- kept for backward compatibility with custom executors.
+    channel: object = dataclasses.field(default=_SENTINEL, repr=False)
+    connection: object = dataclasses.field(default=_SENTINEL, repr=False)
+    queries: object = dataclasses.field(default=_SENTINEL, repr=False)
+    shutdown: object = dataclasses.field(default=_SENTINEL, repr=False)
+
+    def __post_init__(self) -> None:
+        deprecated = [
+            name
+            for name in ("channel", "connection", "queries", "shutdown")
+            if getattr(self, name) is not _SENTINEL
+        ]
+        if deprecated:
+            warnings.warn(
+                f"Passing {', '.join(deprecated)} to EntrypointExecutorParameters is "
+                "deprecated and will be removed in a future version. "
+                "These fields are unused by executors.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
 
 @dataclasses.dataclass
@@ -207,13 +227,30 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
 
 @dataclasses.dataclass
 class ScheduleExecutorFactoryParameters:
-    connection: db.Driver
     entrypoint: str
     expression: str
     func: AsyncCrontab
-    queries: queries.Queries
-    shutdown: asyncio.Event
     clean_old: bool
+
+    # Deprecated fields -- kept for backward compatibility with custom executors.
+    connection: object = dataclasses.field(default=_SENTINEL, repr=False)
+    queries: object = dataclasses.field(default=_SENTINEL, repr=False)
+    shutdown: object = dataclasses.field(default=_SENTINEL, repr=False)
+
+    def __post_init__(self) -> None:
+        deprecated = [
+            name
+            for name in ("connection", "queries", "shutdown")
+            if getattr(self, name) is not _SENTINEL
+        ]
+        if deprecated:
+            warnings.warn(
+                f"Passing {', '.join(deprecated)} to ScheduleExecutorFactoryParameters is "
+                "deprecated and will be removed in a future version. "
+                "These fields are unused by executors.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
 
 
 @dataclasses.dataclass
