@@ -200,6 +200,7 @@ jobs:
               run: uv run pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
 
             - name: Coverage Comment
+              if: matrix.python-version == '3.14' && matrix.postgres-version == '18'
               uses: py-cov-action/python-coverage-comment-action@v3
               with:
                 GITHUB_TOKEN: ${{ github.token }}
