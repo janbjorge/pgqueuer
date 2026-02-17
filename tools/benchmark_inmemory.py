@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,37 +58,66 @@ def main(
 ):
     """In-memory benchmark: single PgQueuer with producer/consumer."""
 
+    hard_timeout = timer * 1.1  # 10% grace period
+
+    # Hard process-level timeout as a safety net
+    def _hard_timeout_handler(signum: int, frame: object) -> None:
+        print(f"\nHard timeout ({hard_timeout:.1f}s) reached — aborting.", file=sys.stderr)
+        sys.exit(1)
+
+    signal.signal(signal.SIGALRM, _hard_timeout_handler)
+    signal.alarm(int(hard_timeout) + 1)
+
     async def benchmark():
+        from datetime import timedelta
+        from time import monotonic
+
+        from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+
         repo = InMemoryRepository()
         job_count = [0]
+        stop = False
         start_time = datetime.now(timezone.utc)
+        mono_start = monotonic()
+        deadline = mono_start + timer
 
         async def producer():
+            nonlocal stop
             job_id = 0
-            for _ in range(int(timer * 100000)):  # Run many iterations instead of checking time
-                tasks = ["task_a", "task_b", "task_c"]
-                await repo.enqueue(
-                    [tasks[i % 3] for i in range(batch_size)],
-                    [f"{job_id + i}".encode() for i in range(batch_size)],
-                    [0] * batch_size,
-                )
+            tasks = ["task_a", "task_b", "task_c"]
+            entrypoints = [tasks[i % len(tasks)] for i in range(batch_size)]
+            payloads: list[bytes | None] = [None] * batch_size
+            priorities = [0] * batch_size
+            i = 0
+            while not stop:
+                await repo.enqueue(entrypoints, payloads, priorities)
                 job_id += batch_size
+                i += 1
+                # Yield to event loop periodically and check deadline
+                if i % 64 == 0:
+                    await asyncio.sleep(0)
+                    if monotonic() >= deadline:
+                        stop = True
 
         async def consumer():
-            from datetime import timedelta
-
-            from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
-
+            nonlocal stop
             ep = EntrypointExecutionParameter(
                 retry_after=timedelta(0), serialized=False, concurrency_limit=0
             )
             entrypoints = {"task_a": ep, "task_b": ep, "task_c": ep}
-            for _ in range(int(timer * 100000)):  # Match producer iterations
+            i = 0
+            while not stop:
                 jobs = await repo.dequeue(batch_size, entrypoints, None, None)
                 if jobs:
                     job_count[0] += len(jobs)
+                i += 1
+                if i % 64 == 0:
+                    await asyncio.sleep(0)
 
-        await asyncio.gather(producer(), consumer())
+        await asyncio.wait_for(
+            asyncio.gather(producer(), consumer()),
+            timeout=hard_timeout,
+        )
 
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         return BenchmarkResult(
