@@ -52,6 +52,14 @@ class InMemoryRepository:
         self._lock = asyncio.Lock()
         self._dedupe: dict[str, JobId] = {}
 
+        # Maintain count of picked jobs to avoid O(n) scan in dequeue
+        self._picked_count: Counter[str] = Counter()  # entrypoint -> count
+        self._total_picked = 0
+
+        # Index jobs by status to avoid iterating all jobs
+        self._queued_jobs: set[JobId] = set()  # Jobs with status="queued"
+        self._picked_jobs: set[JobId] = set()  # Jobs with status="picked"
+
         self._schedules: dict[ScheduleId, models.Schedule] = {}
         self._schedule_seq = itertools.count(1)
 
@@ -60,6 +68,13 @@ class InMemoryRepository:
         if job is not None:
             # Clean dedupe index
             self._dedupe = {k: v for k, v in self._dedupe.items() if v != jid}
+            # Update picked count and indexes
+            if job.status == "picked":
+                self._picked_count[job.entrypoint] -= 1
+                self._total_picked -= 1
+                self._picked_jobs.discard(jid)
+            elif job.status == "queued":
+                self._queued_jobs.discard(jid)
         return job
 
     # ===================================================================
@@ -78,41 +93,53 @@ class InMemoryRepository:
 
         now = _now()
         async with self._lock:
-            picked_by_ep: Counter[str] = Counter(
-                j.entrypoint for j in self._jobs.values() if j.status == "picked"
-            )
-            total_picked = sum(picked_by_ep.values())
+            # Use maintained counters instead of O(n) scan
+            picked_by_ep = self._picked_count.copy()
+            total_picked = self._total_picked
 
             candidates: list[tuple[int, int, JobId]] = []
-            for job in self._jobs.values():
+
+            # Check queued jobs using index
+            for jid in self._queued_jobs:
+                job = self._jobs[jid]
                 if job.entrypoint not in entrypoints:
                     continue
                 ep = entrypoints[job.entrypoint]
 
-                is_queued = job.status == "queued" and job.execute_after <= now
+                # Check if job is ready to execute
+                if job.execute_after > now:
+                    continue
+
+                # Skip if constraints are violated
+                if ep.serialized and picked_by_ep[job.entrypoint] > 0:
+                    continue
+                if (
+                    ep.concurrency_limit > 0
+                    and picked_by_ep[job.entrypoint] >= ep.concurrency_limit
+                ):
+                    continue
+                if (
+                    global_concurrency_limit is not None
+                    and total_picked >= global_concurrency_limit
+                ):
+                    continue
+
+                candidates.append((-job.priority, job.id, job.id))
+
+            # Check picked jobs for retries using index
+            for jid in self._picked_jobs:
+                job = self._jobs[jid]
+                if job.entrypoint not in entrypoints:
+                    continue
+                ep = entrypoints[job.entrypoint]
+
                 is_retry = (
-                    job.status == "picked"
-                    and ep.retry_after > timedelta(0)
+                    ep.retry_after > timedelta(0)
                     and job.heartbeat < now - ep.retry_after
                     and job.execute_after <= now
                 )
-                if not (is_queued or is_retry):
-                    continue
-
-                # Skip if constraints are violated (retries bypass constraints)
                 if not is_retry:
-                    if ep.serialized and picked_by_ep[job.entrypoint] > 0:
-                        continue
-                    if (
-                        ep.concurrency_limit > 0
-                        and picked_by_ep[job.entrypoint] >= ep.concurrency_limit
-                    ):
-                        continue
-                    if (
-                        global_concurrency_limit is not None
-                        and total_picked >= global_concurrency_limit
-                    ):
-                        continue
+                    continue
 
                 candidates.append((-job.priority, job.id, job.id))
 
@@ -131,6 +158,12 @@ class InMemoryRepository:
                 )
                 self._jobs[jid] = updated
                 result.append(updated)
+                # Update indexes and counters
+                if job.status == "queued":
+                    self._queued_jobs.discard(jid)
+                    self._picked_jobs.add(jid)
+                    self._picked_count[updated.entrypoint] += 1
+                    self._total_picked += 1
                 picked_by_ep[updated.entrypoint] += 1
                 total_picked += 1
                 self._log.append(_make_log(jid, "picked", updated.priority, updated.entrypoint))
@@ -205,6 +238,8 @@ class InMemoryRepository:
                 }
             )
             self._jobs[jid] = job
+            # Add to queued jobs index
+            self._queued_jobs.add(jid)
             if dk is not None:
                 self._dedupe[dk] = jid
             ids.append(jid)
@@ -253,6 +288,10 @@ class InMemoryRepository:
             # Truncate — no log entries (matches PG TRUNCATE behavior)
             self._jobs.clear()
             self._dedupe.clear()
+            self._picked_count.clear()
+            self._total_picked = 0
+            self._queued_jobs.clear()
+            self._picked_jobs.clear()
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         counts: Counter[tuple[str, int, models.JOB_STATUS]] = Counter()
@@ -265,8 +304,9 @@ class InMemoryRepository:
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         ep_set = set(entrypoints)
+        # Use queued_jobs index instead of iterating all jobs
         return sum(
-            1 for j in self._jobs.values() if j.status == "queued" and j.entrypoint in ep_set
+            1 for jid in self._queued_jobs if self._jobs[jid].entrypoint in ep_set
         )
 
     async def queue_log(self) -> list[models.Log]:

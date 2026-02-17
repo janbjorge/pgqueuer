@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import asyncio, json, os, sys
+import asyncio
+import json
+import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-import typer, uvloop
+import typer
+import uvloop
 from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
-from pgqueuer import PgQueuer, logconfig, types
+from pgqueuer import logconfig
 from pgqueuer.adapters.persistence.inmemory import InMemoryRepository
-from pgqueuer.models import Job
 from pgqueuer.qb import add_prefix
 
 
@@ -24,15 +26,20 @@ class BenchmarkResult(BaseModel):
     avg_latency_ms: float
 
     def pretty_print(self):
-        print(tabulate([
-            ["Created At", self.created_at],
-            ["Total Jobs", self.total_jobs],
-            ["Elapsed Time", f"{self.elapsed:.2f}s"],
-            ["Throughput", f"{self.throughput:.2f} jobs/sec"],
-            ["Avg Latency", f"{self.avg_latency_ms:.2f} ms"],
-        ], headers=["Field", "Value"],
-        tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
-        colalign=("left", "left")))
+        print(
+            tabulate(
+                [
+                    ["Created At", self.created_at],
+                    ["Total Jobs", self.total_jobs],
+                    ["Elapsed Time", f"{self.elapsed:.2f}s"],
+                    ["Throughput", f"{self.throughput:.2f} jobs/sec"],
+                    ["Avg Latency", f"{self.avg_latency_ms:.2f} ms"],
+                ],
+                headers=["Field", "Value"],
+                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                colalign=("left", "left"),
+            )
+        )
 
 
 def job_progress_bar(total=None):
@@ -57,7 +64,7 @@ def main(
 
         async def producer():
             job_id = 0
-            while (datetime.now(timezone.utc) - start_time).total_seconds() < timer:
+            for _ in range(int(timer * 100000)):  # Run many iterations instead of checking time
                 tasks = ["task_a", "task_b", "task_c"]
                 await repo.enqueue(
                     [tasks[i % 3] for i in range(batch_size)],
@@ -65,18 +72,20 @@ def main(
                     [0] * batch_size,
                 )
                 job_id += batch_size
-                await asyncio.sleep(0)  # Yield control but don't throttle
 
         async def consumer():
-            from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
             from datetime import timedelta
-            ep = EntrypointExecutionParameter(retry_after=timedelta(0), serialized=False, concurrency_limit=0)
+
+            from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+
+            ep = EntrypointExecutionParameter(
+                retry_after=timedelta(0), serialized=False, concurrency_limit=0
+            )
             entrypoints = {"task_a": ep, "task_b": ep, "task_c": ep}
-            while (datetime.now(timezone.utc) - start_time).total_seconds() < timer:
+            for _ in range(int(timer * 100000)):  # Match producer iterations
                 jobs = await repo.dequeue(batch_size, entrypoints, None, None)
-                job_count[0] += len(jobs)
-                if not jobs:
-                    await asyncio.sleep(0)  # Yield but don't throttle
+                if jobs:
+                    job_count[0] += len(jobs)
 
         await asyncio.gather(producer(), consumer())
 
