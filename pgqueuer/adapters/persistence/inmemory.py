@@ -46,35 +46,44 @@ class InMemoryRepository:
     """Pure-Python in-memory adapter implementing all four PgQueuer ports."""
 
     def __init__(self) -> None:
-        self._jobs: dict[JobId, models.Job] = {}
         self._job_seq = itertools.count(1)
         self._log: list[models.Log] = []
         self._lock = asyncio.Lock()
         self._dedupe: dict[str, JobId] = {}
 
+        # Per-entrypoint storage: entrypoint -> (jobs dict, queued list, picked dict)
+        self._queues: dict[str, tuple[dict[JobId, models.Job], list[JobId], dict[JobId, models.Job]]] = {}
         # Maintain count of picked jobs to avoid O(n) scan in dequeue
         self._picked_count: Counter[str] = Counter()  # entrypoint -> count
         self._total_picked = 0
 
-        # Index jobs by status to avoid iterating all jobs
-        self._queued_jobs: set[JobId] = set()  # Jobs with status="queued"
-        self._picked_jobs: set[JobId] = set()  # Jobs with status="picked"
-
         self._schedules: dict[ScheduleId, models.Schedule] = {}
         self._schedule_seq = itertools.count(1)
 
-    def _remove_job(self, jid: JobId) -> models.Job | None:
-        job = self._jobs.pop(jid, None)
+    def _get_queue(self, entrypoint: str):
+        """Get or create queue storage for entrypoint."""
+        if entrypoint not in self._queues:
+            self._queues[entrypoint] = ({}, [], {})  # (jobs, queued_list, picked_dict)
+        return self._queues[entrypoint]
+
+    def _remove_job(self, jid: JobId, entrypoint: str) -> models.Job | None:
+        """Remove a job from its entrypoint queue."""
+        queue_tuple = self._queues.get(entrypoint)
+        if queue_tuple is None:
+            return None
+
+        jobs_dict, queued_list, picked_dict = queue_tuple
+        job = jobs_dict.pop(jid, None)
         if job is not None:
             # Clean dedupe index
             self._dedupe = {k: v for k, v in self._dedupe.items() if v != jid}
-            # Update picked count and indexes
-            if job.status == "picked":
-                self._picked_count[job.entrypoint] -= 1
+            # Update picked count and remove from picked/queued
+            if jid in picked_dict:
+                picked_dict.pop(jid)
+                self._picked_count[entrypoint] -= 1
                 self._total_picked -= 1
-                self._picked_jobs.discard(jid)
-            elif job.status == "queued":
-                self._queued_jobs.discard(jid)
+            elif jid in queued_list:
+                queued_list.remove(jid)
         return job
 
     # ===================================================================
@@ -97,57 +106,58 @@ class InMemoryRepository:
             picked_by_ep = self._picked_count.copy()
             total_picked = self._total_picked
 
-            candidates: list[tuple[int, int, JobId]] = []
+            candidates: list[tuple[int, JobId, str]] = []
 
-            # Check queued jobs using index
-            for jid in self._queued_jobs:
-                job = self._jobs[jid]
-                if job.entrypoint not in entrypoints:
-                    continue
-                ep = entrypoints[job.entrypoint]
-
-                # Check if job is ready to execute
-                if job.execute_after > now:
+            # Only iterate requested entrypoints
+            for ep_name, ep_config in entrypoints.items():
+                queue_tuple = self._queues.get(ep_name)
+                if queue_tuple is None:
                     continue
 
-                # Skip if constraints are violated
-                if ep.serialized and picked_by_ep[job.entrypoint] > 0:
-                    continue
-                if (
-                    ep.concurrency_limit > 0
-                    and picked_by_ep[job.entrypoint] >= ep.concurrency_limit
-                ):
-                    continue
-                if (
-                    global_concurrency_limit is not None
-                    and total_picked >= global_concurrency_limit
-                ):
-                    continue
+                jobs_dict, queued_list, picked_dict = queue_tuple
 
-                candidates.append((-job.priority, job.id, job.id))
+                # Check queued jobs for this entrypoint
+                for jid in queued_list:
+                    job = jobs_dict[jid]
 
-            # Check picked jobs for retries using index
-            for jid in self._picked_jobs:
-                job = self._jobs[jid]
-                if job.entrypoint not in entrypoints:
-                    continue
-                ep = entrypoints[job.entrypoint]
+                    # Check if job is ready to execute
+                    if job.execute_after > now:
+                        continue
 
-                is_retry = (
-                    ep.retry_after > timedelta(0)
-                    and job.heartbeat < now - ep.retry_after
-                    and job.execute_after <= now
-                )
-                if not is_retry:
-                    continue
+                    # Skip if constraints are violated
+                    if ep_config.serialized and picked_by_ep[ep_name] > 0:
+                        continue
+                    if (
+                        ep_config.concurrency_limit > 0
+                        and picked_by_ep[ep_name] >= ep_config.concurrency_limit
+                    ):
+                        continue
+                    if (
+                        global_concurrency_limit is not None
+                        and total_picked >= global_concurrency_limit
+                    ):
+                        continue
 
-                candidates.append((-job.priority, job.id, job.id))
+                    candidates.append((-job.priority, jid, ep_name))
+
+                # Check picked jobs for retries for this entrypoint
+                for jid, job in picked_dict.items():
+                    is_retry = (
+                        ep_config.retry_after > timedelta(0)
+                        and job.heartbeat < now - ep_config.retry_after
+                        and job.execute_after <= now
+                    )
+                    if is_retry:
+                        candidates.append((-job.priority, jid, ep_name))
 
             candidates.sort()
 
             result: list[models.Job] = []
-            for _, _, jid in candidates[:batch_size]:
-                job = self._jobs[jid]
+            for _, jid, ep_name in candidates[:batch_size]:
+                queue_tuple = self._queues[ep_name]
+                jobs_dict, queued_list, picked_dict = queue_tuple
+                job = jobs_dict[jid]
+
                 updated = job.model_copy(
                     update={
                         "status": "picked",
@@ -156,17 +166,17 @@ class InMemoryRepository:
                         "queue_manager_id": queue_manager_id,
                     }
                 )
-                self._jobs[jid] = updated
+                jobs_dict[jid] = updated
                 result.append(updated)
-                # Update indexes and counters
-                if job.status == "queued":
-                    self._queued_jobs.discard(jid)
-                    self._picked_jobs.add(jid)
-                    self._picked_count[updated.entrypoint] += 1
+
+                # Move from queued to picked if it was queued
+                if jid in queued_list:
+                    queued_list.remove(jid)
+                    picked_dict[jid] = updated
+                    self._picked_count[ep_name] += 1
                     self._total_picked += 1
-                picked_by_ep[updated.entrypoint] += 1
-                total_picked += 1
-                self._log.append(_make_log(jid, "picked", updated.priority, updated.entrypoint))
+
+                self._log.append(_make_log(jid, "picked", updated.priority, ep_name))
 
             return result
 
@@ -237,9 +247,12 @@ class InMemoryRepository:
                     "headers": to_json(hd).decode() if hd is not None else None,
                 }
             )
-            self._jobs[jid] = job
-            # Add to queued jobs index
-            self._queued_jobs.add(jid)
+            # Add to per-entrypoint queue
+            queue_tuple = self._get_queue(ep)
+            jobs_dict, queued_list, picked_dict = queue_tuple
+            jobs_dict[jid] = job
+            queued_list.append(jid)
+
             if dk is not None:
                 self._dedupe[dk] = jid
             ids.append(jid)
@@ -252,7 +265,7 @@ class InMemoryRepository:
         job_status: list[tuple[models.Job, models.JOB_STATUS, models.TracebackRecord | None]],
     ) -> None:
         for job, status, tb in job_status:
-            self._remove_job(job.id)
+            self._remove_job(job.id, job.entrypoint)
             self._log.append(
                 _make_log(
                     job.id,
@@ -265,38 +278,62 @@ class InMemoryRepository:
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         for jid in ids:
-            job = self._remove_job(jid)
-            if job is not None:
-                self._log.append(_make_log(jid, "canceled", job.priority, job.entrypoint))
+            # Find which queue contains this job
+            for ep_name, queue_tuple in self._queues.items():
+                jobs_dict, _, _ = queue_tuple
+                if jid in jobs_dict:
+                    job = self._remove_job(jid, ep_name)
+                    if job is not None:
+                        self._log.append(_make_log(jid, "canceled", job.priority, ep_name))
+                    break
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
         now = _now()
         for jid in set(job_ids):
-            if jid in self._jobs:
-                self._jobs[jid] = self._jobs[jid].model_copy(update={"heartbeat": now})
+            # Find the job in any queue
+            for queue_tuple in self._queues.values():
+                jobs_dict, _, picked_dict = queue_tuple
+                if jid in jobs_dict:
+                    jobs_dict[jid] = jobs_dict[jid].model_copy(update={"heartbeat": now})
+                    # Also update in picked if it's there
+                    if jid in picked_dict:
+                        picked_dict[jid] = jobs_dict[jid]
+                    break
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint is not None:
             # Delete by entrypoint — log each removal (matches PG CTE behavior)
             eps = {entrypoint} if isinstance(entrypoint, str) else set(entrypoint)
-            to_remove = [jid for jid, j in self._jobs.items() if j.entrypoint in eps]
-            for jid in to_remove:
-                job = self._remove_job(jid)
-                if job is not None:
-                    self._log.append(_make_log(jid, "deleted", job.priority, job.entrypoint))
+            for ep in eps:
+                queue_tuple = self._queues.get(ep)
+                if queue_tuple is None:
+                    continue
+                jobs_dict, queued_list, picked_dict = queue_tuple
+                # Log each job removal
+                for jid in list(jobs_dict.keys()):
+                    job = jobs_dict[jid]
+                    self._log.append(_make_log(jid, "deleted", job.priority, ep))
+                    # Clean up counters
+                    if jid in picked_dict:
+                        self._picked_count[ep] -= 1
+                        self._total_picked -= 1
+                # Clear the queue
+                jobs_dict.clear()
+                queued_list.clear()
+                picked_dict.clear()
         else:
             # Truncate — no log entries (matches PG TRUNCATE behavior)
-            self._jobs.clear()
+            self._queues.clear()
             self._dedupe.clear()
             self._picked_count.clear()
             self._total_picked = 0
-            self._queued_jobs.clear()
-            self._picked_jobs.clear()
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         counts: Counter[tuple[str, int, models.JOB_STATUS]] = Counter()
-        for job in self._jobs.values():
-            counts[(job.entrypoint, job.priority, job.status)] += 1
+        for queue_tuple in self._queues.values():
+            jobs_dict, _, _ = queue_tuple
+            for job in jobs_dict.values():
+                counts[(job.entrypoint, job.priority, job.status)] += 1
         return [
             models.QueueStatistics(count=c, entrypoint=ep, priority=pr, status=st)
             for (ep, pr, st), c in counts.items()
@@ -304,10 +341,13 @@ class InMemoryRepository:
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         ep_set = set(entrypoints)
-        # Use queued_jobs index instead of iterating all jobs
-        return sum(
-            1 for jid in self._queued_jobs if self._jobs[jid].entrypoint in ep_set
-        )
+        total = 0
+        for ep in ep_set:
+            queue_tuple = self._queues.get(ep)
+            if queue_tuple is not None:
+                _, queued_list, _ = queue_tuple
+                total += len(queued_list)
+        return total
 
     async def queue_log(self) -> list[models.Log]:
         return list(self._log)
