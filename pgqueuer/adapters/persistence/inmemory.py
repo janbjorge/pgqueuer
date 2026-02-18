@@ -41,8 +41,10 @@ def _us_to_dt(us: int) -> datetime:
     return datetime.fromtimestamp(us / 1e6, tz=_UTC)
 
 
-def _td_to_us(td: timedelta) -> int:
+def _td_to_us(td: timedelta | None) -> int:
     """Convert timedelta to microseconds."""
+    if td is None:
+        return 0
     return int(td.total_seconds() * 1_000_000)
 
 
@@ -55,6 +57,10 @@ def _row_to_job(row: tuple) -> models.Job:
     id_, priority, created_us, updated_us, heartbeat_us, execute_after_us, entrypoint, payload, qm_bytes, headers_json = (
         row
     )
+
+    # PyO3 converts Vec<u8> to list[int], convert back to bytes
+    if isinstance(payload, list):
+        payload = bytes(payload) if payload else None
 
     # Convert queue_manager_id bytes back to UUID
     queue_manager_id = None

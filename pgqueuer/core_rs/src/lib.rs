@@ -7,8 +7,8 @@ mod types;
 use core::InMemoryCore;
 
 /// PyO3 module initialization
-#[pymodule]
-fn _core(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pymodule(name = "core_rs")]
+fn core_rs(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<InMemoryCore>()?;
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::types::{HeapEntry, JobRow, JobStatus};
+use crate::types::{HeapEntry, JobRow};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 /// Per-entrypoint queue storage with priority heap and job tracking.

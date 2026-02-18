@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 /// Job status enum with discriminant values matching Python constants.
 #[repr(u8)]

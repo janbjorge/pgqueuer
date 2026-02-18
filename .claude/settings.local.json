@@ -7,7 +7,8 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:files.pythonhosted.org)",
       "WebFetch(domain:static.crates.io)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(uvx:*)"
     ]
   }
 }

@@ -48,12 +48,6 @@ impl InMemoryCore {
         }
     }
 
-    fn get_queue(&mut self, entrypoint: &str) -> &mut EntrypointQueue {
-        self.queues
-            .entry(entrypoint.to_string())
-            .or_insert_with(EntrypointQueue::new)
-    }
-
     /// Enqueue a batch of jobs.
     /// Returns list of job IDs.
     /// Phase 2 Note: GIL is automatically released by PyO3 during synchronous operations
@@ -74,7 +68,7 @@ impl InMemoryCore {
         for dk in &dedupe_keys {
             if let Some(key) = dk {
                 if self.dedupe.contains_key(key) {
-                    return Err(pyo3::exceptions::ValueError::new_err(format!(
+                    return Err(pyo3::exceptions::PyValueError::new_err(format!(
                         "Duplicate job error: {:?}",
                         dedupe_keys
                     )));
@@ -169,7 +163,7 @@ impl InMemoryCore {
             || ep_names.len() != ep_serialized.len()
             || ep_names.len() != ep_concurrency_limits.len()
         {
-            return Err(pyo3::exceptions::ValueError::new_err(
+            return Err(pyo3::exceptions::PyValueError::new_err(
                 "Entrypoint parameter arrays must have equal length",
             ));
         }
@@ -280,7 +274,7 @@ impl InMemoryCore {
             let traceback = tracebacks[i].clone();
 
             let status = JobStatus::from_str(status_str).ok_or_else(|| {
-                pyo3::exceptions::ValueError::new_err(format!("Invalid status: {}", status_str))
+                pyo3::exceptions::PyValueError::new_err(format!("Invalid status: {}", status_str))
             })?;
 
             // Get priority and entrypoint before removing the job
@@ -534,7 +528,7 @@ impl InMemoryCore {
         let mut removed_ep = None;
 
         for (ep_name, q) in self.queues.iter_mut() {
-            if let Some(job) = q.jobs.remove(&jid) {
+            if let Some(_job) = q.jobs.remove(&jid) {
                 let dk = self.dedupe_reverse.remove(&jid);
                 if let Some(key) = dk {
                     self.dedupe.remove(&key);
@@ -561,5 +555,13 @@ impl InMemoryCore {
             // Job not found in queues, but still update log status index
             self.log_status_idx.remove(&jid);
         }
+    }
+}
+
+impl InMemoryCore {
+    fn get_queue(&mut self, entrypoint: &str) -> &mut EntrypointQueue {
+        self.queues
+            .entry(entrypoint.to_string())
+            .or_insert_with(EntrypointQueue::new)
     }
 }
