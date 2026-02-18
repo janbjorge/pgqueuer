@@ -65,8 +65,4 @@ impl EntrypointQueue {
         self.queued_heap.clear();
         self.picked.clear();
     }
-
-    pub fn is_empty(&self) -> bool {
-        self.jobs.is_empty()
-    }
 }

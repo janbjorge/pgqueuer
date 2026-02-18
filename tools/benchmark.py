@@ -23,24 +23,12 @@ from tqdm.asyncio import tqdm
 from pgqueuer import PgQueuer, logconfig, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job, JobId, QueueStatistics
+from pgqueuer.ports.repository import QueueRepositoryPort
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
 
-class RepositoryDriver(Protocol):
-    """Port abstraction for repository operations (enqueue, dequeue, etc.)."""
-
-    async def enqueue(self, *args: Any, **kwargs: Any) -> list[JobId]:
-        """Enqueue jobs."""
-
-    async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
-        """Clear queued jobs."""
-
-    async def queue_size(self) -> list[QueueStatistics]:
-        """Get current queue size statistics."""
-
-
-def get_driver_for_pgqueuer(repository: RepositoryDriver) -> Any:
+def get_driver_for_pgqueuer(repository: QueueRepositoryPort) -> Any:
     """Extract the Driver from a repository for use with PgQueuer.
 
     For Queries, this returns the wrapped Driver.
@@ -200,7 +188,7 @@ class DrainSettings(BaseModel):
         )
 
 
-async def make_repository(driver: DriverEnum, conninfo: str) -> RepositoryDriver:
+async def make_repository(driver: DriverEnum, conninfo: str) -> QueueRepositoryPort:
     """Create a repository that implements QueueuerDriver protocol."""
     match driver:
         case "apg":
@@ -250,7 +238,7 @@ class Consumer:
 @dataclass
 class Producer:
     shutdown: asyncio.Event
-    repository: RepositoryDriver
+    repository: QueueRepositoryPort
     batch_size: int
     cnt: count[int]
 

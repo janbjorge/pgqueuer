@@ -13,18 +13,6 @@ pub enum JobStatus {
 }
 
 impl JobStatus {
-    pub fn from_u8(v: u8) -> Option<Self> {
-        match v {
-            0 => Some(JobStatus::Queued),
-            1 => Some(JobStatus::Picked),
-            2 => Some(JobStatus::Successful),
-            3 => Some(JobStatus::Canceled),
-            4 => Some(JobStatus::Deleted),
-            5 => Some(JobStatus::Exception),
-            _ => None,
-        }
-    }
-
     pub fn to_str(&self) -> &'static str {
         match self {
             JobStatus::Queued => "queued",
@@ -63,7 +51,6 @@ pub struct JobRow {
     pub payload: Option<Vec<u8>>,
     pub queue_manager_id: Option<[u8; 16]>,
     pub headers: Option<String>,
-    pub dedupe_key: Option<String>,
 }
 
 impl JobRow {
@@ -116,9 +103,9 @@ pub struct HeapEntry(pub i32, pub i64);
 
 impl Ord for HeapEntry {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Reverse priority comparison (higher priority comes first)
-        match other.0.cmp(&self.0) {
-            Ordering::Equal => other.1.cmp(&self.1), // for determinism
+        // Higher priority pops first (matching PostgreSQL ORDER BY priority DESC)
+        match self.0.cmp(&other.0) {
+            Ordering::Equal => other.1.cmp(&self.1), // lower id first for determinism
             ord => ord,
         }
     }

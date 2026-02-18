@@ -77,7 +77,6 @@ impl InMemoryCore {
         }
 
         let mut ids = Vec::with_capacity(n);
-        let mut queue_cache: HashMap<String, usize> = HashMap::new();
 
         for i in 0..n {
             let jid = self.job_seq;
@@ -101,7 +100,6 @@ impl InMemoryCore {
                 payload,
                 queue_manager_id: None,
                 headers: headers_val,
-                dedupe_key: dedupe_keys[i].clone(),
             };
 
             let q = self.get_queue(&ep);
@@ -289,7 +287,7 @@ impl InMemoryCore {
                 found
             };
 
-            self.remove_job(jid);
+            self.remove_job(jid, if entrypoint.is_empty() { None } else { Some(&entrypoint) });
 
             self.log.push(LogRow {
                 created_us: now_us,
@@ -339,7 +337,7 @@ impl InMemoryCore {
                 }
             };
 
-            self.remove_job(jid);
+            self.remove_job(jid, if entrypoint.is_empty() { None } else { Some(&entrypoint) });
 
             self.log.push(LogRow {
                 created_us: now_us,
@@ -390,6 +388,21 @@ impl InMemoryCore {
                 }
             }
         } else {
+            // Write Deleted log entries for all jobs before clearing
+            for (ep_name, q) in &self.queues {
+                for (jid, job) in &q.jobs {
+                    self.log.push(LogRow {
+                        created_us: now_us,
+                        job_id: *jid,
+                        status: JobStatus::Deleted,
+                        priority: job.priority,
+                        entrypoint: ep_name.clone(),
+                        traceback: None,
+                        aggregated: false,
+                    });
+                    self.log_status_idx.insert(*jid, self.log.len() - 1);
+                }
+            }
             self.queues.clear();
             self.dedupe.clear();
             self.dedupe_reverse.clear();
@@ -523,39 +536,6 @@ impl InMemoryCore {
         Ok(stats)
     }
 
-    // Helper: remove a job from all structures
-    fn remove_job(&mut self, jid: i64) {
-        let mut removed_ep = None;
-
-        for (ep_name, q) in self.queues.iter_mut() {
-            if let Some(_job) = q.jobs.remove(&jid) {
-                let dk = self.dedupe_reverse.remove(&jid);
-                if let Some(key) = dk {
-                    self.dedupe.remove(&key);
-                }
-
-                if q.picked.remove(&jid) {
-                    if let Some(count) = self.picked_count.get_mut(ep_name) {
-                        *count -= 1;
-                        if *count == 0 {
-                            self.picked_count.remove(ep_name);
-                        }
-                    }
-                    self.total_picked -= 1;
-                } else {
-                    q.queued_ids.remove(&jid);
-                }
-
-                removed_ep = Some(ep_name.clone());
-                break;
-            }
-        }
-
-        if removed_ep.is_none() {
-            // Job not found in queues, but still update log status index
-            self.log_status_idx.remove(&jid);
-        }
-    }
 }
 
 impl InMemoryCore {
@@ -563,5 +543,47 @@ impl InMemoryCore {
         self.queues
             .entry(entrypoint.to_string())
             .or_insert_with(EntrypointQueue::new)
+    }
+
+    // Helper: remove a job from all structures.
+    // If `entrypoint` is provided, goes directly to the right queue (O(1)).
+    // Otherwise, scans all queues.
+    fn remove_job(&mut self, jid: i64, entrypoint: Option<&str>) {
+        let mut found = false;
+
+        let queues_iter: Vec<_> = if let Some(ep) = entrypoint {
+            vec![ep.to_string()]
+        } else {
+            self.queues.keys().cloned().collect()
+        };
+
+        for ep_name in &queues_iter {
+            if let Some(q) = self.queues.get_mut(ep_name) {
+                if q.jobs.remove(&jid).is_some() {
+                    if let Some(key) = self.dedupe_reverse.remove(&jid) {
+                        self.dedupe.remove(&key);
+                    }
+
+                    if q.picked.remove(&jid) {
+                        if let Some(count) = self.picked_count.get_mut(ep_name) {
+                            *count -= 1;
+                            if *count == 0 {
+                                self.picked_count.remove(ep_name);
+                            }
+                        }
+                        self.total_picked -= 1;
+                    } else {
+                        q.queued_ids.remove(&jid);
+                    }
+
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if !found {
+            self.log_status_idx.remove(&jid);
+        }
     }
 }
