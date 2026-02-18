@@ -13,12 +13,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import overload
+from typing import cast, overload
 
 from pydantic_core import to_json
 
-from pgqueuer.core_rs import InMemoryCore
 from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+from pgqueuer.core_rs import InMemoryCore
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId
 
@@ -54,9 +54,18 @@ def _row_to_job(row: tuple) -> models.Job:
     Row format: (id, priority, created_us, updated_us, heartbeat_us, execute_after_us,
                  entrypoint, payload, queue_manager_id_bytes, headers_json)
     """
-    id_, priority, created_us, updated_us, heartbeat_us, execute_after_us, entrypoint, payload, qm_bytes, headers_json = (
-        row
-    )
+    (
+        id_,
+        priority,
+        created_us,
+        updated_us,
+        heartbeat_us,
+        execute_after_us,
+        entrypoint,
+        payload,
+        qm_bytes,
+        headers_json,
+    ) = row
 
     # PyO3 converts Vec<u8> to list[int], convert back to bytes
     if isinstance(payload, list):
@@ -204,11 +213,15 @@ class InMemoryRepository:
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
     ) -> list[models.JobId]:
         # Normalize to batch form
-        is_batch = isinstance(entrypoint, list)
-        ep_list: list[str] = entrypoint if is_batch else [entrypoint]  # type: ignore[assignment]
+        if isinstance(entrypoint, list):
+            ep_list = entrypoint
+            pl_list = cast(list[bytes | None], payload)
+            pr_list = cast(list[int], priority)
+        else:
+            ep_list = [entrypoint]
+            pl_list = cast(list[bytes | None], [payload])
+            pr_list = cast(list[int], [priority])
         n = len(ep_list)
-        pl_list: list[bytes | None] = payload if is_batch else [payload]  # type: ignore[assignment]
-        pr_list: list[int] = priority if is_batch else [priority]  # type: ignore[assignment]
 
         # normalize execute_after
         if execute_after is None:
@@ -267,12 +280,12 @@ class InMemoryRepository:
         self,
         job_status: list[tuple[models.Job, models.JOB_STATUS, models.TracebackRecord | None]],
     ) -> None:
-        job_ids = []
-        statuses = []
-        tracebacks = []
+        job_ids: list[int] = []
+        statuses: list[str] = []
+        tracebacks: list[str | None] = []
 
         for job, status, tb in job_status:
-            job_ids.append(job.id)
+            job_ids.append(int(job.id))
             statuses.append(status)
             tracebacks.append(to_json(tb.model_dump()).decode() if tb else None)
 
@@ -287,14 +300,14 @@ class InMemoryRepository:
 
         # Phase 1: Use global lock since we don't know affected entrypoints
         async with self._global_lock:
-            self._core.mark_cancelled(ids, now_us)
+            self._core.mark_cancelled([int(jid) for jid in ids], now_us)
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
         now_us = _us()
 
         # Phase 1: Use global lock since we don't know affected entrypoints
         async with self._global_lock:
-            self._core.update_heartbeat(job_ids, now_us)
+            self._core.update_heartbeat([int(jid) for jid in job_ids], now_us)
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         now_us = _us()
@@ -331,7 +344,7 @@ class InMemoryRepository:
                     count=count,
                     entrypoint=ep,
                     priority=priority,
-                    status=status,  # type: ignore[arg-type]
+                    status=cast(models.JOB_STATUS, status),
                 )
             )
 
@@ -354,12 +367,20 @@ class InMemoryRepository:
             log_entries = self._core.queue_log()
 
         result = []
-        for created_us, job_id, status_str, priority, entrypoint, traceback, aggregated in log_entries:
+        for (
+            created_us,
+            job_id,
+            status_str,
+            priority,
+            entrypoint,
+            traceback,
+            aggregated,
+        ) in log_entries:
             result.append(
                 models.Log(
                     created=_us_to_dt(created_us),
                     job_id=JobId(job_id),
-                    status=status_str,  # type: ignore[arg-type]
+                    status=cast(models.JOB_STATUS, status_str),
                     priority=priority,
                     entrypoint=entrypoint,
                     traceback=traceback,
@@ -369,14 +390,16 @@ class InMemoryRepository:
 
         return result
 
-    async def job_status(self, ids: list[models.JobId]) -> list[tuple[models.JobId, models.JOB_STATUS]]:
+    async def job_status(
+        self, ids: list[models.JobId]
+    ) -> list[tuple[models.JobId, models.JOB_STATUS]]:
         # Phase 1: Use global lock for consistency
         async with self._global_lock:
-            statuses = self._core.job_status(ids)
+            statuses = self._core.job_status([int(jid) for jid in ids])
 
-        result = []
+        result: list[tuple[models.JobId, models.JOB_STATUS]] = []
         for jid, status_str in statuses:
-            result.append((JobId(jid), status_str))  # type: ignore[arg-type]
+            result.append((JobId(jid), cast(models.JOB_STATUS, status_str)))
 
         return result
 
@@ -401,7 +424,7 @@ class InMemoryRepository:
                     created=_us_to_dt(created_us),
                     entrypoint=entrypoint,
                     priority=priority,
-                    status=status_str,  # type: ignore[arg-type]
+                    status=cast(models.JOB_STATUS, status_str),
                 )
             )
 
@@ -411,7 +434,9 @@ class InMemoryRepository:
     # ScheduleRepositoryPort
     # ===================================================================
 
-    async def insert_schedule(self, schedules: dict[models.CronExpressionEntrypoint, timedelta]) -> None:
+    async def insert_schedule(
+        self, schedules: dict[models.CronExpressionEntrypoint, timedelta]
+    ) -> None:
         now = _now()
         existing = {(s.entrypoint, s.expression) for s in self._schedules.values()}
 
@@ -452,9 +477,7 @@ class InMemoryRepository:
         now = _now()
         for sid in ids:
             if sid in self._schedules:
-                self._schedules[sid] = self._schedules[sid].model_copy(
-                    update={"heartbeat": now}
-                )
+                self._schedules[sid] = self._schedules[sid].model_copy(update={"heartbeat": now})
 
     async def peak_schedule(self) -> list[models.Schedule]:
         return list(self._schedules.values())

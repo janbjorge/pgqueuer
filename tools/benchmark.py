@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import typer
 import uvloop
@@ -22,9 +22,33 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer import PgQueuer, logconfig, types
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
-from pgqueuer.models import Job
+from pgqueuer.models import Job, JobId, QueueStatistics
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
+
+
+class RepositoryDriver(Protocol):
+    """Port abstraction for repository operations (enqueue, dequeue, etc.)."""
+
+    async def enqueue(self, *args: Any, **kwargs: Any) -> list[JobId]:
+        """Enqueue jobs."""
+
+    async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
+        """Clear queued jobs."""
+
+    async def queue_size(self) -> list[QueueStatistics]:
+        """Get current queue size statistics."""
+
+
+def get_driver_for_pgqueuer(repository: RepositoryDriver) -> Any:
+    """Extract the Driver from a repository for use with PgQueuer.
+
+    For Queries, this returns the wrapped Driver.
+    For InMemoryRepository, this returns the repository itself (which acts as a driver).
+    """
+    if hasattr(repository, "driver"):
+        return getattr(repository, "driver", repository)
+    return repository
 
 
 def job_progress_bar(total: int | None = None) -> tqdm:
@@ -39,6 +63,7 @@ class DriverEnum(str, Enum):
     apg = "apg"
     apgpool = "apgpool"
     psy = "psy"
+    inmemory = "inmemory"
 
 
 class StrategyEnum(str, Enum):
@@ -175,7 +200,8 @@ class DrainSettings(BaseModel):
         )
 
 
-async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
+async def make_repository(driver: DriverEnum, conninfo: str) -> RepositoryDriver:
+    """Create a repository that implements QueueuerDriver protocol."""
     match driver:
         case "apg":
             import asyncpg
@@ -195,6 +221,10 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
                     await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
                 )
             )
+        case "inmemory":
+            from pgqueuer.adapters.persistence.inmemory import InMemoryRepository
+
+            return InMemoryRepository()
     raise NotImplementedError(driver)
 
 
@@ -220,14 +250,14 @@ class Consumer:
 @dataclass
 class Producer:
     shutdown: asyncio.Event
-    queries: Queries
+    repository: RepositoryDriver
     batch_size: int
-    cnt: count
+    cnt: count[int]
 
     async def run(self) -> None:
         entrypoints = ["syncfetch", "asyncfetch"] * self.batch_size
         while not self.shutdown.is_set():
-            await self.queries.enqueue(
+            await self.repository.enqueue(
                 random.sample(entrypoints, k=self.batch_size),
                 [f"{next(self.cnt)}".encode() for _ in range(self.batch_size)],
                 [0] * self.batch_size,
@@ -260,7 +290,7 @@ class ThroughputStrategy:
         default_factory=list,
         init=False,
     )
-    tqdm_format_dict: dict[str, str] = dataclass_field(
+    tqdm_format_dict: dict[str, Any] = dataclass_field(
         default_factory=dict,
         init=False,
     )
@@ -269,17 +299,18 @@ class ThroughputStrategy:
         cnt = count()
         tasks = []
         for _ in range(self.settings.enqueue):
-            q = await make_queries(self.settings.driver, dsn())
-            p = Producer(self.shutdown, q, self.settings.enqueue_batch_size, cnt)
+            repository = await make_repository(self.settings.driver, dsn())
+            p = Producer(self.shutdown, repository, self.settings.enqueue_batch_size, cnt)
             tasks.append(p.run())
         await asyncio.gather(*tasks)
 
     async def run_dequeuers(self) -> None:
-        queries = [
-            await make_queries(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
+        repositories = [
+            await make_repository(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
         ]
-        for q in queries:
-            self.pgqs.append(PgQueuer(q.driver))
+        for repository in repositories:
+            driver = get_driver_for_pgqueuer(repository)
+            self.pgqs.append(PgQueuer(driver))
         with job_progress_bar() as bar:
             tasks = [
                 Consumer(pgq, self.settings.dequeue_batch_size, bar).run() for pgq in self.pgqs
@@ -302,9 +333,10 @@ class ThroughputStrategy:
         loop.add_signal_handler(signal.SIGTERM, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver, dsn())
-        await queries.clear_statistics_log()
-        await queries.clear_queue()
+        repository = await make_repository(self.settings.driver, dsn())
+        if hasattr(repository, "clear_statistics_log"):
+            await repository.clear_statistics_log()
+        await repository.clear_queue()
 
     def graceful_shutdown(self) -> None:
         self.shutdown.set()
@@ -318,7 +350,8 @@ class ThroughputStrategy:
             self.shutdown_timer(),
         )
 
-        qsize = await (await make_queries(self.settings.driver, dsn())).queue_size()
+        queries = await make_repository(self.settings.driver, dsn())
+        qsize = await queries.queue_size()
         return BenchmarkResult(
             created_at=datetime.now(timezone.utc),
             driver=self.settings.driver,
@@ -340,7 +373,7 @@ class DrainStrategy:
 
     settings: DrainSettings
     pgqs: list[PgQueuer] = dataclass_field(default_factory=list, init=False)
-    tqdm_format_dict: dict[str, str] = dataclass_field(default_factory=dict, init=False)
+    tqdm_format_dict: dict[str, Any] = dataclass_field(default_factory=dict, init=False)
 
     async def setup(self) -> None:
         loop = asyncio.get_event_loop()
@@ -348,12 +381,13 @@ class DrainStrategy:
             loop.add_signal_handler(sig, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver, dsn())
-        await queries.clear_statistics_log()
-        await queries.clear_queue()
+        repository = await make_repository(self.settings.driver, dsn())
+        if hasattr(repository, "clear_statistics_log"):
+            await repository.clear_statistics_log()
+        await repository.clear_queue()
 
         entrypoints = ["syncfetch", "asyncfetch"] * self.settings.jobs
-        await queries.enqueue(
+        await repository.enqueue(
             random.sample(entrypoints, k=self.settings.jobs),
             [b"" for _ in range(self.settings.jobs)],
             [0] * self.settings.jobs,
@@ -364,11 +398,12 @@ class DrainStrategy:
             qm.shutdown.set()
 
     async def run(self) -> BenchmarkResult:
-        queries = [
-            await make_queries(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
+        repositories = [
+            await make_repository(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
         ]
-        for q in queries:
-            self.pgqs.append(PgQueuer(q.driver))
+        for repository in repositories:
+            driver = get_driver_for_pgqueuer(repository)
+            self.pgqs.append(PgQueuer(driver))
 
         start = datetime.now(timezone.utc)
         with job_progress_bar(total=self.settings.jobs) as bar:
