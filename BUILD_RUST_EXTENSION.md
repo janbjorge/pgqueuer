@@ -17,9 +17,7 @@ The Rust extension (`pgqueuer._core`) is a PyO3 module that implements high-perf
 
 3. **Build Tools**: maturin (Rust → Python packaging)
    ```bash
-   pip install "maturin>=1.7,<2.0"
-   # Or using uv/poetry/rye:
-   uv pip install maturin  # if using uv
+   uv pip install "maturin>=1.7,<2.0"
    ```
 
 4. **Network Access**: Required to download Rust crates from crates.io
@@ -59,8 +57,8 @@ pip install -e .
 After building, verify the extension loads correctly:
 
 ```bash
-python -c "from pgqueuer._core import InMemoryCore; print(InMemoryCore)"
-# Output: <class 'pgqueuer._core.InMemoryCore'>
+python -c "from pgqueuer.core_rs import InMemoryCore; print(InMemoryCore)"
+# Output: <class 'pgqueuer.core_rs.InMemoryCore'>
 ```
 
 ## Running Tests
@@ -94,7 +92,7 @@ After building successfully, you should see:
 ### Directory Structure
 
 ```
-pgqueuer/_core/
+pgqueuer/core_rs/
   Cargo.toml            # Rust crate manifest
   src/
     lib.rs              # PyO3 module entry point
@@ -102,7 +100,7 @@ pgqueuer/_core/
     entrypoint_queue.rs # Per-entrypoint queue storage
     types.rs            # JobStatus, JobRow, LogRow, etc.
 pgqueuer/
-  _core.pyi             # Type stubs for mypy
+  core_rs.pyi           # Type stubs for mypy
   adapters/persistence/inmemory.py  # Python wrapper
 ```
 
@@ -185,7 +183,7 @@ ls target/wheels/pgqueuer_core-*.whl
 
 ## Type Checking
 
-The `pgqueuer/_core.pyi` stub file enables mypy type checking:
+The `pgqueuer/core_rs.pyi` stub file enables mypy type checking:
 
 ```bash
 mypy pgqueuer/adapters/persistence/inmemory.py --strict

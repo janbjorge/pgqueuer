@@ -17,7 +17,7 @@ from typing import overload
 
 from pydantic_core import to_json
 
-from pgqueuer._core import InMemoryCore
+from pgqueuer.core_rs import InMemoryCore
 from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId

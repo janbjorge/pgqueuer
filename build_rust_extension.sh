@@ -29,7 +29,7 @@ echo -e "${GREEN}Using Python ${PYTHON_VERSION}${NC}"
 # Check for maturin
 if ! python -c "import maturin" 2>/dev/null; then
     echo -e "${BLUE}Installing maturin...${NC}"
-    pip install "maturin>=1.7,<2.0"
+    uv pip install "maturin>=1.7,<2.0"
 fi
 
 # Build
@@ -52,7 +52,7 @@ echo -e "${GREEN}Build complete!${NC}"
 
 # Verify
 echo -e "${BLUE}Verifying extension loads...${NC}"
-python -c "from pgqueuer._core import InMemoryCore; print('✓ InMemoryCore loaded successfully')"
+python -c "from pgqueuer.core_rs import InMemoryCore; print('✓ InMemoryCore loaded successfully')"
 
 # Optional: Run tests
 if [ "$2" == "--test" ]; then

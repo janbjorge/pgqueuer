@@ -3,9 +3,9 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-manifest-path = "pgqueuer/_core/Cargo.toml"
+manifest-path = "pgqueuer/core_rs/Cargo.toml"
 python-packages = ["pgqueuer"]
-module-name = "pgqueuer._core"
+module-name = "pgqueuer.core_rs"
 
 [tool.setuptools_scm]
 version_scheme= "only-version"

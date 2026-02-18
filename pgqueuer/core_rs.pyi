@@ -1,4 +1,4 @@
-"""Type stubs for pgqueuer._core (Rust PyO3 extension)."""
+"""Type stubs for pgqueuer.core_rs (Rust PyO3 extension)."""
 
 from __future__ import annotations
 
