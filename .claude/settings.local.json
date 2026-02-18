@@ -3,7 +3,11 @@
     "allow": [
       "Bash(python -m pytest:*)",
       "Bash(python:*)",
-      "WebFetch(domain:index.crates.io)"
+      "WebFetch(domain:index.crates.io)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:files.pythonhosted.org)",
+      "WebFetch(domain:static.crates.io)",
+      "Bash(cargo build:*)"
     ]
   }
 }

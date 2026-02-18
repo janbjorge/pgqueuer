@@ -26,10 +26,10 @@ fi
 PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}')
 echo -e "${GREEN}Using Python ${PYTHON_VERSION}${NC}"
 
-# Check for maturin
-if ! python -c "import maturin" 2>/dev/null; then
-    echo -e "${BLUE}Installing maturin...${NC}"
-    uv pip install "maturin>=1.7,<2.0"
+# Check for uvx (used to run maturin)
+if ! command -v uvx &> /dev/null; then
+    echo -e "${RED}Error: uvx not found. Install uv from https://github.com/astral-sh/uv${NC}"
+    exit 1
 fi
 
 # Build
@@ -39,13 +39,13 @@ cd "$(dirname "$0")"
 if [ "$1" == "--wheel" ]; then
     # Build wheel
     echo -e "${BLUE}Creating redistributable wheel...${NC}"
-    maturin build --release
+    uvx maturin build --release
     echo -e "${GREEN}Wheel built in target/wheels/${NC}"
     ls target/wheels/
 else
     # Development build (installs in current venv)
     echo -e "${BLUE}Installing extension for development...${NC}"
-    maturin develop --release
+    uvx maturin develop --release
 fi
 
 echo -e "${GREEN}Build complete!${NC}"

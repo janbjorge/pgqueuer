@@ -15,32 +15,37 @@ The Rust extension (`pgqueuer._core`) is a PyO3 module that implements high-perf
 
 2. **Python 3.10+**: Required for PyO3 compatibility
 
-3. **Build Tools**: maturin (Rust → Python packaging)
-   ```bash
-   uv pip install "maturin>=1.7,<2.0"
-   ```
+3. **uv**: The package manager and tool runner (usually included with the project setup)
 
 4. **Network Access**: Required to download Rust crates from crates.io
+
+**Note**: maturin is automatically invoked via `uvx maturin` (no separate installation needed)
 
 ## Building
 
 ### Option 1: Full Development Build (Recommended)
 
 ```bash
-# Install with editable mode (rebuilds whenever you change Rust code)
-maturin develop --release
+# Using the provided script
+./build_rust_extension.sh
+
+# Or directly with uvx
+uvx maturin develop --release
 ```
 
 This:
 - Compiles the Rust extension in release mode (optimized)
 - Installs it in your current virtualenv
-- Allows the Python test suite to import `pgqueuer._core`
+- Allows the Python test suite to import `pgqueuer.core_rs`
 
 ### Option 2: Build Wheel
 
 ```bash
-# Create a redistributable wheel
-maturin build --release
+# Using the provided script
+./build_rust_extension.sh --wheel
+
+# Or directly with uvx
+uvx maturin build --release
 
 # Outputs to: target/wheels/pgqueuer_core-0.1.0-cp*.whl
 ```
@@ -48,8 +53,8 @@ maturin build --release
 ### Option 3: Build and Install from Source
 
 ```bash
-# Build + install in one step
-pip install -e .
+# Build + install in one step (uses maturin automatically)
+uv pip install -e .
 ```
 
 ## Verifying the Build
