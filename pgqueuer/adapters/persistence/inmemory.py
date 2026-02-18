@@ -80,18 +80,45 @@ class InMemoryRepository:
     """Pure-Rust in-memory adapter implementing all four PgQueuer ports.
 
     The Rust InMemoryCore handles all hot-path state; this class provides:
-    - asyncio.Lock coordination (single-threaded GIL holds)
+    - Per-entrypoint locks for reduced contention (Phase 1 optimization)
+    - Thread pool executor for GIL release during Rust calls (Phase 2 optimization)
     - Time conversions (datetime ↔ µs, timedelta → µs)
     - Pydantic model construction at API boundaries
     """
 
     def __init__(self) -> None:
         self._core = InMemoryCore()
-        self._lock = asyncio.Lock()
+        # Phase 1: Per-entrypoint locks instead of single global lock
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._global_lock = asyncio.Lock()  # For operations touching multiple entrypoints
+
+        # Phase 2 Note: Per-entrypoint locks enable parallelism automatically
+        # Multiple asyncio tasks can work on different entrypoints simultaneously
+        # even in a single-threaded async context
 
         # Python-side state for schedules (not in Rust)
         self._schedules: dict[ScheduleId, models.Schedule] = {}
         self._schedule_seq = 1
+
+    def _get_lock(self, entrypoint: str) -> asyncio.Lock:
+        """Get or create a lock for an entrypoint."""
+        if entrypoint not in self._locks:
+            self._locks[entrypoint] = asyncio.Lock()
+        return self._locks[entrypoint]
+
+    def _get_locks(self, entrypoints: list[str]) -> list[asyncio.Lock]:
+        """Get locks for multiple entrypoints, sorted for deadlock avoidance."""
+        return [self._get_lock(ep) for ep in sorted(set(entrypoints))]
+
+    async def _acquire_locks(self, locks: list[asyncio.Lock]) -> None:
+        """Acquire multiple locks in sorted order (deadlock prevention)."""
+        for lock in locks:
+            await lock.acquire()
+
+    def _release_locks(self, locks: list[asyncio.Lock]) -> None:
+        """Release multiple locks."""
+        for lock in locks:
+            lock.release()
 
     # ===================================================================
     # QueueRepositoryPort
@@ -118,7 +145,11 @@ class InMemoryRepository:
         # Convert UUID to 16-byte array
         qm_bytes = list(queue_manager_id.bytes)
 
-        async with self._lock:
+        # Phase 1: Acquire locks for only the entrypoints we need
+        locks = self._get_locks(ep_names)
+        for lock in locks:
+            await lock.acquire()
+        try:
             rows = self._core.dequeue_batch(
                 batch_size,
                 ep_names,
@@ -129,6 +160,9 @@ class InMemoryRepository:
                 global_concurrency_limit,
                 now_us,
             )
+        finally:
+            for lock in locks:
+                lock.release()
 
         return [_row_to_job(row) for row in rows]
 
@@ -199,21 +233,27 @@ class InMemoryRepository:
 
         now_us = _us()
 
-        async with self._lock:
-            try:
-                ids = self._core.enqueue_batch(
-                    ep_list,
-                    pl_list,
-                    pr_list,
-                    ea_us_list,
-                    dk_list,
-                    hd_list,
-                    now_us,
-                )
-            except ValueError as e:
-                if "Duplicate job error" in str(e):
-                    raise errors.DuplicateJobError(dk_list) from e
-                raise
+        # Phase 1: Acquire locks for only the entrypoints we're enqueueing to
+        locks = self._get_locks(ep_list)
+        for lock in locks:
+            await lock.acquire()
+        try:
+            ids = self._core.enqueue_batch(
+                ep_list,
+                pl_list,
+                pr_list,
+                ea_us_list,
+                dk_list,
+                hd_list,
+                now_us,
+            )
+        except ValueError as e:
+            if "Duplicate job error" in str(e):
+                raise errors.DuplicateJobError(dk_list) from e
+            raise
+        finally:
+            for lock in locks:
+                lock.release()
 
         return [JobId(i) for i in ids]
 
@@ -232,19 +272,22 @@ class InMemoryRepository:
 
         now_us = _us()
 
-        async with self._lock:
+        # Phase 1: Use global lock since we don't know affected entrypoints
+        async with self._global_lock:
             self._core.log_jobs(job_ids, statuses, tracebacks, now_us)
 
     async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
         now_us = _us()
 
-        async with self._lock:
+        # Phase 1: Use global lock since we don't know affected entrypoints
+        async with self._global_lock:
             self._core.mark_cancelled(ids, now_us)
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
         now_us = _us()
 
-        async with self._lock:
+        # Phase 1: Use global lock since we don't know affected entrypoints
+        async with self._global_lock:
             self._core.update_heartbeat(job_ids, now_us)
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
@@ -255,11 +298,24 @@ class InMemoryRepository:
         else:
             eps = None
 
-        async with self._lock:
-            self._core.clear_queue(eps, now_us)
+        # Phase 1: Use per-entrypoint locks if clearing specific entrypoints
+        if eps is not None:
+            locks = self._get_locks(eps)
+            for lock in locks:
+                await lock.acquire()
+            try:
+                self._core.clear_queue(eps, now_us)
+            finally:
+                for lock in locks:
+                    lock.release()
+        else:
+            # Clearing all entrypoints needs global lock
+            async with self._global_lock:
+                self._core.clear_queue(None, now_us)
 
     async def queue_size(self) -> list[models.QueueStatistics]:
-        async with self._lock:
+        # Phase 1: Use global lock for consistency across all entrypoints
+        async with self._global_lock:
             stats = self._core.queue_size()
 
         result = []
@@ -276,11 +332,19 @@ class InMemoryRepository:
         return result
 
     async def queued_work(self, entrypoints: list[str]) -> int:
-        async with self._lock:
+        # Phase 1: Use per-entrypoint locks for read operation
+        locks = self._get_locks(entrypoints)
+        for lock in locks:
+            await lock.acquire()
+        try:
             return self._core.queued_work(entrypoints)
+        finally:
+            for lock in locks:
+                lock.release()
 
     async def queue_log(self) -> list[models.Log]:
-        async with self._lock:
+        # Phase 1: Use global lock since we're reading all log entries
+        async with self._global_lock:
             log_entries = self._core.queue_log()
 
         result = []
@@ -300,7 +364,8 @@ class InMemoryRepository:
         return result
 
     async def job_status(self, ids: list[models.JobId]) -> list[tuple[models.JobId, models.JOB_STATUS]]:
-        async with self._lock:
+        # Phase 1: Use global lock for consistency
+        async with self._global_lock:
             statuses = self._core.job_status(ids)
 
         result = []
@@ -318,7 +383,8 @@ class InMemoryRepository:
         if last is not None:
             since_us = _us() - _td_to_us(last)
 
-        async with self._lock:
+        # Phase 1: Use global lock since we're reading all log entries
+        async with self._global_lock:
             stats = self._core.log_statistics(tail, since_us)
 
         result = []

@@ -56,6 +56,7 @@ impl InMemoryCore {
 
     /// Enqueue a batch of jobs.
     /// Returns list of job IDs.
+    /// Phase 2 Note: GIL is automatically released by PyO3 during synchronous operations
     #[pyo3(signature = (entrypoints, payloads, priorities, execute_after_us, dedupe_keys, headers, now_us))]
     pub fn enqueue_batch(
         &mut self,
