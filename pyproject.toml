@@ -1,9 +1,11 @@
 [build-system]
-build-backend = "setuptools.build_meta"
-requires = ["setuptools>=64", "setuptools_scm>=8", "wheel"]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
 
-[tool.setuptools.packages.find]
-include = ["pgqueuer*"]
+[tool.maturin]
+manifest-path = "pgqueuer/_core/Cargo.toml"
+python-packages = ["pgqueuer"]
+module-name = "pgqueuer._core"
 
 [tool.setuptools_scm]
 version_scheme= "only-version"
