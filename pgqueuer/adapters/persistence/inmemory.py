@@ -148,8 +148,8 @@ class InMemoryRepository:
         ep_serialized = [entrypoints[ep].serialized for ep in ep_names]
         ep_concurrency_limits = [entrypoints[ep].concurrency_limit for ep in ep_names]
 
-        # Convert UUID to 16-byte array
-        qm_bytes = list(queue_manager_id.bytes)
+        # Convert UUID to 16-byte array (or None if not provided)
+        qm_bytes = list(queue_manager_id.bytes) if queue_manager_id else [0] * 16
 
         # Phase 1: Acquire locks for only the entrypoints we need
         locks = self._get_locks(ep_names)
