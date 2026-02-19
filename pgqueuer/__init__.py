@@ -1,3 +1,4 @@
+from pgqueuer.adapters.in_memory import InMemoryDriver, InMemoryRepository
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
 from pgqueuer.models import Job, JobId
@@ -13,6 +14,8 @@ except ImportError:
 __all__ = [
     "AsyncpgDriver",
     "AsyncpgPoolDriver",
+    "InMemoryDriver",
+    "InMemoryRepository",
     "Job",
     "JobId",
     "PgQueuer",
