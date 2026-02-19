@@ -141,7 +141,7 @@ class BenchmarkResult(BaseModel):
 class ThroughputSettings(BaseModel):
     driver: DriverEnum = typer.Option(
         DriverEnum.apg,
-        help="Postgres driver to use.",
+        help="Postgres driver to use. Note: 'mem' (in-memory) driver works best with drain strategy.",
     )
     strategy: StrategyEnum = typer.Option(
         StrategyEnum.throughput,
@@ -496,6 +496,16 @@ def main(
     output_json: Path | None = typer.Option(None),
     strategy: StrategyEnum = typer.Option(StrategyEnum.throughput, "-s", "--strategy"),
 ) -> None:
+    # In-memory driver works best with drain strategy
+    if driver is DriverEnum.mem and strategy is StrategyEnum.throughput:
+        typer.echo(
+            "⚠️  Warning: in-memory driver works best with 'drain' strategy.\n"
+            "The throughput strategy requires PostgreSQL async notifications.\n"
+            "Use: --strategy drain\n",
+            err=True,
+        )
+        raise typer.Exit(1)
+
     if strategy is StrategyEnum.drain:
         drain_settings = DrainSettings(
             driver=driver,
