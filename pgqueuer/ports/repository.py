@@ -32,6 +32,7 @@ class EntrypointExecutionParameter:
     serialized: bool
     concurrency_limit: int
 
+
 # ---------------------------------------------------------------------------
 # Queue persistence
 # ---------------------------------------------------------------------------

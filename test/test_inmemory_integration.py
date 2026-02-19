@@ -14,7 +14,6 @@ from pgqueuer.core.applications import PgQueuer
 from pgqueuer.domain.models import Job
 from pgqueuer.domain.types import QueueExecutionMode
 
-
 # ---------------------------------------------------------------------------
 # PgQueuer.in_memory() factory
 # ---------------------------------------------------------------------------

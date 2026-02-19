@@ -72,7 +72,8 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         self.qm = QueueManager(
-            self.connection, self.channel,
+            self.connection,
+            self.channel,
             queries=self.queries,  # type: ignore[arg-type]
             resources=self.resources,
         )
@@ -181,7 +182,7 @@ class PgQueuer:
         channel = channel or Channel(DBSettings().channel)
         inmem = InMemoryQueries(driver=driver)
         return cls(
-            connection=driver,  # type: ignore[arg-type]
+            connection=driver,
             channel=channel,
             queries=inmem,
             resources=resources or {},

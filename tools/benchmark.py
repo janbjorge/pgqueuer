@@ -294,7 +294,8 @@ class ThroughputStrategy:
 
     async def run_dequeuers(self) -> None:
         queries = [
-            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver)) for _ in range(self.settings.dequeue)
+            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+            for _ in range(self.settings.dequeue)
         ]
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver, queries=q))
@@ -349,7 +350,9 @@ class ThroughputStrategy:
             if not task.cancelled() and (exc := task.exception()):
                 raise exc
 
-        qsize = await (await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))).queue_size()
+        qsize = await (
+            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+        ).queue_size()
         return BenchmarkResult(
             created_at=datetime.now(timezone.utc),
             driver=self.settings.driver,
@@ -397,7 +400,8 @@ class DrainStrategy:
 
     async def run(self) -> BenchmarkResult:
         queries = [
-            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver)) for _ in range(self.settings.dequeue)
+            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+            for _ in range(self.settings.dequeue)
         ]
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver, queries=q))

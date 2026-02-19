@@ -10,7 +10,6 @@ import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.types import JobId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -73,7 +72,7 @@ async def test_dedupe_key_rejects_duplicate(queries: InMemoryQueries) -> None:
 
 @pytest.mark.asyncio
 async def test_dedupe_key_freed_after_log(queries: InMemoryQueries) -> None:
-    ids = await queries.enqueue("ep", None, dedupe_key="dk1")
+    await queries.enqueue("ep", None, dedupe_key="dk1")
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
@@ -506,9 +505,7 @@ async def test_rps_notification(queries: InMemoryQueries, driver: InMemoryDriver
 
 
 @pytest.mark.asyncio
-async def test_health_check_notification(
-    queries: InMemoryQueries, driver: InMemoryDriver
-) -> None:
+async def test_health_check_notification(queries: InMemoryQueries, driver: InMemoryDriver) -> None:
     notifications: list[str] = []
     await driver.add_listener(queries.qbq.settings.channel, notifications.append)
 

@@ -16,7 +16,6 @@ from pydantic_core import to_json
 from pgqueuer.adapters import tracing
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
-from pgqueuer.core import helpers
 from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId
@@ -48,21 +47,11 @@ class InMemoryQueries:
 
     # -- internal state --------------------------------------------------------
 
-    _jobs: dict[int, dict[str, Any]] = dataclasses.field(
-        default_factory=dict, init=False
-    )
-    _log: list[dict[str, Any]] = dataclasses.field(
-        default_factory=list, init=False
-    )
-    _statistics: list[dict[str, Any]] = dataclasses.field(
-        default_factory=list, init=False
-    )
-    _schedules: dict[int, dict[str, Any]] = dataclasses.field(
-        default_factory=dict, init=False
-    )
-    _dedupe_index: dict[str, int] = dataclasses.field(
-        default_factory=dict, init=False
-    )
+    _jobs: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
+    _log: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
+    _statistics: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
+    _schedules: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
+    _dedupe_index: dict[str, int] = dataclasses.field(default_factory=dict, init=False)
     _next_job_id: int = dataclasses.field(default=1, init=False)
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
@@ -178,22 +167,136 @@ class InMemoryQueries:
             ids.append(JobId(job_id))
 
             # Write 'queued' log entry
-            self._log.append({
-                "id": self._next_log_id,
-                "created": now,
-                "job_id": job_id,
-                "status": "queued",
-                "priority": normed.priority[i],
-                "entrypoint": normed.entrypoint[i],
-                "traceback": None,
-                "aggregated": False,
-            })
+            self._log.append(
+                {
+                    "id": self._next_log_id,
+                    "created": now,
+                    "job_id": job_id,
+                    "status": "queued",
+                    "priority": normed.priority[i],
+                    "entrypoint": normed.entrypoint[i],
+                    "traceback": None,
+                    "aggregated": False,
+                }
+            )
             self._next_log_id += 1
 
         self._emit_table_changed("insert")
         return ids
 
     # -- dequeue ---------------------------------------------------------------
+
+    def _count_picked_jobs(
+        self,
+        queue_manager_id: uuid.UUID,
+        entrypoints: dict[str, EntrypointExecutionParameter],
+    ) -> tuple[dict[str, int], int, set[str]]:
+        """Count picked jobs per entrypoint and track which have picked jobs."""
+        picked_per_ep: dict[str, int] = {}
+        total_picked = 0
+        ep_has_picked: set[str] = set()
+        for j in self._jobs.values():
+            if j["status"] == "picked" and j["queue_manager_id"] == queue_manager_id:
+                ep = j["entrypoint"]
+                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
+                total_picked += 1
+            if j["status"] == "picked" and j["entrypoint"] in entrypoints:
+                ep_has_picked.add(j["entrypoint"])
+        return picked_per_ep, total_picked, ep_has_picked
+
+    def _collect_queued_candidates(
+        self,
+        now: datetime,
+        entrypoints: dict[str, EntrypointExecutionParameter],
+    ) -> list[dict[str, Any]]:
+        """Collect queued candidates sorted by priority DESC, id ASC."""
+        candidates: list[dict[str, Any]] = []
+        for j in self._jobs.values():
+            if (
+                j["status"] != "queued"
+                or j["entrypoint"] not in entrypoints
+                or j["execute_after"] > now
+            ):
+                continue
+            candidates.append(j)
+        candidates.sort(key=lambda j: (-j["priority"], j["id"]))
+        return candidates
+
+    def _collect_retry_candidates(
+        self,
+        now: datetime,
+        entrypoints: dict[str, EntrypointExecutionParameter],
+    ) -> list[dict[str, Any]]:
+        """Collect retry candidates sorted by heartbeat ASC, id ASC."""
+        candidates: list[dict[str, Any]] = []
+        for j in self._jobs.values():
+            if j["status"] != "picked" or j["entrypoint"] not in entrypoints:
+                continue
+            params = entrypoints[j["entrypoint"]]
+            if params.retry_after <= timedelta(0) or now - j["heartbeat"] < params.retry_after:
+                continue
+            candidates.append(j)
+        candidates.sort(key=lambda j: (j["heartbeat"], j["id"]))
+        return candidates
+
+    def _select_jobs(
+        self,
+        batch_size: int,
+        candidates: list[dict[str, Any]],
+        entrypoints: dict[str, EntrypointExecutionParameter],
+        picked_per_ep: dict[str, int],
+        ep_has_picked: set[str],
+    ) -> list[dict[str, Any]]:
+        """Select jobs respecting concurrency and serialization constraints."""
+        selected: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        for j in candidates:
+            if len(selected) >= batch_size:
+                break
+            if j["id"] in seen:
+                continue
+            seen.add(j["id"])
+
+            ep = j["entrypoint"]
+            params = entrypoints[ep]
+
+            # serialized_dispatch: at most 1 picked job per entrypoint
+            if params.serialized and ep in ep_has_picked:
+                continue
+
+            # concurrency_limit: check current count
+            if (
+                params.concurrency_limit > 0
+                and picked_per_ep.get(ep, 0) >= params.concurrency_limit
+            ):
+                continue
+
+            selected.append(j)
+            ep_has_picked.add(ep)
+            picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
+
+        return selected
+
+    def _write_picked_logs(
+        self,
+        jobs: list[dict[str, Any]],
+        now: datetime,
+    ) -> None:
+        """Write 'picked' log entries for selected jobs."""
+        for j in jobs:
+            self._log.append(
+                {
+                    "id": self._next_log_id,
+                    "created": now,
+                    "job_id": j["id"],
+                    "status": "picked",
+                    "priority": j["priority"],
+                    "entrypoint": j["entrypoint"],
+                    "traceback": None,
+                    "aggregated": False,
+                }
+            )
+            self._next_log_id += 1
 
     async def dequeue(
         self,
@@ -210,17 +313,9 @@ class InMemoryQueries:
 
         now = _utc_now()
 
-        # Count currently picked jobs for this queue_manager_id
-        picked_per_ep: dict[str, int] = {}
-        total_picked = 0
-        ep_has_picked: set[str] = set()
-        for j in self._jobs.values():
-            if j["status"] == "picked" and j["queue_manager_id"] == queue_manager_id:
-                ep = j["entrypoint"]
-                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
-                total_picked += 1
-            if j["status"] == "picked" and j["entrypoint"] in entrypoints:
-                ep_has_picked.add(j["entrypoint"])
+        picked_per_ep, total_picked, ep_has_picked = self._count_picked_jobs(
+            queue_manager_id, entrypoints
+        )
 
         # Apply global concurrency limit
         if global_concurrency_limit is not None and total_picked >= global_concurrency_limit:
@@ -230,65 +325,16 @@ class InMemoryQueries:
         if global_concurrency_limit is not None:
             remaining = min(remaining, global_concurrency_limit - total_picked)
 
-        # Collect queued candidates sorted by priority DESC, id ASC
-        queued_candidates: list[dict[str, Any]] = []
-        for j in self._jobs.values():
-            if j["status"] != "queued":
-                continue
-            ep = j["entrypoint"]
-            if ep not in entrypoints:
-                continue
-            if j["execute_after"] > now:
-                continue
-            queued_candidates.append(j)
-        queued_candidates.sort(key=lambda j: (-j["priority"], j["id"]))
+        queued_candidates = self._collect_queued_candidates(now, entrypoints)
+        retry_candidates = self._collect_retry_candidates(now, entrypoints)
 
-        # Collect retry candidates sorted by heartbeat ASC, id ASC
-        retry_candidates: list[dict[str, Any]] = []
-        for j in self._jobs.values():
-            if j["status"] != "picked":
-                continue
-            ep = j["entrypoint"]
-            if ep not in entrypoints:
-                continue
-            params = entrypoints[ep]
-            if params.retry_after <= timedelta(0):
-                continue
-            if now - j["heartbeat"] < params.retry_after:
-                continue
-            retry_candidates.append(j)
-        retry_candidates.sort(key=lambda j: (j["heartbeat"], j["id"]))
-
-        # Select jobs one at a time, enforcing serialized/concurrency limits
-        # as we go (since picking one job affects the next).
-        seen: set[int] = set()
-        selected: list[dict[str, Any]] = []
-        for j in (*queued_candidates, *retry_candidates):
-            if len(selected) >= remaining:
-                break
-            if j["id"] in seen:
-                continue
-            seen.add(j["id"])
-
-            ep = j["entrypoint"]
-            params = entrypoints[ep]
-
-            # serialized_dispatch: at most 1 picked job per entrypoint
-            if params.serialized and ep in ep_has_picked:
-                continue
-
-            # concurrency_limit: check current count
-            if params.concurrency_limit > 0:
-                current = picked_per_ep.get(ep, 0)
-                if current >= params.concurrency_limit:
-                    continue
-
-            selected.append(j)
-
-            # Update running counts so subsequent candidates see this pick
-            ep_has_picked.add(ep)
-            picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
-            total_picked += 1
+        selected = self._select_jobs(
+            remaining,
+            [*queued_candidates, *retry_candidates],
+            entrypoints,
+            picked_per_ep,
+            ep_has_picked,
+        )
 
         # Update matched jobs
         for j in selected:
@@ -297,18 +343,7 @@ class InMemoryQueries:
             j["updated"] = now
             j["heartbeat"] = now
 
-            # Write 'picked' log entry
-            self._log.append({
-                "id": self._next_log_id,
-                "created": now,
-                "job_id": j["id"],
-                "status": "picked",
-                "priority": j["priority"],
-                "entrypoint": j["entrypoint"],
-                "traceback": None,
-                "aggregated": False,
-            })
-            self._next_log_id += 1
+        self._write_picked_logs(selected, now)
 
         # Sort result: priority DESC, id ASC
         selected.sort(key=lambda j: (-j["priority"], j["id"]))
@@ -338,16 +373,18 @@ class InMemoryQueries:
             self._jobs.pop(int(job.id), None)
             # Clean dedupe index
             self._remove_dedupe_for_job(int(job.id))
-            self._log.append({
-                "id": self._next_log_id,
-                "created": now,
-                "job_id": int(job.id),
-                "status": status,
-                "priority": job.priority,
-                "entrypoint": job.entrypoint,
-                "traceback": tb.model_dump_json() if tb else None,
-                "aggregated": False,
-            })
+            self._log.append(
+                {
+                    "id": self._next_log_id,
+                    "created": now,
+                    "job_id": int(job.id),
+                    "status": status,
+                    "priority": job.priority,
+                    "entrypoint": job.entrypoint,
+                    "traceback": tb.model_dump_json() if tb else None,
+                    "aggregated": False,
+                }
+            )
             self._next_log_id += 1
 
     # -- mark_job_as_cancelled -------------------------------------------------
@@ -358,16 +395,18 @@ class InMemoryQueries:
             job_dict = self._jobs.pop(int(jid), None)
             if job_dict is not None:
                 self._remove_dedupe_for_job(int(jid))
-                self._log.append({
-                    "id": self._next_log_id,
-                    "created": now,
-                    "job_id": int(jid),
-                    "status": "canceled",
-                    "priority": job_dict["priority"],
-                    "entrypoint": job_dict["entrypoint"],
-                    "traceback": None,
-                    "aggregated": False,
-                })
+                self._log.append(
+                    {
+                        "id": self._next_log_id,
+                        "created": now,
+                        "job_id": int(jid),
+                        "status": "canceled",
+                        "priority": job_dict["priority"],
+                        "entrypoint": job_dict["entrypoint"],
+                        "traceback": None,
+                        "aggregated": False,
+                    }
+                )
                 self._next_log_id += 1
 
         await self.notify_job_cancellation(ids)
@@ -378,22 +417,22 @@ class InMemoryQueries:
         if entrypoint:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
             now = _utc_now()
-            to_remove = [
-                jid for jid, j in self._jobs.items() if j["entrypoint"] in eps
-            ]
+            to_remove = [jid for jid, j in self._jobs.items() if j["entrypoint"] in eps]
             for jid in to_remove:
                 j = self._jobs.pop(jid)
                 self._remove_dedupe_for_job(jid)
-                self._log.append({
-                    "id": self._next_log_id,
-                    "created": now,
-                    "job_id": jid,
-                    "status": "deleted",
-                    "priority": j["priority"],
-                    "entrypoint": j["entrypoint"],
-                    "traceback": None,
-                    "aggregated": False,
-                })
+                self._log.append(
+                    {
+                        "id": self._next_log_id,
+                        "created": now,
+                        "job_id": jid,
+                        "status": "deleted",
+                        "priority": j["priority"],
+                        "entrypoint": j["entrypoint"],
+                        "traceback": None,
+                        "aggregated": False,
+                    }
+                )
                 self._next_log_id += 1
         else:
             # TRUNCATE equivalent — no log entries
@@ -422,9 +461,7 @@ class InMemoryQueries:
     async def queued_work(self, entrypoints: list[str]) -> int:
         ep_set = set(entrypoints)
         return sum(
-            1
-            for j in self._jobs.values()
-            if j["status"] == "queued" and j["entrypoint"] in ep_set
+            1 for j in self._jobs.values() if j["status"] == "queued" and j["entrypoint"] in ep_set
         )
 
     # -- queue_log -------------------------------------------------------------
@@ -436,7 +473,7 @@ class InMemoryQueries:
 
     async def update_heartbeat(self, job_ids: list[JobId]) -> None:
         now = _utc_now()
-        unique_ids = set(int(jid) for jid in job_ids)
+        unique_ids = {int(jid) for jid in job_ids}
         for jid in unique_ids:
             if jid in self._jobs:
                 self._jobs[jid]["heartbeat"] = now
@@ -447,7 +484,7 @@ class InMemoryQueries:
         self,
         ids: list[JobId],
     ) -> list[tuple[JobId, models.JOB_STATUS]]:
-        id_set = set(int(jid) for jid in ids)
+        id_set = {int(jid) for jid in ids}
         # Scan log in reverse; keep latest per job_id
         latest: dict[int, models.JOB_STATUS] = {}
         for entry in reversed(self._log):
@@ -478,14 +515,16 @@ class InMemoryQueries:
             entry["aggregated"] = True
 
         for (ep, pri, st, created), count in to_agg.items():
-            self._statistics.append({
-                "id": self._next_stats_id,
-                "created": created,
-                "count": count,
-                "entrypoint": ep,
-                "priority": pri,
-                "status": st,
-            })
+            self._statistics.append(
+                {
+                    "id": self._next_stats_id,
+                    "created": created,
+                    "count": count,
+                    "entrypoint": ep,
+                    "priority": pri,
+                    "status": st,
+                }
+            )
             self._next_stats_id += 1
 
         # Step 2: filter and return
@@ -572,15 +611,12 @@ class InMemoryQueries:
         now = _utc_now()
         selected: list[dict[str, Any]] = []
 
-        ep_set = {
-            (k.expression, k.entrypoint): v for k, v in entrypoints.items()
-        }
+        ep_set = {(k.expression, k.entrypoint): v for k, v in entrypoints.items()}
 
         for s in self._schedules.values():
             key = (s["expression"], s["entrypoint"])
             if key not in ep_set:
                 continue
-            delay = ep_set[key]
 
             # Pick if (queued AND next_run <= now) OR (picked AND heartbeat stale >30s)
             if s["status"] == "queued" and s["next_run"] <= now:
@@ -613,9 +649,7 @@ class InMemoryQueries:
                 s["updated"] = now
 
     async def peak_schedule(self) -> list[models.Schedule]:
-        return [
-            models.Schedule.model_validate(s) for s in self._schedules.values()
-        ]
+        return [models.Schedule.model_validate(s) for s in self._schedules.values()]
 
     async def delete_schedule(
         self,

@@ -25,9 +25,7 @@ class InMemoryDriver:
     def __init__(self) -> None:
         self._shutdown = asyncio.Event()
         self._tm = TaskManager()
-        self._listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = (
-            defaultdict(list)
-        )
+        self._listeners: dict[str, list[Callable[[str], None]]] = defaultdict(list)
 
     # -- Driver protocol -------------------------------------------------------
 
@@ -40,7 +38,7 @@ class InMemoryDriver:
     async def add_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: Callable[[str], None],
     ) -> None:
         self._listeners[channel].append(callback)
 
