@@ -593,7 +593,7 @@ class InMemoryRepository:
         """Clear the queue log table."""
         if entrypoint:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
-            self._logs = [l for l in self._logs if l["entrypoint"] not in eps]
+            self._logs = [entry for entry in self._logs if entry["entrypoint"] not in eps]
         else:
             self._logs.clear()
 

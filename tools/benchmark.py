@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 import typer
 import uvloop
@@ -141,7 +141,7 @@ class BenchmarkResult(BaseModel):
 class ThroughputSettings(BaseModel):
     driver: DriverEnum = typer.Option(
         DriverEnum.apg,
-        help="Postgres driver to use. Note: 'mem' (in-memory) driver works best with drain strategy.",
+        help="Postgres driver to use. Note: 'mem' driver works best with drain strategy.",
     )
     strategy: StrategyEnum = typer.Option(
         StrategyEnum.throughput,
