@@ -30,6 +30,7 @@ from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver, SyncDriver
+from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
 
@@ -64,22 +65,6 @@ def is_unique_violation(exc: Exception) -> bool:
             return True
 
     return False
-
-
-@dataclasses.dataclass
-class EntrypointExecutionParameter:
-    """
-    Job execution parameters like retry, concurrency.
-
-    Attributes:
-        retry_after (timedelta): Time to wait before retrying.
-        serialized (bool): Whether execution is serialized.
-        concurrency_limit (int): Max number of concurrent executions.
-    """
-
-    retry_after: timedelta
-    serialized: bool
-    concurrency_limit: int
 
 
 @dataclasses.dataclass

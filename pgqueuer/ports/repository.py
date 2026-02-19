@@ -8,15 +8,29 @@ inheritance or registration is required.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol, overload
+from typing import Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.types import CronEntrypoint
 
-if TYPE_CHECKING:
-    from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+
+@dataclasses.dataclass
+class EntrypointExecutionParameter:
+    """
+    Job execution parameters like retry, concurrency.
+
+    Attributes:
+        retry_after (timedelta): Time to wait before retrying.
+        serialized (bool): Whether execution is serialized.
+        concurrency_limit (int): Max number of concurrent executions.
+    """
+
+    retry_after: timedelta
+    serialized: bool
+    concurrency_limit: int
 
 # ---------------------------------------------------------------------------
 # Queue persistence
