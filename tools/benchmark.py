@@ -312,22 +312,36 @@ class ThroughputStrategy:
             qm.shutdown.set()
 
     async def run(self) -> BenchmarkResult:
-        await asyncio.gather(
-            self.run_dequeuers(),
-            self.run_enqueuers(),
-            self.shutdown_timer(),
-        )
+        dequeuers = asyncio.ensure_future(self.run_dequeuers())
+        enqueuers = asyncio.ensure_future(self.run_enqueuers())
+
+        # Wait for the timer (which fires graceful_shutdown internally)
+        await self.shutdown_timer()
+
+        # Give workers a grace period to exit naturally after shutdown signals
+        grace = max(5.0, self.settings.timer.total_seconds() * 0.1)
+        done, pending = await asyncio.wait({dequeuers, enqueuers}, timeout=grace)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+        # Propagate unexpected errors from completed tasks
+        for task in done:
+            if not task.cancelled() and (exc := task.exception()):
+                raise exc
 
         qsize = await (await make_queries(self.settings.driver, dsn())).queue_size()
         return BenchmarkResult(
             created_at=datetime.now(timezone.utc),
             driver=self.settings.driver,
             strategy=StrategyEnum.throughput,
-            elapsed=self.tqdm_format_dict["elapsed"],
+            elapsed=self.tqdm_format_dict.get("elapsed", 0),
             github_ref_name=os.environ.get("REF_NAME", ""),
             queued=sum(x.count for x in qsize),
-            rate=float(self.tqdm_format_dict["n"]) / float(self.tqdm_format_dict["elapsed"]),
-            steps=self.tqdm_format_dict["n"],
+            rate=float(self.tqdm_format_dict.get("n", 0))
+            / max(float(self.tqdm_format_dict.get("elapsed", 1)), 1),
+            steps=self.tqdm_format_dict.get("n", 0),
         )
 
     async def teardown(self) -> None:  # pragma: no cover - nothing to clean up

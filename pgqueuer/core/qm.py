@@ -562,6 +562,10 @@ class QueueManager:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
 
+            periodic_health_check_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await periodic_health_check_task
+
         if event_task and not event_task.done():
             event_task.cancel()
 
