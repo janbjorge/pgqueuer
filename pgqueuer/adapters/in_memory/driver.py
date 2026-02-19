@@ -20,8 +20,8 @@ from pgqueuer.core.tm import TaskManager
 class InMemoryDriver:
     """In-memory driver that satisfies the ``Driver`` protocol."""
 
-    _listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = (
-        dataclasses.field(default_factory=dict)
+    _listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = dataclasses.field(
+        default_factory=dict
     )
     _shutdown: asyncio.Event = dataclasses.field(default_factory=asyncio.Event)
     _tm: TaskManager = dataclasses.field(default_factory=TaskManager)

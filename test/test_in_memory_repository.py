@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import timedelta
 
@@ -12,7 +11,7 @@ from pgqueuer.adapters.in_memory.driver import InMemoryDriver
 from pgqueuer.adapters.in_memory.repository import InMemoryRepository
 from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
 from pgqueuer.domain import errors, models
-from pgqueuer.domain.types import CronEntrypoint, CronExpression, JobId
+from pgqueuer.domain.types import CronEntrypoint, CronExpression
 
 
 def _make_pair() -> tuple[InMemoryDriver, InMemoryRepository]:

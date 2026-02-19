@@ -72,17 +72,13 @@ class InMemoryRepository:
         qm_count = sum(
             1
             for j in self._jobs.values()
-            if j["queue_manager_id"] == queue_manager_id
-            and j["entrypoint"] in entrypoints
+            if j["queue_manager_id"] == queue_manager_id and j["entrypoint"] in entrypoints
         )
 
         # Count jobs picked by this queue manager per entrypoint (for concurrency limit).
         qm_per_ep: dict[str, int] = {}
         for j in self._jobs.values():
-            if (
-                j["queue_manager_id"] == queue_manager_id
-                and j["entrypoint"] in entrypoints
-            ):
+            if j["queue_manager_id"] == queue_manager_id and j["entrypoint"] in entrypoints:
                 qm_per_ep[j["entrypoint"]] = qm_per_ep.get(j["entrypoint"], 0) + 1
 
         selected_ids: list[int] = []
@@ -356,11 +352,7 @@ class InMemoryRepository:
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
-            to_remove = [
-                jid
-                for jid, j in self._jobs.items()
-                if j["entrypoint"] in eps
-            ]
+            to_remove = [jid for jid, j in self._jobs.items() if j["entrypoint"] in eps]
         else:
             to_remove = list(self._jobs.keys())
 
@@ -483,10 +475,7 @@ class InMemoryRepository:
             if existing is None or log_id > existing[0]:
                 latest[jid] = (log_id, entry["created"].isoformat(), entry["status"])
 
-        return [
-            (JobId(jid), status)
-            for jid, (_, _, status) in sorted(latest.items())
-        ]
+        return [(JobId(jid), status) for jid, (_, _, status) in sorted(latest.items())]
 
     # ------------------------------------------------------------------
     # ScheduleRepositoryPort
