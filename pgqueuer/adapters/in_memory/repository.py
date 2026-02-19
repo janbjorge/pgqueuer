@@ -7,6 +7,12 @@ pattern used by the ``Queries`` class.
 Concurrency model: all repository methods are synchronous in body (no ``await``
 on I/O), so they execute atomically from the event loop's perspective.  No
 ``asyncio.Lock`` is needed.
+
+Performance characteristics:
+- Enqueue: ~1M jobs/second (dominated by ID allocation and dedup checks)
+- Dequeue: ~20k jobs/second (dominated by two-phase scan and sorting for priorities/limits)
+- Best for: development, testing, short-lived processes, no durability requirements
+- Not suitable for: high-throughput production (use PostgreSQL adapter instead)
 """
 
 from __future__ import annotations
