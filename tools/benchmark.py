@@ -272,6 +272,7 @@ class Consumer:
     batch_size: int
     bar: tqdm
     mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous
+    dequeue_timeout: timedelta = dataclass_field(default_factory=lambda: timedelta(seconds=30))
 
     async def run(self) -> None:
         @self.pgq.entrypoint("asyncfetch")
@@ -282,7 +283,11 @@ class Consumer:
         def syncfetch(job: Job) -> None:
             self.bar.update()
 
-        await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
+        await self.pgq.run(
+            batch_size=self.batch_size,
+            mode=self.mode,
+            dequeue_timeout=self.dequeue_timeout,
+        )
 
 
 @dataclass
@@ -409,6 +414,8 @@ class DrainStrategy:
     settings: DrainSettings
     pgqs: list[PgQueuer] = dataclass_field(default_factory=list, init=False)
     tqdm_format_dict: dict[str, str] = dataclass_field(default_factory=dict, init=False)
+    # Shared queries instance for in-memory driver (all phases must use same state)
+    _shared_queries: Queries | None = dataclass_field(default=None, init=False)
 
     async def setup(self) -> None:
         loop = asyncio.get_event_loop()
@@ -427,16 +434,33 @@ class DrainStrategy:
             [0] * self.settings.jobs,
         )
 
+        # For in-memory driver, preserve the queries instance so run() uses the same state
+        if self.settings.driver is DriverEnum.mem:
+            self._shared_queries = queries  # type: ignore[assignment]
+
     def graceful_shutdown(self) -> None:
         for qm in self.pgqs:
             qm.shutdown.set()
 
     async def run(self) -> BenchmarkResult:
-        queries = [
-            await make_queries(self.settings.driver, dsn()) for _ in range(self.settings.dequeue)
-        ]
-        for q in queries:
+        if self._shared_queries is not None:
+            # In-memory: reuse the same queries/driver (state is not shared across instances)
+            queries_list = [self._shared_queries] * self.settings.dequeue
+        else:
+            queries_list = [
+                await make_queries(self.settings.driver, dsn())
+                for _ in range(self.settings.dequeue)
+            ]
+        for q in queries_list:
             self.pgqs.append(PgQueuer(q.driver))
+
+        # In-memory has no async notifications, so use a near-zero dequeue timeout
+        # to avoid waiting 30s between batches.
+        timeout = (
+            timedelta(seconds=0.01)
+            if self.settings.driver is DriverEnum.mem
+            else timedelta(seconds=30)
+        )
 
         start = datetime.now(timezone.utc)
         with job_progress_bar(total=self.settings.jobs) as bar:
@@ -446,6 +470,7 @@ class DrainStrategy:
                     self.settings.dequeue_batch_size,
                     bar,
                     types.QueueExecutionMode.drain,
+                    dequeue_timeout=timeout,
                 ).run()
                 for pgq in self.pgqs
             ]
