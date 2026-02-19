@@ -261,6 +261,7 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
 
             driver = InMemoryDriver()
             repo = InMemoryRepository(_driver=driver)
+            driver._repository = repo  # Store for QueueManager to use
             return _InMemoryQueriesWrapper(repo)  # type: ignore[return-value]
     raise NotImplementedError(driver)
 

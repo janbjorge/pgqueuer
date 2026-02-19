@@ -25,6 +25,8 @@ class InMemoryDriver:
     )
     _shutdown: asyncio.Event = dataclasses.field(default_factory=asyncio.Event)
     _tm: TaskManager = dataclasses.field(default_factory=TaskManager)
+    # Optional reference to the repository for tools that need it
+    _repository: Any = dataclasses.field(default=None, init=False)
 
     async def fetch(self, query: str, *args: Any) -> list[dict]:
         return []

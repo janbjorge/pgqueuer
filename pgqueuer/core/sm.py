@@ -55,7 +55,11 @@ class SchedulerManager:
         when no queries instance was injected.
         """
         if self.queries is None:
-            self.queries = queries.Queries(self.connection)
+            # Check if driver has a stored repository (e.g., InMemoryDriver)
+            if hasattr(self.connection, "_repository") and self.connection._repository is not None:
+                self.queries = self.connection._repository
+            else:
+                self.queries = queries.Queries(self.connection)
 
     # TODO: Propagate shared 'resources' mapping into scheduled job execution.
     # Consider approaches:
