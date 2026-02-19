@@ -27,6 +27,66 @@ from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
 
+class _InMemoryQueriesWrapper:
+    """Wrapper to provide a Queries-compatible interface for InMemoryRepository."""
+
+    def __init__(self, repo: Any) -> None:
+        self._repo = repo
+        self.driver = repo._driver
+        self.qbe = repo.qbe
+
+    async def dequeue(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.dequeue(*args, **kwargs)
+
+    async def enqueue(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.enqueue(*args, **kwargs)
+
+    async def log_jobs(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.log_jobs(*args, **kwargs)
+
+    async def clear_queue(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.clear_queue(*args, **kwargs)
+
+    async def queue_size(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.queue_size(*args, **kwargs)
+
+    async def mark_job_as_cancelled(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.mark_job_as_cancelled(*args, **kwargs)
+
+    async def update_heartbeat(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.update_heartbeat(*args, **kwargs)
+
+    async def queued_work(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.queued_work(*args, **kwargs)
+
+    async def queue_log(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.queue_log(*args, **kwargs)
+
+    async def log_statistics(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.log_statistics(*args, **kwargs)
+
+    async def job_status(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.job_status(*args, **kwargs)
+
+    async def clear_statistics_log(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.clear_statistics_log(*args, **kwargs)
+
+    async def clear_queue_log(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.clear_queue_log(*args, **kwargs)
+
+    async def has_table(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.has_table(*args, **kwargs)
+
+    async def table_has_column(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.table_has_column(*args, **kwargs)
+
+    async def table_has_index(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.table_has_index(*args, **kwargs)
+
+    async def has_user_defined_enum(self, *args: Any, **kwargs: Any) -> Any:
+        return await self._repo.has_user_defined_enum(*args, **kwargs)
+
+
 def job_progress_bar(total: int | None = None) -> tqdm:
     """Return a progress bar configured for job throughput measurements."""
     return tqdm(total=total, ascii=True, unit=" job", unit_scale=True, file=sys.stdout)
@@ -39,6 +99,7 @@ class DriverEnum(str, Enum):
     apg = "apg"
     apgpool = "apgpool"
     psy = "psy"
+    mem = "mem"
 
 
 class StrategyEnum(str, Enum):
@@ -195,6 +256,12 @@ async def make_queries(driver: DriverEnum, conninfo: str) -> Queries:
                     await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
                 )
             )
+        case "mem":
+            from pgqueuer.adapters.in_memory import InMemoryDriver, InMemoryRepository
+
+            driver = InMemoryDriver()
+            repo = InMemoryRepository(_driver=driver)
+            return _InMemoryQueriesWrapper(repo)  # type: ignore[return-value]
     raise NotImplementedError(driver)
 
 

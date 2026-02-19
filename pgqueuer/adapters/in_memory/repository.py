@@ -578,6 +578,26 @@ class InMemoryRepository:
         self._schedules.clear()
 
     # ------------------------------------------------------------------
+    # Utility methods (not in port protocols, but needed by benchmarks/tools)
+    # ------------------------------------------------------------------
+
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """Clear the statistics (log) table."""
+        if entrypoint:
+            eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
+            self._statistics = [s for s in self._statistics if s["entrypoint"] not in eps]
+        else:
+            self._statistics.clear()
+
+    async def clear_queue_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """Clear the queue log table."""
+        if entrypoint:
+            eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
+            self._logs = [l for l in self._logs if l["entrypoint"] not in eps]
+        else:
+            self._logs.clear()
+
+    # ------------------------------------------------------------------
     # NotificationPort
     # ------------------------------------------------------------------
 
