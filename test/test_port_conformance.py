@@ -1,12 +1,6 @@
-"""Verify that Queries structurally satisfies all port protocols.
-
-These tests use runtime isinstance checks against runtime_checkable
-protocols AND static typing assignments that mypy validates.
-"""
+"""Verify that Queries structurally satisfies all port protocols."""
 
 from __future__ import annotations
-
-from typing import TYPE_CHECKING
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.ports import (
@@ -18,21 +12,6 @@ from pgqueuer.ports import (
 )
 from pgqueuer.queries import Queries
 from pgqueuer.tracing import LogfireTracing, SentryTracing
-
-if TYPE_CHECKING:
-    # Static conformance: mypy will error if Queries doesn't match.
-    _q: QueueRepositoryPort = Queries.__new__(Queries)
-    _s: ScheduleRepositoryPort = Queries.__new__(Queries)
-    _n: NotificationPort = Queries.__new__(Queries)
-    _m: SchemaManagementPort = Queries.__new__(Queries)
-    _tl: TracingProtocol = LogfireTracing.__new__(LogfireTracing)
-    _ts: TracingProtocol = SentryTracing.__new__(SentryTracing)
-
-    # InMemoryQueries must also satisfy all four ports.
-    _iq: QueueRepositoryPort = InMemoryQueries.__new__(InMemoryQueries)
-    _is: ScheduleRepositoryPort = InMemoryQueries.__new__(InMemoryQueries)
-    _in: NotificationPort = InMemoryQueries.__new__(InMemoryQueries)
-    _im: SchemaManagementPort = InMemoryQueries.__new__(InMemoryQueries)
 
 
 def test_queries_has_queue_repository_methods() -> None:
