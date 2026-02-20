@@ -505,20 +505,21 @@ class InMemoryQueries:
         for entry in self._log:
             if entry["aggregated"]:
                 continue
+            created_sec = entry["created"].replace(microsecond=0)
             key = (
                 entry["entrypoint"],
                 entry["priority"],
                 entry["status"],
-                entry["created"],
+                created_sec,
             )
             to_agg[key] = to_agg.get(key, 0) + 1
             entry["aggregated"] = True
 
-        for (ep, pri, st, created), count in to_agg.items():
+        for (ep, pri, st, created_sec), count in to_agg.items():
             self._statistics.append(
                 {
                     "id": self._next_stats_id,
-                    "created": created,
+                    "created": created_sec,
                     "count": count,
                     "entrypoint": ep,
                     "priority": pri,
@@ -534,8 +535,8 @@ class InMemoryQueries:
             cutoff = _utc_now() - last
             result = [r for r in result if r["created"] >= cutoff]
 
-        # Sort by created DESC
-        result.sort(key=lambda r: r["created"], reverse=True)
+        # Sort by id DESC
+        result.sort(key=lambda r: r["id"], reverse=True)
 
         if tail is not None:
             result = result[:tail]
