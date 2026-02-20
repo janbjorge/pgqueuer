@@ -11,13 +11,11 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol, overload
+from typing import Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.types import CronEntrypoint
-
-if TYPE_CHECKING:
-    from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.driver import Driver
 
 
 @dataclasses.dataclass
