@@ -120,6 +120,7 @@ async def test_qm_concurrency_limit() -> None:
         batch_size=10,
         mode=QueueExecutionMode.drain,
         max_concurrent_tasks=100,
+        dequeue_timeout=timedelta(seconds=0.01),
     )
 
     assert max_concurrent <= 2
