@@ -24,6 +24,7 @@ from pgqueuer import PgQueuer, logconfig, types
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
 from pgqueuer.models import Job
+from pgqueuer.ports import RepositoryPort
 from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
@@ -177,7 +178,7 @@ class DrainSettings(BaseModel):
         )
 
 
-_shared_inmem: InMemoryQueries | None = None
+_shared_inmem: RepositoryPort | None = None
 
 
 def _get_conninfo(driver: DriverEnum) -> str:
@@ -185,7 +186,7 @@ def _get_conninfo(driver: DriverEnum) -> str:
     return "" if driver == DriverEnum.mem else dsn()
 
 
-async def make_queries(driver: DriverEnum, conninfo: str = "") -> Queries | InMemoryQueries:
+async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort:
     global _shared_inmem
     match driver:
         case "apg":
@@ -235,7 +236,7 @@ class Consumer:
 @dataclass
 class Producer:
     shutdown: asyncio.Event
-    queries: Queries | InMemoryQueries
+    queries: RepositoryPort
     batch_size: int
     cnt: count
 

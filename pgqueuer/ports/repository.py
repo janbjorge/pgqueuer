@@ -11,10 +11,13 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import Protocol, overload
+from typing import TYPE_CHECKING, Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.types import CronEntrypoint
+
+if TYPE_CHECKING:
+    from pgqueuer.ports.driver import Driver
 
 
 @dataclasses.dataclass
@@ -114,6 +117,15 @@ class QueueRepositoryPort(Protocol):
         self,
         ids: list[models.JobId],
     ) -> list[tuple[models.JobId, models.JOB_STATUS]]: ...
+
+    @property
+    def driver(self) -> Driver:
+        """Access the underlying database driver."""
+        ...
+
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """Clear statistics log entries."""
+        ...
 
 
 # ---------------------------------------------------------------------------
