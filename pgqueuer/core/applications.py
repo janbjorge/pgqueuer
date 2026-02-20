@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.adapters.persistence import queries
 from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
@@ -58,7 +59,7 @@ class PgQueuer:
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
-    queries: object | None = dataclasses.field(default=None)
+    queries: InMemoryQueries | queries.Queries | None = dataclasses.field(default=None)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,

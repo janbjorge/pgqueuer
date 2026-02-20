@@ -23,6 +23,7 @@ from typing import AsyncGenerator, Callable
 import anyio
 
 from pgqueuer.adapters import tracing
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import (
     buffers,
@@ -75,7 +76,7 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: InMemoryQueries | queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(

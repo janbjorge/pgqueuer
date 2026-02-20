@@ -9,6 +9,7 @@ from typing import Callable
 
 import croniter
 
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, helpers, logconfig, tm
 from pgqueuer.domain import models
@@ -39,7 +40,7 @@ class SchedulerManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: InMemoryQueries | queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
