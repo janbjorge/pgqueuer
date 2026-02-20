@@ -3,13 +3,6 @@
 from __future__ import annotations
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
-from pgqueuer.ports import (
-    NotificationPort,
-    QueueRepositoryPort,
-    ScheduleRepositoryPort,
-    SchemaManagementPort,
-    TracingProtocol,
-)
 from pgqueuer.queries import Queries
 from pgqueuer.tracing import LogfireTracing, SentryTracing
 
