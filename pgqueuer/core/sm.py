@@ -9,10 +9,10 @@ from typing import Callable
 
 import croniter
 
-from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, helpers, logconfig, tm
 from pgqueuer.domain import models
+from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
 warnings.simplefilter("default", DeprecationWarning)
@@ -40,7 +40,7 @@ class SchedulerManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: InMemoryQueries | queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
