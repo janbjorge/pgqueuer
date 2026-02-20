@@ -9,6 +9,7 @@ from typing import Protocol
 
 import async_timeout
 
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.models import Job
 from pgqueuer.queries import Queries
 
@@ -47,7 +48,7 @@ def mocked_job(
 
 
 async def wait_until_empty_queue(
-    queries: Queries,
+    queries: InMemoryQueries | Queries,
     managers: Sequence[ShutdownCapable],
     *,
     timeout_seconds: float = 15.0,

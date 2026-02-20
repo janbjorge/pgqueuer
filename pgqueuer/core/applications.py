@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.adapters.persistence import queries
 from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
@@ -30,6 +29,7 @@ from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.domain.models import Channel
 from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ class PgQueuer:
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
-    queries: InMemoryQueries | queries.Queries | None = dataclasses.field(default=None)
+    queries: RepositoryPort | None = dataclasses.field(default=None)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -72,6 +72,8 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
+        # RepositoryPort | None is passed here; QueueManager/SchedulerManager will
+        # create default Queries instances if None, which satisfies their type contract.
         self.qm = QueueManager(
             self.connection,
             self.channel,
