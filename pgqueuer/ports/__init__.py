@@ -5,6 +5,7 @@ from typing import Protocol
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import (
     NotificationPort,
+    QueryBuilderEnvironmentPort,
     QueueRepositoryPort,
     ScheduleRepositoryPort,
     SchemaManagementPort,
@@ -25,6 +26,7 @@ class RepositoryPort(
 __all__ = [
     "Driver",
     "NotificationPort",
+    "QueryBuilderEnvironmentPort",
     "QueueRepositoryPort",
     "RepositoryPort",
     "ScheduleRepositoryPort",

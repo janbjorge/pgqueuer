@@ -11,14 +11,18 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol, overload
+from typing import Protocol, overload
 
 from pgqueuer.domain import models
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver
 
-if TYPE_CHECKING:
-    from pgqueuer.adapters.persistence import qb
+
+class QueryBuilderEnvironmentPort(Protocol):
+    """Protocol for query builder environment used in schema operations."""
+
+    settings: DBSettings
 
 
 @dataclasses.dataclass
@@ -186,7 +190,7 @@ class SchemaManagementPort(Protocol):
     """DDL operations for installing, upgrading, and inspecting the schema."""
 
     @property
-    def qbe(self) -> qb.QueryBuilderEnvironment:
+    def qbe(self) -> QueryBuilderEnvironmentPort:
         """Access the query builder environment for schema operations."""
         ...
 
