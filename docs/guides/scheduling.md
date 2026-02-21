@@ -23,31 +23,29 @@ async def fetch_db(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '10'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
-    Define["<b>@schedule</b><br/>Define"]
-    Store["<b>Stored</b><br/>in DB"]
-    Poll["<b>Poll</b><br/>Loop"]
-    Check{{"<b>Cron?</b>"}}
-    Enqueue["<b>Enqueue</b><br/>Job"]
-    Execute["<b>Execute</b><br/>Task"]
+    Define[@pgq.schedule]
+    Store[(Schedule in DB)]
+    Poll[Poll loop]
+    Enqueue[Enqueue job]
+    Execute[Execute task]
 
     Define --> Store
     Store --> Poll
-    Poll --> Check
-    Check -->|YES| Enqueue
+    Poll -->|cron ready| Enqueue
     Enqueue --> Execute
-    Check -->|NO| Poll
+    Poll -->|not yet| Poll
 
-    classDef code fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef code     fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
     classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
-    classDef process fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
-    classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
+    classDef process  fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef success  fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
 
     class Define code
     class Store database
-    class Poll,Enqueue,Execute process
-    class Check decision
+    class Poll process
+    class Enqueue,Execute success
 ```
 
 ## Cron Expression Format

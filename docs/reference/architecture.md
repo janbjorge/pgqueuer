@@ -7,6 +7,7 @@ consumers up to date.
 ## Job Flow Diagram
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
     P[Producer]
     DB[(PostgreSQL)]
@@ -14,11 +15,21 @@ flowchart LR
     QM[QueueManager]
     C[Consumer]
 
-    P -- "Queries.enqueue" --> DB
-    DB -- "NOTIFY table_changed" --> R
-    R -- "signal pending work" --> QM
-    QM -- "dispatch job" --> C
-    C -- "update status" --> DB
+    P -->|Queries.enqueue| DB
+    DB -->|NOTIFY| R
+    R -->|signal| QM
+    QM -->|dispatch| C
+    C -->|update status| DB
+
+    classDef producer fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
+    classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
+    classDef router  fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef consumer fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
+
+    class P producer
+    class DB database
+    class R,QM router
+    class C consumer
 ```
 
 1. **Producer** inserts a job using `Queries.enqueue()`.
@@ -90,14 +101,14 @@ The lifecycle of a job flows through these statuses:
 ### Status Transition Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '10'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
-    Queued["<b>QUEUED</b>"]
-    Picked["<b>PICKED</b>"]
-    Success["<b>SUCCESS</b>"]
-    Exception["<b>EXCEPTION</b>"]
-    Canceled["<b>CANCELED</b>"]
-    Deleted["<b>DELETED</b>"]
+    Queued[queued]
+    Picked[picked]
+    Success[successful]
+    Exception[exception]
+    Canceled[canceled]
+    Deleted[deleted]
 
     Queued -->|claim| Picked
     Queued -->|delete| Deleted
@@ -105,10 +116,10 @@ flowchart LR
     Picked -->|error| Exception
     Picked -->|cancel| Canceled
 
-    classDef queued fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
-    classDef picked fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef queued  fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
+    classDef picked  fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
     classDef success fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
-    classDef error fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
+    classDef error   fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
     classDef canceled fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
 
     class Queued queued
