@@ -11,13 +11,13 @@
   --md-primary-fg-color:        var(--pgq-blue);
   --md-primary-fg-color--light: var(--pgq-blue-light);
   --md-primary-fg-color--dark:  var(--pgq-blue-dark);
-  --md-accent-fg-color:         var(--pgq-blue-light);
+  --md-accent-fg-color:         var(--pgq-blue);
 }
 
 /* Override in dark (slate) mode */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color:        var(--pgq-blue-light);
-  --md-primary-fg-color--light: var(--pgq-blue);
+  --md-primary-fg-color:        var(--pgq-blue);
+  --md-primary-fg-color--light: var(--pgq-blue-light);
   --md-primary-fg-color--dark:  var(--pgq-blue-dark);
   --md-accent-fg-color:         var(--pgq-blue-light);
   --md-default-bg-color:        var(--pgq-bg-dark);
