@@ -25,29 +25,32 @@ async with CompletionWatcher(driver) as watcher:
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
-stateDiagram-v2
-    direction LR
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif'}}}%%
+flowchart LR
+    Start(["START"]) --> Queued["<b style='font-size:28px'>QUEUED</b>"]
+    Queued -->|"claim"| Picked["<b style='font-size:28px'>PICKED</b>"]
+    Queued -->|"delete"| Deleted["<b style='font-size:28px'>DELETED</b>"]
+    Picked -->|"done"| Success["<b style='font-size:28px'>SUCCESSFUL</b>"]
+    Picked -->|"error"| Exception["<b style='font-size:28px'>EXCEPTION</b>"]
+    Picked -->|"cancel"| Canceled["<b style='font-size:28px'>CANCELED</b>"]
+    Success --> End(["COMPLETE"])
+    Exception --> End
+    Canceled --> End
+    Deleted --> End
 
-    [*] --> queued
+    classDef queuedStyle fill:#1e90ff,stroke:#000,stroke-width:4px,color:#fff
+    classDef pickedStyle fill:#ff8c00,stroke:#000,stroke-width:4px,color:#fff
+    classDef successStyle fill:#00cc00,stroke:#000,stroke-width:4px,color:#fff
+    classDef exceptionStyle fill:#ff0000,stroke:#000,stroke-width:4px,color:#fff
+    classDef canceledStyle fill:#ffaa00,stroke:#000,stroke-width:4px,color:#000
+    classDef terminalStyle fill:#333,stroke:#000,stroke-width:4px,color:#fff
 
-    queued --> picked: QueueManager claims
-    picked --> successful: Job completes
-    picked --> exception: Job errors
-    picked --> canceled: Cancellation triggered
-    queued --> deleted: Manual deletion
-
-    successful --> [*]: Returns
-    exception --> [*]: Returns
-    canceled --> [*]: Returns
-    deleted --> [*]: Returns
-
-    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
-    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
-    classDef terminal fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
-
-    class queued,picked pending
-    class successful,exception,canceled,deleted terminal
+    class Queued queuedStyle
+    class Picked pickedStyle
+    class Success successStyle
+    class Exception exceptionStyle
+    class Canceled canceledStyle
+    class Start,End terminalStyle
 ```
 
 ## Tracking Many Jobs at Once

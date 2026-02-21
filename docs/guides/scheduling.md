@@ -23,32 +23,33 @@ async def fetch_db(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '20px', 'fontFamily': 'Inter, sans-serif', 'primaryColor': '#4A6FA5', 'primaryBorderColor': '#2E5080', 'primaryTextColor': '#fff', 'lineColor': '#4A6FA5', 'secondBkgColor': '#6B8FC7'}}}}%%
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif'}}}%%
 flowchart TD
-    A["Register cron schedule<br/>@pgq.schedule name cron expr"]
-    B["("Schedule stored in<br/>PostgreSQL"<br/>"]
-    C["QueueManager polling loop"]
-    D{{"Cron time<br/>triggered?"}}
-    E["Enqueue as Job<br/>to job queue"]
-    F["("Job sent to<br/>PostgreSQL"<br/>"]
-    G["EventRouter notifies<br/>via LISTEN/NOTIFY"]
-    H["Consumer executes<br/>@pgq.schedule function"]
+    A["<b style='font-size:26px'>Define Schedule</b><br/>@pgq.schedule"]
+    B["<b style='font-size:26px'>Schedule in DB</b>"]
+    C["<b style='font-size:26px'>Poll Loop</b>"]
+    D{{"<b style='font-size:24px'>Cron<br/>Ready?</b>"}}
+    E["<b style='font-size:26px'>Enqueue Job</b>"]
+    F["<b style='font-size:26px'>Job in Queue</b>"]
+    G["<b style='font-size:26px'>Execute Task</b>"]
 
     A --> B
     B --> C
     C --> D
-    D -->|"Yes"| E
+    D -->|"YES"| E
     E --> F
     F --> G
-    G --> H
-    D -->|"No"| C
+    D -->|"NO"| C
 
-    classDef db fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:3px,font-size:16px
-    classDef process fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
-    classDef action fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
+    classDef code fill:#9966ff,stroke:#000,stroke-width:4px,color:#fff
+    classDef database fill:#ff6600,stroke:#000,stroke-width:4px,color:#fff
+    classDef process fill:#00cc00,stroke:#000,stroke-width:4px,color:#000
+    classDef decision fill:#ffcc00,stroke:#000,stroke-width:4px,color:#000
 
-    class B,F db
-    class A,C,D,E,G,H action
+    class A code
+    class B,F database
+    class C,E,G process
+    class D decision
 ```
 
 ## Cron Expression Format

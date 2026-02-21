@@ -34,36 +34,38 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 ## QueueManager Processing Loop
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif'}}}%%
 flowchart TD
-    A["Wait for NOTIFY<br/>or timeout"]
-    B["Query for queued jobs<br/>FOR UPDATE SKIP LOCKED"]
-    C{{"Jobs<br/>found?"}}
-    D["Claim job<br/>status = picked"]
-    E["Execute<br/>@pgq.entrypoint"]
-    F{{"Success?"}}
-    G["Update status<br/>successful"]
-    H["Update status<br/>exception"]
+    A["<b style='font-size:28px'>WAIT</b><br/>for NOTIFY"]
+    B["<b style='font-size:28px'>QUERY</b><br/>queued jobs"]
+    C{{"<b style='font-size:26px'>Found?</b>"}}
+    D["<b style='font-size:28px'>CLAIM</b><br/>→ picked"]
+    E["<b style='font-size:28px'>EXECUTE</b><br/>entrypoint"]
+    F{{"<b style='font-size:26px'>Success?</b>"}}
+    G["<b style='font-size:28px'>MARK</b><br/>successful"]
+    H["<b style='font-size:28px'>MARK</b><br/>exception"]
 
     A --> B
     B --> C
-    C -->|"Yes"| D
-    C -->|"No"| A
+    C -->|"YES"| D
+    C -->|"NO"| A
     D --> E
     E --> F
-    F -->|"Yes"| G
-    F -->|"No"| H
+    F -->|"YES"| G
+    F -->|"NO"| H
     G --> A
     H --> A
 
-    classDef wait fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
-    classDef query fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:3px,font-size:16px
-    classDef process fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
-    classDef success fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
-    classDef error fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:3px,font-size:16px
+    classDef wait fill:#1e90ff,stroke:#000,stroke-width:4px,color:#fff
+    classDef query fill:#ff8c00,stroke:#000,stroke-width:4px,color:#fff
+    classDef process fill:#9966ff,stroke:#000,stroke-width:4px,color:#fff
+    classDef success fill:#00cc00,stroke:#000,stroke-width:4px,color:#000
+    classDef error fill:#ff0000,stroke:#000,stroke-width:4px,color:#fff
+    classDef decision fill:#ffcc00,stroke:#000,stroke-width:4px,color:#000
 
     class A wait
-    class B,C query
+    class B query
+    class C,F decision
     class D,E process
     class G success
     class H error
@@ -101,34 +103,30 @@ The lifecycle of a job flows through these statuses:
 ### Status Transition Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
-stateDiagram-v2
-    direction LR
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif', 'tertiaryColor': '#fff', 'tertiaryTextColor': '#000', 'tertiaryBorderColor': '#000'}}}%%
+flowchart LR
+    Start(["START"]) --> Queued["<b style='font-size:28px'>QUEUED</b>"]
+    Queued -->|"claim"| Picked["<b style='font-size:28px'>PICKED</b>"]
+    Queued -->|"delete"| Deleted["<b style='font-size:28px'>DELETED</b>"]
+    Picked -->|"success"| Success["<b style='font-size:28px'>SUCCESSFUL</b>"]
+    Picked -->|"error"| Exception["<b style='font-size:28px'>EXCEPTION</b>"]
+    Picked -->|"cancel"| Canceled["<b style='font-size:28px'>CANCELED</b>"]
+    Success --> End(["END"])
+    Exception --> End
+    Canceled --> End
+    Deleted --> End
 
-    [*] --> queued
+    classDef queuedStyle fill:#1e90ff,stroke:#000,stroke-width:4px,color:#fff
+    classDef pickedStyle fill:#ff8c00,stroke:#000,stroke-width:4px,color:#fff
+    classDef successStyle fill:#00cc00,stroke:#000,stroke-width:4px,color:#fff
+    classDef exceptionStyle fill:#ff0000,stroke:#000,stroke-width:4px,color:#fff
+    classDef canceledStyle fill:#ffaa00,stroke:#000,stroke-width:4px,color:#000
+    classDef terminalStyle fill:#333,stroke:#000,stroke-width:4px,color:#fff
 
-    queued --> picked: QueueManager claims
-    queued --> deleted: Manual cleanup
-
-    picked --> successful: Execution completes
-    picked --> exception: Uncaught error
-    picked --> canceled: Cancellation triggered
-
-    successful --> [*]
-    exception --> [*]
-    canceled --> [*]
-    deleted --> [*]
-
-    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
-    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
-    classDef success fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
-    classDef failure fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:3px,font-size:16px
-    classDef canceled fill:#ffc107,stroke:#8b6f00,color:#000,stroke-width:3px,font-size:16px
-
-    class queued pending
-    class picked processing
-    class successful success
-    class exception failure
-    class canceled canceled
-    class deleted failure
+    class Queued queuedStyle
+    class Picked pickedStyle
+    class Success successStyle
+    class Exception exceptionStyle
+    class Canceled canceledStyle
+    class Start,End terminalStyle
 ```
