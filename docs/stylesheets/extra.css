@@ -1,25 +1,25 @@
 /* PgQueuer brand palette */
 :root {
-  --pgq-orange:       #E8622A;
-  --pgq-orange-light: #F0895A;
-  --pgq-orange-dark:  #C94E1A;
-  --pgq-bg-dark:      #1C1E26;
+  --pgq-blue:       #4A6FA5;
+  --pgq-blue-light: #6B8FC7;
+  --pgq-blue-dark:  #2E5080;
+  --pgq-bg-dark:    #1C1E26;
 }
 
 /* Override Material primary/accent in light mode */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color:        var(--pgq-orange);
-  --md-primary-fg-color--light: var(--pgq-orange-light);
-  --md-primary-fg-color--dark:  var(--pgq-orange-dark);
-  --md-accent-fg-color:         var(--pgq-orange-light);
+  --md-primary-fg-color:        var(--pgq-blue);
+  --md-primary-fg-color--light: var(--pgq-blue-light);
+  --md-primary-fg-color--dark:  var(--pgq-blue-dark);
+  --md-accent-fg-color:         var(--pgq-blue-light);
 }
 
 /* Override in dark (slate) mode */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color:        var(--pgq-orange-light);
-  --md-primary-fg-color--light: var(--pgq-orange);
-  --md-primary-fg-color--dark:  var(--pgq-orange-dark);
-  --md-accent-fg-color:         var(--pgq-orange-light);
+  --md-primary-fg-color:        var(--pgq-blue-light);
+  --md-primary-fg-color--light: var(--pgq-blue);
+  --md-primary-fg-color--dark:  var(--pgq-blue-dark);
+  --md-accent-fg-color:         var(--pgq-blue-light);
   --md-default-bg-color:        var(--pgq-bg-dark);
 }
 
@@ -31,11 +31,11 @@
   border-radius: 12px;
   margin-bottom: 2rem;
 }
-.pgq-hero h1 { color: var(--pgq-orange); font-size: 3rem; margin-bottom: .5rem; }
+.pgq-hero h1 { color: var(--pgq-blue-light); font-size: 3rem; margin-bottom: .5rem; }
 .pgq-hero p  { color: #B0B3C0; font-size: 1.2rem; max-width: 640px; margin: 0 auto 2rem; }
 .pgq-hero-badge {
   display: inline-block;
-  background: var(--pgq-orange);
+  background: var(--pgq-blue);
   color: #fff;
   padding: .5rem 1.5rem;
   border-radius: 999px;
@@ -44,7 +44,7 @@
   margin: .25rem;
   transition: background .2s;
 }
-.pgq-hero-badge:hover { background: var(--pgq-orange-dark); color: #fff; }
+.pgq-hero-badge:hover { background: var(--pgq-blue-dark); color: #fff; }
 
 /* Feature grid cards */
 .pgq-grid {
@@ -60,11 +60,11 @@
   transition: border-color .2s, box-shadow .2s;
 }
 .pgq-card:hover {
-  border-color: var(--pgq-orange);
-  box-shadow: 0 2px 12px rgba(232, 98, 42, 0.15);
+  border-color: var(--pgq-blue);
+  box-shadow: 0 2px 12px rgba(74, 111, 165, 0.15);
 }
 .pgq-card h3 {
-  color: var(--pgq-orange);
+  color: var(--pgq-blue);
   margin-top: 0;
   font-size: 1rem;
 }
