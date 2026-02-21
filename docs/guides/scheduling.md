@@ -20,6 +20,26 @@ async def fetch_db(schedule: Schedule) -> None:
 - **Database Integration**: Schedules are stored in PostgreSQL, ensuring durability and recovery
   across process restarts.
 
+### Scheduler Flow Diagram
+
+```mermaid
+flowchart TD
+    A["Cron expression\n(e.g., '0 * * * *')"] -->|Schedule registered| B[("PostgreSQL\nSchedule Table")]
+    C["QueueManager"] -->|Poll interval| D{Cron triggered?}
+    D -->|Yes| E["Enqueue job"]
+    E --> F[("Job Table")]
+    D -->|No| C
+    F -->|NOTIFY| G["EventRouter"]
+    G -->|Dispatch| H["Consumer<br/>executes task"]
+
+    classDef schedule fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
+    classDef database fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:2px
+    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
+
+    class A,B,F database
+    class C,D,E,G,H processing
+```
+
 ## Cron Expression Format
 
 PgQueuer uses standard 5-field cron expressions:

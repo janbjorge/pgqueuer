@@ -20,6 +20,35 @@ async with CompletionWatcher(driver) as watcher:
     # status: "successful", "exception", "canceled", or "deleted"
 ```
 
+### Completion Watcher State Flow
+
+The watcher monitors a job's progression until it reaches a **terminal state**:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> queued
+
+    queued --> picked: QueueManager claims
+    picked --> successful: Job completes
+    picked --> exception: Job errors
+    picked --> canceled: Cancellation triggered
+    queued --> deleted: Manual deletion
+
+    successful --> [*]: ✓ watcher.wait_for() returns
+    exception --> [*]: ✓ watcher.wait_for() returns
+    canceled --> [*]: ✓ watcher.wait_for() returns
+    deleted --> [*]: ✓ watcher.wait_for() returns
+
+    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
+    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
+    classDef terminal fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:2px
+
+    class queued,picked pending
+    class successful,exception,canceled,deleted terminal
+```
+
 ## Tracking Many Jobs at Once
 
 ```python
