@@ -104,12 +104,16 @@ nav:
     - Completion Tracking: guides/completion-tracking.md
     - Job Cancellation: guides/job-cancellation.md
     - Heartbeat Monitoring: guides/heartbeat.md
+    - Reliability Model: guides/reliability.md
+    - Performance Tuning: guides/performance-tuning.md
+    - Deployment: guides/deployment.md
   - Reference:
     - Architecture: reference/architecture.md
     - Database Setup: reference/database-setup.md
     - CLI: reference/cli.md
     - Drivers: reference/drivers.md
     - In-Memory Adapter: reference/in-memory.md
+    - Database Permissions: reference/database-permissions.md
   - Integrations:
     - Prometheus Metrics: integrations/prometheus.md
     - Distributed Tracing: integrations/tracing.md
