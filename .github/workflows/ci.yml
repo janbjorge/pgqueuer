@@ -1,0 +1,304 @@
+name: PGQueuer CI Pipeline
+
+on:
+    pull_request:
+        branches: [main]
+    push:
+        branches: [main]
+    schedule:
+        - cron: "0 */6 * * *"
+
+jobs:
+    run-benchmark:
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ["3.12"]
+                os: [ubuntu-24.04]
+                pgdriver: ["apg", "apgpool", "psy", "mem"]
+                postgres-version: ["16"]
+                strategy: ["throughput", "drain"]
+
+        env:
+            PGUSER: pgquser
+            PGDATABASE: pgqdb
+            PGPASSWORD: pgqpw
+            PGHOST: localhost
+
+        name: Run PGQueuer Benchmark
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 5
+
+        services:
+            postgres:
+                image: postgres:${{ matrix.postgres-version }}
+                env:
+                    POSTGRES_USER: ${{ env.PGUSER }}
+                    POSTGRES_DB: ${{ env.PGDATABASE }}
+                    POSTGRES_PASSWORD: ${{ env.PGPASSWORD }}
+                    POSTGRES_INITDB_ARGS: >
+                        --encoding=UTF8
+                        -c jit=off
+                        -c synchronous_commit=off
+                        -c full_page_writes=off
+                        -c fsync=off
+                        -c checkpoint_timeout=30min
+                        -c max_wal_size=4GB
+                        -c checkpoint_completion_target=0.9
+                        -c shared_buffers=256MB
+                        -c vacuum_buffer_usage_limit=8MB
+                        -c autovacuum_naptime=5s
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                    --tmpfs /var/lib/postgresql/data:rw
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install ${{ matrix.python-version }}
+
+            - name: Check that JIT is off
+              run: psql -h localhost -U $PGUSER -d $PGDATABASE -c "SHOW jit;"
+
+            - name: Install PGQueuer
+              run: |
+                  uv sync --all-extras --frozen
+                  uv run --frozen pgq install
+                  uv run --frozen pgq autovac
+
+            - name: Set ISO Timestamp
+              id: timestamp
+              run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
+
+            - name: Set Branch or Tag Name
+              id: get_ref
+              run: |
+                  if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+                    echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+                  else
+                    echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+                  fi
+
+            - name: Benchmark
+              run: |
+                  PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
+                    --driver ${{ matrix.pgdriver }} \
+                    --strategy ${{ matrix.strategy }} \
+                    --output-json benchmark.json
+
+            - name: Commit and Push Benchmark to Artifact Repository
+              if: ${{ env.HAS_ARTIFACTS_REPO_PAT == 'true' }}
+              env:
+                  ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
+                  ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
+                  HAS_ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT != '' }}
+              run: |
+                  git clone https://x-access-token:${ARTIFACTS_REPO_PAT}@github.com/janbjorge/artifacts-storage.git artifacts-repo
+                  mkdir -p artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}
+                  cp benchmark.json artifacts-repo/pgqueuer/benchmark/${{ matrix.pgdriver }}/benchmark-${{ env.TIMESTAMP }}.json
+                  cd artifacts-repo
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git add .
+                  git commit -m "Add benchmark-${{ matrix.strategy }}-${{ matrix.pgdriver }}-${{ env.TIMESTAMP }}.json"
+                  push_with_retry() {
+                    local retries=5
+                    local count=0
+                    until git push origin main; do
+                      count=$((count + 1))
+                      if [ $count -ge $retries ]; then
+                        echo "Push failed after $retries attempts."
+                        exit 1
+                      fi
+                      echo "Push failed, attempting to pull and retry... ($count/$retries)"
+                      git fetch origin main
+                      git rebase origin/main --autosquash
+                    done
+                  }
+                  push_with_retry
+
+    validate-benchmark:
+        needs: [run-benchmark]
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ["3.12"]
+                os: [ubuntu-24.04]
+
+        name: Validate Benchmark Results
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 5
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set Branch or Tag Name
+              id: get_ref
+              run: |
+                  if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+                    echo "REF_NAME=${GITHUB_HEAD_REF}" >> $GITHUB_ENV
+                  else
+                    echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
+                  fi
+
+            - name: Clone Artifact Repository
+              run: git clone https://github.com/janbjorge/artifacts-storage.git
+
+            - name: Validate RPS Against Main
+              run: |
+                  cd artifacts-storage
+                  PYTHONUNBUFFERED=1 uv run python3 pgqueuer/compare_rps_main.py
+
+    run-tests:
+        if: github.event_name != 'schedule'
+        strategy:
+            fail-fast: false
+
+            matrix:
+                python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+                postgres-version: ["13", "14", "15", "16", "17", "18"]
+                os: [ubuntu-24.04]
+
+        env:
+            CI: 1
+            PYTHONASYNCIODEBUG: 1
+            PYTHONDEBUG: 1
+            PYTHONFAULTHANDLER: 1
+            POSTGRES_VERSION: ${{ matrix.postgres-version }}
+            TESTCONTAINERS_RYUK_DISABLED: "true"
+            TESTCONTAINERS_HOST_OVERRIDE: "localhost"
+
+        name: Test PGQueuer with Multiple Python and Postgres Versions
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 10
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Prefetch docker images
+              run: docker pull postgres:${{ matrix.postgres-version }}
+
+            - name: Set up Python
+              run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
+
+            - name: Run Full Test Suite
+              run: uv run pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
+
+    run-windows-tests:
+        if: github.event_name != 'schedule'
+        runs-on: windows-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ["3.12"]
+
+        env:
+            CI: 1
+            PYTHONASYNCIODEBUG: 1
+            PYTHONDEBUG: 1
+            PYTHONFAULTHANDLER: 1
+
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install ${{ matrix.python-version }}
+
+            - name: Install PGQueuer
+              run: uv sync --all-extras --frozen
+
+            - name: Run Windows Shutdown Test
+              run: uv run pytest test/windows/test_shutdown.py --durations=10
+
+    run-ruff:
+        if: github.event_name != 'schedule'
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install 3.12
+
+            - name: Install Dev Environment
+              run: uv sync --all-extras --frozen
+
+            - name: Run Ruff Linter
+              if: ${{ always() }}
+              run: uv run ruff check .
+
+            - name: Apply Ruff Formatting
+              if: ${{ always() }}
+              run: uv run ruff format . --check
+
+    run-import-linter:
+        if: github.event_name != 'schedule'
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install 3.12
+
+            - name: Install Dev Environment
+              run: uv sync --all-extras --frozen
+
+            - name: Run Import Linter (Hexagonal Architecture Validation)
+              run: uv run lint-imports
+
+    run-mypy:
+        if: github.event_name != 'schedule'
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v3
+
+            - name: Set up Python
+              run: uv python install 3.12
+
+            - name: Install Dev Environment
+              run: uv sync --all-extras --frozen
+
+            - name: Run Mypy Type Check
+              run: uv run mypy .
+
+    complete-pipeline:
+        if: github.event_name != 'schedule'
+        needs:
+            [
+                validate-benchmark,
+                run-tests,
+                run-windows-tests,
+                run-ruff,
+                run-import-linter,
+                run-mypy,
+            ]
+        runs-on: ubuntu-24.04
+        steps:
+            - name: Confirm All Tests Completed
+              run: echo "All tests completed successfully."
