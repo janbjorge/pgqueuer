@@ -34,28 +34,38 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 ## QueueManager Processing Loop
 
 ```mermaid
-flowchart LR
-    A["Wait for notification<br/>or timeout"] --> B["SELECT * FROM jobs<br/>WHERE status='queued'<br/>FOR UPDATE SKIP LOCKED"]
-    B --> C{"Jobs<br/>available?"}
-    C -->|Yes| D["Claim job<br/>status→'picked'"]
-    C -->|No| A
-    D --> E["Dispatch to<br/>@pgq.entrypoint"]
-    E --> F{"Execution<br/>result?"}
-    F -->|Success| G["Update status<br/>→ 'successful'"]
-    F -->|Error| H["Update status<br/>→ 'exception'"]
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
+flowchart TD
+    A["Wait for NOTIFY<br/>or timeout"]
+    B["Query for queued jobs<br/>FOR UPDATE SKIP LOCKED"]
+    C{{"Jobs<br/>found?"}}
+    D["Claim job<br/>status = picked"]
+    E["Execute<br/>@pgq.entrypoint"]
+    F{{"Success?"}}
+    G["Update status<br/>successful"]
+    H["Update status<br/>exception"]
+
+    A --> B
+    B --> C
+    C -->|"Yes"| D
+    C -->|"No"| A
+    D --> E
+    E --> F
+    F -->|"Yes"| G
+    F -->|"No"| H
     G --> A
     H --> A
 
-    classDef wait fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
-    classDef query fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:2px
-    classDef process fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
-    classDef result fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:2px
-    classDef error fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:2px
+    classDef wait fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
+    classDef query fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:3px,font-size:16px
+    classDef process fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
+    classDef success fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
+    classDef error fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:3px,font-size:16px
 
     class A wait
     class B,C query
     class D,E process
-    class G result
+    class G success
     class H error
 ```
 
@@ -91,6 +101,7 @@ The lifecycle of a job flows through these statuses:
 ### Status Transition Diagram
 
 ```mermaid
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
 stateDiagram-v2
     direction LR
 
@@ -108,11 +119,11 @@ stateDiagram-v2
     canceled --> [*]
     deleted --> [*]
 
-    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
-    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
-    classDef success fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:2px
-    classDef failure fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:2px
-    classDef canceled fill:#ffc107,stroke:#8b6f00,color:#000,stroke-width:2px
+    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
+    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
+    classDef success fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
+    classDef failure fill:#dc3545,stroke:#8b0000,color:#fff,stroke-width:3px,font-size:16px
+    classDef canceled fill:#ffc107,stroke:#8b6f00,color:#000,stroke-width:3px,font-size:16px
 
     class queued pending
     class picked processing

@@ -23,21 +23,32 @@ async def fetch_db(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '20px', 'fontFamily': 'Inter, sans-serif', 'primaryColor': '#4A6FA5', 'primaryBorderColor': '#2E5080', 'primaryTextColor': '#fff', 'lineColor': '#4A6FA5', 'secondBkgColor': '#6B8FC7'}}}}%%
 flowchart TD
-    A["Cron expression\n(e.g., '0 * * * *')"] -->|Schedule registered| B[("PostgreSQL\nSchedule Table")]
-    C["QueueManager"] -->|Poll interval| D{Cron triggered?}
-    D -->|Yes| E["Enqueue job"]
-    E --> F[("Job Table")]
-    D -->|No| C
-    F -->|NOTIFY| G["EventRouter"]
-    G -->|Dispatch| H["Consumer<br/>executes task"]
+    A["Register cron schedule<br/>@pgq.schedule name cron expr"]
+    B["("Schedule stored in<br/>PostgreSQL"<br/>"]
+    C["QueueManager polling loop"]
+    D{{"Cron time<br/>triggered?"}}
+    E["Enqueue as Job<br/>to job queue"]
+    F["("Job sent to<br/>PostgreSQL"<br/>"]
+    G["EventRouter notifies<br/>via LISTEN/NOTIFY"]
+    H["Consumer executes<br/>@pgq.schedule function"]
 
-    classDef schedule fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
-    classDef database fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:2px
-    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
+    A --> B
+    B --> C
+    C --> D
+    D -->|"Yes"| E
+    E --> F
+    F --> G
+    G --> H
+    D -->|"No"| C
 
-    class A,B,F database
-    class C,D,E,G,H processing
+    classDef db fill:#2E5080,stroke:#1a2f40,color:#fff,stroke-width:3px,font-size:16px
+    classDef process fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
+    classDef action fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
+
+    class B,F db
+    class A,C,D,E,G,H action
 ```
 
 ## Cron Expression Format

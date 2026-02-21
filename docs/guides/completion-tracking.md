@@ -25,6 +25,7 @@ async with CompletionWatcher(driver) as watcher:
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```mermaid
+%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'base', 'themeVariables': {'fontSize': '18px', 'fontFamily': 'Inter, sans-serif'}}}%%
 stateDiagram-v2
     direction LR
 
@@ -36,14 +37,14 @@ stateDiagram-v2
     picked --> canceled: Cancellation triggered
     queued --> deleted: Manual deletion
 
-    successful --> [*]: ✓ watcher.wait_for() returns
-    exception --> [*]: ✓ watcher.wait_for() returns
-    canceled --> [*]: ✓ watcher.wait_for() returns
-    deleted --> [*]: ✓ watcher.wait_for() returns
+    successful --> [*]: Returns
+    exception --> [*]: Returns
+    canceled --> [*]: Returns
+    deleted --> [*]: Returns
 
-    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:2px
-    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:2px
-    classDef terminal fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:2px
+    classDef pending fill:#4A6FA5,stroke:#2E5080,color:#fff,stroke-width:3px,font-size:16px
+    classDef processing fill:#6B8FC7,stroke:#4A6FA5,color:#fff,stroke-width:3px,font-size:16px
+    classDef terminal fill:#28a745,stroke:#1a5e1a,color:#fff,stroke-width:3px,font-size:16px
 
     class queued,picked pending
     class successful,exception,canceled,deleted terminal
