@@ -31,46 +31,6 @@ Endpoint routing is handled by `EventRouter` which maps notification types to
 functions registered via `@pgq.entrypoint`. Notifications delivered through
 `LISTEN/NOTIFY` ensure consumers promptly react to new work.
 
-## QueueManager Processing Loop
-
-```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '15'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart TD
-    A["<b>WAIT</b>"]
-    B["<b>QUERY</b>"]
-    C{{"<b>Found?</b>"}}
-    D["<b>CLAIM</b>"]
-    E["<b>EXEC</b>"]
-    F{{"<b>OK?</b>"}}
-    G["<b>✓</b>"]
-    H["<b>✗</b>"]
-
-    A --> B
-    B --> C
-    C -->|YES| D
-    C -->|NO| A
-    D --> E
-    E --> F
-    F -->|YES| G
-    F -->|NO| H
-    G --> A
-    H --> A
-
-    classDef wait fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
-    classDef query fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
-    classDef process fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
-    classDef success fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
-    classDef error fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
-    classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
-
-    class A wait
-    class B query
-    class C,F decision
-    class D,E process
-    class G success
-    class H error
-```
-
 ## Job Status Lifecycle
 
 PGQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
