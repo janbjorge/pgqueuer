@@ -6,7 +6,7 @@ consumers up to date.
 
 ## Job Flow Diagram
 
-```{mermaid}
+```mermaid
 flowchart LR
     P[Producer]
     DB[(PostgreSQL)]
@@ -49,22 +49,20 @@ CREATE TYPE pgqueuer_status AS ENUM (
 
 The lifecycle of a job flows through these statuses:
 
-- **`queued`** – Newly enqueued jobs start here and wait for a worker to pick
-  them up.
-- **`picked`** – Set by `QueueManager` when a worker begins processing the job.
-  A heartbeat timestamp keeps track of active work.
-- **`successful`** – Assigned after a job completes without errors. Details are
-  copied to the statistics log and removed from the queue.
-- **`exception`** – Indicates the job failed with an uncaught error. The
-  traceback is stored for later inspection.
-- **`canceled`** – Jobs canceled before completion receive this status and are
-  logged accordingly.
-- **`deleted`** – Used when jobs are removed from the queue without running,
-  such as during manual cleanup operations.
+- **`queued`** — Newly enqueued jobs start here and wait for a worker to pick them up.
+- **`picked`** — Set by `QueueManager` when a worker begins processing. A heartbeat
+  timestamp tracks active work.
+- **`successful`** — Assigned after a job completes without errors. Details are copied to
+  the statistics log and removed from the queue.
+- **`exception`** — Indicates the job failed with an uncaught error. The traceback is
+  stored for later inspection.
+- **`canceled`** — Jobs canceled before completion receive this status and are logged.
+- **`deleted`** — Used when jobs are removed from the queue without running, such as during
+  manual cleanup operations.
 
 ### Status Transition Diagram
 
-```{mermaid}
+```mermaid
 stateDiagram-v2
     direction LR
     queued --> picked

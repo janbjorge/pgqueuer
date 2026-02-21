@@ -92,10 +92,10 @@ dev = [
     "import-linter>=2.0",
 ]
 docs = [
-    "myst-parser",
-    "sphinx",
-    "sphinx-rtd-theme",
-    "sphinxcontrib-mermaid"
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocs-redirects",
+    "pymdown-extensions",
 ]
 
 [tool.ruff]
