@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.pydantic.dev)",
+      "WebFetch(domain:squidfunk.github.io)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "Bash(git push:*)"
+    ]
+  }
+}
