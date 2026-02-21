@@ -1,0 +1,122 @@
+site_name: PgQueuer
+site_description: "High-performance PostgreSQL job queue for Python"
+site_url: https://janbjorge.github.io/pgqueuer/
+repo_url: https://github.com/janbjorge/pgqueuer
+repo_name: janbjorge/pgqueuer
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: logo.png
+  favicon: logo.png
+  palette:
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - announce.dismiss
+
+plugins:
+  - search:
+      lang: en
+  - redirects:
+      redirect_maps:
+        pgqueuer.md: guides/shared-resources.md
+        architecture.md: reference/architecture.md
+        driver.md: reference/drivers.md
+        database_initialization.md: reference/database-setup.md
+        in-memory.md: reference/in-memory.md
+        dashboard.md: reference/cli.md
+        development.md: development/development.md
+        benchmark.md: development/benchmark.md
+        celery-comparison.md: development/celery-comparison.md
+        prometheus-metrics-service.md: integrations/prometheus.md
+        tracing.md: integrations/tracing.md
+        postgrest.md: integrations/postgrest.md
+        postgres-driver-troubleshooting.md: development/troubleshooting.md
+        getting-started/installation.md: index.md
+        getting-started/quickstart.md: index.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
+  - admonition
+  - attr_list
+  - tables
+  - footnotes
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra_css:
+  - stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/janbjorge/pgqueuer
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/pgqueuer/
+
+nav:
+  - Home: index.md
+  - Guides:
+    - Shared Resources: guides/shared-resources.md
+    - Scheduling: guides/scheduling.md
+    - Deferred Execution: guides/deferred-execution.md
+    - Rate Limiting & Concurrency: guides/rate-limiting.md
+    - Custom Executors: guides/custom-executors.md
+    - Completion Tracking: guides/completion-tracking.md
+    - Job Cancellation: guides/job-cancellation.md
+    - Heartbeat Monitoring: guides/heartbeat.md
+  - Reference:
+    - Architecture: reference/architecture.md
+    - Database Setup: reference/database-setup.md
+    - CLI: reference/cli.md
+    - Drivers: reference/drivers.md
+    - In-Memory Adapter: reference/in-memory.md
+  - Integrations:
+    - Prometheus Metrics: integrations/prometheus.md
+    - Distributed Tracing: integrations/tracing.md
+    - PostgREST: integrations/postgrest.md
+  - Development:
+    - Contributing: development/development.md
+    - Benchmarks: development/benchmark.md
+    - Celery Comparison: development/celery-comparison.md
+    - Ports & Adapters: reference/ports-and-adapters.md
+    - Driver Troubleshooting: development/troubleshooting.md

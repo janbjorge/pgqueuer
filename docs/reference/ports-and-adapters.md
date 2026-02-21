@@ -1,4 +1,4 @@
-# Ports & Adapters for PgQueuer
+# Ports & Adapters
 
 ## Status
 
@@ -6,21 +6,32 @@ Accepted
 
 ## Context
 
-PgQueuer's flat package layout (~27 modules) has grown organically. Job lifecycle management, rate limiting, and scheduling logic live inside `QueueManager` and `SchedulerManager`, but these classes directly instantiate `Queries` in their `__post_init__` methods and reach into PostgreSQL-specific notification, heartbeat, and buffering infrastructure. This makes it impossible to unit-test core dispatch logic without a running PostgreSQL instance.
+PgQueuer's flat package layout (~27 modules) has grown organically. Job lifecycle management,
+rate limiting, and scheduling logic live inside `QueueManager` and `SchedulerManager`, but
+these classes directly instantiate `Queries` in their `__post_init__` methods and reach into
+PostgreSQL-specific notification, heartbeat, and buffering infrastructure. This makes it
+impossible to unit-test core dispatch logic without a running PostgreSQL instance.
 
 Specific coupling problems:
 
 - `QueueManager.__post_init__` hardcodes `self.queries = queries.Queries(self.connection)`.
 - `SchedulerManager.__post_init__` does the same.
-- `EntrypointExecutorParameters` bundles `connection`, `queries`, `channel`, and `shutdown` alongside executor config (`requests_per_second`, `retry_timer`), even though no executor implementation reads the infrastructure fields.
+- `EntrypointExecutorParameters` bundles `connection`, `queries`, `channel`, and `shutdown`
+  alongside executor config, even though no executor implementation reads the infrastructure
+  fields.
 - `tracing.TRACER` is a module-level mutable singleton instead of an injected dependency.
-- The `Queries` class is simultaneously the interface definition and the PostgreSQL implementation.
+- The `Queries` class is simultaneously the interface definition and the PostgreSQL
+  implementation.
 
-The `Driver` protocol in `db.py` and `TracingProtocol` in `tracing.py` already demonstrate that protocol-based boundaries work well in this codebase. This document extends that pattern to the rest of the system.
+The `Driver` protocol in `db.py` and `TracingProtocol` in `tracing.py` already demonstrate
+that protocol-based boundaries work well in this codebase. This document extends that pattern
+to the rest of the system.
 
 ## Decision
 
-Migrate PgQueuer to a Ports & Adapters structure using Python `Protocol` classes as port definitions and dependency injection to wire adapters. The migration is incremental (strangler fig) and must not break the public API.
+Migrate PgQueuer to a Ports & Adapters structure using Python `Protocol` classes as port
+definitions and dependency injection to wire adapters. The migration is incremental
+(strangler fig) and must not break the public API.
 
 ### Constraint: Zero Unnecessary Breaking Changes
 
@@ -33,16 +44,17 @@ from pgqueuer import (
 )
 ```
 
-The decorator APIs `.entrypoint()` and `.schedule()` must remain stable. When modules move to new paths, thin re-export shims preserve the old import locations.
+The decorator APIs `.entrypoint()` and `.schedule()` must remain stable. When modules move
+to new paths, thin re-export shims preserve the old import locations.
 
 ### Port Definitions
 
-Ports are `Protocol` classes living in `pgqueuer/ports/`. They capture what the core needs without specifying how.
+Ports are `Protocol` classes living in `pgqueuer/ports/`. They capture what the core needs
+without specifying how.
 
-**QueueRepositoryPort** -- persistence for the job queue:
+**QueueRepositoryPort** — persistence for the job queue:
 
 ```python
-# pgqueuer/ports/repository.py
 class QueueRepositoryPort(Protocol):
     async def dequeue(self, batch_size, entrypoints, queue_manager_id, global_concurrency_limit) -> list[Job]: ...
     async def enqueue(self, entrypoint, payload, priority, ...) -> list[JobId]: ...
@@ -54,7 +66,7 @@ class QueueRepositoryPort(Protocol):
     async def queued_work(self, entrypoints) -> int: ...
 ```
 
-**ScheduleRepositoryPort** -- persistence for cron schedules:
+**ScheduleRepositoryPort** — persistence for cron schedules:
 
 ```python
 class ScheduleRepositoryPort(Protocol):
@@ -65,7 +77,7 @@ class ScheduleRepositoryPort(Protocol):
     async def delete_schedule(self, ids, entrypoints) -> None: ...
 ```
 
-**NotificationPort** -- PostgreSQL NOTIFY abstraction:
+**NotificationPort** — PostgreSQL NOTIFY abstraction:
 
 ```python
 class NotificationPort(Protocol):
@@ -74,7 +86,7 @@ class NotificationPort(Protocol):
     async def notify_health_check(self, health_check_event_id) -> None: ...
 ```
 
-**SchemaManagementPort** -- DDL operations:
+**SchemaManagementPort** — DDL operations:
 
 ```python
 class SchemaManagementPort(Protocol):
@@ -87,16 +99,19 @@ class SchemaManagementPort(Protocol):
     async def has_user_defined_enum(self, key, enum) -> bool: ...
 ```
 
-The existing `Queries` class satisfies all four ports via structural subtyping. No inheritance or registration required.
+The existing `Queries` class satisfies all four ports via structural subtyping. No
+inheritance or registration required.
 
 ### Existing Ports (Already In Place)
 
-- **`Driver`** (`db.py`) -- database execution abstraction. Adapters: `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`.
-- **`TracingProtocol`** (`tracing.py`) -- distributed tracing. Adapters: `LogfireTracing`, `SentryTracing`.
+- **`Driver`** (`db.py`) — database execution abstraction. Adapters: `AsyncpgDriver`,
+  `AsyncpgPoolDriver`, `PsycopgDriver`.
+- **`TracingProtocol`** (`tracing.py`) — distributed tracing. Adapters: `LogfireTracing`,
+  `SentryTracing`.
 
 ### Dependency Injection Pattern
 
-`QueueManager` and `SchedulerManager` accept an optional `queries` argument. When omitted, they auto-create `Queries(self.connection)` for backward compatibility:
+`QueueManager` and `SchedulerManager` accept an optional `queries` argument:
 
 ```python
 @dataclasses.dataclass
@@ -109,7 +124,8 @@ class QueueManager:
             self.queries = queries.Queries(self.connection)
 ```
 
-This preserves `QueueManager(connection)` for all existing callers while enabling mock injection for tests.
+This preserves `QueueManager(connection)` for all existing callers while enabling mock
+injection for tests.
 
 ### Target Directory Layout
 
@@ -152,27 +168,23 @@ pgqueuer/
       cli.py, supervisor.py, factories.py
 ```
 
-Old module paths (`pgqueuer/db.py`, `pgqueuer/queries.py`, etc.) become thin re-export shims so existing imports keep working.
+Old module paths (`pgqueuer/db.py`, `pgqueuer/queries.py`, etc.) become thin re-export shims
+so existing imports keep working.
 
 ### Migration Phases
 
-**Phase 0 -- Deprecate unused infrastructure fields in executor parameters.**
-Mark `connection`, `queries`, `channel`, `shutdown` on `EntrypointExecutorParameters` and `ScheduleExecutorFactoryParameters` as deprecated. No removal yet.
+**Phase 0** — Deprecate unused infrastructure fields in executor parameters.
 
-**Phase 1 -- Extract port protocols.**
-Create `pgqueuer/ports/` with Protocol classes. Purely additive, no existing code changes.
+**Phase 1** — Extract port protocols. Purely additive.
 
-**Phase 2 -- Dependency injection for QueueManager and SchedulerManager.**
-Change `queries` field from `init=False` to `default=None` with auto-creation fallback. Depends on Phase 1.
+**Phase 2** — Dependency injection for `QueueManager` and `SchedulerManager`.
 
-**Phase 3 -- Inject tracing instead of global singleton.**
-Add optional `tracer` field to `QueueManager` and `Queries`. Falls back to `TRACER` global when not provided.
+**Phase 3** — Inject tracing instead of global singleton.
 
-**Phase 4 -- Directory restructure.**
-Move modules into `domain/`, `ports/`, `core/`, `adapters/`. Old paths become re-export shims. One module per commit, full test suite after each move. Leaf dependencies (`types.py`, `models.py`, `errors.py`) move first.
+**Phase 4** — Directory restructure. Move modules into `domain/`, `ports/`, `core/`,
+`adapters/`. Old paths become re-export shims.
 
-**Phase 5 -- Enforce boundaries.**
-Add `import-linter` rules to CI. Add typing conformance tests verifying `Queries` satisfies all port protocols.
+**Phase 5** — Enforce boundaries via `import-linter` CI rules.
 
 Phase dependency graph:
 
@@ -182,23 +194,20 @@ Phase 1 ──┼──> Phase 2 ──> Phase 4 ──> Phase 5
 Phase 3 ──┘
 ```
 
-Phases 0, 1, and 3 are independently shippable.
-
 ## Consequences
 
 ### Positive
 
-- `QueueManager` and `SchedulerManager` become unit-testable without PostgreSQL by injecting mock repositories.
-- Port protocols document exactly what the core requires, making the contract explicit.
-- Alternative persistence backends (e.g., in-memory for testing) can implement the ports without touching core logic.
-- The `Driver` protocol pattern, already proven in the codebase, is extended consistently.
-- Re-export shims mean the migration is invisible to downstream users.
+- `QueueManager` and `SchedulerManager` become unit-testable without PostgreSQL.
+- Port protocols document exactly what the core requires.
+- Alternative backends (e.g., in-memory) can implement the ports without touching core logic.
+- Re-export shims make the migration invisible to downstream users.
 
 ### Negative
 
 - Re-export shim files add maintenance overhead until a major version removes them.
 - Developers must learn the directory conventions and respect import boundaries.
-- Protocol definitions add surface area that must stay in sync with the `Queries` implementation.
+- Protocol definitions add surface area that must stay in sync with `Queries`.
 
 ### Risks and Mitigations
 

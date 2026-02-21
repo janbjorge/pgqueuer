@@ -1,0 +1,24 @@
+/* PgQueuer brand palette */
+:root {
+  --pgq-blue:       #4A6FA5;
+  --pgq-blue-light: #6B8FC7;
+  --pgq-blue-dark:  #2E5080;
+  --pgq-bg-dark:    #1C1E26;
+}
+
+/* Override Material primary/accent in light mode */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color:        var(--pgq-blue);
+  --md-primary-fg-color--light: var(--pgq-blue-light);
+  --md-primary-fg-color--dark:  var(--pgq-blue-dark);
+  --md-accent-fg-color:         var(--pgq-blue);
+}
+
+/* Override in dark (slate) mode */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color:        var(--pgq-blue);
+  --md-primary-fg-color--light: var(--pgq-blue-light);
+  --md-primary-fg-color--dark:  var(--pgq-blue-dark);
+  --md-accent-fg-color:         var(--pgq-blue-light);
+  --md-default-bg-color:        var(--pgq-bg-dark);
+}
