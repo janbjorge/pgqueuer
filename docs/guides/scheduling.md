@@ -23,7 +23,7 @@ async def fetch_db(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif'}}}%%
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart TD
     A["<b style='font-size:26px'>Define Schedule</b><br/>@pgq.schedule"]
     B["<b style='font-size:26px'>Schedule in DB</b>"]
@@ -41,10 +41,10 @@ flowchart TD
     F --> G
     D -->|"NO"| C
 
-    classDef code fill:#9966ff,stroke:#000,stroke-width:4px,color:#fff
-    classDef database fill:#ff6600,stroke:#000,stroke-width:4px,color:#fff
-    classDef process fill:#00cc00,stroke:#000,stroke-width:4px,color:#000
-    classDef decision fill:#ffcc00,stroke:#000,stroke-width:4px,color:#000
+    classDef code fill:#4A6FA5,stroke:#2E5080,stroke-width:3px,color:#fff
+    classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:3px,color:#fff
+    classDef process fill:#6B8FC7,stroke:#4A6FA5,stroke-width:3px,color:#fff
+    classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:3px,color:#fff
 
     class A code
     class B,F database

@@ -25,7 +25,7 @@ async with CompletionWatcher(driver) as watcher:
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Arial, sans-serif'}}}%%
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
     Start(["START"]) --> Queued["<b style='font-size:28px'>QUEUED</b>"]
     Queued -->|"claim"| Picked["<b style='font-size:28px'>PICKED</b>"]
@@ -38,12 +38,12 @@ flowchart LR
     Canceled --> End
     Deleted --> End
 
-    classDef queuedStyle fill:#1e90ff,stroke:#000,stroke-width:4px,color:#fff
-    classDef pickedStyle fill:#ff8c00,stroke:#000,stroke-width:4px,color:#fff
-    classDef successStyle fill:#00cc00,stroke:#000,stroke-width:4px,color:#fff
-    classDef exceptionStyle fill:#ff0000,stroke:#000,stroke-width:4px,color:#fff
-    classDef canceledStyle fill:#ffaa00,stroke:#000,stroke-width:4px,color:#000
-    classDef terminalStyle fill:#333,stroke:#000,stroke-width:4px,color:#fff
+    classDef queuedStyle fill:#6B8FC7,stroke:#4A6FA5,stroke-width:3px,color:#fff
+    classDef pickedStyle fill:#4A6FA5,stroke:#2E5080,stroke-width:3px,color:#fff
+    classDef successStyle fill:#2D9D78,stroke:#1d6d55,stroke-width:3px,color:#fff
+    classDef exceptionStyle fill:#C1666B,stroke:#8b3a3f,stroke-width:3px,color:#fff
+    classDef canceledStyle fill:#D4A240,stroke:#8b6e1a,stroke-width:3px,color:#fff
+    classDef terminalStyle fill:#2E5080,stroke:#1a2f40,stroke-width:3px,color:#fff
 
     class Queued queuedStyle
     class Picked pickedStyle
