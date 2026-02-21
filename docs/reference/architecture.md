@@ -31,6 +31,33 @@ Endpoint routing is handled by `EventRouter` which maps notification types to
 functions registered via `@pgq.entrypoint`. Notifications delivered through
 `LISTEN/NOTIFY` ensure consumers promptly react to new work.
 
+## QueueManager Processing Loop
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
+flowchart LR
+    Wait[Wait for NOTIFY] --> Query[Query jobs]
+    Query -->|no jobs| Wait
+    Query -->|jobs found| Claim[Claim job]
+    Claim --> Execute[Execute task]
+    Execute -->|success| Success[Mark successful]
+    Execute -->|error| Error[Mark exception]
+    Success --> Wait
+    Error --> Wait
+
+    classDef wait    fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
+    classDef db      fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
+    classDef process fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef success fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
+    classDef error   fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
+
+    class Wait wait
+    class Query db
+    class Claim,Execute process
+    class Success success
+    class Error error
+```
+
 ## Job Status Lifecycle
 
 PGQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
