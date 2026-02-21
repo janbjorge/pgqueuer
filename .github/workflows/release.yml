@@ -1,35 +1,26 @@
 name: Publish Python distribution to PyPI
-
 on:
-    release:
-        types: [created]
-
+  release:
+    types: [created]
 jobs:
-    publish-pypi-package:
-        name: Publish Python distribution to PyPI.
-        runs-on: ubuntu-24.04
-
-        environment:
-            name: release
-            url: https://pypi.org/project/pgqueuer/
-
-        permissions:
-            id-token: write
-
-        steps:
-            - uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0 # Ensures tags are also fetched
-
-            - name: Set up Python 3.10.
-              uses: actions/setup-python@v4
-              with:
-                  python-version: "3.10"
-
-            - name: Install release dependencies.
-              run: python3 -m pip install build twine setuptools_scm
-
-            - name: Build package.
-              run: python3 -m build . --sdist --wheel --outdir dist/
-
-            - uses: pypa/gh-action-pypi-publish@release/v1
+  publish-pypi-package:
+    name: Publish Python distribution to PyPI.
+    runs-on: ubuntu-24.04
+    environment:
+      name: release
+      url: https://pypi.org/project/pgqueuer/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Ensures tags are also fetched
+      - name: Set up Python 3.10.
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install release dependencies.
+        run: python3 -m pip install build twine setuptools_scm
+      - name: Build package.
+        run: python3 -m build . --sdist --wheel --outdir dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
