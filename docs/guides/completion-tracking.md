@@ -40,11 +40,11 @@ flowchart LR
     Picked -->|error| Exception
     Picked -->|cancel| Canceled
 
-    classDef queued  fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
-    classDef picked  fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
-    classDef success fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
-    classDef error   fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
-    classDef canceled fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
+    classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
+    classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
+    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
+    classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
+    classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
 
     class Queued queued
     class Picked picked

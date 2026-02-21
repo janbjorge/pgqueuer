@@ -37,10 +37,10 @@ flowchart LR
     Enqueue --> Execute
     Poll -->|not yet| Poll
 
-    classDef code     fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
-    classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
-    classDef process  fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
-    classDef success  fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
+    classDef code     fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
+    classDef database fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
+    classDef process  fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
+    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
 
     class Define code
     class Store database
