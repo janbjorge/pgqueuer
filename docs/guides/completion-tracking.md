@@ -25,32 +25,32 @@ async with CompletionWatcher(driver) as watcher:
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Inter, sans-serif'}}}%%
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '10'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
-    Start(["START"]) --> Queued["<b style='font-size:28px'>QUEUED</b>"]
-    Queued -->|"claim"| Picked["<b style='font-size:28px'>PICKED</b>"]
-    Queued -->|"delete"| Deleted["<b style='font-size:28px'>DELETED</b>"]
-    Picked -->|"done"| Success["<b style='font-size:28px'>SUCCESSFUL</b>"]
-    Picked -->|"error"| Exception["<b style='font-size:28px'>EXCEPTION</b>"]
-    Picked -->|"cancel"| Canceled["<b style='font-size:28px'>CANCELED</b>"]
-    Success --> End(["COMPLETE"])
-    Exception --> End
-    Canceled --> End
-    Deleted --> End
+    Queued["<b>QUEUED</b>"]
+    Picked["<b>PICKED</b>"]
+    Success["<b>✓ SUCCESS</b>"]
+    Exception["<b>✗ EXCEPTION</b>"]
+    Canceled["<b>⊘ CANCELED</b>"]
+    Deleted["<b>DELETED</b>"]
 
-    classDef queuedStyle fill:#6B8FC7,stroke:#4A6FA5,stroke-width:3px,color:#fff
-    classDef pickedStyle fill:#4A6FA5,stroke:#2E5080,stroke-width:3px,color:#fff
-    classDef successStyle fill:#2D9D78,stroke:#1d6d55,stroke-width:3px,color:#fff
-    classDef exceptionStyle fill:#C1666B,stroke:#8b3a3f,stroke-width:3px,color:#fff
-    classDef canceledStyle fill:#D4A240,stroke:#8b6e1a,stroke-width:3px,color:#fff
-    classDef terminalStyle fill:#2E5080,stroke:#1a2f40,stroke-width:3px,color:#fff
+    Queued -->|claim| Picked
+    Queued -->|delete| Deleted
+    Picked -->|complete| Success
+    Picked -->|error| Exception
+    Picked -->|cancel| Canceled
 
-    class Queued queuedStyle
-    class Picked pickedStyle
-    class Success successStyle
-    class Exception exceptionStyle
-    class Canceled canceledStyle
-    class Start,End terminalStyle
+    classDef queued fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
+    classDef picked fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef success fill:#2D9D78,stroke:#1d6d55,stroke-width:2px,color:#fff
+    classDef error fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
+    classDef canceled fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
+
+    class Queued queued
+    class Picked picked
+    class Success success
+    class Exception,Deleted error
+    class Canceled canceled
 ```
 
 ## Tracking Many Jobs at Once

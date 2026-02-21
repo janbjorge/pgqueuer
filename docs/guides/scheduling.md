@@ -23,33 +23,31 @@ async def fetch_db(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear'}, 'theme': 'base', 'themeVariables': {'primaryColor':'#fff', 'primaryTextColor':'#000', 'primaryBorderColor':'#000', 'fontSize': '28px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart TD
-    A["<b style='font-size:26px'>Define Schedule</b><br/>@pgq.schedule"]
-    B["<b style='font-size:26px'>Schedule in DB</b>"]
-    C["<b style='font-size:26px'>Poll Loop</b>"]
-    D{{"<b style='font-size:24px'>Cron<br/>Ready?</b>"}}
-    E["<b style='font-size:26px'>Enqueue Job</b>"]
-    F["<b style='font-size:26px'>Job in Queue</b>"]
-    G["<b style='font-size:26px'>Execute Task</b>"]
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '10'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
+flowchart LR
+    Define["<b>@schedule</b><br/>Define"]
+    Store["<b>Stored</b><br/>in DB"]
+    Poll["<b>Poll</b><br/>Loop"]
+    Check{{"<b>Cron?</b>"}}
+    Enqueue["<b>Enqueue</b><br/>Job"]
+    Execute["<b>Execute</b><br/>Task"]
 
-    A --> B
-    B --> C
-    C --> D
-    D -->|"YES"| E
-    E --> F
-    F --> G
-    D -->|"NO"| C
+    Define --> Store
+    Store --> Poll
+    Poll --> Check
+    Check -->|YES| Enqueue
+    Enqueue --> Execute
+    Check -->|NO| Poll
 
-    classDef code fill:#4A6FA5,stroke:#2E5080,stroke-width:3px,color:#fff
-    classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:3px,color:#fff
-    classDef process fill:#6B8FC7,stroke:#4A6FA5,stroke-width:3px,color:#fff
-    classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:3px,color:#fff
+    classDef code fill:#4A6FA5,stroke:#2E5080,stroke-width:2px,color:#fff
+    classDef database fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
+    classDef process fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
+    classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
 
-    class A code
-    class B,F database
-    class C,E,G process
-    class D decision
+    class Define code
+    class Store database
+    class Poll,Enqueue,Execute process
+    class Check decision
 ```
 
 ## Cron Expression Format
