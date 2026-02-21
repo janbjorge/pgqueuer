@@ -163,8 +163,6 @@ forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
 ignore_imports = [
     # ports/driver.py needs TaskManager from core for the protocol definition
     "pgqueuer.ports.driver -> pgqueuer.core.tm",
-    # TYPE_CHECKING import for protocol type hint
-    "pgqueuer.ports.repository -> pgqueuer.adapters.persistence.queries",
 ]
 
 [[tool.importlinter.contracts]]
@@ -184,4 +182,5 @@ ignore_imports = [
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.asyncpg",
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.psycopg",
     "pgqueuer.core.applications -> pgqueuer.adapters.persistence.qb",
+    "pgqueuer.core.applications -> pgqueuer.adapters.inmemory",
 ]

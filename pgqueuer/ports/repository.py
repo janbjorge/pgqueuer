@@ -8,15 +8,38 @@ inheritance or registration is required.
 
 from __future__ import annotations
 
+import dataclasses
 import uuid
 from datetime import timedelta
-from typing import TYPE_CHECKING, Protocol, overload
+from typing import Protocol, overload
 
 from pgqueuer.domain import models
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint
+from pgqueuer.ports.driver import Driver
 
-if TYPE_CHECKING:
-    from pgqueuer.adapters.persistence.queries import EntrypointExecutionParameter
+
+class QueryBuilderEnvironmentPort(Protocol):
+    """Protocol for query builder environment used in schema operations."""
+
+    settings: DBSettings
+
+
+@dataclasses.dataclass
+class EntrypointExecutionParameter:
+    """
+    Job execution parameters like retry, concurrency.
+
+    Attributes:
+        retry_after (timedelta): Time to wait before retrying.
+        serialized (bool): Whether execution is serialized.
+        concurrency_limit (int): Max number of concurrent executions.
+    """
+
+    retry_after: timedelta
+    serialized: bool
+    concurrency_limit: int
+
 
 # ---------------------------------------------------------------------------
 # Queue persistence
@@ -100,6 +123,15 @@ class QueueRepositoryPort(Protocol):
         ids: list[models.JobId],
     ) -> list[tuple[models.JobId, models.JOB_STATUS]]: ...
 
+    @property
+    def driver(self) -> Driver:
+        """Access the underlying database driver."""
+        ...
+
+    async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
+        """Clear statistics log entries."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Schedule persistence
@@ -156,6 +188,11 @@ class NotificationPort(Protocol):
 
 class SchemaManagementPort(Protocol):
     """DDL operations for installing, upgrading, and inspecting the schema."""
+
+    @property
+    def qbe(self) -> QueryBuilderEnvironmentPort:
+        """Access the query builder environment for schema operations."""
+        ...
 
     async def install(self) -> None: ...
 

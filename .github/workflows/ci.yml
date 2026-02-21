@@ -15,7 +15,7 @@ jobs:
             matrix:
                 python-version: ["3.12"]
                 os: [ubuntu-24.04]
-                pgdriver: ["apg", "apgpool", "psy"]
+                pgdriver: ["apg", "apgpool", "psy", "mem"]
                 postgres-version: ["16"]
                 strategy: ["throughput", "drain"]
 

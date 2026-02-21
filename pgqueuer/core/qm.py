@@ -35,7 +35,9 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
+from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
 @dataclasses.dataclass
@@ -74,7 +76,7 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: queries.Queries = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -359,7 +361,7 @@ class QueueManager:
 
         while not self.shutdown.is_set():
             entrypoints = {
-                x: queries.EntrypointExecutionParameter(
+                x: EntrypointExecutionParameter(
                     retry_after=self.entrypoint_registry[x].parameters.retry_timer,
                     serialized=self.entrypoint_registry[x].parameters.serialized_dispatch,
                     concurrency_limit=self.entrypoint_registry[x].parameters.concurrency_limit,

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
@@ -28,6 +29,7 @@ from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.domain.models import Channel
 from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -57,6 +59,7 @@ class PgQueuer:
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
+    queries: RepositoryPort | None = dataclasses.field(default=None)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -69,8 +72,18 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
-        self.qm = QueueManager(self.connection, self.channel, resources=self.resources)
-        self.sm = SchedulerManager(self.connection)
+        # RepositoryPort | None is passed here; QueueManager/SchedulerManager will
+        # create default Queries instances if None, which satisfies their type contract.
+        self.qm = QueueManager(
+            self.connection,
+            self.channel,
+            queries=self.queries,  # type: ignore[arg-type]
+            resources=self.resources,
+        )
+        self.sm = SchedulerManager(
+            self.connection,
+            queries=self.queries,  # type: ignore[arg-type]
+        )
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown
 
@@ -156,6 +169,27 @@ class PgQueuer:
         channel = channel or Channel(DBSettings().channel)
         resources = resources or {}
         return cls(connection=driver, channel=channel, resources=resources)
+
+    @classmethod
+    def in_memory(
+        cls,
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> "PgQueuer":
+        """Create a PgQueuer backed entirely by in-memory data structures.
+
+        No PostgreSQL connection is needed.  Useful for testing, dev,
+        and short-lived batch-processing containers.
+        """
+        driver = InMemoryDriver()
+        channel = channel or Channel(DBSettings().channel)
+        inmem = InMemoryQueries(driver=driver)
+        return cls(
+            connection=driver,
+            channel=channel,
+            queries=inmem,
+            resources=resources or {},
+        )
 
     async def run(
         self,
