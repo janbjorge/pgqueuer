@@ -74,6 +74,7 @@ shows how to pass a callable to ``pgqueuer.cli.run``.
    pgqueuer
    architecture
    driver
+   in-memory
    postgrest
    postgres-driver-troubleshooting
    dashboard
