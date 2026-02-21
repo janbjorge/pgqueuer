@@ -34,27 +34,27 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 ## QueueManager Processing Loop
 
 ```mermaid
-%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '10'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    Wait["<b>WAIT</b><br/>for NOTIFY"]
-    Query["<b>QUERY</b><br/>jobs"]
-    Found{{"<b>Found?</b>"}}
-    Claim["<b>CLAIM</b><br/>picked"]
-    Execute["<b>EXEC</b><br/>task"]
-    Result{{"<b>OK?</b>"}}
-    Success["<b>SUCCESS</b>"]
-    Error["<b>ERROR</b>"]
+%%{init: {'flowchart': {'htmlLabels': true, 'curve': 'linear', 'padding': '15'}, 'theme': 'base', 'themeVariables': {'fontSize': '16px', 'fontFamily': 'Inter, sans-serif'}}}%%
+flowchart TD
+    A["<b>WAIT</b>"]
+    B["<b>QUERY</b>"]
+    C{{"<b>Found?</b>"}}
+    D["<b>CLAIM</b>"]
+    E["<b>EXEC</b>"]
+    F{{"<b>OK?</b>"}}
+    G["<b>✓</b>"]
+    H["<b>✗</b>"]
 
-    Wait --> Query
-    Query --> Found
-    Found -->|YES| Claim
-    Found -->|NO| Wait
-    Claim --> Execute
-    Execute --> Result
-    Result -->|YES| Success
-    Result -->|NO| Error
-    Success --> Wait
-    Error --> Wait
+    A --> B
+    B --> C
+    C -->|YES| D
+    C -->|NO| A
+    D --> E
+    E --> F
+    F -->|YES| G
+    F -->|NO| H
+    G --> A
+    H --> A
 
     classDef wait fill:#6B8FC7,stroke:#4A6FA5,stroke-width:2px,color:#fff
     classDef query fill:#2E5080,stroke:#1a2f40,stroke-width:2px,color:#fff
@@ -63,12 +63,12 @@ flowchart LR
     classDef error fill:#C1666B,stroke:#8b3a3f,stroke-width:2px,color:#fff
     classDef decision fill:#D4A240,stroke:#8b6e1a,stroke-width:2px,color:#000
 
-    class Wait wait
-    class Query query
-    class Found,Result decision
-    class Claim,Execute process
-    class Success success
-    class Error error
+    class A wait
+    class B query
+    class C,F decision
+    class D,E process
+    class G success
+    class H error
 ```
 
 ## Job Status Lifecycle
