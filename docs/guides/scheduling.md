@@ -46,8 +46,9 @@ Examples:
 
 ## Cleaning Up Old Schedules
 
-The `clean_old` flag removes schedules from the database that are no longer registered in the
-current process. This is useful when you rename or remove scheduled tasks.
+When `clean_old=True`, PgQueuer deletes any **existing** database schedules whose entrypoint
+matches this decorator's entrypoint before re-registering it. This is useful when you change
+the cron expression for a task and want the old schedule row replaced on startup.
 
 ```python
 @pgq.schedule("fetch_db", "* * * * *", clean_old=True)

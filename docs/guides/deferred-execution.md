@@ -34,20 +34,9 @@ Jobs remain in the queue with `queued` status until their `execute_after` timest
 surpassed. The `QueueManager` uses `FOR UPDATE SKIP LOCKED` with a timestamp filter, so
 deferred jobs are never picked early.
 
-## Absolute vs Relative Times
-
-`execute_after` accepts a `timedelta` (relative to now) or a `datetime` (absolute):
-
-```python
-from datetime import datetime, timezone, timedelta
-
-# Relative: run 30 seconds from now
-await queries.enqueue("task", b"data", 0, execute_after=timedelta(seconds=30))
-
-# Absolute: run at a specific UTC time
-run_at = datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
-await queries.enqueue("task", b"data", 0, execute_after=run_at)
-```
+!!! note
+    `execute_after` only accepts a `timedelta` offset from the current time (or `None` for
+    immediate execution). Absolute `datetime` values are **not** supported.
 
 ## Combining with Priority
 

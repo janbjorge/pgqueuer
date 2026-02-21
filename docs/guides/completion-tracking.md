@@ -40,11 +40,12 @@ async with CompletionWatcher(driver) as w:
 
 Terminal states: `canceled`, `deleted`, `exception`, `successful`.
 
-## Helper Functions
+## Helper Patterns
 
-For one-off scripts and test suites, two convenience wrappers ship with PgQueuer:
+Below are two ready-to-use patterns you can copy into your own code for common
+completion-tracking scenarios.
 
-### `wait_for_all`
+### Wait for all jobs
 
 Block until every supplied job finishes; return statuses in the same order as the input IDs.
 
@@ -70,7 +71,7 @@ async def wait_for_all(
         return await asyncio.gather(*waiters)
 ```
 
-### `wait_for_first`
+### Wait for first job
 
 Return as soon as **any** job hits a terminal state; cancel pending waiters.
 

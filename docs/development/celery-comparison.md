@@ -72,11 +72,13 @@ print(result.id)
 
 ```python
 import asyncpg
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
 async def main() -> None:
     conn = await asyncpg.connect()
-    job_id = await Queries(conn).enqueue("add", [2, 3])
+    driver = AsyncpgDriver(conn)
+    job_id = await Queries(driver).enqueue("add", [2, 3])
     print(job_id)
 ```
 
