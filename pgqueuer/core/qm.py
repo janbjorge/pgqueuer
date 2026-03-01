@@ -286,6 +286,12 @@ class QueueManager:
                         serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
                         accepts_context=accepts_context,
+                        # Deprecated -- still passed so custom executors
+                        # keep working during the deprecation window.
+                        connection=self.connection,
+                        channel=self.channel,
+                        queries=self.queries,
+                        shutdown=self.shutdown,
                     )
                 ),
             )
