@@ -29,8 +29,8 @@ from pgqueuer import InMemoryDriver, InMemoryQueries
 ```python
 import asyncio
 from pgqueuer import PgQueuer
-from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.models import Job
+from pgqueuer.types import QueueExecutionMode
 
 async def main():
     pq = PgQueuer.in_memory()

@@ -122,8 +122,8 @@ Create `myapp.py`:
 
     ```python
     from pgqueuer import PgQueuer
-    from pgqueuer.domain.models import Job
-    from pgqueuer.domain.types import QueueExecutionMode
+    from pgqueuer.models import Job
+    from pgqueuer.types import QueueExecutionMode
 
     async def test_job_handler():
         pq = PgQueuer.in_memory()
@@ -174,11 +174,11 @@ From another process or script:
     ```python
     import psycopg
     from pgqueuer.db import SyncPsycopgDriver
-    from pgqueuer.queries import Queries
+    from pgqueuer.queries import SyncQueries
 
     conn = psycopg.connect(autocommit=True)
     driver = SyncPsycopgDriver(conn)
-    queries = Queries(driver)
+    queries = SyncQueries(driver)
     job_ids = queries.enqueue("fetch", b"payload")
     ```
 

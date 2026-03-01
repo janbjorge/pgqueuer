@@ -7,7 +7,7 @@ PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
 
 | Parameter | Type | Default | Purpose |
 |-----------|------|---------|---------|
-| `refresh_interval` | `timedelta \| None` | **5 s** | Safety-net poll in case a `NOTIFY` was lost |
+| `refresh_interval` | `timedelta` | **5 s** | Safety-net poll in case a `NOTIFY` was lost |
 | `debounce` | `timedelta` | **50 ms** | Coalesces bursts of `NOTIFY`s to reduce query load |
 
 ## Basic Usage
@@ -137,10 +137,10 @@ To maximise reliability without heavy polling:
 1. **Listener health check** — Enable `--shutdown-on-listener-failure` on the `QueueManager`
    so it stops (and can be restarted by a supervisor) if the LISTEN channel becomes unhealthy.
 
-2. **Disable the refresh poll** — Set `refresh_interval=None` to rely solely on notifications
-   when your channel is stable:
+2. **Minimize the refresh poll** — Set a long `refresh_interval` to rely primarily on
+   notifications when your channel is stable:
 
     ```python
-    async with CompletionWatcher(driver, refresh_interval=None) as w:
+    async with CompletionWatcher(driver, refresh_interval=timedelta(minutes=5)) as w:
         status = await w.wait_for(job_id)
     ```
