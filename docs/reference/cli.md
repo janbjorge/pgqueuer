@@ -16,6 +16,7 @@ Set up the necessary database schema for PgQueuer.
   - `balanced`: Critical tables (`pgqueuer`, `pgqueuer_schedules`) are logged; auxiliary
     tables are unlogged.
   - `durable` *(default)*: All tables are logged — full crash recovery.
+- `--dry-run`: Print SQL commands without executing them.
 
 ```bash
 pgq install --durability balanced
@@ -26,6 +27,10 @@ pgq install --durability balanced
 ### `uninstall`
 
 Remove the PgQueuer schema from the database.
+
+**Options:**
+
+- `--dry-run`: Print SQL commands without executing them.
 
 ```bash
 pgq uninstall
@@ -40,6 +45,7 @@ Apply database schema upgrades.
 **Options:**
 
 - `--durability`: Adjust the durability level during the upgrade (same options as `install`).
+- `--dry-run`: Print SQL commands without executing them.
 
 ```bash
 pgq upgrade --durability durable
@@ -53,7 +59,7 @@ Ensure PgQueuer tables, triggers, and functions exist (or are absent).
 
 **Options:**
 
-- `--expect`: `present` *(default)* or `absent`.
+- `--expect` *(required)*: `present` or `absent`.
 
 Prints a message for each missing or unexpected object. Exits with code `1` if any
 mismatches are found; `0` otherwise.
@@ -119,10 +125,12 @@ Display a live dashboard showing job statistics.
 
 - `--interval <seconds>`: Refresh interval. If not set, updates once and exits.
 - `--tail <number>`: Number of most recent log entries to display.
-- `--table-format <format>`: Table format (grid, plain, html, etc.).
+
+The table format can be controlled via the `PGQUEUER_TABLEFMT` environment variable
+(default: `pretty`).
 
 ```bash
-pgq dashboard --interval 10 --tail 25 --table-format grid
+pgq dashboard --interval 10 --tail 25
 ```
 
 ---
@@ -131,8 +139,13 @@ pgq dashboard --interval 10 --tail 25 --table-format grid
 
 Listen to PostgreSQL NOTIFY channels for debugging.
 
+**Options:**
+
+- `--channel`: Channel name to listen on (default: `ch_pgqueuer`).
+
 ```bash
 pgq listen
+pgq listen --channel my_custom_channel
 ```
 
 ---
@@ -195,9 +208,9 @@ crash recovery.
 
 ### Balanced
 
-- Critical tables (`pgqueuer`, `pgqueuer_schedules`) are **logged**.
-- Auxiliary tables (`pgqueuer_log`, `pgqueuer_statistics`) are **unlogged**.
-- Best for: production systems where job data must survive crashes but statistics can be
+- Critical tables (`pgqueuer`, `pgqueuer_schedules`) are **logged** — survive crashes.
+- Auxiliary tables (`pgqueuer_log`, `pgqueuer_statistics`) are **unlogged** — faster writes.
+- Best for: production systems where job data must survive crashes but log/statistics can be
   sacrificed for speed.
 
 ### Durable *(default)*
@@ -286,3 +299,19 @@ pgq run myapp:create_pgqueuer
 - **Shutdown is graceful**: In-flight jobs complete before teardown runs.
 
 See `examples/consumer.py` and `examples/callable_factory/` in the repository for working examples.
+
+---
+
+## Global Options
+
+All commands accept the following connection options:
+
+| Flag | Env Variable | Description |
+|------|-------------|-------------|
+| `--pg-dsn` | `PGQUEUER_PG_DSN` | Full PostgreSQL DSN (overrides individual settings) |
+| `--pg-host` | `PGHOST` | Database host |
+| `--pg-port` | `PGPORT` | Database port |
+| `--pg-user` | `PGUSER` | Database user |
+| `--pg-password` | `PGPASSWORD` | Database password |
+| `--pg-database` | `PGDATABASE` | Database name |
+| `--pg-schema` | — | PostgreSQL schema for PgQueuer objects |

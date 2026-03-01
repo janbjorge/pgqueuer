@@ -22,7 +22,7 @@ the questions that quickly separate configuration issues from bugs.
 - **Unexpected timeouts** — Server-side `statement_timeout` or driver-level timeouts cancel
   dequeues. List active timeout settings (asyncpg `timeout`, psycopg `options`) and compare
   with production defaults.
-- **Type adapters** — Binary payloads must match table encoding. Confirm `pgqueuer.jobs`
+- **Type adapters** — Binary payloads must match table encoding. Confirm `pgqueuer` table
   column types and ensure custom adapters/serializers are registered before enqueueing.
 
 ## 3. Driver Quirks
@@ -42,7 +42,8 @@ the questions that quickly separate configuration issues from bugs.
 
 ## 4. PGQueuer Expectations
 
-- Health checks raise `DriverConfigurationError`; capture them during service startup.
+- Health checks may raise exceptions from `pgqueuer.errors` (e.g. `FailingListenerError`);
+  capture them during service startup.
 - LISTEN/NOTIFY keeps consumers awake. Firewalls that drop idle sockets or missing
   `pg_notify` privileges starve queues — monitor `pg_notification_queue_usage()`.
 - Payloads are stored as `bytea`; producers and consumers must agree on encoding.

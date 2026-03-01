@@ -43,7 +43,8 @@ return Response(content=content, media_type="text/plain; version=0.0.4")
 
 ## Standalone Metrics Service
 
-A Docker-based standalone metrics service is available in `tools/prometheus`.
+A Docker-based standalone metrics service is available in `tools/prometheus`. Note that
+this service uses its own implementation separate from the `pgqueuer.metrics` library module.
 
 ### Building the Image
 
@@ -61,14 +62,6 @@ docker run -p 8000:8000 \
   -e PGUSER=your-username \
   -e PGPORT=5432 \
   pgq-prometheus-service
-```
-
-### Docker Compose
-
-A docker-compose file `docker-compose.prometheus-metrics.yml` is provided:
-
-```bash
-docker compose -f docker-compose.prometheus-metrics.yml up
 ```
 
 After the service starts, the metrics endpoint is available at

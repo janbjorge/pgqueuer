@@ -15,9 +15,9 @@ job_ids = await queries.enqueue("task_entrypoint", b"Job data", priority=5)
 From synchronous code:
 
 ```python
-from pgqueuer.queries import Queries
+from pgqueuer.queries import SyncQueries
 
-queries = Queries(sync_db_driver)
+queries = SyncQueries(sync_db_driver)
 job_ids = queries.enqueue("task_entrypoint", b"Job data", priority=5)
 ```
 
@@ -56,6 +56,11 @@ def process_job(job: Job) -> None:
             return
         perform_task(step)
 ```
+
+!!! note
+    `anyio.CancelScope` delivers cancellation asynchronously. In synchronous entrypoints,
+    polling `cancel_called` between steps is the recommended approach since the scope's
+    context-manager form requires an async context to function.
 
 ## Job Status After Cancellation
 

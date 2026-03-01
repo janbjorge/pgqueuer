@@ -11,7 +11,7 @@ PGQueuer includes a built-in benchmarking tool for evaluating performance in you
 ## Running the Benchmark
 
 ```bash
-python3 tools/benchmark.py -dq 5 -eqbs 10
+python3 tools/benchmark.py --dequeue 5 --dequeue-batch-size 10
 ```
 
 Example output:
@@ -52,7 +52,7 @@ Both tests run with the same settings:
 ### asyncpg
 
 ```bash
-python3 tools/benchmark.py -d apg
+python3 tools/benchmark.py -d apg -t 10
 ```
 
 ```
@@ -65,7 +65,7 @@ python3 tools/benchmark.py -d apg
 ### psycopg
 
 ```bash
-python3 tools/benchmark.py -d psy
+python3 tools/benchmark.py -d psy -t 10
 ```
 
 ```

@@ -12,11 +12,14 @@ When a job raises an unhandled exception, PgQueuer:
 3. Moves the record from the active queue (`pgqueuer`) to the log table (`pgqueuer_log`).
 
 The job is **not** automatically retried at this point — it is considered definitively failed
-for this execution attempt. The traceback is persisted for inspection via `pgq logs` or a
-direct query:
+for this execution attempt. The traceback is persisted for inspection via `pgq dashboard`
+or a direct query:
 
 ```sql
-SELECT job_id, entrypoint, exception_type, exception_message, traceback
+SELECT job_id, entrypoint,
+       traceback->>'exception_type' AS exception_type,
+       traceback->>'exception_message' AS exception_message,
+       traceback->>'traceback' AS traceback_text
 FROM pgqueuer_log
 WHERE status = 'exception'
 ORDER BY created DESC
@@ -56,12 +59,15 @@ details.
 ### Worker-crash recovery: stalled jobs
 
 If a worker process crashes mid-job, the job remains in `picked` state with a stale heartbeat.
-Configure `retry_timer` on `QueueManager` to automatically re-queue jobs whose heartbeat has
-not been updated within the specified window:
+Configure `retry_timer` on the `@entrypoint()` decorator to automatically re-queue jobs
+whose heartbeat has not been updated within the specified window:
 
 ```python
 from datetime import timedelta
-pgq = PgQueuer(driver, retry_timer=timedelta(minutes=5))
+
+@pgq.entrypoint("send_email", retry_timer=timedelta(minutes=5))
+async def send_email(job: Job) -> None:
+    await smtp_client.send(job.payload)
 ```
 
 Any worker can then claim and re-run the stalled job. See
@@ -129,7 +135,7 @@ Every job that leaves the active queue is written to `pgqueuer_log`:
 | Job is deleted without running | `deleted` |
 
 The log is **append-only** and serves as a permanent audit record. You can query it directly
-or use `pgq logs` from the CLI.
+or use `pgq dashboard` from the CLI.
 
 !!! note "Log table retention"
     PgQueuer does not automatically prune `pgqueuer_log`. Add a periodic `DELETE` job or

@@ -56,14 +56,14 @@ GRANT USAGE ON SCHEMA public TO pgqueuer_app;
 -- Active queue: full CRUD needed for enqueue, dequeue, and status updates
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pgqueuer TO pgqueuer_app;
 
--- Execution log: insert on completion, select for queries
-GRANT SELECT, INSERT ON TABLE pgqueuer_log TO pgqueuer_app;
+-- Execution log: insert on completion, update for aggregation, delete for pruning
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pgqueuer_log TO pgqueuer_app;
 
--- Statistics: aggregation writes
-GRANT SELECT, INSERT, UPDATE ON TABLE pgqueuer_statistics TO pgqueuer_app;
+-- Statistics: aggregation writes and pruning
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pgqueuer_statistics TO pgqueuer_app;
 
--- Schedules: read/write for scheduler
-GRANT SELECT, INSERT, UPDATE ON TABLE pgqueuer_schedules TO pgqueuer_app;
+-- Schedules: read/write for scheduler, delete for removal
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE pgqueuer_schedules TO pgqueuer_app;
 
 -- Trigger function: must be executable by the application user
 GRANT EXECUTE ON FUNCTION fn_pgqueuer_changed() TO pgqueuer_app;
@@ -86,7 +86,7 @@ CREATE SCHEMA pgq;
 GRANT USAGE ON SCHEMA pgq TO pgqueuer_app;
 
 -- Install into the dedicated schema
-pgq install --schema pgq
+pgq --pg-schema pgq install
 ```
 
 This separates PgQueuer objects from application tables and makes privilege management

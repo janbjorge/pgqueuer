@@ -69,7 +69,7 @@ Choose the durability level that matches your risk tolerance:
 | Level | Tables | Crash behaviour | Throughput |
 |-------|--------|-----------------|------------|
 | `durable` (default) | Logged (WAL) | No data loss | Baseline |
-| `balanced` | Queue: unlogged; Log: logged | Queue data lost on crash | ~2× |
+| `balanced` | Queue + Schedules: logged; Log + Statistics: unlogged | Statistics lost on crash | ~2× |
 | `volatile` | All unlogged | All data lost on crash | Highest |
 
 Change durability after installation without data loss:
@@ -139,12 +139,12 @@ PgQueuer installs all required indexes automatically. The most important for thr
 
 ```sql
 -- Used for every dequeue: priority-ordered job selection
-CREATE INDEX ON pgqueuer (priority DESC, id ASC)
-WHERE status = 'queued';
+CREATE INDEX ON pgqueuer (priority ASC, id DESC)
+INCLUDE (id) WHERE status = 'queued';
 
 -- Used for heartbeat-based retry detection
-CREATE INDEX ON pgqueuer (updated, id)
-WHERE status = 'picked';
+CREATE INDEX ON pgqueuer (heartbeat ASC, id DESC)
+INCLUDE (id) WHERE status = 'picked';
 ```
 
 These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not drop them.

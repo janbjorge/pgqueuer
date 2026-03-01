@@ -58,11 +58,11 @@ consumers and internals require an async driver.
 ```python
 import psycopg
 from pgqueuer.db import SyncPsycopgDriver
-from pgqueuer.queries import Queries
+from pgqueuer.queries import SyncQueries
 
 conn = psycopg.connect(dsn, autocommit=True)
 driver = SyncPsycopgDriver(conn)
-queries = Queries(driver)
+queries = SyncQueries(driver)
 queries.enqueue("fetch", b"payload")
 ```
 
