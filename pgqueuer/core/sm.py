@@ -118,6 +118,11 @@ class SchedulerManager:
                     expression=expression,
                     func=func,
                     clean_old=clean_old,
+                    # Deprecated -- still passed so custom executors
+                    # keep working during the deprecation window.
+                    connection=self.connection,
+                    queries=self.queries,
+                    shutdown=self.shutdown,
                 )
             )
             return func
