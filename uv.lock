@@ -1152,6 +1152,9 @@ dev = [
     { name = "import-linter" },
     { name = "mypy" },
     { name = "mypy-extensions" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "opentelemetry-semantic-conventions" },
     { name = "psycopg" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1177,6 +1180,11 @@ fastapi = [
 ]
 logfire = [
     { name = "logfire" },
+]
+opentelemetry = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "opentelemetry-semantic-conventions" },
 ]
 psycopg = [
     { name = "psycopg" },
@@ -1206,6 +1214,12 @@ requires-dist = [
     { name = "mkdocs-redirects", marker = "extra == 'docs'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "mypy-extensions", marker = "extra == 'dev'" },
+    { name = "opentelemetry-api", marker = "extra == 'dev'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-api", marker = "extra == 'opentelemetry'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'opentelemetry'", specifier = ">=1.20.0" },
+    { name = "opentelemetry-semantic-conventions", marker = "extra == 'dev'", specifier = ">=0.41b0" },
+    { name = "opentelemetry-semantic-conventions", marker = "extra == 'opentelemetry'", specifier = ">=0.41b0" },
     { name = "psycopg", marker = "extra == 'dev'", specifier = ">=3.2.0" },
     { name = "psycopg", marker = "extra == 'psycopg'", specifier = ">=3.2.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
@@ -1228,7 +1242,7 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'dev'" },
     { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.22.0" },
 ]
-provides-extras = ["asyncpg", "psycopg", "logfire", "sentry", "fastapi", "dev", "docs"]
+provides-extras = ["asyncpg", "psycopg", "logfire", "sentry", "opentelemetry", "fastapi", "dev", "docs"]
 
 [[package]]
 name = "platformdirs"
