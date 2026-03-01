@@ -119,6 +119,7 @@ def test_single_publish_attributes(
     assert span.attributes["messaging.destination.name"] == "fetch"
     assert span.attributes["messaging.system"] == "pgqueuer"
     assert span.attributes["messaging.operation.name"] == "send"
+    assert span.attributes["messaging.operation.type"] == "send"
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +178,7 @@ def test_batch_publish_send_span_attributes(
     assert attrs is not None
     assert attrs["messaging.system"] == "pgqueuer"
     assert attrs["messaging.operation.name"] == "send"
+    assert attrs["messaging.operation.type"] == "send"
     assert attrs["messaging.batch.message_count"] == 3
 
 
@@ -193,6 +195,7 @@ def test_batch_publish_create_span_attributes(
     assert attrs["messaging.destination.name"] == "a"
     assert attrs["messaging.system"] == "pgqueuer"
     assert attrs["messaging.operation.name"] == "create"
+    assert attrs["messaging.operation.type"] == "create"
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +281,9 @@ async def test_trace_process_attributes(
     assert attrs["messaging.destination.name"] == "say_hello"
     assert attrs["messaging.system"] == "pgqueuer"
     assert attrs["messaging.operation.name"] == "process"
+    assert attrs["messaging.operation.type"] == "process"
     assert attrs["messaging.message.id"] == str(job.id)
+    assert attrs["messaging.message.body.size"] == len(job.payload or b"")
 
 
 async def test_trace_process_ok_status_on_success(
@@ -311,6 +316,8 @@ async def test_trace_process_error_status_on_exception(
     assert span.status.status_code == StatusCode.ERROR
     assert span.status.description is not None
     assert "boom" in span.status.description
+    assert span.attributes is not None
+    assert span.attributes["error.type"] == "ValueError"
 
 
 async def test_trace_process_no_headers_is_noop(
