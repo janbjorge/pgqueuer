@@ -113,6 +113,41 @@ async def main() -> None:
 
 The job arrives instantly via `LISTEN/NOTIFY`, and your consumer's `process` function handles it.
 
+## In-Memory Adapter
+
+PGQueuer can run entirely without PostgreSQL. The in-memory adapter is a drop-in replacement that implements the same port protocols as the real backend, so your job handlers and business logic stay identical.
+
+```python
+import asyncio
+from pgqueuer import PgQueuer
+from pgqueuer.domain.models import Job
+from pgqueuer.domain.types import QueueExecutionMode
+
+async def main():
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("send_email")
+    async def send_email(job: Job) -> None:
+        print(f"Sending: {job.payload}")
+
+    await pq.qm.queries.enqueue(
+        ["send_email"] * 3,
+        [b"alice", b"bob", b"charlie"],
+        [0] * 3,
+    )
+    await pq.qm.run(mode=QueueExecutionMode.drain)
+
+asyncio.run(main())
+```
+
+No database, no Docker, no environment variables. This is useful for:
+
+- **Unit and integration tests** -- fast, deterministic, no CI infrastructure
+- **Local prototyping** -- try out queue logic before setting up Postgres
+- **Short-lived batch jobs** -- process a fixed set of jobs and exit
+
+The in-memory adapter does not provide durability, multi-process coordination, or ACID transactions. For production workloads, use the PostgreSQL backend. See the [full in-memory reference](https://janbjorge.github.io/pgqueuer/reference/in-memory/) for details and limitations.
+
 ## Common Patterns
 
 ### Batch Operations
