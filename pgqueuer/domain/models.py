@@ -162,6 +162,12 @@ class Job(BaseModel):
         """
         return None if self.headers is None else self.headers.get("sentry")
 
+    def otel_headers(self) -> dict[str, Any] | None:
+        """
+        Extracts OpenTelemetry W3C propagation headers from the job headers if available.
+        """
+        return None if self.headers is None else self.headers.get("otel")
+
 
 ###### Log ######
 
