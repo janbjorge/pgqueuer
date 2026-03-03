@@ -15,7 +15,12 @@ from pgqueuer.domain import models
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
-warnings.simplefilter("default", DeprecationWarning)
+warnings.filterwarnings(
+    "default",
+    category=DeprecationWarning,
+    module=r"^pgqueuer(\.|$)",
+    append=True,
+)
 
 
 @dataclasses.dataclass
