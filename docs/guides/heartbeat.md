@@ -28,19 +28,22 @@ WHERE status = 'picked'
 
 ## Retry Timer
 
-The `retry_timer` parameter on `QueueManager` sets an interval after which jobs with a
-stale heartbeat are eligible to be re-picked by any available worker. This enables
-automatic recovery from crashed or stalled workers:
+The `retry_timer` parameter on the `@entrypoint()` decorator sets an interval after which
+jobs with a stale heartbeat are eligible to be re-picked by any available worker. This
+enables automatic recovery from crashed or stalled workers:
 
 ```python
 from datetime import timedelta
-pgq = PgQueuer(driver, retry_timer=timedelta(minutes=5))
+
+@pgq.entrypoint("my_task", retry_timer=timedelta(minutes=5))
+async def my_task(job: Job) -> None:
+    await do_work(job.payload)
 ```
 
 With `retry_timer` set, a job that stops updating its heartbeat for the specified duration
 will be retried by the next available worker.
 
 !!! note
-    The default `retry_timer` is `0` (disabled). Set it to match your expected maximum job
-    runtime plus a safety margin to avoid prematurely re-queuing legitimately long-running
-    jobs.
+    The default `retry_timer` is `0` (disabled). Set it per entrypoint to match your
+    expected maximum job runtime plus a safety margin to avoid prematurely re-queuing
+    legitimately long-running jobs.

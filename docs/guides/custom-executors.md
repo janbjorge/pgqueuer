@@ -97,8 +97,11 @@ async def create_pgqueuer() -> PgQueuer:
 
 ### Parameters
 
-| Parameter | Description |
-|-----------|-------------|
-| `max_attempts` | Maximum number of retry attempts |
-| `max_delay` | Cap on exponential backoff delay between retries |
-| `max_time` | Maximum total time allowed for all retry attempts combined |
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_attempts` | — | Maximum number of retry attempts |
+| `max_delay` | — | Cap on exponential backoff delay between retries |
+| `max_time` | — | Maximum total time allowed for all retry attempts combined |
+| `initial_delay` | `0.1` | Initial delay in seconds before the first retry |
+| `backoff_multiplier` | `2.0` | Multiplier applied to delay after each retry |
+| `jitter` | `random()` | Callable returning a random float to add jitter to delays |

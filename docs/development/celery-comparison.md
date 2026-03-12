@@ -78,8 +78,8 @@ from pgqueuer.queries import Queries
 async def main() -> None:
     conn = await asyncpg.connect()
     driver = AsyncpgDriver(conn)
-    job_id = await Queries(driver).enqueue("add", [2, 3])
-    print(job_id)
+    job_ids = await Queries(driver).enqueue("add", b'{"x": 2, "y": 3}')
+    print(job_ids)
 ```
 
 ## Example: Scheduling a Recurring Task
@@ -147,6 +147,7 @@ print(result.get())
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.queries import Queries
 from pgqueuer.completion import CompletionWatcher
 
 async def wait_for_job() -> None:
@@ -154,9 +155,9 @@ async def wait_for_job() -> None:
     driver = AsyncpgDriver(conn)
     pgq = PgQueuer(driver)
 
-    job_id = await pgq.queries.enqueue("add", [2, 3])
+    job_ids = await Queries(driver).enqueue("add", b'{"x": 2, "y": 3}')
     async with CompletionWatcher(driver) as watcher:
-        status = await watcher.wait_for(job_id)
+        status = await watcher.wait_for(job_ids[0])
         print(status)
 ```
 

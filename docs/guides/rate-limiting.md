@@ -70,7 +70,6 @@ async def call_external_api(job: Job) -> None:
 Two additional parameters control job processing timing:
 
 - **`dequeue_timeout`**: Maximum time (in seconds) to wait for new jobs before returning an
-  empty batch. Default: 30 seconds.
+  empty batch. Default: 30 seconds. Set at the `QueueManager` / `PgQueuer` level.
 - **`retry_timer`**: Interval to retry unprocessed jobs. Default: 0 (no retry timer).
-
-These are set at the `QueueManager` / `PgQueuer` level, not per entrypoint.
+  Set per entrypoint via the `@entrypoint()` decorator.

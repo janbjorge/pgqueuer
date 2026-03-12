@@ -117,7 +117,7 @@ inheritance or registration required.
 @dataclasses.dataclass
 class QueueManager:
     connection: db.Driver
-    queries: queries.Queries | None = dataclasses.field(default=None)
+    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
 
     def __post_init__(self) -> None:
         if self.queries is None:
@@ -137,11 +137,12 @@ pgqueuer/
     models.py                 # Job, Schedule, Event, Context, statistics
     types.py                  # JobId, JOB_STATUS, Channel, etc.
     errors.py                 # Exception hierarchy
+    settings.py               # DBSettings, Durability, DurabilityPolicy
 
   ports/
-    repository.py             # QueueRepositoryPort, ScheduleRepositoryPort
-    notification.py           # NotificationPort
-    schema.py                 # SchemaManagementPort
+    __init__.py               # RepositoryPort (combined protocol), re-exports
+    repository.py             # QueueRepositoryPort, ScheduleRepositoryPort,
+                              #   NotificationPort, SchemaManagementPort
     driver.py                 # Driver protocol
     tracing.py                # TracingProtocol
 
@@ -152,7 +153,7 @@ pgqueuer/
     executors.py              # AbstractEntrypointExecutor, EntrypointExecutor
     listeners.py              # EventRouter, PGNoticeEventListener
     buffers.py                # TimedOverflowBuffer and typed variants
-    heartbeat.py, cache.py, helpers.py, retries.py, tm.py, logconfig.py
+    heartbeat.py, cache.py, helpers.py, retries.py, tm.py, logconfig.py, completion.py
 
   adapters/
     drivers/
@@ -162,6 +163,9 @@ pgqueuer/
       queries.py              # Queries class (implements all repository ports)
       qb.py                   # SQL query builders
       query_helpers.py        # Parameter normalization
+    inmemory/
+      driver.py               # InMemoryDriver
+      queries.py              # InMemoryQueries (implements all repository ports)
     tracing/
       logfire.py, sentry.py
     cli/

@@ -5,10 +5,11 @@ for job queuing and processing.
 
 ## Table Structure
 
-PGQueuer uses three primary tables:
+PGQueuer uses four primary tables:
 
 - **`pgqueuer`** — the active job queue
-- **`pgqueuer_log`** — job statistics and history
+- **`pgqueuer_log`** — job execution history and audit trail
+- **`pgqueuer_statistics`** — aggregated statistics
 - **`pgqueuer_schedules`** — recurring schedule definitions
 
 ## Installation
