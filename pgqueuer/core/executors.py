@@ -282,7 +282,7 @@ class AbstractScheduleExecutor(ABC):
             datetime: The next scheduled datetime in UTC.
         """
         return datetime.fromtimestamp(
-            croniter(self.parameters.expression).get_next(),
+            croniter(self.parameters.expression, start_time=helpers.utc_now()).get_next(),
             timezone.utc,
         )
 

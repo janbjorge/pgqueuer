@@ -717,6 +717,7 @@ class QuerySchedulerBuilder:
     SET
         status = 'picked',
         updated = NOW(),
+        heartbeat = NOW(),
         next_run = date_trunc('seconds', NOW() + (
                 SELECT delay FROM params
                 WHERE
