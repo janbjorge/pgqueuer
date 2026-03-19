@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.models import CronExpressionEntrypoint, Schedule
+from pgqueuer.models import CronEntrypoint, CronExpression, CronExpressionEntrypoint, Schedule
 from pgqueuer.qb import DBSettings
 from pgqueuer.sm import SchedulerManager
 
@@ -54,6 +54,62 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
 
     with pytest.raises(ValueError):
         scheduler.schedule("sample_task", "bla * * * *")(sample_task)
+
+
+async def test_scheduler_register_accepts_three_second_expression(
+    mocker: Mock,
+) -> None:
+    scheduler = SchedulerManager(Mock())
+
+    async def sample_task(schedule: Schedule) -> None:
+        pass
+
+    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+
+    scheduler.schedule("sample_task", "* * * * * */3")(sample_task)
+
+    key = next(iter(scheduler.registry.keys()))
+    executor = scheduler.registry[key]
+
+    assert key.entrypoint == "sample_task"
+    assert key.expression == "* * * * * */3"
+    assert executor.parameters.expression == "* * * * * */3"
+    assert executor.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc)
+    assert executor.next_in() == timedelta(seconds=2)
+
+
+async def test_scheduler_trailing_seconds_field_is_documented_behavior(
+    mocker: Mock,
+) -> None:
+    scheduler = SchedulerManager(Mock())
+
+    async def sample_task(schedule: Schedule) -> None:
+        pass
+
+    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+
+    scheduler.schedule("sample_task_seconds_last", "* * * * * */3")(sample_task)
+    scheduler.schedule("sample_task_seconds_first", "*/3 * * * * *")(sample_task)
+
+    seconds_last = scheduler.registry[
+        CronExpressionEntrypoint(
+            CronEntrypoint("sample_task_seconds_last"),
+            CronExpression("* * * * * */3"),
+        )
+    ]
+    seconds_first = scheduler.registry[
+        CronExpressionEntrypoint(
+            CronEntrypoint("sample_task_seconds_first"),
+            CronExpression("*/3 * * * * *"),
+        )
+    ]
+
+    assert seconds_last.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc)
+    assert seconds_last.next_in() == timedelta(seconds=2)
+    assert seconds_first.get_next() == datetime(2025, 1, 1, 0, 0, 2, tzinfo=timezone.utc)
+    assert seconds_first.next_in() == timedelta(seconds=1)
 
 
 async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
