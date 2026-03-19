@@ -72,9 +72,6 @@ Create `myapp.py`:
         return pgq
     ```
 
-Recurring schedules support standard 5-field cron expressions and 6-field expressions with a
-trailing seconds field such as `* * * * * */3`.
-
 === "asyncpg pool"
 
     ```python
