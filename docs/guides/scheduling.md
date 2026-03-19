@@ -13,6 +13,14 @@ async def fetch_db(schedule: Schedule) -> None:
     await perform_task()
 ```
 
+Use a 6-field expression to schedule work at second-level granularity:
+
+```python
+@pgq.schedule("heartbeat", "* * * * * */3")
+async def heartbeat(schedule: Schedule) -> None:
+    await send_heartbeat()
+```
+
 ## How It Works
 
 - **Registration**: Define tasks using the `@schedule` decorator with a name and a cron expression.
@@ -50,7 +58,10 @@ flowchart LR
 
 ## Cron Expression Format
 
-PgQueuer uses standard 5-field cron expressions:
+PgQueuer supports both standard 5-field cron expressions and 6-field expressions with seconds
+in the final position.
+
+### 5-field format
 
 ```
 ┌───────────── minute (0–59)
@@ -71,6 +82,32 @@ Examples:
 | `0 * * * *` | Every hour |
 | `0 9 * * 1` | Every Monday at 9:00 AM |
 | `0 0 1 * *` | First day of each month at midnight |
+
+### 6-field format
+
+For second-level schedules, the seconds field comes last:
+
+```
+┌───────────── minute (0–59)
+│ ┌───────────── hour (0–23)
+│ │ ┌───────────── day of month (1–31)
+│ │ │ ┌───────────── month (1–12)
+│ │ │ │ ┌───────────── day of week (0–6, Sunday=0)
+│ │ │ │ │ ┌───────────── second (0–59)
+│ │ │ │ │ │
+* * * * * *
+```
+
+Examples:
+
+| Expression | Meaning |
+|------------|---------|
+| `* * * * * */3` | Every 3 seconds |
+| `* * * * * */10` | Every 10 seconds |
+| `* * * * * 0` | At second 0 of every minute |
+
+Use trailing seconds, not leading seconds. For example, `*/3 * * * * *` is **not** "every 3
+seconds"; use `* * * * * */3` instead.
 
 ## Cleaning Up Old Schedules
 
@@ -119,6 +156,10 @@ async def main() -> PgQueuer:
     @pgq.schedule("hourly_report", "0 * * * *")
     async def hourly_report(schedule: Schedule) -> None:
         print(f"Generating report at {datetime.now()}")
+
+    @pgq.schedule("heartbeat", "* * * * * */3")
+    async def heartbeat(schedule: Schedule) -> None:
+        print(f"Heartbeat at {datetime.now()}")
 
     @pgq.schedule("daily_cleanup", "0 2 * * *", clean_old=True)
     async def daily_cleanup(schedule: Schedule) -> None:
