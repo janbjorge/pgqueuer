@@ -118,9 +118,7 @@ async def test_notify(
 
         await d.add_listener(channel, event.set_result)
 
-        # Seems psycopg does not pick up on
-        # notifiys sent from its current connection.
-        # Workaround by using asyncpg.
+        # Send from a separate connection to avoid self-notify edge cases.
         async with driver(dsn) as ad:
             await ad.execute(
                 QueryQueueBuilder(
@@ -129,6 +127,8 @@ async def test_notify(
                 payload,
             )
 
+        # Pump the connection so psycopg's add_notify_handler can dispatch.
+        await d.execute("SELECT 1;")
         assert await asyncio.wait_for(event, timeout=1) == payload
 
 
@@ -206,15 +206,15 @@ async def test_event_listener(
             ),
         )
 
-        # Seems psycopg does not pick up on
-        # notifiys sent from its current connection.
-        # Workaround by using asyncpg.
+        # Send from a separate connection to avoid self-notify edge cases.
         async with driver(dsn) as dd:
             await dd.execute(
                 QueryQueueBuilder(DBSettings(channel=channel)).build_notify_query(),
                 payload.model_dump_json(),
             )
 
+        # Pump the connection so psycopg's add_notify_handler can dispatch.
+        await d.execute("SELECT 1;")
         assert (await asyncio.wait_for(listener.get(), timeout=1)) == payload
 
 
