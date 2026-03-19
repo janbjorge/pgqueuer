@@ -22,3 +22,67 @@
   --md-accent-fg-color:         var(--pgq-blue-light);
   --md-default-bg-color:        var(--pgq-bg-dark);
 }
+
+/* Hero section on landing page */
+.hero {
+  text-align: center;
+  padding: 2rem 1rem 1rem;
+}
+
+.hero p:first-of-type {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--pgq-blue-dark);
+  margin-bottom: 0.5rem;
+}
+
+[data-md-color-scheme="slate"] .hero p:first-of-type {
+  color: var(--pgq-blue-light);
+}
+
+.hero p:nth-of-type(2) {
+  font-size: 1.1rem;
+  max-width: 42rem;
+  margin: 0 auto 1.5rem;
+  line-height: 1.6;
+}
+
+/* Grid cards for feature section */
+.grid.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.grid.cards > ul {
+  display: contents;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.grid.cards > ul > li {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.4rem;
+  padding: 1.2rem 1.4rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.grid.cards > ul > li:hover {
+  border-color: var(--pgq-blue-light);
+  box-shadow: 0 2px 8px rgba(74, 111, 165, 0.1);
+}
+
+.grid.cards > ul > li > strong:first-child,
+.grid.cards > ul > li > p:first-child > strong {
+  display: block;
+  font-size: 1.05rem;
+  margin-bottom: 0.3rem;
+}
+
+.grid.cards > ul > li hr {
+  margin: 0.6rem 0;
+  border: none;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
