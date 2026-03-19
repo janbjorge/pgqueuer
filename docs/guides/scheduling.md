@@ -87,6 +87,11 @@ Examples:
 
 For second-level schedules, the seconds field comes last:
 
+PgQueuer uses [croniter](https://github.com/pallets-eco/croniter) to parse cron expressions.
+Second-level schedules follow croniter's
+[about second repeats](https://github.com/pallets-eco/croniter?tab=readme-ov-file#about-second-repeats)
+behavior.
+
 ```
 ┌───────────── minute (0–59)
 │ ┌───────────── hour (0–23)
