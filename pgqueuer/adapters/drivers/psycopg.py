@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
-import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -15,44 +13,6 @@ from pgqueuer.ports.driver import Driver, SyncDriver
 
 if TYPE_CHECKING:
     import psycopg
-
-
-@functools.cache
-def _replace_dollar_named_parameter(query: str) -> str:
-    """
-    Replace positional parameters in a SQL query with named parameters.
-
-    This function replaces all occurrences of $1, $2, etc., in the provided SQL query
-    string with named parameters of the form %(parameter_1)s, which is compatible with
-    Psycopg's named parameter syntax.
-
-    Used by SyncPsycopgDriver which cannot use RawCursor.
-
-    Args:
-        query: The SQL query string containing positional parameters.
-
-    Returns:
-        The modified SQL query string with named parameters.
-    """
-    return re.sub(r"\$(\d+)", r"%(parameter_\1)s", query)
-
-
-def _named_parameter(args: tuple) -> dict[str, Any]:
-    """
-    Convert positional arguments into a dictionary of named parameters.
-
-    Creates a dictionary mapping parameter names like 'parameter_1', 'parameter_2', etc.,
-    to the provided positional arguments. This is used for parameter substitution in SQL queries.
-
-    Used by SyncPsycopgDriver which cannot use RawCursor.
-
-    Args:
-        args: A tuple of positional arguments.
-
-    Returns:
-        A dictionary mapping parameter names to their corresponding values.
-    """
-    return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
 
 
 class PsycopgDriver(Driver):
