@@ -35,7 +35,6 @@ class PsycopgDriver(Driver):
     ) -> None:
         self._shutdown = asyncio.Event()
         self._connection = connection
-        self._lock = asyncio.Lock()
         self._tm = TaskManager()
         self._notify_stop_after = notify_stop_after
         self._notify_timeout = notify_timeout
@@ -63,10 +62,9 @@ class PsycopgDriver(Driver):
         import psycopg
         from psycopg.rows import dict_row
 
-        async with self._lock:
-            cursor = psycopg.AsyncRawCursor(self._connection, row_factory=dict_row)
-            await cursor.execute(query, args or None)
-            return await cursor.fetchall()
+        cursor = psycopg.AsyncRawCursor(self._connection, row_factory=dict_row)
+        await cursor.execute(query, args or None)
+        return await cursor.fetchall()
 
     async def execute(
         self,
@@ -75,35 +73,36 @@ class PsycopgDriver(Driver):
     ) -> str:
         import psycopg
 
-        async with self._lock:
-            cursor = psycopg.AsyncRawCursor(self._connection)
-            await cursor.execute(query, args or None)
-            return cursor.statusmessage or ""
+        cursor = psycopg.AsyncRawCursor(self._connection)
+        await cursor.execute(query, args or None)
+        return cursor.statusmessage or ""
 
     async def add_listener(
         self,
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        async with self._lock:
-            await self._connection.execute(f"LISTEN {channel};")
+        await self._connection.execute(f"LISTEN {channel};")
 
-            async def notify_handler() -> None:
-                while not self.shutdown.is_set():
-                    gen = self._connection.notifies(
-                        timeout=self._notify_timeout.total_seconds(),
-                        stop_after=self._notify_stop_after,
-                    )
-                    async for note in gen:
-                        if not self.shutdown.is_set():
-                            callback(note.payload)
-
-            self._tm.add(
-                asyncio.create_task(
-                    notify_handler(),
-                    name=f"notify_psycopg_handler_{channel}",
+        async def notify_handler() -> None:
+            while not self.shutdown.is_set():
+                # Poll with timeout=0 so the connection lock is held only
+                # briefly, then sleep to let fetch/execute through.
+                gen = self._connection.notifies(
+                    timeout=0,
+                    stop_after=self._notify_stop_after,
                 )
+                async for note in gen:
+                    if not self.shutdown.is_set():
+                        callback(note.payload)
+                await asyncio.sleep(self._notify_timeout.total_seconds())
+
+        self._tm.add(
+            asyncio.create_task(
+                notify_handler(),
+                name=f"notify_psycopg_handler_{channel}",
             )
+        )
 
     async def __aenter__(self) -> Self:
         return self
