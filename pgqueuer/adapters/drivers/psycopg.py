@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import functools
-import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -17,47 +15,16 @@ if TYPE_CHECKING:
     import psycopg
 
 
-@functools.cache
-def _replace_dollar_named_parameter(query: str) -> str:
-    """
-    Replace positional parameters in a SQL query with named parameters.
-
-    This function replaces all occurrences of $1, $2, etc., in the provided SQL query
-    string with named parameters of the form %(parameter_1)s, which is compatible with
-    Psycopg's named parameter syntax.
-
-    Args:
-        query (str): The SQL query string containing positional parameters.
-
-    Returns:
-        str: The modified SQL query string with named parameters.
-    """
-    return re.sub(r"\$(\d+)", r"%(parameter_\1)s", query)
-
-
-def _named_parameter(args: tuple) -> dict[str, Any]:
-    """
-    Convert positional arguments into a dictionary of named parameters.
-
-    Creates a dictionary mapping parameter names like 'parameter_1', 'parameter_2', etc.,
-    to the provided positional arguments. This is used for parameter substitution in SQL queries.
-
-    Args:
-        args (tuple): A tuple of positional arguments.
-
-    Returns:
-        dict[str, Any]: A dictionary mapping parameter names to their corresponding values.
-    """
-    return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
-
-
 class PsycopgDriver(Driver):
     """Psycopg implementation of the :class:`Driver` protocol.
 
     This driver operates on an existing ``psycopg.AsyncConnection`` instance to
-    execute queries and listen for notifications. The driver itself does not
-    close the provided connection; callers should close it manually or manage it
-    with an async context manager.
+    execute queries and listen for notifications. It uses ``AsyncRawCursor`` with
+    ``dict_row`` row factory to accept PostgreSQL-native ``$1, $2`` placeholders
+    directly and return results as dictionaries without manual construction.
+
+    The driver itself does not close the provided connection; callers should
+    close it manually or manage it with an async context manager.
     """
 
     def __init__(
@@ -93,26 +60,23 @@ class PsycopgDriver(Driver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        cursor = await self._connection.execute(
-            _replace_dollar_named_parameter(query),
-            _named_parameter(args),
-        )
-        if not (description := cursor.description):
-            raise RuntimeError("No description")
-        cols = [col.name for col in description]
-        return [dict(zip(cols, val)) for val in await cursor.fetchall()]
+        from psycopg import AsyncRawCursor
+        from psycopg.rows import dict_row
+
+        cursor = AsyncRawCursor(self._connection, row_factory=dict_row)
+        await cursor.execute(query, args or None)
+        return await cursor.fetchall()
 
     async def execute(
         self,
         query: str,
         *args: Any,
     ) -> str:
-        return (
-            await self._connection.execute(
-                _replace_dollar_named_parameter(query),
-                _named_parameter(args),
-            )
-        ).statusmessage or ""
+        from psycopg import AsyncRawCursor
+
+        cursor = AsyncRawCursor(self._connection)
+        await cursor.execute(query, args or None)
+        return cursor.statusmessage or ""
 
     async def add_listener(
         self,
@@ -151,8 +115,11 @@ class PsycopgDriver(Driver):
 class SyncPsycopgDriver(SyncDriver):
     """Synchronous psycopg implementation of the :class:`SyncDriver` protocol.
 
-    The driver works with an existing ``psycopg.Connection`` instance. It does
-    not close the provided connection; callers must handle the connection
+    The driver works with an existing ``psycopg.Connection`` instance. It uses
+    ``RawCursor`` with ``dict_row`` row factory to accept PostgreSQL-native
+    ``$1, $2`` placeholders directly.
+
+    It does not close the provided connection; callers must handle the connection
     lifecycle themselves.
     """
 
@@ -173,11 +140,9 @@ class SyncPsycopgDriver(SyncDriver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        cursor = self._connection.execute(
-            _replace_dollar_named_parameter(query),
-            _named_parameter(args),
-        )
-        if not (description := cursor.description):
-            raise RuntimeError("No description")
-        cols = [col.name for col in description]
-        return [dict(zip(cols, val)) for val in cursor.fetchall()]
+        from psycopg import RawCursor
+        from psycopg.rows import dict_row
+
+        cursor = RawCursor(self._connection, row_factory=dict_row)
+        cursor.execute(query, args or None)
+        return cursor.fetchall()
