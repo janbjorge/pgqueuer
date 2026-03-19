@@ -59,10 +59,10 @@ class PsycopgDriver(Driver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        import psycopg
+        from psycopg import AsyncRawCursor
         from psycopg.rows import dict_row
 
-        cursor = psycopg.AsyncRawCursor(self._connection, row_factory=dict_row)
+        cursor = AsyncRawCursor(self._connection, row_factory=dict_row)
         await cursor.execute(query, args or None)
         return await cursor.fetchall()
 
@@ -71,9 +71,9 @@ class PsycopgDriver(Driver):
         query: str,
         *args: Any,
     ) -> str:
-        import psycopg
+        from psycopg import AsyncRawCursor
 
-        cursor = psycopg.AsyncRawCursor(self._connection)
+        cursor = AsyncRawCursor(self._connection)
         await cursor.execute(query, args or None)
         return cursor.statusmessage or ""
 
@@ -140,9 +140,9 @@ class SyncPsycopgDriver(SyncDriver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        import psycopg
+        from psycopg import RawCursor
         from psycopg.rows import dict_row
 
-        cursor = psycopg.RawCursor(self._connection, row_factory=dict_row)
+        cursor = RawCursor(self._connection, row_factory=dict_row)
         cursor.execute(query, args or None)
         return cursor.fetchall()
