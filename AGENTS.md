@@ -183,15 +183,6 @@ Add heartbeat buffer flush on shutdown (#87)
 Fix duplicate job detection in concurrent workers (#91)
 ```
 
-### Edge Cases
-
-Trivial changes (typo fixes, dependency bumps, CI config tweaks) can omit the PR reference. Just use a succinct imperative title:
-
-```
-Fix typo in README
-Bump ruff to 0.8.2
-```
-
 ### Rationale
 
 - `git log --oneline` gives a clean, readable history.
