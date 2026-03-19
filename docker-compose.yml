@@ -1,22 +1,3 @@
-# ---------------------------------------------------------------------------
-# Shared fragments
-# ---------------------------------------------------------------------------
-x-app-environment: &app-environment
-  PGUSER: pgquser
-  PGPASSWORD: pgqpw
-  PGDATABASE: pgqdb
-  PGHOST: db
-  PGPORT: 5432
-
-x-app-base: &app-base
-  build: .
-  working_dir: /app
-  restart: "no"
-  environment: *app-environment
-
-# ---------------------------------------------------------------------------
-# Services
-# ---------------------------------------------------------------------------
 services:
 
   # --- PostgreSQL ------------------------------------------------------------
@@ -51,7 +32,15 @@ services:
 
   # --- Schema setup ----------------------------------------------------------
   populate:
-    <<: *app-base
+    build: .
+    working_dir: /app
+    restart: "no"
+    environment:
+      PGUSER: pgquser
+      PGPASSWORD: pgqpw
+      PGDATABASE: pgqdb
+      PGHOST: db
+      PGPORT: 5432
     depends_on:
       db:
         condition: service_healthy
@@ -60,7 +49,15 @@ services:
 
   # --- Test suite ------------------------------------------------------------
   test:
-    <<: *app-base
+    build: .
+    working_dir: /app
+    restart: "no"
+    environment:
+      PGUSER: pgquser
+      PGPASSWORD: pgqpw
+      PGDATABASE: pgqdb
+      PGHOST: db
+      PGPORT: 5432
     depends_on:
       populate:
         condition: service_completed_successfully
@@ -68,7 +65,15 @@ services:
 
   # --- Benchmark -------------------------------------------------------------
   benchmark:
-    <<: *app-base
+    build: .
+    working_dir: /app
+    restart: "no"
+    environment:
+      PGUSER: pgquser
+      PGPASSWORD: pgqpw
+      PGDATABASE: pgqdb
+      PGHOST: db
+      PGPORT: 5432
     depends_on:
       populate:
         condition: service_completed_successfully
