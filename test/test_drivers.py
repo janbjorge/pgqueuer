@@ -127,8 +127,6 @@ async def test_notify(
                 payload,
             )
 
-        # Pump the connection so psycopg's add_notify_handler can dispatch.
-        await d.execute("SELECT 1;")
         assert await asyncio.wait_for(event, timeout=1) == payload
 
 
@@ -213,8 +211,6 @@ async def test_event_listener(
                 payload.model_dump_json(),
             )
 
-        # Pump the connection so psycopg's add_notify_handler can dispatch.
-        await d.execute("SELECT 1;")
         assert (await asyncio.wait_for(listener.get(), timeout=1)) == payload
 
 

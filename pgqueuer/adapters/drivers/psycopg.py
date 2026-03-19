@@ -22,9 +22,11 @@ class PsycopgDriver(Driver):
     ``dict_row`` row factory to accept PostgreSQL-native ``$1, $2`` placeholders
     directly and return results as dictionaries without manual construction.
 
-    Notifications use ``add_notify_handler`` so callbacks fire during normal
-    query processing on the same connection — no dedicated connection or
-    background task required.
+    Notifications use the ``notifies()`` generator which waits on the
+    connection fd for incoming data — truly event-driven, no polling.
+    The generator is run with ``stop_after=1`` so it releases the
+    connection lock after each notification batch, allowing queries
+    to proceed.
 
     The driver does not close the provided connection; callers should
     close it manually or manage it with an async context manager.
@@ -36,6 +38,7 @@ class PsycopgDriver(Driver):
     ) -> None:
         self._shutdown = asyncio.Event()
         self._connection = connection
+        self._tm = TaskManager()
 
         if not self._connection.autocommit:
             raise RuntimeError(
@@ -50,7 +53,7 @@ class PsycopgDriver(Driver):
 
     @property
     def tm(self) -> TaskManager:
-        return TaskManager()
+        return self._tm
 
     async def fetch(
         self,
@@ -81,13 +84,28 @@ class PsycopgDriver(Driver):
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
         await self._connection.execute(f"LISTEN {channel};")
-        self._connection.add_notify_handler(lambda n: callback(n.payload))
+
+        async def notify_watcher() -> None:
+            while not self.shutdown.is_set():
+                async for note in self._connection.notifies(
+                    timeout=1.0,
+                    stop_after=1,
+                ):
+                    callback(note.payload)
+
+        self._tm.add(
+            asyncio.create_task(
+                notify_watcher(),
+                name=f"notify_psycopg_watcher_{channel}",
+            )
+        )
 
     async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(self, *_: object) -> None:
         self.shutdown.set()
+        await self.tm.gather_tasks()
 
 
 class SyncPsycopgDriver(SyncDriver):
