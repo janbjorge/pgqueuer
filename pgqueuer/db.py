@@ -2,12 +2,7 @@
 
 from pgqueuer.adapters.drivers import dsn
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
-from pgqueuer.adapters.drivers.psycopg import (
-    PsycopgDriver,
-    SyncPsycopgDriver,
-    _named_parameter,
-    _replace_dollar_named_parameter,
-)
+from pgqueuer.adapters.drivers.psycopg import PsycopgDriver, SyncPsycopgDriver
 from pgqueuer.ports.driver import Driver, SyncDriver
 
 __all__ = [
@@ -17,7 +12,5 @@ __all__ = [
     "PsycopgDriver",
     "SyncDriver",
     "SyncPsycopgDriver",
-    "_named_parameter",
-    "_replace_dollar_named_parameter",
     "dsn",
 ]
