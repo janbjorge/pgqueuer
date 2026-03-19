@@ -195,9 +195,16 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: PgQueuer)
 
 
 async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
+    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.helpers.utc_now",
-        return_value=datetime.now(timezone.utc) + timedelta(hours=1),
+        return_value=mocked_now,
+    )
+    # Mock croniter to return a time in the past, making the task immediately due
+    past_timestamp = int(mocked_now.timestamp()) - 60
+    mocker.patch(
+        "pgqueuer.core.executors.croniter",
+        return_value=mocker.Mock(get_next=mocker.Mock(return_value=past_timestamp)),
     )
     executed = False
 
@@ -218,9 +225,16 @@ async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
 
 
 async def test_heartbeat_updates(scheduler: PgQueuer, mocker: Mock) -> None:
+    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.helpers.utc_now",
-        return_value=datetime.now(timezone.utc) + timedelta(hours=1),
+        return_value=mocked_now,
+    )
+    # Mock croniter to return a time in the past, making the task immediately due
+    past_timestamp = int(mocked_now.timestamp()) - 60
+    mocker.patch(
+        "pgqueuer.core.executors.croniter",
+        return_value=mocker.Mock(get_next=mocker.Mock(return_value=past_timestamp)),
     )
 
     async def sample_task(schedule: Schedule) -> None: ...
@@ -231,7 +245,7 @@ async def test_heartbeat_updates(scheduler: PgQueuer, mocker: Mock) -> None:
     await asyncio.gather(
         *[
             scheduler.run(),
-            shutdown_scheduler_after(scheduler, timedelta(seconds=2)),
+            shutdown_scheduler_after(scheduler, timedelta(seconds=1)),
         ],
     )
     after = await inspect_schedule(scheduler.connection)
@@ -243,9 +257,16 @@ async def test_schedule_storage_and_retrieval(
     scheduler: PgQueuer,
     mocker: Mock,
 ) -> None:
+    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.helpers.utc_now",
-        return_value=datetime.now(timezone.utc) + timedelta(hours=1),
+        return_value=mocked_now,
+    )
+    # Mock croniter to return a time in the past, making the task immediately due
+    past_timestamp = int(mocked_now.timestamp()) - 60
+    mocker.patch(
+        "pgqueuer.core.executors.croniter",
+        return_value=mocker.Mock(get_next=mocker.Mock(return_value=past_timestamp)),
     )
     expression = "* * * * *"
     entrypoint = "db_task"
