@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import warnings
 from contextlib import suppress
 from datetime import timedelta
 from typing import Callable
@@ -14,13 +13,6 @@ from pgqueuer.core import executors, helpers, logconfig, tm
 from pgqueuer.domain import models
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
-
-warnings.filterwarnings(
-    "default",
-    category=DeprecationWarning,
-    module=r"^pgqueuer(\.|$)",
-    append=True,
-)
 
 
 @dataclasses.dataclass
