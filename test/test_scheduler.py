@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.models import CronExpressionEntrypoint, Schedule
+from pgqueuer.models import CronEntrypoint, CronExpression, CronExpressionEntrypoint, Schedule
 from pgqueuer.qb import DBSettings
 from pgqueuer.sm import SchedulerManager
 
@@ -94,10 +94,16 @@ async def test_scheduler_trailing_seconds_field_is_documented_behavior(
     scheduler.schedule("sample_task_seconds_first", "*/3 * * * * *")(sample_task)
 
     seconds_last = scheduler.registry[
-        CronExpressionEntrypoint("sample_task_seconds_last", "* * * * * */3")
+        CronExpressionEntrypoint(
+            CronEntrypoint("sample_task_seconds_last"),
+            CronExpression("* * * * * */3"),
+        )
     ]
     seconds_first = scheduler.registry[
-        CronExpressionEntrypoint("sample_task_seconds_first", "*/3 * * * * *")
+        CronExpressionEntrypoint(
+            CronEntrypoint("sample_task_seconds_first"),
+            CronExpression("*/3 * * * * *"),
+        )
     ]
 
     assert seconds_last.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc)
