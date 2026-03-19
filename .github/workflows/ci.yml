@@ -69,7 +69,7 @@ jobs:
             --strategy ${{ matrix.strategy }} \
             --output-json benchmark.json
       - name: Commit and Push Benchmark to Artifact Repository
-        if: ${{ env.HAS_ARTIFACTS_REPO_PAT == 'true' }}
+        if: ${{ github.ref == 'refs/heads/main' && env.HAS_ARTIFACTS_REPO_PAT == 'true' }}
         env:
           ARTIFACTS_REPO_URL: https://github.com/janbjorge/artifacts-storage.git
           ARTIFACTS_REPO_PAT: ${{ secrets.ARTIFACTS_STORAGE_PAT }}
@@ -131,9 +131,32 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        postgres-version: ["13", "14", "15", "16", "17", "18"]
-        os: [ubuntu-24.04]
+        # Sparse matrix: every Python against anchor PG 16,
+        # plus every PG against anchor Python 3.12.
+        # Covers the full range of both axes in 10 jobs instead of 30.
+        include:
+          # All Python versions × PG 16 (anchor)
+          - python-version: "3.10"
+            postgres-version: "16"
+          - python-version: "3.11"
+            postgres-version: "16"
+          - python-version: "3.12"
+            postgres-version: "16"
+          - python-version: "3.13"
+            postgres-version: "16"
+          - python-version: "3.14"
+            postgres-version: "16"
+          # All remaining PG versions × Python 3.12 (anchor)
+          - python-version: "3.12"
+            postgres-version: "13"
+          - python-version: "3.12"
+            postgres-version: "14"
+          - python-version: "3.12"
+            postgres-version: "15"
+          - python-version: "3.12"
+            postgres-version: "17"
+          - python-version: "3.12"
+            postgres-version: "18"
     env:
       CI: 1
       PYTHONASYNCIODEBUG: 1
@@ -142,8 +165,8 @@ jobs:
       POSTGRES_VERSION: ${{ matrix.postgres-version }}
       TESTCONTAINERS_RYUK_DISABLED: "true"
       TESTCONTAINERS_HOST_OVERRIDE: "localhost"
-    name: Test PGQueuer with Multiple Python and Postgres Versions
-    runs-on: ${{ matrix.os }}
+    name: "Test Py ${{ matrix.python-version }} / PG ${{ matrix.postgres-version }}"
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -152,7 +175,7 @@ jobs:
       - name: Prefetch docker images
         run: docker pull postgres:${{ matrix.postgres-version }}
       - name: Set up Python
-        run: uv sync --python ${{ matrix.python-version }} --all-extras  --frozen
+        run: uv sync --python ${{ matrix.python-version }} --all-extras --frozen
       - name: Run Full Test Suite
         run: uv run pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
   run-windows-tests:
@@ -177,8 +200,9 @@ jobs:
         run: uv sync --all-extras --frozen
       - name: Run Windows Shutdown Test
         run: uv run pytest test/windows/test_shutdown.py --durations=10
-  run-ruff:
+  run-checks:
     if: github.event_name != 'schedule'
+    name: Lint, Typecheck & Architecture
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -191,38 +215,18 @@ jobs:
       - name: Run Ruff Linter
         if: ${{ always() }}
         run: uv run ruff check .
-      - name: Apply Ruff Formatting
+      - name: Check Ruff Formatting
         if: ${{ always() }}
         run: uv run ruff format . --check
-  run-import-linter:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-      - name: Set up Python
-        run: uv python install 3.12
-      - name: Install Dev Environment
-        run: uv sync --all-extras --frozen
       - name: Run Import Linter (Hexagonal Architecture Validation)
+        if: ${{ always() }}
         run: uv run lint-imports
-  run-mypy:
-    if: github.event_name != 'schedule'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-      - name: Set up Python
-        run: uv python install 3.12
-      - name: Install Dev Environment
-        run: uv sync --all-extras --frozen
       - name: Run Mypy Type Check
+        if: ${{ always() }}
         run: uv run mypy .
   complete-pipeline:
     if: github.event_name != 'schedule'
-    needs: [validate-benchmark, run-tests, run-windows-tests, run-ruff, run-import-linter, run-mypy]
+    needs: [validate-benchmark, run-tests, run-windows-tests, run-checks]
     runs-on: ubuntu-24.04
     steps:
       - name: Confirm All Tests Completed
