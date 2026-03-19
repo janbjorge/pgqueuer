@@ -174,10 +174,8 @@ async def test_valid_query_syntax(
                 await d.execute(rolledback(sql))
 
         elif isinstance(d, PsycopgDriver):
-            try:
+            with suppress(psycopg.errors.UndefinedParameter):
                 await d.execute(rolledback(sql))
-            except psycopg.errors.ProgrammingError as exc:
-                assert "query parameter missing" in str(exc)
         else:
             raise NotADirectoryError(d)
 

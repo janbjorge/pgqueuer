@@ -26,11 +26,13 @@ def _replace_dollar_named_parameter(query: str) -> str:
     string with named parameters of the form %(parameter_1)s, which is compatible with
     Psycopg's named parameter syntax.
 
+    Used by SyncPsycopgDriver which cannot use RawCursor.
+
     Args:
-        query (str): The SQL query string containing positional parameters.
+        query: The SQL query string containing positional parameters.
 
     Returns:
-        str: The modified SQL query string with named parameters.
+        The modified SQL query string with named parameters.
     """
     return re.sub(r"\$(\d+)", r"%(parameter_\1)s", query)
 
@@ -42,11 +44,13 @@ def _named_parameter(args: tuple) -> dict[str, Any]:
     Creates a dictionary mapping parameter names like 'parameter_1', 'parameter_2', etc.,
     to the provided positional arguments. This is used for parameter substitution in SQL queries.
 
+    Used by SyncPsycopgDriver which cannot use RawCursor.
+
     Args:
-        args (tuple): A tuple of positional arguments.
+        args: A tuple of positional arguments.
 
     Returns:
-        dict[str, Any]: A dictionary mapping parameter names to their corresponding values.
+        A dictionary mapping parameter names to their corresponding values.
     """
     return {f"parameter_{n}": arg for n, arg in enumerate(args, start=1)}
 
@@ -55,16 +59,19 @@ class PsycopgDriver(Driver):
     """Psycopg implementation of the :class:`Driver` protocol.
 
     This driver operates on an existing ``psycopg.AsyncConnection`` instance to
-    execute queries and listen for notifications. The driver itself does not
-    close the provided connection; callers should close it manually or manage it
-    with an async context manager.
+    execute queries and listen for notifications. It uses ``AsyncRawCursor`` with
+    ``dict_row`` row factory to accept PostgreSQL-native ``$1, $2`` placeholders
+    directly and return results as dictionaries without manual construction.
+
+    The driver itself does not close the provided connection; callers should
+    close it manually or manage it with an async context manager.
     """
 
     def __init__(
         self,
         connection: psycopg.AsyncConnection,
         notify_timeout: timedelta = timedelta(seconds=0.25),
-        notify_stop_after: int = 10,
+        notify_stop_after: int = 100,
     ) -> None:
         self._shutdown = asyncio.Event()
         self._connection = connection
@@ -93,26 +100,25 @@ class PsycopgDriver(Driver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        cursor = await self._connection.execute(
-            _replace_dollar_named_parameter(query),
-            _named_parameter(args),
-        )
-        if not (description := cursor.description):
-            raise RuntimeError("No description")
-        cols = [col.name for col in description]
-        return [dict(zip(cols, val)) for val in await cursor.fetchall()]
+        import psycopg
+        from psycopg.rows import dict_row
+
+        async with self._lock:
+            cursor = psycopg.AsyncRawCursor(self._connection, row_factory=dict_row)
+            await cursor.execute(query, args or None)
+            return await cursor.fetchall()
 
     async def execute(
         self,
         query: str,
         *args: Any,
     ) -> str:
-        return (
-            await self._connection.execute(
-                _replace_dollar_named_parameter(query),
-                _named_parameter(args),
-            )
-        ).statusmessage or ""
+        import psycopg
+
+        async with self._lock:
+            cursor = psycopg.AsyncRawCursor(self._connection)
+            await cursor.execute(query, args or None)
+            return cursor.statusmessage or ""
 
     async def add_listener(
         self,
@@ -131,7 +137,6 @@ class PsycopgDriver(Driver):
                     async for note in gen:
                         if not self.shutdown.is_set():
                             callback(note.payload)
-                    await asyncio.sleep(self._notify_timeout.total_seconds())
 
             self._tm.add(
                 asyncio.create_task(
@@ -151,8 +156,11 @@ class PsycopgDriver(Driver):
 class SyncPsycopgDriver(SyncDriver):
     """Synchronous psycopg implementation of the :class:`SyncDriver` protocol.
 
-    The driver works with an existing ``psycopg.Connection`` instance. It does
-    not close the provided connection; callers must handle the connection
+    The driver works with an existing ``psycopg.Connection`` instance. It uses
+    ``RawCursor`` with ``dict_row`` row factory to accept PostgreSQL-native
+    ``$1, $2`` placeholders directly.
+
+    It does not close the provided connection; callers must handle the connection
     lifecycle themselves.
     """
 
@@ -173,11 +181,9 @@ class SyncPsycopgDriver(SyncDriver):
         query: str,
         *args: Any,
     ) -> list[dict]:
-        cursor = self._connection.execute(
-            _replace_dollar_named_parameter(query),
-            _named_parameter(args),
-        )
-        if not (description := cursor.description):
-            raise RuntimeError("No description")
-        cols = [col.name for col in description]
-        return [dict(zip(cols, val)) for val in cursor.fetchall()]
+        import psycopg
+        from psycopg.rows import dict_row
+
+        cursor = psycopg.RawCursor(self._connection, row_factory=dict_row)
+        cursor.execute(query, args or None)
+        return cursor.fetchall()
