@@ -165,7 +165,42 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 ## Commit Conventions
 
-Follow conventional-commits: `feat:`, `fix:`, `docs:`, `ci:`, `chore:`, `refactor:`. Present tense, 72-char first line, reference issues. See `CONTRIBUTING.md`.
+### Title Format
+
+All commit titles must follow this format:
+
+```
+{Title} (#{PR_ID})
+```
+
+- **Title**: Imperative mood, starting with a capital letter.
+- **PR reference**: End with the PR number in parentheses, prefixed with `#`.
+
+Examples:
+
+```
+Add heartbeat buffer flush on shutdown (#87)
+Fix duplicate job detection in concurrent workers (#91)
+```
+
+### Edge Cases
+
+Trivial changes (typo fixes, dependency bumps, CI config tweaks) can omit the PR reference. Just use a succinct imperative title:
+
+```
+Fix typo in README
+Bump ruff to 0.8.2
+```
+
+### Rationale
+
+- `git log --oneline` gives a clean, readable history.
+- `git blame` gives immediate context.
+- The `#{PR_ID}` suffix implicitly links to the PR in GitHub.
+
+### Body and Trailers
+
+Present tense, wrap at 72 characters. Reference additional context in the body when needed. See `CONTRIBUTING.md`.
 
 ## CI Matrix
 
