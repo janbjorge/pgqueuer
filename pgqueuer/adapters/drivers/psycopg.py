@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Callable
 
 from typing_extensions import Self
@@ -30,14 +29,10 @@ class PsycopgDriver(Driver):
     def __init__(
         self,
         connection: psycopg.AsyncConnection,
-        notify_timeout: timedelta = timedelta(seconds=0.25),
-        notify_stop_after: int = 100,
     ) -> None:
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._tm = TaskManager()
-        self._notify_stop_after = notify_stop_after
-        self._notify_timeout = notify_timeout
 
         if not self._connection.autocommit:
             raise RuntimeError(
@@ -82,25 +77,27 @@ class PsycopgDriver(Driver):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
+        from psycopg import Notify
+
+        def on_notify(note: Notify) -> None:
+            if not self.shutdown.is_set():
+                callback(note.payload)
+
+        self._connection.add_notify_handler(on_notify)
         await self._connection.execute(f"LISTEN {channel};")
 
-        async def notify_handler() -> None:
+        # Handlers only fire during query execution.  Run a cheap
+        # periodic poll so notifications arrive even when the
+        # connection is otherwise idle.
+        async def poll_notifications() -> None:
             while not self.shutdown.is_set():
-                # Poll with timeout=0 so the connection lock is held only
-                # briefly, then sleep to let fetch/execute through.
-                gen = self._connection.notifies(
-                    timeout=0,
-                    stop_after=self._notify_stop_after,
-                )
-                async for note in gen:
-                    if not self.shutdown.is_set():
-                        callback(note.payload)
-                await asyncio.sleep(self._notify_timeout.total_seconds())
+                await self._connection.execute("")
+                await asyncio.sleep(0.25)
 
         self._tm.add(
             asyncio.create_task(
-                notify_handler(),
-                name=f"notify_psycopg_handler_{channel}",
+                poll_notifications(),
+                name=f"notify_psycopg_poll_{channel}",
             )
         )
 
