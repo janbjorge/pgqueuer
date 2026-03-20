@@ -354,7 +354,7 @@ class InMemoryQueries:
         # timers, and other tasks.
         await asyncio.sleep(0)
 
-        return [models.Job.model_validate(dict(j)) for j in selected]
+        return [models.Job.model_validate(j) for j in selected]
 
     # -- log_jobs --------------------------------------------------------------
 
