@@ -310,7 +310,7 @@ class Queries:
             queue_manager_id,
             global_concurrency_limit,
         )
-        return [models.Job.model_validate(dict(row)) for row in rows]
+        return [models.Job.model_validate(row) for row in rows]
 
     @overload
     async def enqueue(
@@ -444,7 +444,7 @@ class Queries:
             list[models.QueueStatistics]: A list of statistics entries for the queue.
         """
         return [
-            models.QueueStatistics.model_validate(dict(x))
+            models.QueueStatistics.model_validate(x)
             for x in await self.driver.fetch(self.qbq.build_queue_size_query())
         ]
 
@@ -538,7 +538,7 @@ class Queries:
 
         await self.driver.execute(self.qbq.build_aggregate_log_data_to_statistics_query())
         return [
-            models.LogStatistics.model_validate(dict(x))
+            models.LogStatistics.model_validate(x)
             for x in await self.driver.fetch(
                 self.qbq.build_log_statistics_query(),
                 tail,
@@ -634,7 +634,7 @@ class Queries:
         entrypoints: dict[models.CronExpressionEntrypoint, timedelta],
     ) -> list[models.Schedule]:
         return [
-            models.Schedule.model_validate(dict(row))
+            models.Schedule.model_validate(row)
             for row in await self.driver.fetch(
                 self.qbs.build_fetch_schedule_query(),
                 [x.expression for x in entrypoints],
@@ -657,7 +657,7 @@ class Queries:
 
     async def peak_schedule(self) -> list[models.Schedule]:
         return [
-            models.Schedule.model_validate(dict(row))
+            models.Schedule.model_validate(row)
             for row in await self.driver.fetch(
                 self.qbs.build_peak_schedule_query(),
             )
@@ -681,7 +681,7 @@ class Queries:
 
     async def queue_log(self) -> list[models.Log]:
         return [
-            models.Log.model_validate(dict(x))
+            models.Log.model_validate(x)
             for x in await self.driver.fetch(self.qbq.build_fetch_log_query())
         ]
 
@@ -815,6 +815,6 @@ class SyncQueries:
             list[models.QueueStatistics]: A list of statistics entries for the queue.
         """
         return [
-            models.QueueStatistics.model_validate(dict(x))
+            models.QueueStatistics.model_validate(x)
             for x in self.driver.fetch(self.qbq.build_queue_size_query())
         ]
