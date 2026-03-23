@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from contextlib import suppress
 from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, MutableMapping
 
@@ -26,7 +27,6 @@ from pgqueuer.core.executors import (
 )
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
-from pgqueuer.core.tm import TaskManager
 from pgqueuer.domain.models import Channel
 from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
@@ -205,24 +205,50 @@ class PgQueuer:
         This method starts both the `QueueManager` and `SchedulerManager` concurrently to
         handle job processing and scheduling.
         """
-
-        # The task manager waits for all tasks for compile before
-        # exit.
-        async with TaskManager() as tm:
-            # Start queue manager
-            tm.add(
-                asyncio.create_task(
-                    self.qm.run(
-                        batch_size=batch_size,
-                        dequeue_timeout=dequeue_timeout,
-                        mode=mode,
-                        max_concurrent_tasks=max_concurrent_tasks,
-                        shutdown_on_listener_failure=shutdown_on_listener_failure,
-                    )
-                )
+        qm_task = asyncio.create_task(
+            self.qm.run(
+                batch_size=batch_size,
+                dequeue_timeout=dequeue_timeout,
+                mode=mode,
+                max_concurrent_tasks=max_concurrent_tasks,
+                shutdown_on_listener_failure=shutdown_on_listener_failure,
             )
-            # Start scheduler manager
-            tm.add(asyncio.create_task(self.sm.run()))
+        )
+        sm_task = asyncio.create_task(self.sm.run())
+        task_names = {
+            qm_task: "QueueManager",
+            sm_task: "SchedulerManager",
+        }
+        pending = {qm_task, sm_task}
+
+        try:
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for task in done:
+                    with suppress(asyncio.CancelledError):
+                        if exception := task.exception():
+                            raise exception
+
+                    if pending and not self.shutdown.is_set():
+                        raise RuntimeError(
+                            f"{task_names[task]} exited unexpectedly before shutdown."
+                        )
+
+                if self.shutdown.is_set() and pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+                    return
+        except BaseException:
+            self.shutdown.set()
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            raise
+        finally:
+            self.shutdown.set()
 
     def entrypoint(
         self,
