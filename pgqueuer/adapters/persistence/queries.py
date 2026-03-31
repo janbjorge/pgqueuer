@@ -694,6 +694,48 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
+    async def list_jobs(
+        self,
+        entrypoint: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[models.Job]:
+        args: list[object] = []
+        if entrypoint is not None:
+            args.append(entrypoint)
+        if status is not None:
+            args.append(status)
+        args.append(limit)
+        return [
+            models.Job.model_validate(row)
+            for row in await self.driver.fetch(
+                self.qbq.build_list_jobs_query(entrypoint=entrypoint, status=status),
+                *args,
+            )
+        ]
+
+    async def get_job(self, job_id: models.JobId) -> models.Job | None:
+        rows = await self.driver.fetch(self.qbq.build_get_job_query(), job_id)
+        if rows:
+            return models.Job.model_validate(rows[0])
+        return None
+
+    async def error_log(
+        self,
+        limit: int = 20,
+        entrypoint: str | None = None,
+    ) -> list[models.Log]:
+        args: list[object] = [limit]
+        if entrypoint is not None:
+            args.append(entrypoint)
+        return [
+            models.Log.model_validate(row)
+            for row in await self.driver.fetch(
+                self.qbq.build_error_log_query(entrypoint=entrypoint),
+                *args,
+            )
+        ]
+
 
 @dataclasses.dataclass
 class SyncQueries:

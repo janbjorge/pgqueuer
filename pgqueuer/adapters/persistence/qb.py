@@ -680,6 +680,38 @@ class QueryQueueBuilder:
         ORDER  BY job_id, created DESC, id DESC;
         """
 
+    def build_list_jobs_query(
+        self,
+        entrypoint: str | None,
+        status: str | None,
+    ) -> str:
+        conditions: list[str] = []
+        if entrypoint is not None:
+            conditions.append(f"entrypoint = {self._param(len(conditions) + 1)}")
+        if status is not None:
+            conditions.append(f"status = {self._param(len(conditions) + 1)}")
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        return f"""SELECT * FROM {self.settings.queue_table}
+    {where}
+    ORDER BY id DESC
+    LIMIT {self._param(len(conditions) + 1)}
+    """
+
+    def build_get_job_query(self) -> str:
+        return f"SELECT * FROM {self.settings.queue_table} WHERE id = $1"
+
+    def build_error_log_query(self, entrypoint: str | None) -> str:
+        ep_filter = " AND entrypoint = $2" if entrypoint is not None else ""
+        return f"""SELECT * FROM {self.settings.queue_table_log}
+    WHERE status = 'exception' AND traceback IS NOT NULL{ep_filter}
+    ORDER BY created DESC
+    LIMIT $1
+    """
+
+    @staticmethod
+    def _param(n: int) -> str:
+        return f"${n}"
+
 
 @dataclasses.dataclass
 class QuerySchedulerBuilder:

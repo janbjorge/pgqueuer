@@ -607,5 +607,18 @@ def optimize_autovacuum(
         asyncio_run(run())
 
 
+@app.command(help="Start the PgQueuer MCP server for AI assistant integration.")
+def mcp(
+    transport: str = typer.Option(
+        "stdio",
+        help="MCP transport: 'stdio' or 'streamable-http'.",
+    ),
+) -> None:
+    from pgqueuer.adapters.mcp.server import create_mcp_server
+
+    server = create_mcp_server()
+    server.run(transport=transport)
+
+
 if __name__ == "__main__":
     app(prog_name="pgqueuer")
