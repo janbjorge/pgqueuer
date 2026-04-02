@@ -19,8 +19,8 @@ async def test_pgqueuer_run_propagates_scheduler_failure() -> None:
     async def scheduler_manager_run() -> None:
         raise RuntimeError("scheduler failure")
 
-    pgq.qm.run = queue_manager_run  # type: ignore[method-assign]
-    pgq.sm.run = scheduler_manager_run  # type: ignore[method-assign]
+    pgq.qm.run = queue_manager_run  # type: ignore
+    pgq.sm.run = scheduler_manager_run  # type: ignore
 
     with pytest.raises(RuntimeError, match="scheduler failure"):
         await pgq.run()
@@ -43,8 +43,8 @@ async def test_pgqueuer_run_propagates_queue_failure() -> None:
             scheduler_cancelled.set()
             raise
 
-    pgq.qm.run = queue_manager_run  # type: ignore[method-assign]
-    pgq.sm.run = scheduler_manager_run  # type: ignore[method-assign]
+    pgq.qm.run = queue_manager_run  # type: ignore
+    pgq.sm.run = scheduler_manager_run  # type: ignore
 
     with pytest.raises(RuntimeError, match="queue failure"):
         await pgq.run()
