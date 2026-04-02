@@ -571,7 +571,7 @@ class QueueManager:
                 )
 
             periodic_health_check_task.cancel()
-            with suppress(asyncio.CancelledError):
+            with suppress(asyncio.CancelledError, Exception):
                 await periodic_health_check_task
 
         if event_task and not event_task.done():

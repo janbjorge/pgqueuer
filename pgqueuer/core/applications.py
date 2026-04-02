@@ -26,7 +26,6 @@ from pgqueuer.core.executors import (
 )
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
-from pgqueuer.core.tm import TaskManager
 from pgqueuer.domain.models import Channel
 from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
@@ -205,24 +204,25 @@ class PgQueuer:
         This method starts both the `QueueManager` and `SchedulerManager` concurrently to
         handle job processing and scheduling.
         """
-
-        # The task manager waits for all tasks for compile before
-        # exit.
-        async with TaskManager() as tm:
-            # Start queue manager
-            tm.add(
-                asyncio.create_task(
-                    self.qm.run(
-                        batch_size=batch_size,
-                        dequeue_timeout=dequeue_timeout,
-                        mode=mode,
-                        max_concurrent_tasks=max_concurrent_tasks,
-                        shutdown_on_listener_failure=shutdown_on_listener_failure,
-                    )
+        tasks = [
+            asyncio.create_task(
+                self.qm.run(
+                    batch_size=batch_size,
+                    dequeue_timeout=dequeue_timeout,
+                    mode=mode,
+                    max_concurrent_tasks=max_concurrent_tasks,
+                    shutdown_on_listener_failure=shutdown_on_listener_failure,
                 )
-            )
-            # Start scheduler manager
-            tm.add(asyncio.create_task(self.sm.run()))
+            ),
+            asyncio.create_task(self.sm.run()),
+        ]
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            self.shutdown.set()
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def entrypoint(
         self,
