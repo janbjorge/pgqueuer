@@ -89,6 +89,7 @@ nav:
       - Scheduling: guides/scheduling.md
       - Reliability:
           - Reliability Model: guides/reliability.md
+          - Database-Level Retry: guides/retry.md
           - Heartbeat Monitoring: guides/heartbeat.md
       - Shared Resources: guides/shared-resources.md
       - Performance & Deployment:
