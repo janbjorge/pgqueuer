@@ -102,6 +102,7 @@ nav:
       - Database Permissions: reference/database-permissions.md
       - In-Memory Adapter: reference/in-memory.md
   - Integrations:
+      - MCP Server: integrations/mcp-server.md
       - Prometheus Metrics: integrations/prometheus.md
       - Distributed Tracing: integrations/tracing.md
       - PostgREST: integrations/postgrest.md
