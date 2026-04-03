@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -85,8 +84,7 @@ def _parse_interval(period: str | None) -> timedelta | None:
 
 
 def _db(ctx: Ctx) -> PgQueuerDatabase:
-    lifespan_context: PgQueuerDatabase = ctx.request_context.lifespan_context
-    return lifespan_context
+    return ctx.request_context.lifespan_context
 
 
 def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
@@ -490,25 +488,21 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
 
 def create_mcp_server(
     dsn: str | None = None,
-    settings: DBSettings | None = None,
+    settings: DBSettings = DBSettings(),
 ) -> FastMCP:
     """Factory that builds a fully-configured PgQueuer MCP server.
 
     Args:
-        dsn: PostgreSQL connection string. Falls back to PGQUEUER_DSN / PGDSN env vars.
-        settings: PgQueuer DBSettings (table names, channel, etc.). Uses defaults if omitted.
+        dsn: PostgreSQL connection string. If None, asyncpg reads standard
+             libpq environment variables (PGHOST, PGPORT, PGUSER,
+             PGPASSWORD, PGDATABASE) automatically.
+        settings: PgQueuer DBSettings (table names, channel, etc.).
     """
-    resolved_settings = settings or DBSettings()
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:
-        resolved_dsn = dsn or os.environ.get("PGQUEUER_DSN") or os.environ.get("PGDSN")
-        if not resolved_dsn:
-            raise RuntimeError(
-                "Set PGQUEUER_DSN or PGDSN environment variable to a PostgreSQL connection string."
-            )
-        async with asyncpg.create_pool(dsn=resolved_dsn, min_size=1, max_size=5) as pool:
-            yield PgQueuerDatabase(pool, resolved_settings)
+        async with asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5) as pool:
+            yield PgQueuerDatabase(pool, settings)
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)
 
