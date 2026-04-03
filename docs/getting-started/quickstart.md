@@ -108,7 +108,7 @@ function that returns a configured `PgQueuer` instance.
 
 - `PgQueuer.from_asyncpg_connection(connection)` wraps the connection in an `AsyncpgDriver`
   and sets up a `QueueManager` and `SchedulerManager`.
-- `@pgq.entrypoint("fetch")` registers a function to handle jobs with entrypoint name `"fetch"`.
+- `@pgq.entrypoint("fetch")` registers an async function to handle jobs with entrypoint name `"fetch"`.
 - `@pgq.schedule("cleanup", "0 * * * *")` registers a cron task that runs every hour.
 - Returning the `PgQueuer` instance tells the CLI how to start your application.
 
