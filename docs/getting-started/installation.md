@@ -39,6 +39,7 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     | `psycopg` | psycopg async + sync driver |
     | `logfire` | [Logfire](https://logfire.pydantic.dev/) distributed tracing |
     | `sentry` | [Sentry](https://sentry.io/) distributed tracing |
+    | `mcp` | [MCP server](../integrations/mcp-server.md) for AI agent access |
     | `fastapi` | FastAPI Prometheus metrics router |
 
     Install multiple extras at once:
