@@ -28,8 +28,8 @@ with `@pgq.entrypoint()`.
 
 ## Entrypoints
 
-An **entrypoint** is a named handler that processes jobs. You register entrypoints using
-the `@pgq.entrypoint()` decorator:
+An **entrypoint** is a named async handler that processes jobs. All entrypoints must be
+defined with `async def`. You register entrypoints using the `@pgq.entrypoint()` decorator:
 
 ```python
 @pgq.entrypoint("send_email")

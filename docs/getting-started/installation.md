@@ -20,8 +20,8 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     ```
 
     [psycopg](https://www.psycopg.org/psycopg3/) supports both async and synchronous
-    connections. Use this if you need sync job handlers or already use psycopg elsewhere
-    in your application.
+    connections. Use this if you need to enqueue jobs from sync code (e.g. Flask, Django)
+    or already use psycopg elsewhere in your application.
 
 === "uv"
 
