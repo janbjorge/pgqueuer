@@ -198,13 +198,12 @@ async def test_mixed_serialized_and_concurrent_processing(
     assert len(serialized_dispatch_false) > 0
 
 
-@pytest.mark.parametrize("n_consumers", (1,))
 async def test_single_consumer_serialized_behavior(
-    n_consumers: int,
     apgdriver: Driver,
     n_tasks: int = 50,
     wait: int = 1,  # Set wait time to 1 second
 ) -> None:
+    n_consumers = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
     qms = [QueueManager(apgdriver) for _ in range(n_consumers)]

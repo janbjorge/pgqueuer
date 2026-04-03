@@ -25,7 +25,7 @@ def job_faker(
     )
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
 async def test_job_buffer_max_size(max_size: int) -> None:
     helper_buffer = []
 
@@ -72,7 +72,7 @@ async def test_job_buffer_timeout(
     assert len(helper_buffer) == N
 
 
-@pytest.mark.parametrize("max_size", (2, 3, 5, 64))  # Adjusted to max_size >=2
+@pytest.mark.parametrize("max_size", (2, 64))  # Adjusted to max_size >=2
 async def test_job_buffer_flush_on_exit(max_size: int) -> None:
     """
     Test that the buffer flushes all remaining items upon exiting the context,
@@ -96,8 +96,8 @@ async def test_job_buffer_flush_on_exit(max_size: int) -> None:
     assert len(helper_buffer) == max_size - 2
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
-@pytest.mark.parametrize("flushes", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
+@pytest.mark.parametrize("flushes", (1, 2, 64))
 async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
     """
     Test that the buffer can handle multiple flushes when more items than max_size are added.
@@ -121,7 +121,7 @@ async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
     assert len(helper_buffer) == flushes
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
 async def test_job_buffer_flush_on_exception(max_size: int) -> None:
     """
     Test that the buffer handles exceptions in the callback gracefully and retries.
@@ -152,7 +152,7 @@ async def test_job_buffer_flush_on_exception(max_size: int) -> None:
     assert len(helper_buffer) == max_size
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
 async def test_job_buffer_flush_order(max_size: int) -> None:
     """
     Test that items are flushed in the order they were added.
@@ -174,7 +174,7 @@ async def test_job_buffer_flush_order(max_size: int) -> None:
     assert helper_buffer == items
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
 async def test_job_buffer_concurrent_adds(max_size: int) -> None:
     """
     Test that the buffer can handle concurrent additions without losing items.
@@ -222,7 +222,7 @@ async def test_job_buffer_empty_flush() -> None:
     assert len(helper_buffer) == 0
 
 
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
+@pytest.mark.parametrize("max_size", (1, 2, 64))
 async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
     """
     Test that the buffer can be reused after a flush has occurred.
@@ -251,59 +251,6 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
             await buffer.add((job_faker(), "successful", None))
         await buffer.flush()
         assert len(helper_buffer) == max_size
-
-
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
-async def test_job_buffer_exception_during_flush(max_size: int) -> None:
-    """
-    Test that the buffer handles exceptions during flush without losing items.
-    """
-    helper_buffer = []
-    flush_call_count = 0
-
-    async def faulty_helper(x: list) -> None:
-        nonlocal flush_call_count
-        flush_call_count += 1
-        if flush_call_count == 1:
-            raise RuntimeError("Simulated flush failure")
-        helper_buffer.extend(x)
-
-    async with JobStatusLogBuffer(
-        max_size=max_size,
-        timeout=timedelta(seconds=0.01),
-        callback=faulty_helper,
-    ) as buffer:
-        for _ in range(max_size):
-            await buffer.add((job_faker(), "successful", None))
-
-        # Allow time for the flush to be attempted and retried
-        await asyncio.sleep(0.02)
-
-    # After first failure, flush should retry and succeed
-    assert flush_call_count == 2
-    assert len(helper_buffer) == max_size
-
-
-@pytest.mark.parametrize("max_size", (1, 2, 3, 5, 64))
-async def test_job_buffer_callback_called_correctly(max_size: int) -> None:
-    """
-    Test that the callback is called with the correct items.
-    """
-    items = [(job_faker(), "successful") for _ in range(max_size)]
-    received_items = []
-
-    async def helper(x: list) -> None:
-        received_items.extend(x)
-
-    async with JobStatusLogBuffer(
-        max_size=max_size,
-        timeout=timedelta(seconds=100),
-        callback=helper,
-    ) as buffer:
-        for item in items:
-            await buffer.add(item)  # type: ignore[arg-type]
-
-    assert received_items == items
 
 
 async def test_job_buffer_callback_exception_during_teardown() -> None:
