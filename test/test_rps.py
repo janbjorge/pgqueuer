@@ -14,12 +14,12 @@ from pgqueuer.queries import Queries
 
 
 async def consumer(qm: QueueManager, jobs: list[JobId]) -> None:
-    @qm.entrypoint("asyncfetch", requests_per_second=100)
-    async def asyncfetch(job: Job) -> None:
+    @qm.entrypoint("fast", requests_per_second=100)
+    async def fast(job: Job) -> None:
         jobs.append(job.id)
 
-    @qm.entrypoint("throttledfetch", requests_per_second=10)
-    async def throttledfetch(job: Job) -> None:
+    @qm.entrypoint("slow", requests_per_second=10)
+    async def slow(job: Job) -> None:
         jobs.append(job.id)
 
     await qm.run(dequeue_timeout=timedelta(seconds=0))
@@ -31,7 +31,7 @@ async def enqueue(
 ) -> None:
     assert size > 0
     cnt = count()
-    entrypoints = ["throttledfetch", "asyncfetch"] * size
+    entrypoints = ["slow", "fast"] * size
     await queries.enqueue(
         random.sample(entrypoints, k=size),
         [f"{next(cnt)}".encode() for _ in range(size)],

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import random
 import signal
 import sys
 from contextlib import suppress
@@ -222,12 +221,8 @@ class Consumer:
     mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous
 
     async def run(self) -> None:
-        @self.pgq.entrypoint("asyncfetch")
-        async def asyncfetch(job: Job) -> None:
-            self.bar.update()
-
-        @self.pgq.entrypoint("throttledfetch")
-        async def throttledfetch(job: Job) -> None:
+        @self.pgq.entrypoint("fetch")
+        async def fetch(job: Job) -> None:
             self.bar.update()
 
         await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
@@ -241,10 +236,9 @@ class Producer:
     cnt: count
 
     async def run(self) -> None:
-        entrypoints = ["throttledfetch", "asyncfetch"] * self.batch_size
         while not self.shutdown.is_set():
             await self.queries.enqueue(
-                random.sample(entrypoints, k=self.batch_size),
+                ["fetch"] * self.batch_size,
                 [f"{next(self.cnt)}".encode() for _ in range(self.batch_size)],
                 [0] * self.batch_size,
             )
@@ -388,9 +382,8 @@ class DrainStrategy:
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
-        entrypoints = ["throttledfetch", "asyncfetch"] * self.settings.jobs
         await queries.enqueue(
-            random.sample(entrypoints, k=self.settings.jobs),
+            ["fetch"] * self.settings.jobs,
             [b"" for _ in range(self.settings.jobs)],
             [0] * self.settings.jobs,
         )
