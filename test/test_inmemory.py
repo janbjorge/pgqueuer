@@ -12,17 +12,6 @@ from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
-
-@pytest.fixture
-def driver() -> InMemoryDriver:
-    return InMemoryDriver()
-
-
-@pytest.fixture
-def queries(driver: InMemoryDriver) -> InMemoryQueries:
-    return InMemoryQueries(driver=driver)
-
-
 # ---------------------------------------------------------------------------
 # Enqueue
 # ---------------------------------------------------------------------------

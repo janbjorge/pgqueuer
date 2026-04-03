@@ -6,9 +6,8 @@ import uuid
 from datetime import timedelta
 
 import async_timeout
-import pytest
 
-from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.core.executors import (
     DatabaseRetryEntrypointExecutor,
@@ -49,16 +48,6 @@ def test_retry_requested_is_retry_exception() -> None:
 # ---------------------------------------------------------------------------
 # InMemoryQueries.retry_job — unit tests
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def driver() -> InMemoryDriver:
-    return InMemoryDriver()
-
-
-@pytest.fixture
-def queries(driver: InMemoryDriver) -> InMemoryQueries:
-    return InMemoryQueries(driver=driver)
 
 
 async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> None:
