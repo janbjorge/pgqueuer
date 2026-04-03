@@ -253,8 +253,6 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
         assert len(helper_buffer) == max_size
 
 
-
-
 async def test_job_buffer_callback_exception_during_teardown() -> None:
     N = 10
     items: list[tuple[Job, JOB_STATUS, None]] = [

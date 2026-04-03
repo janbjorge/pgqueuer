@@ -367,6 +367,7 @@ def test_is_async_callable_async_decorator_wrapper() -> None:
 
 def test_is_async_callable_sync_wrapper_returning_coroutine() -> None:
     """Sync def that returns a coroutine object should be classified as sync."""
+
     async def base(job: Job) -> None:
         await asyncio.sleep(0)
 
