@@ -673,6 +673,96 @@ class QueryQueueBuilder:
             count = {self.settings.statistics_table}.count + EXCLUDED.count
         """  # noqa
 
+    def build_queue_table_browse_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.queue_table}
+        ORDER BY priority DESC, id ASC
+        LIMIT $1 OFFSET $2
+        """
+
+    def build_failed_jobs_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.queue_table_log}
+        WHERE status = 'exception'::{self.settings.queue_status_type}
+        ORDER BY created DESC
+        LIMIT $1
+        """
+
+    def build_queue_log_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.queue_table_log}
+        ORDER BY created DESC
+        LIMIT $1
+        """
+
+    def build_stale_jobs_query(self) -> str:
+        return f"""SELECT id, priority, queue_manager_id, created, updated, heartbeat,
+            execute_after, status, entrypoint,
+            EXTRACT(EPOCH FROM NOW() - heartbeat) AS seconds_since_heartbeat
+        FROM {self.settings.queue_table}
+        WHERE status = 'picked'::{self.settings.queue_status_type}
+          AND heartbeat < NOW() - $1::interval
+        ORDER BY heartbeat ASC
+        LIMIT $2
+        """
+
+    def build_queue_age_query(self) -> str:
+        return f"""SELECT
+            entrypoint,
+            COUNT(*) AS queued_count,
+            MIN(created) AS oldest_created,
+            EXTRACT(EPOCH FROM NOW() - MIN(created)) AS oldest_age_seconds,
+            AVG(EXTRACT(EPOCH FROM NOW() - created)) AS avg_age_seconds
+        FROM {self.settings.queue_table}
+        WHERE status = 'queued'::{self.settings.queue_status_type}
+        GROUP BY entrypoint
+        ORDER BY oldest_age_seconds DESC
+        """
+
+    def build_throughput_summary_query(self) -> str:
+        return f"""SELECT
+            entrypoint,
+            status,
+            SUM(count) AS total_count
+        FROM {self.settings.statistics_table}
+        WHERE ($1::interval IS NULL OR created > NOW() - $1)
+        GROUP BY entrypoint, status
+        ORDER BY entrypoint, status
+        """
+
+    def build_active_workers_query(self) -> str:
+        return f"""SELECT
+            queue_manager_id,
+            COUNT(*) AS active_jobs,
+            MIN(heartbeat) AS oldest_heartbeat,
+            MAX(heartbeat) AS newest_heartbeat,
+            array_agg(DISTINCT entrypoint) AS entrypoints
+        FROM {self.settings.queue_table}
+        WHERE status = 'picked'::{self.settings.queue_status_type}
+          AND queue_manager_id IS NOT NULL
+        GROUP BY queue_manager_id
+        ORDER BY active_jobs DESC
+        """
+
+    def build_schema_info_query(self) -> str:
+        return f"""SELECT
+            c.relname AS table_name,
+            CASE WHEN c.relpersistence = 'u' THEN 'UNLOGGED'
+                 WHEN c.relpersistence = 'p' THEN 'LOGGED'
+                 ELSE c.relpersistence::text
+            END AS persistence,
+            c.reltuples::bigint AS estimated_rows,
+            pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema()
+          AND c.relname IN (
+            '{self.settings.queue_table}',
+            '{self.settings.queue_table_log}',
+            '{self.settings.statistics_table}',
+            '{self.settings.schedules_table}'
+          )
+          AND c.relkind = 'r'
+        ORDER BY c.relname
+        """
+
     def build_job_status_query(self) -> str:
         return f"""SELECT DISTINCT ON (job_id) job_id, status
         FROM   {self.settings.queue_table_log}
