@@ -36,9 +36,7 @@ class TestParseInterval:
         assert _parse_interval("P7D") == timedelta(days=7)
 
     def test_complex_duration(self) -> None:
-        assert _parse_interval("P2DT3H30M15S") == timedelta(
-            days=2, hours=3, minutes=30, seconds=15
-        )
+        assert _parse_interval("P2DT3H30M15S") == timedelta(days=2, hours=3, minutes=30, seconds=15)
 
     def test_case_insensitive(self) -> None:
         assert _parse_interval("pt1h") == timedelta(hours=1)
@@ -183,9 +181,7 @@ class TestMcpToolsIntegration:
 
         async with asyncpg.create_pool(dsn=dsn, min_size=1, max_size=2) as pool:
             db = PgQueuerDatabase(pool, DBSettings())
-            rows = await db.fetch(
-                db.qbq.build_stale_jobs_query(), timedelta(minutes=5), 50
-            )
+            rows = await db.fetch(db.qbq.build_stale_jobs_query(), timedelta(minutes=5), 50)
             assert rows == []
 
     async def test_active_workers_empty(self, dsn: str) -> None:
@@ -204,9 +200,7 @@ class TestMcpToolsIntegration:
             rows = await db.fetch(db.qbq.build_queue_age_query())
             assert rows == []
 
-    async def test_queue_age_with_queued_jobs(
-        self, dsn: str, apgdriver: AsyncpgDriver
-    ) -> None:
+    async def test_queue_age_with_queued_jobs(self, dsn: str, apgdriver: AsyncpgDriver) -> None:
         import asyncpg
 
         q = Queries(apgdriver)

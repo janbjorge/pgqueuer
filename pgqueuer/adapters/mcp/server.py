@@ -76,9 +76,7 @@ def _parse_interval(period: str | None) -> timedelta | None:
     p = period.upper().strip()
     m = re.match(r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$", p)
     if not m:
-        raise ValueError(
-            f"Cannot parse duration: {period!r}. Use ISO-8601 like 'PT1H' or 'P7D'."
-        )
+        raise ValueError(f"Cannot parse duration: {period!r}. Use ISO-8601 like 'PT1H' or 'P7D'.")
     days, hours, minutes, seconds = (int(g) if g else 0 for g in m.groups())
     total = timedelta(days=days, hours=hours, minutes=minutes, seconds=seconds)
     if total <= timedelta():
@@ -507,8 +505,7 @@ def create_mcp_server(
         resolved_dsn = dsn or os.environ.get("PGQUEUER_DSN") or os.environ.get("PGDSN")
         if not resolved_dsn:
             raise RuntimeError(
-                "Set PGQUEUER_DSN or PGDSN environment variable "
-                "to a PostgreSQL connection string."
+                "Set PGQUEUER_DSN or PGDSN environment variable to a PostgreSQL connection string."
             )
         async with asyncpg.create_pool(dsn=resolved_dsn, min_size=1, max_size=5) as pool:
             yield PgQueuerDatabase(pool, resolved_settings)
