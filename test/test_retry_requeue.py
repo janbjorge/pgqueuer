@@ -16,7 +16,7 @@ from pgqueuer.core.executors import (
 )
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.domain.errors import RetryRequested
+from pgqueuer.domain.errors import RetryException, RetryRequested
 from pgqueuer.domain.models import Job
 from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -42,8 +42,6 @@ def test_retry_requested_custom_delay_and_reason() -> None:
 
 
 def test_retry_requested_is_retry_exception() -> None:
-    from pgqueuer.domain.errors import RetryException
-
     exc = RetryRequested()
     assert isinstance(exc, RetryException)
 

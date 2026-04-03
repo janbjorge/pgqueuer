@@ -402,7 +402,7 @@ class InMemoryQueries:
         if j is not None:
             j["status"] = "queued"
             j["execute_after"] = now + delay
-            j["attempts"] = j.get("attempts", 0) + 1
+            j["attempts"] = j["attempts"] + 1
             j["updated"] = now
             j["queue_manager_id"] = None
             self._log.append(
