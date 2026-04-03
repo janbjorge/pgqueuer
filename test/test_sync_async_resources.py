@@ -132,16 +132,15 @@ async def test_sync_entrypoint_async_resource_correct_bridging(
     assert all(r.startswith("dep:job:") for r in results)
 
 
-@pytest.mark.parametrize("N", (2,))
 async def test_sync_entrypoint_shared_mutation_with_async_bridge(
     apgdriver: db.Driver,
-    N: int,
 ) -> None:
     """
     Show that:
         - Shared resources mapping is the same across jobs.
         - Async invocation via bridging can mutate shared state safely.
     """
+    N = 2
     q = Queries(apgdriver)
     qm = QueueManager(
         apgdriver,

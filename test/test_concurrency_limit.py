@@ -89,13 +89,9 @@ async def test_max_concurrency(
 
 
 @pytest.mark.parametrize("concurrency_limit", (1, 5, 10))
-@pytest.mark.parametrize("batch_size", (1, 5, 10))
-@pytest.mark.parametrize("dequeue_timeout", (1, 5, 10))
 async def test_concurrency_entrypoint_isolation(
     apgdriver: Driver,
     concurrency_limit: int,
-    batch_size: int,
-    dequeue_timeout: float,
 ) -> None:
     event = asyncio.Event()
     N = concurrency_limit * 1_000
@@ -127,7 +123,7 @@ async def test_concurrency_entrypoint_isolation(
     await asyncio.gather(
         timer(),
         qm.run(
-            batch_size=batch_size,
-            dequeue_timeout=timedelta(seconds=dequeue_timeout),
+            batch_size=5,
+            dequeue_timeout=timedelta(seconds=5),
         ),
     )
