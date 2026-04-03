@@ -18,8 +18,8 @@ async def consumer(qm: QueueManager, jobs: list[JobId]) -> None:
     async def asyncfetch(job: Job) -> None:
         jobs.append(job.id)
 
-    @qm.entrypoint("syncfetch", requests_per_second=10)
-    def syncfetch(job: Job) -> None:
+    @qm.entrypoint("throttledfetch", requests_per_second=10)
+    async def throttledfetch(job: Job) -> None:
         jobs.append(job.id)
 
     await qm.run(dequeue_timeout=timedelta(seconds=0))
@@ -31,7 +31,7 @@ async def enqueue(
 ) -> None:
     assert size > 0
     cnt = count()
-    entrypoints = ["syncfetch", "asyncfetch"] * size
+    entrypoints = ["throttledfetch", "asyncfetch"] * size
     await queries.enqueue(
         random.sample(entrypoints, k=size),
         [f"{next(cnt)}".encode() for _ in range(size)],

@@ -133,7 +133,7 @@ Google-style when present: `Args:`, `Returns:`, `Raises:` sections. Not every me
 - **Pydantic BaseModel** for data transfer objects (`Job`, `Event`, `Schedule`, `Log`)
 - **Decorator registration**: `@pgq.entrypoint("name")`, `@pgq.schedule("name", "*/5 * * * *")`
 - **Factory classmethods**: `from_asyncpg_connection()`, `from_psycopg_connection()`, `in_memory()`
-- **Async-first**: nearly all core logic is async; sync entrypoints use `anyio.to_thread.run_sync()`
+- **Async-only**: all entrypoints must be async (`async def`); core logic is fully async
 - **Buffer pattern**: `JobStatusLogBuffer`, `HeartbeatBuffer` for batched async I/O
 
 ## Hexagonal Architecture (Ports & Adapters)

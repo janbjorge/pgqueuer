@@ -1,5 +1,4 @@
 import asyncio
-import time
 import uuid
 from datetime import timedelta
 
@@ -72,41 +71,6 @@ async def test_job_fetch(
         wait_until_empty_queue(q, qmpool),
     )
 
-    assert sorted(seen) == list(range(N))
-
-
-@pytest.mark.parametrize("N", (1, 2, 32))
-@pytest.mark.parametrize("concurrency", (1, 2, 3, 4))
-async def test_sync_entrypoint(
-    apgdriver: db.Driver,
-    N: int,
-    concurrency: int,
-) -> None:
-    q = Queries(apgdriver)
-    qmpool = [
-        QueueManager(apgdriver, resources={"test": "sync_entrypoint"}) for _ in range(concurrency)
-    ]
-    seen = list[int]()
-
-    for qm in qmpool:
-
-        @qm.entrypoint("fetch")
-        def fetch(context: Job) -> None:
-            time.sleep(1)  # Sim. heavy CPU/IO.
-            assert context.payload is not None
-            assert qm.resources["test"] == "sync_entrypoint"
-            seen.append(int(context.payload))
-
-    await q.enqueue(
-        ["fetch"] * N,
-        [f"{n}".encode() for n in range(N)],
-        [0] * N,
-    )
-
-    await asyncio.gather(
-        asyncio.gather(*[qm.run() for qm in qmpool]),
-        wait_until_empty_queue(q, qmpool),
-    )
     assert sorted(seen) == list(range(N))
 
 

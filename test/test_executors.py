@@ -46,32 +46,6 @@ class MultiprocessingExecutor(AbstractEntrypointExecutor):
             self.queue.put(job.payload)
 
 
-async def test_entrypoint_executor_sync(apgdriver: Driver) -> None:
-    result = []
-
-    def sync_function(job: Job) -> None:
-        if job.payload:
-            result.append(job.payload)
-
-    executor = EntrypointExecutor(
-        EntrypointExecutorParameters(
-            concurrency_limit=10,
-            requests_per_second=float("+inf"),
-            retry_timer=timedelta(seconds=300),
-            serialized_dispatch=False,
-            func=sync_function,
-        )
-    )
-    job = mocked_job(payload=b"test_payload")
-
-    await executor.execute(
-        job,
-        Context(anyio.CancelScope(), resources={"test_key": "sync_executor"}),
-    )
-
-    assert result == [b"test_payload"]
-
-
 async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     result = []
 
@@ -95,30 +69,6 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
         Context(anyio.CancelScope(), resources={"test_key": "async_executor"}),
     )
     assert result == [b"test_payload"]
-
-
-async def test_entrypoint_executor_sync_with_context(apgdriver: Driver) -> None:
-    contexts: list[Context] = []
-
-    def sync_function(job: Job, ctx: Context) -> None:
-        contexts.append(ctx)
-
-    executor = EntrypointExecutor(
-        EntrypointExecutorParameters(
-            concurrency_limit=10,
-            requests_per_second=float("+inf"),
-            retry_timer=timedelta(seconds=300),
-            serialized_dispatch=False,
-            func=sync_function,
-            accepts_context=True,
-        )
-    )
-    job = mocked_job(payload=b"context_payload")
-    job_context = Context(anyio.CancelScope(), resources={"marker": "sync"})
-
-    await executor.execute(job, job_context)
-
-    assert contexts and contexts[0] is job_context
 
 
 async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None:
@@ -147,10 +97,28 @@ async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None
     assert markers == ["async"]
 
 
+@pytest.mark.parametrize("accepts_context", [False, True])
+def test_sync_entrypoint_raises_type_error(accepts_context: bool) -> None:
+    def sync_fn(job: Job) -> None:
+        pass
+
+    with pytest.raises(TypeError, match="must be async"):
+        EntrypointExecutor(
+            EntrypointExecutorParameters(
+                concurrency_limit=10,
+                requests_per_second=float("+inf"),
+                retry_timer=timedelta(seconds=300),
+                serialized_dispatch=False,
+                func=sync_fn,  # type: ignore[arg-type]
+                accepts_context=accepts_context,
+            )
+        )
+
+
 async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver) -> None:
     contexts: list[Context] = []
 
-    def sync_function(job: Job, context: "Context") -> None:
+    async def async_function(job: Job, context: "Context") -> None:
         contexts.append(context)
 
     executor = EntrypointExecutor(
@@ -159,7 +127,7 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            func=sync_function,
+            func=async_function,
             accepts_context=True,
         )
     )
@@ -176,7 +144,7 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
 async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) -> None:
     calls: list[tuple[Job, bytes | None]] = []
 
-    def sync_function(job: Job, extra: bytes | None = None) -> None:
+    async def async_function(job: Job, extra: bytes | None = None) -> None:
         calls.append((job, extra))
 
     executor = EntrypointExecutor(
@@ -185,7 +153,7 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
             requests_per_second=float("+inf"),
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
-            func=sync_function,
+            func=async_function,
         )
     )
     job = mocked_job(payload=b"no_context")
@@ -252,7 +220,7 @@ async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
         name="custom_entrypoint",
         executor_factory=CustomExecutor,
     )
-    def entrypoint_function(job: Job) -> None:
+    async def entrypoint_function(job: Job) -> None:
         pass  # Not used since executor handles execution
 
     queries = Queries(apgdriver)

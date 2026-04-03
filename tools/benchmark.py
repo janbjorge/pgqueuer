@@ -226,8 +226,8 @@ class Consumer:
         async def asyncfetch(job: Job) -> None:
             self.bar.update()
 
-        @self.pgq.entrypoint("syncfetch")
-        def syncfetch(job: Job) -> None:
+        @self.pgq.entrypoint("throttledfetch")
+        async def throttledfetch(job: Job) -> None:
             self.bar.update()
 
         await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
@@ -241,7 +241,7 @@ class Producer:
     cnt: count
 
     async def run(self) -> None:
-        entrypoints = ["syncfetch", "asyncfetch"] * self.batch_size
+        entrypoints = ["throttledfetch", "asyncfetch"] * self.batch_size
         while not self.shutdown.is_set():
             await self.queries.enqueue(
                 random.sample(entrypoints, k=self.batch_size),
@@ -388,7 +388,7 @@ class DrainStrategy:
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
-        entrypoints = ["syncfetch", "asyncfetch"] * self.settings.jobs
+        entrypoints = ["throttledfetch", "asyncfetch"] * self.settings.jobs
         await queries.enqueue(
             random.sample(entrypoints, k=self.settings.jobs),
             [b"" for _ in range(self.settings.jobs)],

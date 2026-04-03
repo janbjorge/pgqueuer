@@ -12,8 +12,6 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
 
-import anyio
-import anyio.to_thread
 import async_timeout
 from croniter import croniter
 
@@ -24,11 +22,7 @@ _SENTINEL = object()
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
-SyncEntrypoint: TypeAlias = Callable[[models.Job], None]
-SyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], None]
-Entrypoint: TypeAlias = (
-    AsyncEntrypoint | AsyncContextEntrypoint | SyncEntrypoint | SyncContextEntrypoint
-)
+Entrypoint: TypeAlias = AsyncEntrypoint | AsyncContextEntrypoint
 EntrypointTypeVar = TypeVar("EntrypointTypeVar", bound=Entrypoint)
 
 
@@ -103,16 +97,19 @@ class AbstractEntrypointExecutor(ABC):
 @dataclasses.dataclass
 class EntrypointExecutor(AbstractEntrypointExecutor):
     """
-    Job executor that wraps an entrypoint function.
+    Job executor that wraps an async entrypoint function.
 
     Executes the provided function when processing a job.
     """
 
-    is_async: bool = dataclasses.field(init=False)
     accepts_context: bool = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.is_async = is_async_callable(cast(Callable[..., object], self.parameters.func))
+        if not is_async_callable(cast(Callable[..., object], self.parameters.func)):
+            raise TypeError(
+                "Entrypoint function must be async (defined with 'async def'). "
+                "Sync entrypoints are no longer supported."
+            )
         self.accepts_context = self.parameters.accepts_context
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
@@ -124,27 +121,9 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             context (models.Context): The context for the job.
         """
         if self.accepts_context:
-            if self.is_async:
-                await cast(AsyncContextEntrypoint, self.parameters.func)(
-                    job,
-                    context,
-                )
-            else:
-                await anyio.to_thread.run_sync(
-                    cast(SyncContextEntrypoint, self.parameters.func),
-                    job,
-                    context,
-                )
+            await cast(AsyncContextEntrypoint, self.parameters.func)(job, context)
         else:
-            if self.is_async:
-                await cast(AsyncEntrypoint, self.parameters.func)(
-                    job,
-                )
-            else:
-                await anyio.to_thread.run_sync(
-                    cast(SyncEntrypoint, self.parameters.func),
-                    job,
-                )
+            await cast(AsyncEntrypoint, self.parameters.func)(job)
 
 
 @dataclasses.dataclass
