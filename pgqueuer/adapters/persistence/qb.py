@@ -70,7 +70,8 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         dedupe_key TEXT,
         payload BYTEA,
-        headers JSONB
+        headers JSONB,
+        attempts INT NOT NULL DEFAULT 0
     );
     CREATE INDEX {self.settings.queue_table}_priority_id_id1_idx ON {self.settings.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
@@ -263,6 +264,7 @@ class QueryBuilderEnvironment:
         yield f"CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
+        yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         return """SELECT EXISTS (
@@ -672,6 +674,22 @@ class QueryQueueBuilder:
         ) DO UPDATE SET
             count = {self.settings.statistics_table}.count + EXCLUDED.count
         """  # noqa
+
+    def build_retry_job_query(self) -> str:
+        return f"""WITH retry AS (
+            UPDATE {self.settings.queue_table}
+            SET
+                status = 'queued',
+                execute_after = NOW() + $2::interval,
+                attempts = attempts + 1,
+                updated = NOW(),
+                queue_manager_id = NULL
+            WHERE id = $1::integer
+            RETURNING id, entrypoint, priority
+        )
+        INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority, traceback)
+        SELECT id, 'queued', entrypoint, priority, $3::JSONB FROM retry
+        """  # noqa: E501
 
     def build_queue_table_browse_query(self) -> str:
         return f"""SELECT * FROM {self.settings.queue_table}

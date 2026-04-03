@@ -155,6 +155,7 @@ class InMemoryQueries:
                 "status": "queued",
                 "entrypoint": normed.entrypoint[i],
                 "payload": normed.payload[i],
+                "attempts": 0,
                 "queue_manager_id": None,
                 "headers": hdr,
             }
@@ -386,6 +387,38 @@ class InMemoryQueries:
                 }
             )
             self._next_log_id += 1
+
+    # -- retry_job -------------------------------------------------------------
+
+    async def retry_job(
+        self,
+        job: models.Job,
+        delay: timedelta,
+        traceback_record: models.TracebackRecord | None,
+    ) -> None:
+        now = _utc_now()
+        jid = int(job.id)
+        j = self._jobs.get(jid)
+        if j is not None:
+            j["status"] = "queued"
+            j["execute_after"] = now + delay
+            j["attempts"] = j.get("attempts", 0) + 1
+            j["updated"] = now
+            j["queue_manager_id"] = None
+            self._log.append(
+                {
+                    "id": self._next_log_id,
+                    "created": now,
+                    "job_id": jid,
+                    "status": "queued",
+                    "priority": j["priority"],
+                    "entrypoint": j["entrypoint"],
+                    "traceback": (traceback_record.model_dump_json() if traceback_record else None),
+                    "aggregated": False,
+                }
+            )
+            self._next_log_id += 1
+            self._emit_table_changed("update")
 
     # -- mark_job_as_cancelled -------------------------------------------------
 

@@ -476,6 +476,25 @@ class Queries:
             [tb.model_dump_json() if tb else None for _, _, tb in job_status],
         )
 
+    async def retry_job(
+        self,
+        job: models.Job,
+        delay: timedelta,
+        traceback_record: models.TracebackRecord | None,
+    ) -> None:
+        """Re-queue a job for retry with the given delay.
+
+        Atomically updates the job in-place (status → queued, execute_after
+        bumped, attempts incremented) and writes a log entry recording the
+        retry event.
+        """
+        await self.driver.execute(
+            self.qbq.build_retry_job_query(),
+            job.id,
+            delay,
+            traceback_record.model_dump_json() if traceback_record else None,
+        )
+
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
         Remove entries from the statistics (log) table.

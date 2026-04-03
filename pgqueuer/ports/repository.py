@@ -100,6 +100,13 @@ class QueueRepositoryPort(Protocol):
         ],
     ) -> None: ...
 
+    async def retry_job(
+        self,
+        job: models.Job,
+        delay: timedelta,
+        traceback_record: models.TracebackRecord | None,
+    ) -> None: ...
+
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None: ...
 
     async def queue_size(self) -> list[models.QueueStatistics]: ...
