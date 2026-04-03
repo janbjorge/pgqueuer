@@ -6,9 +6,17 @@ All queries are predefined — no arbitrary SQL is accepted.
 
 ## Installation
 
-```bash
-pip install pgqueuer[mcp]
-```
+=== "uv"
+
+    ```bash
+    uv add pgqueuer[mcp]
+    ```
+
+=== "pip"
+
+    ```bash
+    pip install pgqueuer[mcp]
+    ```
 
 This pulls in `mcp>=1.0` and `asyncpg>=0.30.0`.
 
@@ -18,9 +26,17 @@ The server connects to PostgreSQL using the same
 [libpq environment variables](../getting-started/installation.md#connection-configuration)
 you already use (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`):
 
-```bash
-python -m pgqueuer.adapters.mcp
-```
+=== "uv"
+
+    ```bash
+    uv run python -m pgqueuer.adapters.mcp
+    ```
+
+=== "pip"
+
+    ```bash
+    python -m pgqueuer.adapters.mcp
+    ```
 
 This starts a stdio-based MCP server that any MCP client (Claude Desktop, Claude Code,
 Cursor, etc.) can connect to.
@@ -29,23 +45,45 @@ Cursor, etc.) can connect to.
 
 Add to your MCP client configuration:
 
-```json
-{
-  "mcpServers": {
-    "pgqueuer": {
-      "command": "python",
-      "args": ["-m", "pgqueuer.adapters.mcp"],
-      "env": {
-        "PGHOST": "localhost",
-        "PGPORT": "5432",
-        "PGUSER": "myuser",
-        "PGPASSWORD": "mypassword",
-        "PGDATABASE": "mydb"
+=== "uv"
+
+    ```json
+    {
+      "mcpServers": {
+        "pgqueuer": {
+          "command": "uv",
+          "args": ["run", "python", "-m", "pgqueuer.adapters.mcp"],
+          "env": {
+            "PGHOST": "localhost",
+            "PGPORT": "5432",
+            "PGUSER": "myuser",
+            "PGPASSWORD": "mypassword",
+            "PGDATABASE": "mydb"
+          }
+        }
       }
     }
-  }
-}
-```
+    ```
+
+=== "pip"
+
+    ```json
+    {
+      "mcpServers": {
+        "pgqueuer": {
+          "command": "python",
+          "args": ["-m", "pgqueuer.adapters.mcp"],
+          "env": {
+            "PGHOST": "localhost",
+            "PGPORT": "5432",
+            "PGUSER": "myuser",
+            "PGPASSWORD": "mypassword",
+            "PGDATABASE": "mydb"
+          }
+        }
+      }
+    }
+    ```
 
 ### Explicit DSN
 
