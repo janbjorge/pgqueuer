@@ -31,29 +31,12 @@ async def heartbeat(schedule: Schedule) -> None:
 ### Scheduler Flow Diagram
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
-    Define[@pgq.schedule]
-    Store[(Schedule in DB)]
-    Poll[Poll loop]
-    Enqueue[Enqueue job]
-    Execute[Execute task]
-
-    Define --> Store
-    Store --> Poll
-    Poll -->|cron ready| Enqueue
-    Enqueue --> Execute
+    Define["@pgq.schedule"] --> Store[(Schedule in DB)]
+    Store --> Poll[Poll loop]
+    Poll -->|cron ready| Enqueue[Enqueue job]
+    Enqueue --> Execute[Execute task]
     Poll -->|not yet| Poll
-
-    classDef code     fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef database fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef process  fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-
-    class Define code
-    class Store database
-    class Poll process
-    class Enqueue,Execute success
 ```
 
 ## Cron Expression Format

@@ -35,29 +35,16 @@ PgQueuer uses battle-tested PostgreSQL primitives to deliver jobs safely and fas
 - **Row-level locking** -- multiple workers scale horizontally against a single database
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    P[Your App]
-    DB[(PostgreSQL)]
-    W1[Worker 1]
-    W2[Worker 2]
-    W3[Worker N]
+flowchart TD
+    P[Your App] -->|enqueue| DB[(PostgreSQL)]
 
-    P -->|enqueue| DB
-    DB -->|NOTIFY| W1
-    DB -->|NOTIFY| W2
-    DB -->|NOTIFY| W3
-    W1 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
-    W2 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
-    W3 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
+    DB -->|NOTIFY| W1[Worker 1]
+    DB -->|NOTIFY| W2[Worker 2]
+    DB -->|NOTIFY| W3[Worker N]
 
-    classDef app      fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef database  fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef worker    fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-
-    class P app
-    class DB database
-    class W1,W2,W3 worker
+    W1 -->|"FOR UPDATE SKIP LOCKED"| DB
+    W2 -->|"FOR UPDATE SKIP LOCKED"| DB
+    W3 -->|"FOR UPDATE SKIP LOCKED"| DB
 ```
 
 ## A Taste of PgQueuer

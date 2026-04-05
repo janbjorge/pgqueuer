@@ -25,32 +25,13 @@ async with CompletionWatcher(driver) as watcher:
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    Queued[queued]
-    Picked[picked]
-    Success[successful]
-    Exception[exception]
-    Canceled[canceled]
-    Deleted[deleted]
+flowchart TD
+    Queued[queued] -->|claim| Picked[picked]
+    Queued -->|delete| Deleted[deleted]
 
-    Queued -->|claim| Picked
-    Queued -->|delete| Deleted
-    Picked -->|complete| Success
-    Picked -->|error| Exception
-    Picked -->|cancel| Canceled
-
-    classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-    classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
-    classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
-
-    class Queued queued
-    class Picked picked
-    class Success success
-    class Exception,Deleted error
-    class Canceled canceled
+    Picked -->|complete| Success[successful]
+    Picked -->|error| Exception[exception]
+    Picked -->|cancel| Canceled[canceled]
 ```
 
 ## Tracking Many Jobs at Once
