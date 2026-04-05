@@ -27,7 +27,7 @@ from pgqueuer.core.executors import (
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.domain.models import Channel
-from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.domain.types import OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
@@ -233,6 +233,7 @@ class PgQueuer:
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
         accepts_context: bool = False,
+        on_failure: OnFailure = "delete",
         executor_factory: Callable[
             [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
@@ -246,6 +247,7 @@ class PgQueuer:
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
             accepts_context=accepts_context,
+            on_failure=on_failure,
             executor_factory=executor_factory,
         )
 

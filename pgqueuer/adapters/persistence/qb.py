@@ -19,6 +19,7 @@ from pgqueuer.domain.settings import (
     DurabilityPolicy,
     add_prefix,
 )
+from pgqueuer.domain.types import SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -57,7 +58,7 @@ class QueryBuilderEnvironment:
         """
         durability_policy = self.settings.durability.config
 
-        return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted');
+        return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted', 'failed');
     CREATE {durability_policy.queue_table} TABLE {self.settings.queue_table} (
         id SERIAL PRIMARY KEY,
         priority INT NOT NULL,
@@ -265,6 +266,7 @@ class QueryBuilderEnvironment:
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;"  # noqa: E501
+        yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'failed';"  # noqa: E501
 
     def build_table_has_column_query(self) -> str:
         return """SELECT EXISTS (
@@ -576,25 +578,34 @@ class QueryQueueBuilder:
     """
 
     def build_log_job_query(self) -> str:
-        return f"""WITH deleted AS (
-            DELETE FROM {self.settings.queue_table}
-            WHERE id = ANY($1::integer[])
-            RETURNING id, entrypoint, priority
-        ), job_status AS (
+        return f"""WITH job_status AS (
             SELECT
                 UNNEST($1::integer[])                           AS id,
                 UNNEST($2::{self.settings.queue_status_type}[]) AS status,
                 UNNEST($3::JSONB[])                             AS traceback
+        ), deleted AS (
+            DELETE FROM {self.settings.queue_table}
+            WHERE id = ANY(SELECT js.id FROM job_status js WHERE js.status != 'failed')
+            RETURNING id, entrypoint, priority
+        ), held AS (
+            UPDATE {self.settings.queue_table}
+            SET status = 'failed', updated = NOW(), queue_manager_id = NULL
+            WHERE id = ANY(SELECT js.id FROM job_status js WHERE js.status = 'failed')
+            RETURNING id, entrypoint, priority
+        ), all_resolved AS (
+            SELECT id, entrypoint, priority FROM deleted
+            UNION ALL
+            SELECT id, entrypoint, priority FROM held
         ), merged AS (
             SELECT
                 job_status.id           AS id,
                 job_status.status       AS status,
                 job_status.traceback    AS traceback,
-                deleted.entrypoint      AS entrypoint,
-                deleted.priority        AS priority
+                all_resolved.entrypoint AS entrypoint,
+                all_resolved.priority   AS priority
             FROM job_status
-            INNER JOIN deleted
-                ON deleted.id = job_status.id
+            INNER JOIN all_resolved
+                ON all_resolved.id = job_status.id
         )
         INSERT INTO {self.settings.queue_table_log} (
             job_id,
@@ -690,6 +701,25 @@ class QueryQueueBuilder:
         INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority, traceback)
         SELECT id, 'queued', entrypoint, priority, $3::JSONB FROM retry
         """  # noqa: E501
+
+    def build_requeue_jobs_query(self) -> str:
+        return f"""WITH requeued AS (
+            UPDATE {self.settings.queue_table}
+            SET status = 'queued', execute_after = NOW(), updated = NOW(),
+                attempts = 0, queue_manager_id = NULL
+            WHERE id = ANY($1::integer[]) AND status = 'failed'
+            RETURNING id, entrypoint, priority
+        )
+        INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority)
+        SELECT id, 'queued', entrypoint, priority FROM requeued
+        """
+
+    def build_list_failed_jobs_query(self, order: SortOrder = "DESC") -> str:
+        return f"""SELECT * FROM {self.settings.queue_table}
+        WHERE status = 'failed'
+        ORDER BY created {order}
+        LIMIT $1
+        """
 
     def build_queue_table_browse_query(self) -> str:
         return f"""SELECT * FROM {self.settings.queue_table}

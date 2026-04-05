@@ -221,6 +221,7 @@ class QueueManager:
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
         accepts_context: bool = False,
+        on_failure: types.OnFailure = "delete",
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
@@ -240,6 +241,9 @@ class QueueManager:
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
             accepts_context (bool): When True, invoke the entrypoint with both job and context.
+            on_failure (OnFailure): What to do when a job fails terminally. ``"delete"``
+                removes the job (default); ``"hold"`` parks it with status ``'failed'``
+                so it can be inspected and manually re-queued.
 
         Returns:
             Callable[[T], T]: A decorator that registers the function as an entrypoint.
@@ -286,6 +290,7 @@ class QueueManager:
                         serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
                         accepts_context=accepts_context,
+                        on_failure=on_failure,
                         # Deprecated -- still passed so custom executors
                         # keep working during the deprecation window.
                         connection=self.connection,
@@ -666,7 +671,10 @@ class QueueManager:
                         "queue_manager_id": self.queue_manager_id,
                     },
                 )
-                await jbuff.add((job, "exception", tbr))
+                status: types.JOB_STATUS = (
+                    "failed" if executor.parameters.on_failure == "hold" else "exception"
+                )
+                await jbuff.add((job, status, tbr))
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",

@@ -27,7 +27,7 @@ from pgqueuer.adapters import tracing
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core import helpers
 from pgqueuer.core.helpers import merge_tracing_headers
-from pgqueuer.domain import errors, models
+from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -461,13 +461,9 @@ class Queries:
         """
         Move completed or failed jobs from the queue to the log table.
 
-        Processes a list of jobs along with their final statuses, removing them
-        from the queue table and recording their details in the statistics table.
-
-        Args:
-            job_status (list[tuple[models.Job, models.STATUS_LOG]]): A list of tuples
-                containing jobs and their corresponding statuses
-                ('successful', 'exception', or 'canceled').
+        Jobs with status ``'failed'`` are held in the queue table (UPDATE)
+        rather than deleted.  All other statuses are removed (DELETE) as before.
+        Both paths write an entry to the log table.
         """
         await self.driver.execute(
             self.qbq.build_log_job_query(),
@@ -494,6 +490,29 @@ class Queries:
             delay,
             traceback_record.model_dump_json() if traceback_record else None,
         )
+
+    async def requeue_jobs(self, ids: list[models.JobId]) -> None:
+        """Move failed jobs back to queued status for reprocessing.
+
+        Resets attempts to 0 and sets execute_after to NOW().
+        Only affects jobs with status ``'failed'``.
+        """
+        await self.driver.execute(
+            self.qbq.build_requeue_jobs_query(),
+            ids,
+        )
+
+    async def list_failed_jobs(
+        self,
+        limit: int = 100,
+        order: types.SortOrder = "DESC",
+    ) -> list[models.Job]:
+        """List jobs held with status ``'failed'``, ordered by creation time."""
+        rows = await self.driver.fetch(
+            self.qbq.build_list_failed_jobs_query(order=order),
+            limit,
+        )
+        return [models.Job.model_validate(r) for r in rows]
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """

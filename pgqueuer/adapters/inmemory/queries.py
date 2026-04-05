@@ -18,7 +18,7 @@ from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
-from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId
+from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -371,14 +371,21 @@ class InMemoryQueries:
     ) -> None:
         now = _utc_now()
         for job, status, tb in job_status:
-            self._jobs.pop(int(job.id), None)
-            # Clean dedupe index
-            self._remove_dedupe_for_job(int(job.id))
+            jid = int(job.id)
+            if status == "failed":
+                j = self._jobs.get(jid)
+                if j is not None:
+                    j["status"] = "failed"
+                    j["updated"] = now
+                    j["queue_manager_id"] = None
+            else:
+                self._jobs.pop(jid, None)
+                self._remove_dedupe_for_job(jid)
             self._log.append(
                 {
                     "id": self._next_log_id,
                     "created": now,
-                    "job_id": int(job.id),
+                    "job_id": jid,
                     "status": status,
                     "priority": job.priority,
                     "entrypoint": job.entrypoint,
@@ -419,6 +426,44 @@ class InMemoryQueries:
             )
             self._next_log_id += 1
             self._emit_table_changed("update")
+
+    # -- requeue_jobs ----------------------------------------------------------
+
+    async def requeue_jobs(self, ids: list[JobId]) -> None:
+        now = _utc_now()
+        for jid in ids:
+            j = self._jobs.get(int(jid))
+            if j is not None and j["status"] == "failed":
+                j["status"] = "queued"
+                j["execute_after"] = now
+                j["updated"] = now
+                j["attempts"] = 0
+                j["queue_manager_id"] = None
+                self._log.append(
+                    {
+                        "id": self._next_log_id,
+                        "created": now,
+                        "job_id": int(jid),
+                        "status": "queued",
+                        "priority": j["priority"],
+                        "entrypoint": j["entrypoint"],
+                        "traceback": None,
+                        "aggregated": False,
+                    }
+                )
+                self._next_log_id += 1
+                self._emit_table_changed("update")
+
+    # -- list_failed_jobs ------------------------------------------------------
+
+    async def list_failed_jobs(
+        self,
+        limit: int = 100,
+        order: SortOrder = "DESC",
+    ) -> list[models.Job]:
+        failed = [j for j in self._jobs.values() if j["status"] == "failed"]
+        failed.sort(key=lambda j: j["created"], reverse=(order != "ASC"))
+        return [models.Job.model_validate(j) for j in failed[:limit]]
 
     # -- mark_job_as_cancelled -------------------------------------------------
 

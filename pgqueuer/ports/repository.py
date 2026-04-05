@@ -15,7 +15,7 @@ from typing import Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import CronEntrypoint
+from pgqueuer.domain.types import CronEntrypoint, SortOrder
 from pgqueuer.ports.driver import Driver
 
 
@@ -106,6 +106,12 @@ class QueueRepositoryPort(Protocol):
         delay: timedelta,
         traceback_record: models.TracebackRecord | None,
     ) -> None: ...
+
+    async def requeue_jobs(self, ids: list[models.JobId]) -> None: ...
+
+    async def list_failed_jobs(
+        self, limit: int = 100, order: SortOrder = "DESC"
+    ) -> list[models.Job]: ...
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None: ...
 
