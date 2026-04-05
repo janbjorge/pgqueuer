@@ -168,7 +168,7 @@ class TestRejectedFactoryTypes:
 
         with pytest.raises(TypeError, match="returned a coroutine") as exc_info:
             await supervisor.runit(
-                factory=factory,
+                factory=factory,  # type: ignore[arg-type]
                 dequeue_timeout=timedelta(seconds=1),
                 batch_size=10,
                 restart_delay=timedelta(seconds=0),
@@ -191,7 +191,7 @@ class TestRejectedFactoryTypes:
 
         with pytest.raises(TypeError, match="synchronous") as exc_info:
             await supervisor.runit(
-                factory=factory,
+                factory=factory,  # type: ignore[arg-type]
                 dequeue_timeout=timedelta(seconds=1),
                 batch_size=10,
                 restart_delay=timedelta(seconds=0),
@@ -207,7 +207,7 @@ class TestRejectedFactoryTypes:
     async def test_arbitrary_return_rejected_with_migration(self) -> None:
         """Factory returning a plain object is rejected."""
 
-        def factory() -> str:  # type: ignore[return-value]
+        def factory() -> str:
             return "not a manager"
 
         with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
@@ -326,7 +326,7 @@ class TestFactoryErrors:
         @asynccontextmanager
         async def factory() -> AsyncGenerator[PgQueuer, None]:
             raise RuntimeError("setup failed")
-            yield  # type: ignore[misc]  # unreachable, needed for generator
+            yield  # unreachable, needed for generator
 
         with pytest.raises(RuntimeError, match="setup failed"):
             await supervisor.runit(
@@ -374,7 +374,7 @@ class TestFactoryErrors:
             nonlocal call_count
             call_count += 1
             raise RuntimeError("transient error")
-            yield  # type: ignore[misc]
+            yield  # unreachable, needed for generator
 
         shutdown = asyncio.Event()
         task = asyncio.create_task(
@@ -477,7 +477,7 @@ class TestRunManagerDispatch:
             called = True
             return await original_run()
 
-        sm.run = spy_run  # type: ignore[assignment]
+        sm.run = spy_run  # type: ignore[method-assign]
 
         await supervisor.run_manager(
             sm,

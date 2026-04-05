@@ -129,7 +129,7 @@ def test_validate_rejects_sync_cm_with_migration_message() -> None:
 
 def test_validate_rejects_arbitrary_type_with_migration_message() -> None:
     with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
-        validate_factory_result("not a manager")  # type: ignore[arg-type]
+        validate_factory_result("not a manager")
 
     msg = str(exc_info.value)
     assert "@asynccontextmanager" in msg

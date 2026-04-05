@@ -192,7 +192,12 @@ async def yield_queries(
         factory_fn = factories.load_factory(config.factory_fn_ref)
     else:
         factory_fn = create_default_queries_factory(config, settings)
-    yield await factory_fn()
+    result = factory_fn()
+    if isinstance(result, contextlib.AbstractAsyncContextManager):
+        async with result as q:
+            yield q
+    else:
+        yield await result
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:

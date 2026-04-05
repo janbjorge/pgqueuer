@@ -32,6 +32,18 @@ def load_factory(factory: str | Callable[..., Any]) -> Callable[..., Any]:
     return getattr(module, factory_name)
 
 
+_EXAMPLE = (
+    "\n"
+    "    from contextlib import asynccontextmanager\n"
+    "\n"
+    "    @asynccontextmanager\n"
+    "    async def my_factory():\n"
+    "        manager = ...  # your setup code\n"
+    "        yield manager\n"
+    "        # optional cleanup\n"
+)
+
+
 def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
     """Validate that a factory produced an async context manager.
 
@@ -48,14 +60,7 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
             "\n"
             "Migration — wrap your factory with @asynccontextmanager and\n"
             "replace 'return' with 'yield':\n"
-            "\n"
-            "    from contextlib import asynccontextmanager\n"
-            "\n"
-            "    @asynccontextmanager\n"
-            "    async def my_factory():\n"
-            "        manager = ...  # your setup code\n"
-            "        yield manager\n"
-            "        # optional cleanup\n"
+            + _EXAMPLE
         )
 
     if isinstance(result, AbstractContextManager):
@@ -64,12 +69,7 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
             "context manager.\n"
             "\n"
             "Migration — replace @contextmanager with @asynccontextmanager:\n"
-            "\n"
-            "    from contextlib import asynccontextmanager\n"
-            "\n"
-            "    @asynccontextmanager\n"
-            "    async def my_factory():\n"
-            "        yield manager\n"
+            + _EXAMPLE
         )
 
     raise TypeError(
@@ -77,10 +77,5 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
         f"but returned {type(result).__name__!r}.\n"
         "\n"
         "Example:\n"
-        "\n"
-        "    from contextlib import asynccontextmanager\n"
-        "\n"
-        "    @asynccontextmanager\n"
-        "    async def my_factory():\n"
-        "        yield manager\n"
+        + _EXAMPLE
     )
