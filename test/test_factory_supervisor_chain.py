@@ -159,7 +159,6 @@ class TestAsyncContextManagerFactory:
 
 
 class TestRejectedFactoryTypes:
-    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     async def test_coroutine_factory_rejected_with_migration(self) -> None:
         """Bare 'async def' that returns a manager is no longer accepted."""
 
@@ -411,7 +410,6 @@ class TestValidateFactoryResult:
         result = factories.validate_factory_result(make())
         assert hasattr(result, "__aenter__")
 
-    @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     async def test_rejects_coroutine(self) -> None:
         async def make() -> str:
             return "value"

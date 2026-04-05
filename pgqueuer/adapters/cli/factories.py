@@ -55,6 +55,7 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
         return result
 
     if inspect.iscoroutine(result):
+        result.close()
         raise TypeError(
             "Factory must return an async context manager, but returned a coroutine.\n"
             "\n"

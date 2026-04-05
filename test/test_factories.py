@@ -102,7 +102,6 @@ def test_validate_accepts_async_context_manager() -> None:
     assert isinstance(result, AbstractAsyncContextManager)
 
 
-@pytest.mark.filterwarnings("ignore::RuntimeWarning")
 async def test_validate_rejects_coroutine_with_migration_message() -> None:
     async def factory() -> str:
         return "value"
