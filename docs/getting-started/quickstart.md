@@ -128,6 +128,14 @@ The `run` command:
 4. Listens on the `ch_pgqueuer` NOTIFY channel for new work.
 5. Shuts down cleanly on Ctrl+C, waiting for in-flight jobs to finish.
 
+!!! tip "Programmatic alternative"
+    You can also start PgQueuer from Python without the CLI:
+    ```python
+    import asyncio, pgqueuer
+    asyncio.run(pgqueuer.run("myapp:main"))
+    ```
+    See [Running Programmatically](../guides/programmatic-run.md) for details.
+
 ---
 
 ## 3. Enqueue Jobs

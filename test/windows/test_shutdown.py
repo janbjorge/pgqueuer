@@ -1,10 +1,9 @@
 import asyncio
-from datetime import timedelta
 from typing import cast
 
 import pytest
 
-from pgqueuer import qm, types
+from pgqueuer import qm
 from pgqueuer.adapters.cli import supervisor
 
 
@@ -43,16 +42,11 @@ async def test_shutdown_without_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(supervisor, "setup_shutdown_handlers", setup_shutdown_handlers_stub)
 
     task = asyncio.create_task(
-        supervisor.runit(
+        supervisor.run(
             factory,
-            dequeue_timeout=timedelta(seconds=1),
+            dequeue_timeout=1.0,
             batch_size=1,
-            restart_delay=timedelta(seconds=0),
-            restart_on_failure=False,
             shutdown=shutdown_event,
-            mode=types.QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
         )
     )
 

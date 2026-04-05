@@ -19,25 +19,21 @@ from pgqueuer.types import QueueExecutionMode
 
 @pytest.fixture(scope="function")
 async def queue_manager(apgdriver: AsyncpgDriver) -> QueueManager:
-    """Fixture to instantiate QueueManager."""
     return QueueManager(connection=apgdriver)
 
 
 @pytest.fixture(scope="function")
 async def scheduler_manager(apgdriver: AsyncpgDriver) -> SchedulerManager:
-    """Fixture to instantiate SchedulerManager."""
     return SchedulerManager(connection=apgdriver)
 
 
 @pytest.fixture(scope="function")
 async def pg_queuer(apgdriver: AsyncpgDriver) -> PgQueuer:
-    """Fixture to instantiate PgQueuer."""
     return PgQueuer(connection=apgdriver)
 
 
 @pytest.fixture(scope="function")
 def shutdown_event() -> asyncio.Event:
-    """Fixture to create a shutdown asyncio.Event."""
     return asyncio.Event()
 
 
@@ -90,127 +86,32 @@ async def test_setup_signal_handlers(
         mock_loop.add_signal_handler.assert_any_call(signal.SIGTERM, ANY, signal.SIGTERM)
 
 
-async def test_runit_normal_operation(
+async def test_run_with_partial_function(
     pg_queuer: PgQueuer,
     shutdown_event: asyncio.Event,
 ) -> None:
     @asynccontextmanager
-    async def foo():  # type: ignore
+    async def factory(arg):  # type: ignore
         yield pg_queuer
 
-    # Run runit in the background
-    runit_task = asyncio.create_task(
-        supervisor.runit(
-            factory=foo,
-            dequeue_timeout=timedelta(seconds=1),
+    task = asyncio.create_task(
+        supervisor.run(
+            partial(factory, arg=42),
+            dequeue_timeout=1.0,
             batch_size=10,
-            restart_delay=timedelta(seconds=2),
-            restart_on_failure=False,
             shutdown=shutdown_event,
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
         )
     )
 
-    # Allow some time for runit to start
     await asyncio.sleep(0.1)
-
-    # Signal shutdown
     shutdown_event.set()
 
-    # Allow some time for runit to handle shutdown
-    await asyncio.sleep(0.2)
-
-    # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
-        await runit_task
-    assert runit_task.done()
+    async with async_timeout.timeout(2):
+        await task
+    assert task.done()
 
 
-async def test_runit_with_partial_function(
-    pg_queuer: PgQueuer,
-    shutdown_event: asyncio.Event,
-) -> None:
-    @asynccontextmanager
-    async def foo(arg):  # type: ignore
-        yield pg_queuer
-
-    # Run runit in the background
-    runit_task = asyncio.create_task(
-        supervisor.runit(
-            factory=partial(foo, arg=42),
-            dequeue_timeout=timedelta(seconds=1),
-            batch_size=10,
-            restart_delay=timedelta(seconds=2),
-            restart_on_failure=False,
-            shutdown=shutdown_event,
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
-        )
-    )
-
-    # Allow some time for runit to start
-    await asyncio.sleep(0.1)
-
-    # Signal shutdown
-    shutdown_event.set()
-
-    # Allow some time for runit to handle shutdown
-    await asyncio.sleep(0.2)
-
-    # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
-        await runit_task
-    assert runit_task.done()
-
-
-async def test_runit_restart_on_failure(
-    pg_queuer: PgQueuer,
-    shutdown_event: asyncio.Event,
-) -> None:
-    calls = 0
-
-    async def failing_run(*args, **kwargs):  # type: ignore
-        nonlocal calls
-        calls += 1
-        raise Exception("Simulated failure")
-
-    pg_queuer.run = failing_run  # type: ignore
-
-    async def foo():  # type: ignore
-        return pg_queuer
-
-    # Run runit in the background
-    runit_task = asyncio.create_task(
-        supervisor.runit(
-            factory=foo,
-            dequeue_timeout=timedelta(seconds=1),
-            batch_size=10,
-            restart_delay=timedelta(seconds=0.05),
-            restart_on_failure=True,
-            shutdown=shutdown_event,
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
-        )
-    )
-
-    # Allow some time for runit to attempt running and failing
-    await asyncio.sleep(0.2)
-
-    # Signal shutdown to stop the runit loop
-    shutdown_event.set()
-
-    # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
-        await runit_task
-    assert runit_task.done()
-    assert calls > 1
-
-
-async def test_runit_no_restart_on_failure(
+async def test_run_no_restart_on_failure(
     pg_queuer: PgQueuer,
     shutdown_event: asyncio.Event,
 ) -> None:
@@ -220,35 +121,24 @@ async def test_runit_no_restart_on_failure(
     pg_queuer.run = failing_run  # type: ignore
 
     @asynccontextmanager
-    async def foo():  # type: ignore
+    async def factory():  # type: ignore
         yield pg_queuer
 
     with pytest.raises(Exception, match="Simulated failure"):
-        await supervisor.runit(
-            factory=foo,
-            dequeue_timeout=timedelta(seconds=1),
+        await supervisor.run(
+            factory,
+            dequeue_timeout=1.0,
             batch_size=10,
-            restart_delay=timedelta(seconds=2),
-            restart_on_failure=False,
             shutdown=shutdown_event,
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
         )
 
 
-async def test_runit_negative_restart_delay(shutdown_event: asyncio.Event) -> None:
+async def test_run_negative_restart_delay(shutdown_event: asyncio.Event) -> None:
     with pytest.raises(ValueError, match="'restart_delay' must be >= 0"):
-        await supervisor.runit(
-            factory=...,  # type: ignore
-            dequeue_timeout=timedelta(seconds=1),
-            batch_size=10,
-            restart_delay=timedelta(seconds=-1),
-            restart_on_failure=True,
+        await supervisor.run(
+            lambda: ...,  # type: ignore
+            restart_delay=-1.0,
             shutdown=shutdown_event,
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
         )
 
 

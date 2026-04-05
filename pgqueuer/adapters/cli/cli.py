@@ -14,16 +14,16 @@ from typer import Context
 from typing_extensions import AsyncGenerator
 
 from pgqueuer.adapters.cli import factories, supervisor
-from pgqueuer.adapters.drivers import dsn
-from pgqueuer.adapters.persistence import qb, queries
-from pgqueuer.core import helpers, listeners, logconfig
-from pgqueuer.domain import models, types
-from pgqueuer.ports.driver import Driver
 
 try:
     from uvloop import run as asyncio_run
 except ImportError:
     from asyncio import run as asyncio_run  # type: ignore[assignment]
+from pgqueuer.adapters.drivers import dsn
+from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.core import helpers, listeners, logconfig
+from pgqueuer.domain import models, types
+from pgqueuer.ports.driver import Driver
 
 app = typer.Typer(
     help=(
@@ -481,16 +481,14 @@ def run(
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
     """
-    logconfig.setup_fancy_logger(log_level)
-
     asyncio_run(
-        supervisor.runit(
-            factories.load_factory(factory_fn),
-            dequeue_timeout=timedelta(seconds=dequeue_timeout),
+        supervisor.run(
+            factory_fn,
+            dequeue_timeout=dequeue_timeout,
             batch_size=batch_size,
-            restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
+            restart_delay=restart_delay,
             restart_on_failure=restart_on_failure,
-            shutdown=asyncio.Event(),
+            log_level=log_level,
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,

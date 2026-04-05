@@ -7,6 +7,7 @@ from pgqueuer.models import Job, JobId
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from pgqueuer.sm import SchedulerManager
+from pgqueuer.supervisor import run
 
 try:
     from pgqueuer._version import version as __version__
@@ -27,4 +28,5 @@ __all__ = [
     "QueueManager",
     "RetryRequested",
     "SchedulerManager",
+    "run",
 ]

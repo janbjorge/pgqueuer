@@ -165,6 +165,10 @@ pgq schedules --remove fetch_db
 
 Start a `QueueManager` to process jobs.
 
+!!! note "Programmatic API"
+    The same functionality is available as `await pgqueuer.run()` for embedding
+    in Python scripts. See [Running Programmatically](../guides/programmatic-run.md).
+
 **Options:**
 
 | Flag | Type | Default | Description |
