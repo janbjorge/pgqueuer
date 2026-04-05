@@ -110,44 +110,6 @@ async def refresh_cache(schedule):
     await http.get("https://api.example.com/ping")
 ```
 
-## Using Async Resources in Sync Entrypoints
-
-Sync entrypoints (declared with `def`, not `async def`) run in a worker thread via
-`anyio.to_thread.run_sync`. Async resources **must not** be called directly inside sync
-functions.
-
-**Recommended approaches:**
-
-1. Prefer making I/O entrypoints async:
-
-    ```python
-    @pgq.entrypoint("process_user")
-    async def process_user(job: Job) -> None:
-        pool = pgq.qm.get_context(job.id).resources["pg_pool"]
-        await pool.execute("SELECT 1")
-    ```
-
-2. If you must stay sync but still need async calls, bridge them with `anyio.from_thread.run`:
-
-    ```python
-    @pgq.entrypoint("resize_then_store")
-    def resize_then_store(job: Job) -> None:
-        ctx = pgq.qm.get_context(job.id)
-        img = cpu_resize(job.payload)
-        anyio.from_thread.run(store_image, img, ctx.resources["pg_pool"])
-
-    async def store_image(data: bytes, pool: asyncpg.Pool) -> None:
-        await pool.execute("INSERT INTO images(data) VALUES($1)", data)
-    ```
-
-!!! warning "Do not call async resources directly in sync entrypoints"
-    ```python
-    @pgq.entrypoint("bad")
-    def bad(job: Job) -> None:
-        async_func = ctx.resources["async_func"]
-        coro = async_func("value")  # Returns coroutine, never awaited!
-    ```
-
 ## Testing With Resources
 
 ```python

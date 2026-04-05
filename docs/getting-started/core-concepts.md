@@ -28,8 +28,8 @@ with `@pgq.entrypoint()`.
 
 ## Entrypoints
 
-An **entrypoint** is a named handler that processes jobs. You register entrypoints using
-the `@pgq.entrypoint()` decorator:
+An **entrypoint** is a named async handler that processes jobs. All entrypoints must be
+defined with `async def`. You register entrypoints using the `@pgq.entrypoint()` decorator:
 
 ```python
 @pgq.entrypoint("send_email")
@@ -39,6 +39,17 @@ async def send_email(job: Job) -> None:
 ```
 
 When a job with `entrypoint="send_email"` is dequeued, PgQueuer calls this function.
+
+!!! tip "Migrating from sync entrypoints"
+    If you have blocking code, wrap it with `asyncio.to_thread()`:
+
+    ```python
+    import asyncio
+
+    @pgq.entrypoint("resize_image")
+    async def resize_image(job: Job) -> None:
+        await asyncio.to_thread(cpu_bound_resize, job.payload)
+    ```
 
 ### Entrypoint Parameters
 

@@ -32,8 +32,6 @@ unaffected.
 
 ## Handling Cancellation in Job Code
 
-### Asynchronous entrypoints
-
 Use the job's cancellation scope to stop processing when a cancel request arrives:
 
 ```python
@@ -42,25 +40,6 @@ async def process_job(job: Job) -> None:
     with pgq.qm.get_context(job.id).cancellation:
         await perform_task(job.payload)
 ```
-
-### Synchronous entrypoints
-
-Check the `cancel_called` flag in a loop:
-
-```python
-@pgq.entrypoint("sync_entrypoint")
-def process_job(job: Job) -> None:
-    cancel_scope = pgq.qm.get_context(job.id).cancellation
-    for step in job_steps:
-        if cancel_scope.cancel_called:
-            return
-        perform_task(step)
-```
-
-!!! note
-    `anyio.CancelScope` delivers cancellation asynchronously. In synchronous entrypoints,
-    polling `cancel_called` between steps is the recommended approach since the scope's
-    context-manager form requires an async context to function.
 
 ## Job Status After Cancellation
 

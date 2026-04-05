@@ -374,6 +374,7 @@ async def test_on_failure_rejects_invalid_values(
     """Entrypoint raises ValueError for invalid on_failure values."""
     pgq = PgQueuer(apgdriver)
     with pytest.raises(ValueError, match="on_failure"):
+
         @pgq.entrypoint("bad_ep", on_failure=bad_value)  # type: ignore[arg-type]
         async def handler(job: Job) -> None: ...
 

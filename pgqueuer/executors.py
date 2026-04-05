@@ -14,8 +14,6 @@ from pgqueuer.core.executors import (
     RetryWithBackoffEntrypointExecutor,
     ScheduleExecutor,
     ScheduleExecutorFactoryParameters,
-    SyncContextEntrypoint,
-    SyncEntrypoint,
     is_async_callable,
 )
 
@@ -33,7 +31,5 @@ __all__ = [
     "RetryWithBackoffEntrypointExecutor",
     "ScheduleExecutor",
     "ScheduleExecutorFactoryParameters",
-    "SyncContextEntrypoint",
-    "SyncEntrypoint",
     "is_async_callable",
 ]

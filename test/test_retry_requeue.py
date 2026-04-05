@@ -22,6 +22,11 @@ from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
+
+async def _async_noop(job: Job) -> None:
+    pass
+
+
 # ---------------------------------------------------------------------------
 # RetryRequested exception
 # ---------------------------------------------------------------------------
@@ -381,7 +386,7 @@ def test_database_retry_executor_backoff_caps_at_max_delay() -> None:
     executor = DatabaseRetryEntrypointExecutor(
         parameters=EntrypointExecutorParameters(
             concurrency_limit=0,
-            func=lambda job: None,
+            func=_async_noop,
             requests_per_second=0,
             retry_timer=timedelta(seconds=10),
             serialized_dispatch=False,
