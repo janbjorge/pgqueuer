@@ -39,6 +39,11 @@ from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
+# Minimum sleep before re-checking the queue. Prevents busy-looping when a
+# deferred job's ETA is near zero or when the TOCTOU fallback detects
+# eligible work that the preceding dequeue narrowly missed.
+MIN_DEQUEUE_POLL_INTERVAL = timedelta(seconds=0.1)
+
 
 @dataclasses.dataclass
 class QueueManager:
@@ -504,12 +509,12 @@ class QueueManager:
         entrypoints = list(self.entrypoint_registry.keys())
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
-            return max(eta, timedelta(seconds=0.1))
+            return max(eta, MIN_DEQUEUE_POLL_INTERVAL)
         # When eta is None there are no future-deferred jobs, but a job may have
         # become eligible between the preceding dequeue and this check (TOCTOU).
         # If queued work exists, wake up quickly so the next iteration picks it up.
         if eta is None and await self.queries.queued_work(entrypoints) > 0:
-            return timedelta(seconds=0.1)
+            return MIN_DEQUEUE_POLL_INTERVAL
         return dequeue_timeout
 
     async def run(
