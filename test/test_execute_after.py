@@ -174,3 +174,34 @@ async def test_deferred_job_picked_up_promptly() -> None:
     assert elapsed < defer_seconds + 3.0, (
         f"Deferred job took {elapsed:.1f}s, expected ~{defer_seconds}s"
     )
+
+
+async def test_effective_dequeue_timeout_toctou_fallback() -> None:
+    """When next_deferred_eta returns None but queued work exists (the TOCTOU
+    race between dequeue and next_deferred_eta), _effective_dequeue_timeout
+    must return a short timeout instead of the full dequeue_timeout."""
+    from unittest.mock import AsyncMock, patch
+
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("ep")
+    async def handler(job: Job) -> None:
+        pass
+
+    # Enqueue an eligible job (execute_after in the past).
+    await pq.qm.queries.enqueue("ep", None, 0, timedelta(seconds=-1))
+
+    full_timeout = timedelta(seconds=30)
+
+    # Simulate the race: next_deferred_eta returns None (job just became
+    # eligible between dequeue and this check), but queued_work > 0.
+    with patch.object(
+        pq.qm.queries, "next_deferred_eta", new_callable=AsyncMock, return_value=None
+    ):
+        timeout = await pq.qm._effective_dequeue_timeout(full_timeout)
+
+    # With the fix, queued_work > 0 triggers a short timeout.
+    # Without the fix, the full 30s would be returned.
+    assert timeout < timedelta(seconds=1), (
+        f"Expected short timeout due to queued work, got {timeout}"
+    )

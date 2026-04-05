@@ -112,6 +112,14 @@ class QueueManager:
         )
     )
 
+    # Minimum sleep before re-checking the queue. Prevents busy-looping when a
+    # deferred job's ETA is near zero or when the TOCTOU fallback detects
+    # eligible work that the preceding dequeue narrowly missed.
+    min_dequeue_poll_interval: timedelta = dataclasses.field(
+        init=False,
+        default=timedelta(seconds=0.1),
+    )
+
     async def listener_healthy(
         self,
         timeout: timedelta = timedelta(seconds=10),
@@ -501,9 +509,15 @@ class QueueManager:
 
     async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
         """Return a potentially shortened timeout if a deferred job is about to become eligible."""
-        eta = await self.queries.next_deferred_eta(list(self.entrypoint_registry.keys()))
+        entrypoints = list(self.entrypoint_registry.keys())
+        eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
-            return max(eta, timedelta(seconds=0.1))
+            return max(eta, self.min_dequeue_poll_interval)
+        # When eta is None there are no future-deferred jobs, but a job may have
+        # become eligible between the preceding dequeue and this check (TOCTOU).
+        # If queued work exists, wake up quickly so the next iteration picks it up.
+        if eta is None and await self.queries.queued_work(entrypoints) > 0:
+            return self.min_dequeue_poll_interval
         return dequeue_timeout
 
     async def run(
