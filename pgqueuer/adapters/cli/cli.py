@@ -568,7 +568,7 @@ def failed(
                 tabulate(
                     rows,
                     headers=["ID", "Entrypoint", "Attempts", "Created", "Payload bytes"],
-                    tablefmt="simple",
+                    tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
                 )
             )
 

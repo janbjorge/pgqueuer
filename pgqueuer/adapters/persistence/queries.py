@@ -465,22 +465,12 @@ class Queries:
         rather than deleted.  All other statuses are removed (DELETE) as before.
         Both paths write an entry to the log table.
         """
-        to_delete = [(j, s, t) for j, s, t in job_status if s != "failed"]
-        to_hold = [(j, s, t) for j, s, t in job_status if s == "failed"]
-
-        if to_delete:
-            await self.driver.execute(
-                self.qbq.build_log_job_query(),
-                [job.id for job, _, _ in to_delete],
-                [status for _, status, _ in to_delete],
-                [tb.model_dump_json() if tb else None for _, _, tb in to_delete],
-            )
-        if to_hold:
-            await self.driver.execute(
-                self.qbq.build_hold_jobs_query(),
-                [job.id for job, _, _ in to_hold],
-                [tb.model_dump_json() if tb else None for _, _, tb in to_hold],
-            )
+        await self.driver.execute(
+            self.qbq.build_log_job_query(),
+            [job.id for job, _, _ in job_status],
+            [status for _, status, _ in job_status],
+            [tb.model_dump_json() if tb else None for _, _, tb in job_status],
+        )
 
     async def retry_job(
         self,
@@ -512,10 +502,14 @@ class Queries:
             ids,
         )
 
-    async def list_failed_jobs(self, limit: int = 100) -> list[models.Job]:
-        """List jobs held with status ``'failed'``, ordered by creation time descending."""
+    async def list_failed_jobs(
+        self,
+        limit: int = 100,
+        order: str = "DESC",
+    ) -> list[models.Job]:
+        """List jobs held with status ``'failed'``, ordered by creation time."""
         rows = await self.driver.fetch(
-            self.qbq.build_list_failed_jobs_query(),
+            self.qbq.build_list_failed_jobs_query(order=order),
             limit,
         )
         return [models.Job.model_validate(dict(r)) for r in rows]

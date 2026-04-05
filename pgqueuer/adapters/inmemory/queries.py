@@ -456,11 +456,13 @@ class InMemoryQueries:
 
     # -- list_failed_jobs ------------------------------------------------------
 
-    async def list_failed_jobs(self, limit: int = 100) -> list[models.Job]:
-        failed = [
-            j for j in self._jobs.values() if j["status"] == "failed"
-        ]
-        failed.sort(key=lambda j: j["created"], reverse=True)
+    async def list_failed_jobs(
+        self,
+        limit: int = 100,
+        order: str = "DESC",
+    ) -> list[models.Job]:
+        failed = [j for j in self._jobs.values() if j["status"] == "failed"]
+        failed.sort(key=lambda j: j["created"], reverse=(order.upper() != "ASC"))
         return [models.Job.model_validate(j) for j in failed[:limit]]
 
     # -- mark_job_as_cancelled -------------------------------------------------
