@@ -30,13 +30,10 @@ async def heartbeat(schedule: Schedule) -> None:
 
 ### Scheduler Flow Diagram
 
-```mermaid
-flowchart LR
-    Define["@pgq.schedule"] --> Store[(Schedule in DB)]
-    Store --> Poll[Poll loop]
-    Poll -->|cron ready| Enqueue[Enqueue job]
-    Enqueue --> Execute[Execute task]
-    Poll -->|not yet| Poll
+```
+@pgq.schedule ──▶ Schedule in DB ──▶ Poll loop ──cron ready──▶ Execute task
+                                        ▲                          │
+                                        └──────────────────────────┘
 ```
 
 ## Cron Expression Format

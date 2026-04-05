@@ -6,13 +6,16 @@ consumers up to date.
 
 ## Job Flow Diagram
 
-```mermaid
-flowchart LR
-    P[Producer] -->|Queries.enqueue| DB[(PostgreSQL)]
-    DB -->|NOTIFY| R[EventRouter]
-    R -->|signal| QM[QueueManager]
-    QM -->|dispatch| C[Consumer]
-    C -->|update status| DB
+```
+Producer ──enqueue──▶ PostgreSQL ──NOTIFY──▶ EventRouter
+                          ▲                       │
+                          │                    signal
+                          │                       ▼
+                    update status            QueueManager
+                          │                       │
+                          │                   dispatch
+                          │                       ▼
+                          └───────────────── Consumer
 ```
 
 1. **Producer** inserts a job using `Queries.enqueue()`.
@@ -27,16 +30,27 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 
 ## QueueManager Processing Loop
 
-```mermaid
-flowchart TD
-    Wait[Wait for NOTIFY] --> Query[Query jobs]
-    Query -->|no jobs| Wait
-    Query -->|jobs found| Claim[Claim job]
-    Claim --> Execute[Execute task]
-    Execute -->|success| Success[Mark successful]
-    Execute -->|error| Error[Mark exception]
-    Success --> Wait
-    Error --> Wait
+```
+              ┌──────────────────┐
+              │ Wait for NOTIFY  │◀─────────────────────┐
+              └────────┬─────────┘                      │
+                       │                                │
+                       ▼                                │
+              ┌──────────────────┐   no jobs            │
+              │    Query jobs    │──────────────────────▶│
+              └────────┬─────────┘                      │
+                       │ found                          │
+                       ▼                                │
+              ┌──────────────────┐                      │
+              │   Execute task   │                      │
+              └───┬──────────┬───┘                      │
+                  │          │                          │
+           success│          │error                     │
+                  ▼          ▼                          │
+        ┌──────────┐  ┌─────────────┐                   │
+        │successful│  │  exception  │                   │
+        └─────┬────┘  └──────┬──────┘                   │
+              └──────────────┴──────────────────────────┘
 ```
 
 ## Job Status Lifecycle
@@ -51,7 +65,8 @@ CREATE TYPE pgqueuer_status AS ENUM (
     'successful',
     'exception',
     'canceled',
-    'deleted'
+    'deleted',
+    'failed'
 );
 ```
 
@@ -64,18 +79,33 @@ The lifecycle of a job flows through these statuses:
   the statistics log and removed from the queue.
 - **`exception`** — Indicates the job failed with an uncaught error. The traceback is
   stored for later inspection.
+- **`failed`** — Job held in the queue for manual review when `on_failure="hold"` is set.
+  Can be re-queued or deleted manually.
 - **`canceled`** — Jobs canceled before completion receive this status and are logged.
 - **`deleted`** — Used when jobs are removed from the queue without running, such as during
   manual cleanup operations.
 
 ### Status Transition Diagram
 
-```mermaid
-flowchart TD
-    Queued[queued] -->|claim| Picked[picked]
-    Queued -->|delete| Deleted[deleted]
-
-    Picked -->|success| Success[successful]
-    Picked -->|error| Exception[exception]
-    Picked -->|cancel| Canceled[canceled]
+```
+                  ┌────────┐
+                  │ queued │
+                  └───┬──┬─┘
+               claim  │  │  delete
+                      ▼  ▼
+               ┌────────┐ ┌─────────┐
+               │ picked │ │ deleted │
+               └┬─┬──┬─┬┘ └─────────┘
+                │ │  │ │
+     success    │ │  │ │  cancel
+                │ │  │ │
+                ▼ │  │ ▼
+  ┌────────────┐  │  │  ┌───────────┐
+  │ successful │  │  │  │ canceled  │
+  └────────────┘  │  │  └───────────┘
+            error │  │ hold
+                  ▼  ▼
+        ┌───────────┐ ┌────────┐
+        │ exception │ │ failed │
+        └───────────┘ └────────┘
 ```
