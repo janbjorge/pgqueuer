@@ -62,39 +62,24 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 Every job transitions through a series of states. The status is stored as the
 `pgqueuer_status` PostgreSQL enum with seven values:
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    Queued[queued]
-    Picked[picked]
-    Success[successful]
-    Exception[exception]
-    Failed[failed]
-    Canceled[canceled]
-    Deleted[deleted]
+```
+                             +--- handler completes --> [successful]   *terminal
+                             |
+  [queued] -- worker claims --> [picked] -- handler raises --> [exception]    *terminal
+     ^  |                    |
+     |  |                    +--- on_failure=hold ----> [failed]       stays in queue
+     |  |                    |                             |
+     |  |                    +--- cancel request -----> [canceled]     *terminal
+     |  |                    |
+     |  |                    +--- RetryRequested -------+
+     |  |                                               |
+     |  +--- explicit delete --> [deleted]   *terminal  |
+     |                                                  |
+     +---------- re-queued (retry or manual) -----------+
+     +---------- manual requeue from failed ------------+
 
-    Queued -->|worker claims| Picked
-    Queued -->|explicit delete| Deleted
-    Picked -->|handler completes| Success
-    Picked -->|handler raises| Exception
-    Picked -->|on_failure=hold| Failed
-    Picked -->|cancel request| Canceled
-    Picked -->|RetryRequested| Queued
-    Failed -->|manual requeue| Queued
-
-    classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-    classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
-    classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
-    classDef failed   fill:#F0D5F5,stroke:#9B59B6,stroke-width:2px,color:#111
-
-    class Queued queued
-    class Picked picked
-    class Success success
-    class Exception,Deleted error
-    class Failed failed
-    class Canceled canceled
+  * Terminal states are moved from the queue table to the log table.
+    [failed] jobs remain in the queue for manual inspection/requeue.
 ```
 
 | Status | Meaning |

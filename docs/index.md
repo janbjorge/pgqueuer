@@ -34,30 +34,18 @@ PgQueuer uses battle-tested PostgreSQL primitives to deliver jobs safely and fas
 - **ACID transactions** -- jobs are enqueued and processed with the same guarantees as your application data
 - **Row-level locking** -- multiple workers scale horizontally against a single database
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    P[Your App]
-    DB[(PostgreSQL)]
-    W1[Worker 1]
-    W2[Worker 2]
-    W3[Worker N]
-
-    P -->|enqueue| DB
-    DB -->|NOTIFY| W1
-    DB -->|NOTIFY| W2
-    DB -->|NOTIFY| W3
-    W1 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
-    W2 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
-    W3 -->|"FOR UPDATE<br/>SKIP LOCKED"| DB
-
-    classDef app      fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef database  fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef worker    fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-
-    class P app
-    class DB database
-    class W1,W2,W3 worker
+```
+                                  NOTIFY        +----------+  FOR UPDATE
+                              +------------>    | Worker 1 | ----------+
+                              |                 +----------+           |
+               enqueue        |    NOTIFY       +----------+           |  SKIP
+  Your App  ---------->  PostgreSQL ----------> | Worker 2 | ----------+  LOCKED
+                              |                 +----------+           |
+                              |    NOTIFY       +----------+           |
+                              +------------>    | Worker N | ----------+
+                                                +----------+           |
+                              ^                                        |
+                              +--- each worker claims its own rows ----+
 ```
 
 ## A Taste of PgQueuer
