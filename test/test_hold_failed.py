@@ -67,10 +67,12 @@ async def test_inmemory_mixed_batch(queries: InMemoryQueries) -> None:
     jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
     assert len(jobs) == 2
 
-    await queries.log_jobs([
-        (jobs[0], "failed", None),
-        (jobs[1], "exception", None),
-    ])
+    await queries.log_jobs(
+        [
+            (jobs[0], "failed", None),
+            (jobs[1], "exception", None),
+        ]
+    )
 
     failed = await queries.list_failed_jobs()
     assert len(failed) == 1
