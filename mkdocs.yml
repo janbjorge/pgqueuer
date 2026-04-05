@@ -6,8 +6,8 @@ repo_name: janbjorge/pgqueuer
 edit_uri: edit/main/docs/
 theme:
   name: material
-  logo: logo.png
-  favicon: logo.png
+  logo: logo.svg
+  favicon: favicon.svg
   palette:
     - scheme: default
       primary: custom
