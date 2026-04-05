@@ -24,14 +24,27 @@ async with CompletionWatcher(driver) as watcher:
 
 The watcher monitors a job's progression until it reaches a **terminal state**:
 
-```mermaid
-flowchart TD
-    Queued[queued] -->|claim| Picked[picked]
-    Queued -->|delete| Deleted[deleted]
-
-    Picked -->|complete| Success[successful]
-    Picked -->|error| Exception[exception]
-    Picked -->|cancel| Canceled[canceled]
+```
+                  ┌────────┐
+                  │ queued │
+                  └───┬──┬─┘
+               claim  │  │  delete
+                      ▼  ▼
+               ┌────────┐ ┌─────────┐
+               │ picked │ │ deleted │
+               └┬─┬──┬─┬┘ └─────────┘
+                │ │  │ │
+     complete   │ │  │ │  cancel
+                │ │  │ │
+                ▼ │  │ ▼
+  ┌────────────┐  │  │  ┌───────────┐
+  │ successful │  │  │  │ canceled  │
+  └────────────┘  │  │  └───────────┘
+            error │  │ hold
+                  ▼  ▼
+        ┌───────────┐ ┌────────┐
+        │ exception │ │ failed │
+        └───────────┘ └────────┘
 ```
 
 ## Tracking Many Jobs at Once

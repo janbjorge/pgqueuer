@@ -34,17 +34,18 @@ PgQueuer uses battle-tested PostgreSQL primitives to deliver jobs safely and fas
 - **ACID transactions** -- jobs are enqueued and processed with the same guarantees as your application data
 - **Row-level locking** -- multiple workers scale horizontally against a single database
 
-```mermaid
-flowchart TD
-    P[Your App] -->|enqueue| DB[(PostgreSQL)]
-
-    DB -->|NOTIFY| W1[Worker 1]
-    DB -->|NOTIFY| W2[Worker 2]
-    DB -->|NOTIFY| W3[Worker N]
-
-    W1 -->|"FOR UPDATE SKIP LOCKED"| DB
-    W2 -->|"FOR UPDATE SKIP LOCKED"| DB
-    W3 -->|"FOR UPDATE SKIP LOCKED"| DB
+```
+┌──────────┐  enqueue   ┌────────────┐  NOTIFY   ┌──────────┐
+│ Your App │───────────▶│            │──────────▶│ Worker 1 │──┐
+└──────────┘            │            │           └──────────┘  │
+                        │ PostgreSQL │  NOTIFY   ┌──────────┐  │
+                        │            │──────────▶│ Worker 2 │──┤
+                        │            │           └──────────┘  │
+                        │            │  NOTIFY   ┌──────────┐  │
+                        │            │──────────▶│ Worker N │──┤
+                        └────────────┘           └──────────┘  │
+                              ▲  FOR UPDATE SKIP LOCKED        │
+                              └────────────────────────────────┘
 ```
 
 ## A Taste of PgQueuer

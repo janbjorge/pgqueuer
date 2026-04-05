@@ -73,18 +73,31 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 Every job transitions through a series of states. The status is stored as the
 `pgqueuer_status` PostgreSQL enum with seven values:
 
-```mermaid
-flowchart TD
-    Queued[queued] -->|worker claims| Picked[picked]
-    Queued -->|explicit delete| Deleted[deleted]
-
-    Picked -->|handler completes| Success[successful]
-    Picked -->|handler raises| Exception[exception]
-    Picked -->|"on_failure=hold"| Failed[failed]
-    Picked -->|cancel request| Canceled[canceled]
-    Picked -->|RetryRequested| Queued
-    Failed -->|manual requeue| Queued
 ```
+                     ┌────────┐
+                     │ queued │◀──── retry / requeue
+                     └───┬──┬─┘
+              claim      │  │  delete
+                         ▼  ▼
+                  ┌────────┐ ┌─────────┐
+                  │ picked │ │ deleted │
+                  └┬─┬──┬─┬┘ └─────────┘
+                   │ │  │ │
+        success    │ │  │ │  cancel
+                   │ │  │ │
+                   ▼ │  │ ▼
+      ┌────────────┐ │  │ ┌───────────┐
+      │ successful │ │  │ │ canceled  │
+      └────────────┘ │  │ └───────────┘
+               error │  │ hold
+                     ▼  ▼
+            ┌───────────┐ ┌────────┐
+            │ exception │ │ failed │
+            └───────────┘ └────────┘
+```
+
+Jobs can also return to `queued`: a `picked` job may be retried via `RetryRequested`,
+and a `failed` job can be manually re-queued.
 
 | Status | Meaning |
 |--------|---------|
