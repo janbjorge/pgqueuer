@@ -18,7 +18,7 @@ from collections.abc import MutableMapping
 from contextlib import nullcontext, suppress
 from datetime import timedelta
 from math import isfinite
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Callable, get_args
 
 import anyio
 
@@ -276,6 +276,9 @@ class QueueManager:
 
         if not isinstance(accepts_context, bool):
             raise ValueError("accepts_context must be boolean")
+
+        if on_failure not in get_args(types.OnFailure):
+            raise ValueError(f"on_failure must be one of {get_args(types.OnFailure)}.")
 
         executor_factory = executor_factory or executors.EntrypointExecutor
 

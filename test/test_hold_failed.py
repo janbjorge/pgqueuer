@@ -6,6 +6,7 @@ import uuid
 from datetime import timedelta
 
 import async_timeout
+import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
@@ -358,3 +359,32 @@ async def test_database_retry_executor_then_hold(apgdriver: AsyncpgDriver) -> No
     assert len(failed) == 1
     assert failed[0].entrypoint == "retry_then_hold"
     assert failed[0].payload == b"payload"
+
+
+# ---------------------------------------------------------------------------
+# Validation: on_failure must be a valid literal value
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_value", ["cancel", "retry", "", 0, None, True])
+async def test_on_failure_rejects_invalid_values(
+    apgdriver: AsyncpgDriver,
+    bad_value: object,
+) -> None:
+    """Entrypoint raises ValueError for invalid on_failure values."""
+    pgq = PgQueuer(apgdriver)
+    with pytest.raises(ValueError, match="on_failure"):
+        @pgq.entrypoint("bad_ep", on_failure=bad_value)  # type: ignore[arg-type]
+        async def handler(job: Job) -> None: ...
+
+
+@pytest.mark.parametrize("good_value", ["delete", "hold"])
+async def test_on_failure_accepts_valid_values(
+    apgdriver: AsyncpgDriver,
+    good_value: object,
+) -> None:
+    """Entrypoint accepts valid on_failure values without error."""
+    pgq = PgQueuer(apgdriver)
+
+    @pgq.entrypoint(f"good_ep_{good_value}", on_failure=good_value)  # type: ignore[arg-type]
+    async def handler(job: Job) -> None: ...
