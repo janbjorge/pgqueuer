@@ -40,6 +40,17 @@ async def send_email(job: Job) -> None:
 
 When a job with `entrypoint="send_email"` is dequeued, PgQueuer calls this function.
 
+!!! tip "Migrating from sync entrypoints"
+    If you have blocking code, wrap it with `asyncio.to_thread()`:
+
+    ```python
+    import asyncio
+
+    @pgq.entrypoint("resize_image")
+    async def resize_image(job: Job) -> None:
+        await asyncio.to_thread(cpu_bound_resize, job.payload)
+    ```
+
 ### Entrypoint Parameters
 
 The `@entrypoint()` decorator accepts several parameters that control how jobs are processed:

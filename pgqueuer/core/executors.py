@@ -108,7 +108,9 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
         if not is_async_callable(cast(Callable[..., object], self.parameters.func)):
             raise TypeError(
                 "Entrypoint function must be async (defined with 'async def'). "
-                "Sync entrypoints are no longer supported."
+                "Sync entrypoints are no longer supported. "
+                "Wrap blocking code with asyncio.to_thread(): "
+                "async def my_entry(job): await asyncio.to_thread(blocking_fn, job)"
             )
         self.accepts_context = self.parameters.accepts_context
 
