@@ -818,6 +818,14 @@ class QueryQueueBuilder:
         ORDER  BY job_id, created DESC, id DESC;
         """
 
+    def build_next_deferred_eta_query(self) -> str:
+        return f"""SELECT MIN(execute_after) - NOW() AS eta
+        FROM {self.settings.queue_table}
+        WHERE status = 'queued'
+          AND execute_after > NOW()
+          AND entrypoint = ANY($1)
+        """
+
 
 @dataclasses.dataclass
 class QuerySchedulerBuilder:

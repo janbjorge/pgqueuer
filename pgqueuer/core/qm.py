@@ -575,9 +575,16 @@ class QueueManager:
                     self.shutdown.set()
                     await periodic_health_check_task
 
+                effective_timeout = dequeue_timeout
+                eta = await self.queries.next_deferred_eta(
+                    list(self.entrypoint_registry.keys())
+                )
+                if eta is not None and eta < effective_timeout:
+                    effective_timeout = max(eta, timedelta(seconds=0.1))
+
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,
-                    dequeue_timeout,
+                    effective_timeout,
                 )
                 await asyncio.wait(
                     (shutdown_task, event_task),
