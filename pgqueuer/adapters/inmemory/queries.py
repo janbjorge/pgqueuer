@@ -765,6 +765,21 @@ class InMemoryQueries:
         else:
             self._log.clear()
 
+    # -- next_deferred_eta -----------------------------------------------------
+
+    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+        """Return time until the soonest deferred job becomes eligible, or None."""
+        now = _utc_now()
+        ep_set = set(entrypoints)
+        candidates = [
+            j["execute_after"]
+            for j in self._jobs.values()
+            if j["status"] == "queued" and j["entrypoint"] in ep_set and j["execute_after"] > now
+        ]
+        if candidates:
+            return min(candidates) - now
+        return None
+
     # -- Private helpers -------------------------------------------------------
 
     def _remove_dedupe_for_job(self, job_id: int) -> None:

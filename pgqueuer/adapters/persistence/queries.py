@@ -732,6 +732,11 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
+    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+        """Return time until the soonest deferred job becomes eligible, or None."""
+        rows = await self.driver.fetch(self.qbq.build_next_deferred_eta_query(), entrypoints)
+        return rows[0]["eta"] if rows and rows[0]["eta"] is not None else None
+
 
 @dataclasses.dataclass
 class SyncQueries:

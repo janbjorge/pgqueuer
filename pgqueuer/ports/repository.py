@@ -145,6 +145,10 @@ class QueueRepositoryPort(Protocol):
         """Clear statistics log entries."""
         ...
 
+    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+        """Return time until the soonest deferred job becomes eligible, or None."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Schedule persistence

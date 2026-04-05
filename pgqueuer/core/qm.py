@@ -463,6 +463,49 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
+    async def _maybe_drain_shutdown(
+        self,
+        mode: types.QueueExecutionMode,
+        task_manager: tm.TaskManager,
+        cached_queued_work: cache.TTLCache[int],
+    ) -> None:
+        """In drain mode, shut down once the queue is empty and all tasks have finished.
+
+        When ``max_concurrent_tasks`` is low, ``fetch_jobs`` may stop yielding
+        because capacity is reached rather than because the queue is empty.
+        We therefore re-check the database.  Before that we yield once so
+        in-flight tasks (which may re-queue via ``RetryRequested``) can finish.
+        """
+        if mode is not types.QueueExecutionMode.drain:
+            return
+        if task_manager.tasks:
+            await asyncio.sleep(0)
+        if (await cached_queued_work()) == 0 and not task_manager.tasks:
+            self.shutdown.set()
+
+    async def _maybe_health_shutdown(
+        self,
+        periodic_health_check_task: asyncio.Task[None],
+        mode: types.QueueExecutionMode,
+        shutdown_on_listener_failure: bool,
+    ) -> None:
+        """Propagate a listener health-check failure as a shutdown signal."""
+        if (
+            periodic_health_check_task.done()
+            and periodic_health_check_task.exception()
+            and mode is not types.QueueExecutionMode.drain
+            and shutdown_on_listener_failure
+        ):
+            self.shutdown.set()
+            await periodic_health_check_task
+
+    async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
+        """Return a potentially shortened timeout if a deferred job is about to become eligible."""
+        eta = await self.queries.next_deferred_eta(list(self.entrypoint_registry.keys()))
+        if eta is not None and eta < dequeue_timeout:
+            return max(eta, timedelta(seconds=0.1))
+        return dequeue_timeout
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
@@ -554,30 +597,14 @@ class QueueManager:
                     if self.shutdown.is_set():
                         break
 
-                # Run until the queue is empty and then shutdown,
-                # if max_concurrent_tasks is low, we could exit early due to
-                # fetch_jobs not yield more jobs due to at work capacity. Need to check
-                # back in with the database to see if there are any jobs left.
-                # When dispatch tasks are still running, yield so they can finish
-                # before we check — a task may re-queue work via RetryRequested.
-                if mode is types.QueueExecutionMode.drain:
-                    if task_manager.tasks:
-                        await asyncio.sleep(0)
-                    if (await cached_queued_work()) == 0 and not task_manager.tasks:
-                        self.shutdown.set()
-
-                if (
-                    periodic_health_check_task.done()
-                    and periodic_health_check_task.exception()
-                    and mode is not types.QueueExecutionMode.drain
-                    and shutdown_on_listener_failure
-                ):
-                    self.shutdown.set()
-                    await periodic_health_check_task
+                await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
+                await self._maybe_health_shutdown(
+                    periodic_health_check_task, mode, shutdown_on_listener_failure
+                )
 
                 event_task = helpers.wait_for_notice_event(
                     notice_event_listener,
-                    dequeue_timeout,
+                    await self._effective_dequeue_timeout(dequeue_timeout),
                 )
                 await asyncio.wait(
                     (shutdown_task, event_task),
