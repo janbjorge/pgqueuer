@@ -59,8 +59,7 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
             "Factory must return an async context manager, but returned a coroutine.\n"
             "\n"
             "Migration — wrap your factory with @asynccontextmanager and\n"
-            "replace 'return' with 'yield':\n"
-            + _EXAMPLE
+            "replace 'return' with 'yield':\n" + _EXAMPLE
         )
 
     if isinstance(result, AbstractContextManager):
@@ -68,14 +67,12 @@ def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
             "Factory must return an async context manager, but returned a synchronous\n"
             "context manager.\n"
             "\n"
-            "Migration — replace @contextmanager with @asynccontextmanager:\n"
-            + _EXAMPLE
+            "Migration — replace @contextmanager with @asynccontextmanager:\n" + _EXAMPLE
         )
 
     raise TypeError(
         f"Factory must return an async context manager (AsyncContextManager),\n"
         f"but returned {type(result).__name__!r}.\n"
         "\n"
-        "Example:\n"
-        + _EXAMPLE
+        "Example:\n" + _EXAMPLE
     )
