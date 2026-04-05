@@ -1,0 +1,14 @@
+<svg viewBox="0 0 520 120" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(16, 12)">
+    <rect width="96" height="96" rx="20" fill="#336791"/>
+    <text x="48" y="62" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="48" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="-2">PQ</text>
+    <g transform="translate(24,74)">
+      <rect width="10" height="4" rx="2" fill="#fff" opacity=".45"/>
+      <rect x="16" width="10" height="4" rx="2" fill="#fff" opacity=".65"/>
+      <rect x="32" width="10" height="4" rx="2" fill="#fff" opacity=".9"/>
+    </g>
+  </g>
+  <text x="134" y="74" font-family="system-ui,-apple-system,'Segoe UI',Helvetica,Arial,sans-serif" font-size="48" font-weight="600" fill="#336791" letter-spacing="-1">
+    <tspan fill="#1D3D56">Pg</tspan>Queuer
+  </text>
+</svg>
