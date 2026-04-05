@@ -10,19 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from contextlib import suppress
+from contextlib import AbstractAsyncContextManager, suppress
 from datetime import timedelta
-from typing import AsyncContextManager, Awaitable, Callable, ContextManager, TypeAlias
+from typing import Callable, TypeAlias
 
 from pgqueuer.adapters.cli import factories
 from pgqueuer.core import applications, logconfig, qm, sm
 from pgqueuer.domain import types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
-ManagerFactory: TypeAlias = Callable[
-    [],
-    Awaitable[Manager] | AsyncContextManager[Manager] | ContextManager[Manager],
-]
+ManagerFactory: TypeAlias = Callable[[], AbstractAsyncContextManager[Manager]]
 
 
 def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manager:
@@ -116,7 +113,7 @@ async def runit(
 
     while not shutdown.is_set():
         try:
-            async with factories.run_factory(factory()) as manager:
+            async with factories.validate_factory_result(factory()) as manager:
                 setup_shutdown_handlers(manager, shutdown)
                 await run_manager(
                     manager,

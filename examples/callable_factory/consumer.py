@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import psycopg
 import typer
@@ -21,7 +23,8 @@ async def head_stand(job: Job) -> None:
     print("Upside down from id:", job.id)
 
 
-async def pgqueuer_factory(components: list[str]) -> PgQueuer:
+@asynccontextmanager
+async def pgqueuer_factory(components: list[str]) -> AsyncGenerator[PgQueuer, None]:
     connection_string = dsn(
         host=os.environ["POSTGRES_HOST"],
         user=os.environ["POSTGRES_USER"],
@@ -44,7 +47,7 @@ async def pgqueuer_factory(components: list[str]) -> PgQueuer:
     for component_name in components:
         pgq.entrypoint(component_name)(task_queues[component_name])
 
-    return pgq
+    yield pgq
 
 
 def main(

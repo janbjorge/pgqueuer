@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
 import asyncpg
 
@@ -7,7 +9,8 @@ from pgqueuer.models import Schedule
 from pgqueuer.sm import SchedulerManager
 
 
-async def create_scheduler() -> SchedulerManager:
+@asynccontextmanager
+async def create_scheduler() -> AsyncGenerator[SchedulerManager, None]:
     # Establish a connection to PostgreSQL
     connection = await asyncpg.connect(dsn())
     driver = AsyncpgDriver(connection)
@@ -28,4 +31,4 @@ async def create_scheduler() -> SchedulerManager:
         await asyncio.sleep(0.2)
         print("clean_expired_tokens task completed.")
 
-    return sm
+    yield sm

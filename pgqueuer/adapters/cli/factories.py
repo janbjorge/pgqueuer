@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import os
 import sys
-from contextlib import AbstractAsyncContextManager, AbstractContextManager, asynccontextmanager
-from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar
-
-T = TypeVar("T")
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
+from typing import Any, Callable
 
 
 def load_factory(factory: str | Callable[..., Any]) -> Callable[..., Any]:
@@ -33,22 +32,55 @@ def load_factory(factory: str | Callable[..., Any]) -> Callable[..., Any]:
     return getattr(module, factory_name)
 
 
-@asynccontextmanager
-async def run_factory(
-    factory_result: Awaitable[T] | AbstractContextManager[T] | AbstractAsyncContextManager[T],
-) -> AsyncGenerator[T, None]:
-    """
-    Converts the result of a factory function in a async context manager
-    """
+def validate_factory_result(result: object) -> AbstractAsyncContextManager[Any]:
+    """Validate that a factory produced an async context manager.
 
-    # Check if it's an async context manager
-    if isinstance(factory_result, AbstractAsyncContextManager):
-        async with factory_result as value:
-            yield value
-    # Check if it's a synchronous context manager
-    elif isinstance(factory_result, AbstractContextManager):
-        with factory_result as value:
-            yield value
-    # Otherwise, assume it's an awaitable and return the result
-    else:
-        yield await factory_result
+    Raises TypeError with actionable migration instructions when the result
+    is a coroutine, a synchronous context manager, or any other unsupported
+    type.
+    """
+    if isinstance(result, AbstractAsyncContextManager):
+        return result
+
+    if inspect.iscoroutine(result):
+        raise TypeError(
+            "Factory must return an async context manager, but returned a coroutine.\n"
+            "\n"
+            "Migration — wrap your factory with @asynccontextmanager and\n"
+            "replace 'return' with 'yield':\n"
+            "\n"
+            "    from contextlib import asynccontextmanager\n"
+            "\n"
+            "    @asynccontextmanager\n"
+            "    async def my_factory():\n"
+            "        manager = ...  # your setup code\n"
+            "        yield manager\n"
+            "        # optional cleanup\n"
+        )
+
+    if isinstance(result, AbstractContextManager):
+        raise TypeError(
+            "Factory must return an async context manager, but returned a synchronous\n"
+            "context manager.\n"
+            "\n"
+            "Migration — replace @contextmanager with @asynccontextmanager:\n"
+            "\n"
+            "    from contextlib import asynccontextmanager\n"
+            "\n"
+            "    @asynccontextmanager\n"
+            "    async def my_factory():\n"
+            "        yield manager\n"
+        )
+
+    raise TypeError(
+        f"Factory must return an async context manager (AsyncContextManager),\n"
+        f"but returned {type(result).__name__!r}.\n"
+        "\n"
+        "Example:\n"
+        "\n"
+        "    from contextlib import asynccontextmanager\n"
+        "\n"
+        "    @asynccontextmanager\n"
+        "    async def my_factory():\n"
+        "        yield manager\n"
+    )
