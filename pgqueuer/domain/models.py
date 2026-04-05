@@ -144,6 +144,7 @@ class Job(BaseModel):
     status: JOB_STATUS
     entrypoint: str
     payload: bytes | None
+    attempts: int = 0
     queue_manager_id: uuid.UUID | None
     headers: Annotated[
         dict[str, Any] | None,

@@ -28,7 +28,45 @@ LIMIT 20;
 
 ## Retry Strategies
 
-PgQueuer provides two complementary retry mechanisms.
+PgQueuer provides three complementary retry mechanisms.
+
+### Database-level retry: durable re-queuing
+
+Raise `RetryRequested` from your handler to re-queue the job in the database. The job row is
+updated in-place — the `id`, `payload`, and all metadata are preserved. Any worker can pick
+up the retried job.
+
+```python
+from datetime import timedelta
+from pgqueuer.errors import RetryRequested
+
+@pgq.entrypoint("call_api")
+async def call_api(job: Job) -> None:
+    response = await http_client.post(API_URL, data=job.payload)
+    if response.status == 429:
+        raise RetryRequested(delay=timedelta(seconds=30), reason="rate limited")
+```
+
+Use `DatabaseRetryEntrypointExecutor` to automatically convert any exception into a
+database-level retry with exponential backoff:
+
+```python
+from pgqueuer.executors import DatabaseRetryEntrypointExecutor
+
+@pgq.entrypoint(
+    "flaky_api",
+    executor_factory=lambda params: DatabaseRetryEntrypointExecutor(
+        parameters=params,
+        max_attempts=5,
+        initial_delay=timedelta(seconds=1),
+    ),
+)
+async def flaky_api(job: Job) -> None:
+    await call_unreliable_service(job.payload)
+```
+
+See [Database-Level Retry](retry.md) for full details, backoff configuration, and
+traceability queries.
 
 ### Per-attempt retry: transient errors
 
@@ -145,7 +183,8 @@ or use `pgq dashboard` from the CLI.
 
 | Concern | Mechanism |
 |---------|-----------|
-| Transient errors | `RetryWithBackoffEntrypointExecutor` |
+| Durable retry across workers | `RetryRequested` / `DatabaseRetryEntrypointExecutor` |
+| In-process transient errors | `RetryWithBackoffEntrypointExecutor` |
 | Worker crash recovery | `retry_timer` + heartbeat |
 | Duplicate enqueue prevention | `dedupe_key` unique constraint |
 | Failure inspection | `pgqueuer_log` with traceback |

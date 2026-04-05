@@ -17,6 +17,7 @@ A **job** is a unit of work stored as a row in the `pgqueuer` table. Each job ha
 | `priority` | `int` | Higher values are dequeued first |
 | `status` | enum | Current lifecycle state (see below) |
 | `execute_after` | `timestamp` | Earliest time the job can be picked up |
+| `attempts` | `int` | Number of previous retry attempts (starts at 0) |
 | `heartbeat` | `timestamp` | Last time the worker confirmed it is alive |
 | `dedupe_key` | `str \| None` | Optional unique key to prevent duplicate enqueuing |
 
@@ -75,6 +76,7 @@ flowchart LR
     Picked -->|handler completes| Success
     Picked -->|handler raises| Exception
     Picked -->|cancel request| Canceled
+    Picked -->|RetryRequested| Queued
 
     classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
     classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111

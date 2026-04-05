@@ -1,6 +1,8 @@
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
+from pgqueuer.errors import RetryRequested
+from pgqueuer.executors import DatabaseRetryEntrypointExecutor
 from pgqueuer.models import Job, JobId
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -14,6 +16,7 @@ except ImportError:
 __all__ = [
     "AsyncpgDriver",
     "AsyncpgPoolDriver",
+    "DatabaseRetryEntrypointExecutor",
     "InMemoryDriver",
     "InMemoryQueries",
     "Job",
@@ -22,5 +25,6 @@ __all__ = [
     "PsycopgDriver",
     "Queries",
     "QueueManager",
+    "RetryRequested",
     "SchedulerManager",
 ]

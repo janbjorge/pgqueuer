@@ -223,6 +223,35 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
+@dataclasses.dataclass
+class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
+    """Executor that converts exceptions into database-level retries.
+
+    On failure the job is re-queued via :class:`~pgqueuer.domain.errors.RetryRequested`
+    with exponential backoff derived from ``job.attempts``.  After *max_attempts*
+    consecutive failures the exception propagates as a terminal failure.
+    """
+
+    max_attempts: int = 5
+    initial_delay: timedelta = dataclasses.field(default_factory=lambda: timedelta(seconds=1))
+    max_delay: timedelta = dataclasses.field(default_factory=lambda: timedelta(minutes=5))
+    backoff_multiplier: float = 2.0
+
+    async def execute(self, job: models.Job, context: models.Context) -> None:
+        try:
+            await super().execute(job, context)
+        except errors.RetryRequested:
+            raise
+        except Exception as e:
+            if job.attempts >= self.max_attempts:
+                raise
+            delay = min(
+                self.initial_delay * (self.backoff_multiplier**job.attempts),
+                self.max_delay,
+            )
+            raise errors.RetryRequested(delay=delay, reason=str(e)) from e
+
+
 ######## Schedulers ########
 
 

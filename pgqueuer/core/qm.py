@@ -428,6 +428,7 @@ class QueueManager:
             (self.queries.qbe.settings.queue_table, "queue_manager_id"),
             (self.queries.qbe.settings.queue_table, "execute_after"),
             (self.queries.qbe.settings.queue_table, "headers"),
+            (self.queries.qbe.settings.queue_table, "attempts"),
             (self.queries.qbe.settings.queue_table_log, "traceback"),
         ):
             if not (await self.queries.table_has_column(table, column)):
@@ -549,8 +550,13 @@ class QueueManager:
                 # if max_concurrent_tasks is low, we could exit early due to
                 # fetch_jobs not yield more jobs due to at work capacity. Need to check
                 # back in with the database to see if there are any jobs left.
-                if mode is types.QueueExecutionMode.drain and (await cached_queued_work()) == 0:
-                    self.shutdown.set()
+                # When dispatch tasks are still running, yield so they can finish
+                # before we check — a task may re-queue work via RetryRequested.
+                if mode is types.QueueExecutionMode.drain:
+                    if task_manager.tasks:
+                        await asyncio.sleep(0)
+                    if (await cached_queued_work()) == 0 and not task_manager.tasks:
+                        self.shutdown.set()
 
                 if (
                     periodic_health_check_task.done()
@@ -626,6 +632,26 @@ class QueueManager:
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)
+            except errors.RetryRequested as retry_exc:
+                logconfig.logger.info(
+                    "Retry requested for entrypoint/job-id: %s/%s (attempt=%d, delay=%s)",
+                    job.entrypoint,
+                    job.id,
+                    job.attempts,
+                    retry_exc.delay,
+                )
+                tbr = models.TracebackRecord.from_exception(
+                    exc=retry_exc,
+                    job_id=job.id,
+                    additional_context={
+                        "entrypoint": job.entrypoint,
+                        "queue_manager_id": self.queue_manager_id,
+                        "attempt": job.attempts,
+                        "retry_delay": str(retry_exc.delay),
+                        "reason": retry_exc.reason,
+                    },
+                )
+                await self.queries.retry_job(job, retry_exc.delay, tbr)
             except Exception as e:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",

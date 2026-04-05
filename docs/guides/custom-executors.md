@@ -105,3 +105,50 @@ async def create_pgqueuer() -> PgQueuer:
 | `initial_delay` | `0.1` | Initial delay in seconds before the first retry |
 | `backoff_multiplier` | `2.0` | Multiplier applied to delay after each retry |
 | `jitter` | `random()` | Callable returning a random float to add jitter to delays |
+
+## Database Retry Executor
+
+`DatabaseRetryEntrypointExecutor` converts unhandled exceptions into database-level retries
+via `RetryRequested`. Unlike `RetryWithBackoffEntrypointExecutor` (which retries in-process),
+this executor re-queues the job in the database so any worker can pick it up after the delay.
+
+### When to Use It
+
+- Failures that may take minutes to resolve (e.g., downstream service outages)
+- Jobs that must survive worker restarts between retry attempts
+- Scenarios where you want the retry to be visible in the queue and log tables
+
+### Example
+
+```python
+from datetime import timedelta
+from pgqueuer import PgQueuer, Job
+from pgqueuer.executors import DatabaseRetryEntrypointExecutor
+
+pgq = PgQueuer(driver)
+
+@pgq.entrypoint(
+    "sync_inventory",
+    executor_factory=lambda params: DatabaseRetryEntrypointExecutor(
+        parameters=params,
+        max_attempts=5,
+        initial_delay=timedelta(seconds=2),
+        max_delay=timedelta(minutes=10),
+        backoff_multiplier=3.0,
+    ),
+)
+async def sync_inventory(job: Job) -> None:
+    await inventory_api.sync(job.payload)
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_attempts` | `5` | Maximum retries before the exception becomes terminal |
+| `initial_delay` | `1s` | Delay before the first retry |
+| `max_delay` | `5m` | Cap on exponential backoff |
+| `backoff_multiplier` | `2.0` | Multiplier applied to delay after each attempt |
+
+If the handler raises `RetryRequested` directly, it passes through unchanged — the executor
+only converts non-retry exceptions. See [Database-Level Retry](retry.md) for the full guide.

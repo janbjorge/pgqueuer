@@ -7,6 +7,7 @@ from pgqueuer.domain.errors import (
     MaxTimeExceeded,
     PgqException,
     RetryException,
+    RetryRequested,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "MaxTimeExceeded",
     "PgqException",
     "RetryException",
+    "RetryRequested",
 ]
