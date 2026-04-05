@@ -74,38 +74,16 @@ Every job transitions through a series of states. The status is stored as the
 `pgqueuer_status` PostgreSQL enum with seven values:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    Queued[queued]
-    Picked[picked]
-    Success[successful]
-    Exception[exception]
-    Failed[failed]
-    Canceled[canceled]
-    Deleted[deleted]
+flowchart TD
+    Queued[queued] -->|worker claims| Picked[picked]
+    Queued -->|explicit delete| Deleted[deleted]
 
-    Queued -->|worker claims| Picked
-    Queued -->|explicit delete| Deleted
-    Picked -->|handler completes| Success
-    Picked -->|handler raises| Exception
-    Picked -->|on_failure=hold| Failed
-    Picked -->|cancel request| Canceled
+    Picked -->|handler completes| Success[successful]
+    Picked -->|handler raises| Exception[exception]
+    Picked -->|"on_failure=hold"| Failed[failed]
+    Picked -->|cancel request| Canceled[canceled]
     Picked -->|RetryRequested| Queued
     Failed -->|manual requeue| Queued
-
-    classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-    classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
-    classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
-    classDef failed   fill:#F0D5F5,stroke:#9B59B6,stroke-width:2px,color:#111
-
-    class Queued queued
-    class Picked picked
-    class Success success
-    class Exception,Deleted error
-    class Failed failed
-    class Canceled canceled
 ```
 
 | Status | Meaning |

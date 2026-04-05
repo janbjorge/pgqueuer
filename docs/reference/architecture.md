@@ -7,29 +7,12 @@ consumers up to date.
 ## Job Flow Diagram
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
 flowchart LR
-    P[Producer]
-    DB[(PostgreSQL)]
-    R[EventRouter]
-    QM[QueueManager]
-    C[Consumer]
-
-    P -->|Queries.enqueue| DB
-    DB -->|NOTIFY| R
-    R -->|signal| QM
-    QM -->|dispatch| C
+    P[Producer] -->|Queries.enqueue| DB[(PostgreSQL)]
+    DB -->|NOTIFY| R[EventRouter]
+    R -->|signal| QM[QueueManager]
+    QM -->|dispatch| C[Consumer]
     C -->|update status| DB
-
-    classDef producer fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef database fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef router   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef consumer fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-
-    class P producer
-    class DB database
-    class R,QM router
-    class C consumer
 ```
 
 1. **Producer** inserts a job using `Queries.enqueue()`.
@@ -45,8 +28,7 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 ## QueueManager Processing Loop
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
+flowchart TD
     Wait[Wait for NOTIFY] --> Query[Query jobs]
     Query -->|no jobs| Wait
     Query -->|jobs found| Claim[Claim job]
@@ -55,18 +37,6 @@ flowchart LR
     Execute -->|error| Error[Mark exception]
     Success --> Wait
     Error --> Wait
-
-    classDef wait    fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef db      fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef process fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef success fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-    classDef error   fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
-
-    class Wait wait
-    class Query db
-    class Claim,Execute process
-    class Success success
-    class Error error
 ```
 
 ## Job Status Lifecycle
@@ -101,30 +71,11 @@ The lifecycle of a job flows through these statuses:
 ### Status Transition Diagram
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
-flowchart LR
-    Queued[queued]
-    Picked[picked]
-    Success[successful]
-    Exception[exception]
-    Canceled[canceled]
-    Deleted[deleted]
+flowchart TD
+    Queued[queued] -->|claim| Picked[picked]
+    Queued -->|delete| Deleted[deleted]
 
-    Queued -->|claim| Picked
-    Queued -->|delete| Deleted
-    Picked -->|success| Success
-    Picked -->|error| Exception
-    Picked -->|cancel| Canceled
-
-    classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
-    classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
-    classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
-    classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
-    classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
-
-    class Queued queued
-    class Picked picked
-    class Success success
-    class Exception,Deleted error
-    class Canceled canceled
+    Picked -->|success| Success[successful]
+    Picked -->|error| Exception[exception]
+    Picked -->|cancel| Canceled[canceled]
 ```
