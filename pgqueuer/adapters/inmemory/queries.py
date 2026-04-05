@@ -774,9 +774,7 @@ class InMemoryQueries:
         candidates = [
             j["execute_after"]
             for j in self._jobs.values()
-            if j["status"] == "queued"
-            and j["entrypoint"] in ep_set
-            and j["execute_after"] > now
+            if j["status"] == "queued" and j["entrypoint"] in ep_set and j["execute_after"] > now
         ]
         if candidates:
             return min(candidates) - now
