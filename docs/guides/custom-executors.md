@@ -152,3 +152,8 @@ async def sync_inventory(job: Job) -> None:
 
 If the handler raises `RetryRequested` directly, it passes through unchanged — the executor
 only converts non-retry exceptions. See [Database-Level Retry](retry.md) for the full guide.
+
+!!! tip "Combine with `on_failure=\"hold\"`"
+    After `max_attempts` is exhausted, the exception propagates as a terminal failure. Add
+    `on_failure="hold"` to park the job instead of deleting it, giving you a chance to inspect
+    and manually re-queue. See [Holding Failed Jobs](hold-failed-jobs.md).

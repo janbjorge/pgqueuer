@@ -90,6 +90,7 @@ nav:
       - Reliability:
           - Reliability Model: guides/reliability.md
           - Database-Level Retry: guides/retry.md
+          - Holding Failed Jobs: guides/hold-failed-jobs.md
           - Heartbeat Monitoring: guides/heartbeat.md
       - Shared Resources: guides/shared-resources.md
       - Performance & Deployment:

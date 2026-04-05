@@ -175,7 +175,7 @@ ORDER BY created;
 | Scenario | What happens |
 |----------|-------------|
 | Handler raises `RetryRequested` | Job updated to `queued`, attempts incremented, log entry written |
-| Handler raises any other exception | Job deleted, logged as `exception` (existing behavior) |
+| Handler raises any other exception | Job deleted, logged as `exception` (or held if `on_failure="hold"` — see [Holding Failed Jobs](hold-failed-jobs.md)) |
 | Handler completes normally | Job deleted, logged as `successful` (existing behavior) |
 | `DatabaseRetryEntrypointExecutor` + exception + attempts < max | Converted to `RetryRequested` with backoff |
-| `DatabaseRetryEntrypointExecutor` + exception + attempts >= max | Exception propagates as terminal failure |
+| `DatabaseRetryEntrypointExecutor` + exception + attempts >= max | Exception propagates as terminal failure (or held if `on_failure="hold"`) |

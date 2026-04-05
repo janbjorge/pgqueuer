@@ -18,7 +18,7 @@ import async_timeout
 from croniter import croniter
 
 from pgqueuer.core import helpers
-from pgqueuer.domain import errors, models
+from pgqueuer.domain import errors, models, types
 
 _SENTINEL = object()
 
@@ -55,6 +55,7 @@ class EntrypointExecutorParameters:
     retry_timer: timedelta
     serialized_dispatch: bool
     accepts_context: bool = False
+    on_failure: types.OnFailure = "delete"
 
     # Deprecated fields -- kept for backward compatibility with custom executors.
     channel: object = dataclasses.field(default=_SENTINEL, repr=False)

@@ -52,6 +52,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 | `serialized_dispatch` | `bool` | `False` | Process jobs one at a time (equivalent to `concurrency_limit=1`) |
 | `retry_timer` | `timedelta` | `0` (disabled) | Re-queue jobs whose heartbeat has gone stale |
 | `accepts_context` | `bool` | `False` | Pass a `Context` object as the second argument |
+| `on_failure` | `"delete" \| "hold"` | `"delete"` | Hold failed jobs for manual re-queue instead of deleting |
 | `executor_factory` | callable | `None` | Custom executor class for retry logic, etc. |
 
 ---
@@ -59,7 +60,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 ## Job Status Lifecycle
 
 Every job transitions through a series of states. The status is stored as the
-`pgqueuer_status` PostgreSQL enum with six values:
+`pgqueuer_status` PostgreSQL enum with seven values:
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': {'fontSize': '14px', 'fontFamily': 'Inter, sans-serif'}}}%%
@@ -68,6 +69,7 @@ flowchart LR
     Picked[picked]
     Success[successful]
     Exception[exception]
+    Failed[failed]
     Canceled[canceled]
     Deleted[deleted]
 
@@ -75,19 +77,23 @@ flowchart LR
     Queued -->|explicit delete| Deleted
     Picked -->|handler completes| Success
     Picked -->|handler raises| Exception
+    Picked -->|on_failure=hold| Failed
     Picked -->|cancel request| Canceled
     Picked -->|RetryRequested| Queued
+    Failed -->|manual requeue| Queued
 
     classDef queued   fill:#DDEAF7,stroke:#4A6FA5,stroke-width:2px,color:#111
     classDef picked   fill:#D0DCF0,stroke:#2E5080,stroke-width:2px,color:#111
     classDef success  fill:#D5EDE5,stroke:#2D9D78,stroke-width:2px,color:#111
     classDef error    fill:#F5DADA,stroke:#C1666B,stroke-width:2px,color:#111
     classDef canceled fill:#FBF0D5,stroke:#D4A240,stroke-width:2px,color:#111
+    classDef failed   fill:#F0D5F5,stroke:#9B59B6,stroke-width:2px,color:#111
 
     class Queued queued
     class Picked picked
     class Success success
     class Exception,Deleted error
+    class Failed failed
     class Canceled canceled
 ```
 
@@ -97,11 +103,13 @@ flowchart LR
 | `picked` | A worker has claimed this job and is processing it |
 | `successful` | Handler completed without raising an exception |
 | `exception` | Handler raised an unhandled exception (traceback is logged) |
+| `failed` | Job held for manual review after terminal failure (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
 | `canceled` | Job was canceled via `mark_job_as_cancelled()` |
 | `deleted` | Job was removed before being processed |
 
 Once a job reaches a terminal state (`successful`, `exception`, `canceled`, `deleted`),
 it is moved from the `pgqueuer` table to the `pgqueuer_log` table as an audit record.
+Jobs with status `failed` remain in the queue table until manually re-queued or deleted.
 
 ---
 

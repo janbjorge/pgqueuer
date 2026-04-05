@@ -543,6 +543,52 @@ def queue(
     asyncio_run(run_async())
 
 
+@app.command(help="List jobs held with status 'failed' for manual intervention.")
+def failed(
+    ctx: Context,
+    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            jobs = await q.list_failed_jobs(limit=limit)
+            if not jobs:
+                print("No failed jobs.")
+                return
+            rows = [
+                [
+                    j.id,
+                    j.entrypoint,
+                    j.attempts,
+                    j.created.strftime("%Y-%m-%d %H:%M:%S"),
+                    len(j.payload) if j.payload else 0,
+                ]
+                for j in jobs
+            ]
+            print(
+                tabulate(
+                    rows,
+                    headers=["ID", "Entrypoint", "Attempts", "Created", "Payload bytes"],
+                    tablefmt="simple",
+                )
+            )
+
+    asyncio_run(run())
+
+
+@app.command(help="Re-queue failed jobs by ID so they can be processed again.")
+def requeue(
+    ctx: Context,
+    ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            typed_ids = [types.JobId(i) for i in ids]
+            await q.requeue_jobs(typed_ids)
+            print(f"Re-queued {len(typed_ids)} job(s).")
+
+    asyncio_run(run())
+
+
 @app.command(help="Alter the logging durability for PGQueuer tables.")
 def durability(
     ctx: Context,

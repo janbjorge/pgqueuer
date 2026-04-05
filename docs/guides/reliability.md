@@ -94,6 +94,14 @@ async def send_email(job: Job) -> None:
 See [Custom Executors](custom-executors.md#retry-with-backoff-executor) for full parameter
 details.
 
+### Holding terminal failures for manual re-queue
+
+Set `on_failure="hold"` on an entrypoint to keep the job in the queue table with
+`status='failed'` instead of deleting it. The payload, headers, and attempt count are preserved
+for inspection. Use `pgq failed` to list held jobs and `pgq requeue <id>` to send them back.
+
+See [Holding Failed Jobs](hold-failed-jobs.md) for the full guide with use cases and examples.
+
 ### Worker-crash recovery: stalled jobs
 
 If a worker process crashes mid-job, the job remains in `picked` state with a stale heartbeat.
@@ -186,6 +194,7 @@ or use `pgq dashboard` from the CLI.
 | Durable retry across workers | `RetryRequested` / `DatabaseRetryEntrypointExecutor` |
 | In-process transient errors | `RetryWithBackoffEntrypointExecutor` |
 | Worker crash recovery | `retry_timer` + heartbeat |
+| Terminal failure parking | `on_failure="hold"` |
 | Duplicate enqueue prevention | `dedupe_key` unique constraint |
 | Failure inspection | `pgqueuer_log` with traceback |
 | Audit trail | `pgqueuer_log` for all terminal states |

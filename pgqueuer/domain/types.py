@@ -31,7 +31,10 @@ JOB_STATUS = Literal[
     "canceled",
     "deleted",
     "exception",
+    "failed",
 ]
+
+OnFailure = Literal["delete", "hold"]
 
 
 ###### Schedules ######

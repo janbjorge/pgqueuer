@@ -461,20 +461,26 @@ class Queries:
         """
         Move completed or failed jobs from the queue to the log table.
 
-        Processes a list of jobs along with their final statuses, removing them
-        from the queue table and recording their details in the statistics table.
-
-        Args:
-            job_status (list[tuple[models.Job, models.STATUS_LOG]]): A list of tuples
-                containing jobs and their corresponding statuses
-                ('successful', 'exception', or 'canceled').
+        Jobs with status ``'failed'`` are held in the queue table (UPDATE)
+        rather than deleted.  All other statuses are removed (DELETE) as before.
+        Both paths write an entry to the log table.
         """
-        await self.driver.execute(
-            self.qbq.build_log_job_query(),
-            [job.id for job, _, _ in job_status],
-            [status for _, status, _ in job_status],
-            [tb.model_dump_json() if tb else None for _, _, tb in job_status],
-        )
+        to_delete = [(j, s, t) for j, s, t in job_status if s != "failed"]
+        to_hold = [(j, s, t) for j, s, t in job_status if s == "failed"]
+
+        if to_delete:
+            await self.driver.execute(
+                self.qbq.build_log_job_query(),
+                [job.id for job, _, _ in to_delete],
+                [status for _, status, _ in to_delete],
+                [tb.model_dump_json() if tb else None for _, _, tb in to_delete],
+            )
+        if to_hold:
+            await self.driver.execute(
+                self.qbq.build_hold_jobs_query(),
+                [job.id for job, _, _ in to_hold],
+                [tb.model_dump_json() if tb else None for _, _, tb in to_hold],
+            )
 
     async def retry_job(
         self,
@@ -494,6 +500,25 @@ class Queries:
             delay,
             traceback_record.model_dump_json() if traceback_record else None,
         )
+
+    async def requeue_jobs(self, ids: list[models.JobId]) -> None:
+        """Move failed jobs back to queued status for reprocessing.
+
+        Resets attempts to 0 and sets execute_after to NOW().
+        Only affects jobs with status ``'failed'``.
+        """
+        await self.driver.execute(
+            self.qbq.build_requeue_jobs_query(),
+            ids,
+        )
+
+    async def list_failed_jobs(self, limit: int = 100) -> list[models.Job]:
+        """List jobs held with status ``'failed'``, ordered by creation time descending."""
+        rows = await self.driver.fetch(
+            self.qbq.build_list_failed_jobs_query(),
+            limit,
+        )
+        return [models.Job.model_validate(dict(r)) for r in rows]
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
