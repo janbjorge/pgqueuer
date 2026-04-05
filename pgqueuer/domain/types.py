@@ -35,6 +35,7 @@ JOB_STATUS = Literal[
 ]
 
 OnFailure = Literal["delete", "hold"]
+SortOrder = Literal["ASC", "DESC"]
 
 
 ###### Schedules ######

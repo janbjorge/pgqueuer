@@ -19,6 +19,7 @@ from pgqueuer.domain.settings import (
     DurabilityPolicy,
     add_prefix,
 )
+from pgqueuer.domain.types import SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -713,11 +714,10 @@ class QueryQueueBuilder:
         SELECT id, 'queued', entrypoint, priority FROM requeued
         """
 
-    def build_list_failed_jobs_query(self, order: str = "DESC") -> str:
-        direction = "ASC" if order.upper() == "ASC" else "DESC"
+    def build_list_failed_jobs_query(self, order: SortOrder = "DESC") -> str:
         return f"""SELECT * FROM {self.settings.queue_table}
         WHERE status = 'failed'
-        ORDER BY created {direction}
+        ORDER BY created {order}
         LIMIT $1
         """
 

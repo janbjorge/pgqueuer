@@ -84,7 +84,6 @@ async def test_inmemory_failed_not_dequeued(queries: InMemoryQueries) -> None:
     jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
     await queries.log_jobs([(jobs[0], "failed", None)])
 
-    # Try to dequeue again — should get nothing
     jobs2 = await queries.dequeue(10, {"ep": EP}, qm_id, None)
     assert len(jobs2) == 0
 
@@ -131,9 +130,7 @@ async def test_inmemory_requeue_ignores_non_failed(queries: InMemoryQueries) -> 
     await queries.enqueue("ep", b"payload", priority=1)
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
-    # Job is in 'picked' state, not 'failed'
     await queries.requeue_jobs([jobs[0].id])
-    # Should still be picked, not queued
     failed = await queries.list_failed_jobs()
     assert len(failed) == 0
 

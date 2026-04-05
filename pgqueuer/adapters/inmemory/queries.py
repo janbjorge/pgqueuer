@@ -18,7 +18,7 @@ from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
-from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId
+from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -459,10 +459,10 @@ class InMemoryQueries:
     async def list_failed_jobs(
         self,
         limit: int = 100,
-        order: str = "DESC",
+        order: SortOrder = "DESC",
     ) -> list[models.Job]:
         failed = [j for j in self._jobs.values() if j["status"] == "failed"]
-        failed.sort(key=lambda j: j["created"], reverse=(order.upper() != "ASC"))
+        failed.sort(key=lambda j: j["created"], reverse=(order != "ASC"))
         return [models.Job.model_validate(j) for j in failed[:limit]]
 
     # -- mark_job_as_cancelled -------------------------------------------------

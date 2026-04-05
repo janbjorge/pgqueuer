@@ -27,7 +27,7 @@ from pgqueuer.adapters import tracing
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core import helpers
 from pgqueuer.core.helpers import merge_tracing_headers
-from pgqueuer.domain import errors, models
+from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -505,14 +505,14 @@ class Queries:
     async def list_failed_jobs(
         self,
         limit: int = 100,
-        order: str = "DESC",
+        order: types.SortOrder = "DESC",
     ) -> list[models.Job]:
         """List jobs held with status ``'failed'``, ordered by creation time."""
         rows = await self.driver.fetch(
             self.qbq.build_list_failed_jobs_query(order=order),
             limit,
         )
-        return [models.Job.model_validate(dict(r)) for r in rows]
+        return [models.Job.model_validate(r) for r in rows]
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         """
