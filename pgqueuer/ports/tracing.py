@@ -7,7 +7,8 @@ this protocol via structural subtyping.
 
 from __future__ import annotations
 
-from typing import AsyncContextManager, Generator, Protocol
+from dataclasses import dataclass
+from typing import AsyncContextManager, Final, Generator, Protocol
 
 from pgqueuer.models import Job
 
@@ -44,3 +45,29 @@ class TracingProtocol(Protocol):
             None: This context manager does not return a value but manages the tracing lifecycle.
         """
         ...
+
+
+@dataclass
+class TracingConfig:
+    """
+    Configuration object for tracing setup.
+
+    Attributes:
+        tracer: The active tracing implementation, or ``None`` when tracing is disabled.
+    """
+
+    tracer: TracingProtocol | None = None
+
+
+TRACER: Final[TracingConfig] = TracingConfig()
+
+
+def set_tracing_class(tracer: TracingProtocol) -> None:
+    """
+    Sets the tracing instance for the PGQueuer system.
+
+    Args:
+        tracer (TracingProtocol): An instance implementing the TracingProtocol.
+    """
+
+    TRACER.tracer = tracer

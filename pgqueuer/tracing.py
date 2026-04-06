@@ -1,13 +1,13 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.adapters.tracing + pgqueuer.ports.tracing"""
+"""Backward-compatibility shim. Canonical: pgqueuer.ports.tracing"""
 
-from pgqueuer.adapters.tracing import (
-    TRACER,
-    TracingConfig,
-    set_tracing_class,
-)
 from pgqueuer.adapters.tracing.logfire import LogfireTracing
 from pgqueuer.adapters.tracing.sentry import SentryTracing
-from pgqueuer.ports.tracing import TracingProtocol
+from pgqueuer.ports.tracing import (
+    TRACER,
+    TracingConfig,
+    TracingProtocol,
+    set_tracing_class,
+)
 
 __all__ = [
     "LogfireTracing",
