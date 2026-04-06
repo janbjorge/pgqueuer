@@ -10,11 +10,12 @@ from pgqueuer import db
 from pgqueuer.completion import CompletionWatcher
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
+from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
 
 
 async def test_completion_successful(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None: ...
@@ -31,7 +32,7 @@ async def test_completion_successful(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_already_successful(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None: ...
@@ -48,7 +49,7 @@ async def test_completion_already_successful(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_exception(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:
@@ -66,7 +67,7 @@ async def test_completion_exception(apgdriver: db.Driver) -> None:
 
 
 async def test_for_completion_canceled(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     N = 25
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
@@ -80,7 +81,7 @@ async def test_for_completion_canceled(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_deleted(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     N = 25
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)

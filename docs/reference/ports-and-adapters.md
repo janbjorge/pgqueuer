@@ -111,21 +111,26 @@ inheritance or registration required.
 
 ### Dependency Injection Pattern
 
-`QueueManager` and `SchedulerManager` accept an optional `queries` argument:
+`QueueManager` and `SchedulerManager` require a `queries` argument implementing
+`RepositoryPort`:
 
 ```python
 @dataclasses.dataclass
 class QueueManager:
-    connection: db.Driver
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
+    connection: Driver
+    queries: RepositoryPort
 ```
 
-This preserves `QueueManager(connection)` for all existing callers while enabling mock
-injection for tests.
+Callers must provide the queries instance explicitly:
+
+```python
+from pgqueuer.queries import Queries
+
+qm = QueueManager(connection=driver, queries=Queries(driver))
+```
+
+The recommended entry point, `PgQueuer`, handles this automatically, so most
+users are unaffected.
 
 ### Target Directory Layout
 

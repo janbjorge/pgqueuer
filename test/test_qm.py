@@ -18,7 +18,8 @@ async def test_job_queuing(
     apgdriver: db.Driver,
     N: int,
 ) -> None:
-    c = QueueManager(apgdriver, resources={"test": "job_queuing"})
+    q = Queries(apgdriver)
+    c = QueueManager(connection=apgdriver, queries=q, resources={"test": "job_queuing"})
     seen = list[int]()
 
     @c.entrypoint("fetch")
@@ -49,7 +50,12 @@ async def test_job_fetch(
     concurrency: int,
 ) -> None:
     q = Queries(apgdriver)
-    qmpool = [QueueManager(apgdriver, resources={"test": "job_fetch"}) for _ in range(concurrency)]
+    qmpool = [
+        QueueManager(
+            connection=apgdriver, queries=Queries(apgdriver), resources={"test": "job_fetch"},
+        )
+        for _ in range(concurrency)
+    ]
     seen = list[int]()
 
     for qm in qmpool:
@@ -79,7 +85,9 @@ async def test_pick_local_entrypoints(
     N: int = 100,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, resources={"test": "pick_local"})
+    qm = QueueManager(
+        connection=apgdriver, queries=Queries(apgdriver), resources={"test": "pick_local"},
+    )
     pikced_by = list[str]()
 
     @qm.entrypoint("to_be_picked")
@@ -110,7 +118,9 @@ async def test_pick_set_queue_manager_id(
     N: int = 100,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, resources={"test": "pick_qm_id"})
+    qm = QueueManager(
+        connection=apgdriver, queries=Queries(apgdriver), resources={"test": "pick_qm_id"},
+    )
     qmids = set[uuid.UUID]()
 
     @qm.entrypoint("fetch")
@@ -140,7 +150,7 @@ async def test_drain_mode(
     N: int,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
     jobs = list[Job]()
 
     @qm.entrypoint("fetch")
@@ -161,7 +171,7 @@ async def test_traceback_log(
     N: int,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(job: Job) -> None:
@@ -186,7 +196,7 @@ async def test_max_concurrent_tasks(
     max_concurrent_tasks: int,
 ) -> None:
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
     picked_jobs = list[Log]()
 
     async def log_sampler() -> None:

@@ -18,7 +18,8 @@ async def test_cancellation_async(
     event = asyncio.Event()
     cancel_called_not_cancel_called = list[bool]()
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, resources={"test_key": "async"})
+    q_queries = Queries(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=q_queries, resources={"test_key": "async"})
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
@@ -62,7 +63,10 @@ async def test_cancellation_async_context_manager(
     event = asyncio.Event()
     cancel_called_not_cancel_called = list[bool]()
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, resources={"test_key": "async_cm"})
+    q_queries = Queries(apgdriver)
+    qm = QueueManager(
+        connection=apgdriver, queries=q_queries, resources={"test_key": "async_cm"},
+    )
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:
@@ -101,7 +105,8 @@ async def test_cancellation_drain_mode(apgdriver: db.Driver) -> None:
     N = 10
     event = asyncio.Event()
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, resources={"test_key": "drain"})
+    q_queries = Queries(apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=q_queries, resources={"test_key": "drain"})
 
     @qm.entrypoint("to_be_canceled")
     async def to_be_canceled(job: Job) -> None:

@@ -16,6 +16,7 @@ from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.qb import DBSettings
+from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -71,17 +72,16 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
-        # RepositoryPort | None is passed here; QueueManager/SchedulerManager will
-        # create default Queries instances if None, which satisfies their type contract.
+        resolved_queries: RepositoryPort = self.queries or Queries(self.connection)
         self.qm = QueueManager(
-            self.connection,
-            self.channel,
-            queries=self.queries,  # type: ignore[arg-type]
+            connection=self.connection,
+            queries=resolved_queries,
+            channel=self.channel,
             resources=self.resources,
         )
         self.sm = SchedulerManager(
-            self.connection,
-            queries=self.queries,  # type: ignore[arg-type]
+            connection=self.connection,
+            queries=resolved_queries,
         )
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown

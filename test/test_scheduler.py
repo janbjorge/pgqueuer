@@ -7,6 +7,7 @@ import pytest
 from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.models import CronEntrypoint, CronExpression, CronExpressionEntrypoint, Schedule
 from pgqueuer.qb import DBSettings
+from pgqueuer.queries import Queries
 from pgqueuer.sm import SchedulerManager
 
 
@@ -17,7 +18,7 @@ async def inspect_schedule(connection: Driver) -> list[Schedule]:
 
 @pytest.fixture
 async def scheduler(apgdriver: AsyncpgDriver) -> SchedulerManager:
-    return SchedulerManager(apgdriver)
+    return SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
 
 async def shutdown_Scheduler_after(
@@ -59,7 +60,7 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
 async def test_scheduler_register_accepts_three_second_expression(
     mocker: Mock,
 ) -> None:
-    scheduler = SchedulerManager(Mock())
+    scheduler = SchedulerManager(connection=Mock(), queries=Mock())
 
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -82,7 +83,7 @@ async def test_scheduler_register_accepts_three_second_expression(
 async def test_scheduler_trailing_seconds_field_is_documented_behavior(
     mocker: Mock,
 ) -> None:
-    scheduler = SchedulerManager(Mock())
+    scheduler = SchedulerManager(connection=Mock(), queries=Mock())
 
     async def sample_task(schedule: Schedule) -> None:
         pass
@@ -221,7 +222,7 @@ async def test_schedule_clean_old(
         await asyncio.sleep(delay.total_seconds())
         sm.shutdown.set()
 
-    sm1 = SchedulerManager(apgdriver)
+    sm1 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @sm1.schedule("sm_task", "1 * * * *")
     async def _(schedule: Schedule) -> None:
@@ -232,7 +233,7 @@ async def test_schedule_clean_old(
     schedules = await inspect_schedule(apgdriver)
     assert len(schedules) == 1
 
-    sm2 = SchedulerManager(apgdriver)
+    sm2 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @sm2.schedule("sm_task", "2 * * * *")
     async def _(schedule: Schedule) -> None:
@@ -243,7 +244,7 @@ async def test_schedule_clean_old(
     schedules = await inspect_schedule(apgdriver)
     assert len(schedules) == 2
 
-    sm3 = SchedulerManager(apgdriver)
+    sm3 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @sm3.schedule("sm_task", "3 * * * *", clean_old=True)
     async def _(schedule: Schedule) -> None:
@@ -255,7 +256,7 @@ async def test_schedule_clean_old(
     assert len(schedules) == 1
     assert schedules[0].expression == "3 * * * *"
 
-    sm4 = SchedulerManager(apgdriver)
+    sm4 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
     @sm4.schedule("sm_task", "3 * * * *", clean_old=True)
     @sm4.schedule("sm_task", "4 * * * *", clean_old=True)
@@ -308,8 +309,8 @@ async def test_multi_instance_single_task_execution(
         await asyncio.sleep(0.1)
 
     # Create two scheduler instances
-    scheduler1 = SchedulerManager(apgdriver)
-    scheduler2 = SchedulerManager(apgdriver)
+    scheduler1 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
+    scheduler2 = SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
 
     # Register the same task in both
     scheduler1.schedule("multi_instance_task", "* * * * *")(test_task)

@@ -50,7 +50,10 @@ async def test_rps(
 
     await enqueue(Queries(apgdriver), size=n_tasks)
 
-    qms = [QueueManager(apgdriver) for _ in range(concurrency)]
+    qms = [
+        QueueManager(connection=apgdriver, queries=Queries(apgdriver))
+        for _ in range(concurrency)
+    ]
 
     async def dequeue() -> None:
         consumers = [consumer(q, jobs) for q in qms]

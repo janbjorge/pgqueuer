@@ -8,7 +8,6 @@ from typing import Callable
 
 import croniter
 
-from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, helpers, logconfig, tm
 from pgqueuer.domain import models
 from pgqueuer.ports import RepositoryPort
@@ -33,27 +32,17 @@ class SchedulerManager:
     """
 
     connection: Driver
+    queries: RepositoryPort
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
             default_factory=dict,
         )
     )
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the Scheduler after dataclass fields have been set.
-
-        Sets up the  instance using the provided database connection
-        when no queries instance was injected.
-        """
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
 
     # TODO: Propagate shared 'resources' mapping into scheduled job execution.
     # Consider approaches:
