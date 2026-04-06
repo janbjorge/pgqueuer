@@ -51,7 +51,7 @@ class QueueManager:
 
     Attributes:
         connection (db.Driver): The database driver used for database operations.
-        channel (models.PGChannel): The PostgreSQL channel for notifications.
+        channel (Channel): The PostgreSQL channel for notifications.
         shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
         queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
