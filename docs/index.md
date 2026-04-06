@@ -93,13 +93,12 @@ That's it. Just PostgreSQL and your application code.
     A trigger on the queue table fires `pg_notify()` on every insert --
     workers wake up immediately without polling.
 
--   **Rate Limiting & Concurrency**
+-   **Concurrency Control**
 
     ---
 
-    Per-entrypoint `requests_per_second` and `concurrency_limit` protect
-    downstream services. Or use `serialized_dispatch` to process jobs
-    strictly one at a time.
+    Per-entrypoint `concurrency_limit` protects downstream services.
+    Or use `serialized_dispatch` to process jobs strictly one at a time.
 
 -   **Built-In Scheduler**
 

@@ -8,7 +8,7 @@
 
 PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. No separate message broker required.
 
-Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with rate limiting, deferred execution, and job tracking-all backed by your existing database.
+Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with concurrency control, deferred execution, and job tracking-all backed by your existing database.
 
 ## Key Features
 
@@ -20,7 +20,6 @@ Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIF
 
 ### Performance & Control
 - 👨‍🎓 **Batch operations**: Enqueue or acknowledge thousands of jobs per round trip for maximum throughput
-- 🎛️ **Rate limiting**: Control requests per second per entrypoint to respect external API limits
 - 🔒 **Concurrency control**: Limit parallel execution and enable serialized dispatch for shared resources
 - ⏰ **Deferred execution**: Schedule jobs to run at specific times with `execute_after`
 
@@ -38,7 +37,7 @@ PGQueuer is designed for teams who value simplicity and want to leverage Postgre
 
 **Real-time with PostgreSQL primitives**: `LISTEN/NOTIFY` delivers sub-second job latency without polling loops. Workers wake instantly when jobs arrive, and `FOR UPDATE SKIP LOCKED` coordinates parallel workers without contention.
 
-**Built for modern Python**: First-class async/await support with clean shutdown semantics. Rate limiting, concurrency control, and scheduling are built in-not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
+**Built for modern Python**: First-class async/await support with clean shutdown semantics. Concurrency control and scheduling are built in-not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
 
 **When PGQueuer shines**: Single database stack, microservices that share a database, applications where job data needs transactional consistency with business data, teams who prefer fewer moving parts over distributed systems complexity.
 
@@ -165,16 +164,11 @@ await queries.enqueue(
 )
 ```
 
-### Rate Limiting & Concurrency Control
+### Concurrency Control
 
-Control execution frequency and parallelism per entrypoint:
+Control parallelism per entrypoint:
 
 ```python
-# Limit to 10 requests per second (useful for external APIs)
-@pgq.entrypoint("api_calls", requests_per_second=10)
-async def call_external_api(job: Job) -> None:
-    await http_client.post("https://api.example.com", data=job.payload)
-
 # Limit to 5 concurrent executions
 @pgq.entrypoint("db_writes", concurrency_limit=5)
 async def write_to_db(job: Job) -> None:

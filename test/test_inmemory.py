@@ -485,15 +485,6 @@ async def test_table_changed_notification(queries: InMemoryQueries, driver: InMe
 
 
 @pytest.mark.asyncio
-async def test_rps_notification(queries: InMemoryQueries, driver: InMemoryDriver) -> None:
-    notifications: list[str] = []
-    await driver.add_listener(queries.qbq.settings.channel, notifications.append)
-
-    await queries.notify_entrypoint_rps({"ep": 5})
-    assert any("requests_per_second_event" in n for n in notifications)
-
-
-@pytest.mark.asyncio
 async def test_health_check_notification(queries: InMemoryQueries, driver: InMemoryDriver) -> None:
     notifications: list[str] = []
     await driver.add_listener(queries.qbq.settings.channel, notifications.append)

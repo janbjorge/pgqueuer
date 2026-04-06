@@ -254,7 +254,3 @@ class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     """
 
 
-class RequestsPerSecondBuffer(TimedOverflowBuffer[str]):
-    """
-    Specialized TimedOverflowBuffer for handling RPS.
-    """

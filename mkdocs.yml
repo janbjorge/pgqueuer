@@ -81,7 +81,7 @@ nav:
       - Core Concepts: getting-started/core-concepts.md
   - Guides:
       - Job Processing:
-          - Rate Limiting & Concurrency: guides/rate-limiting.md
+          - Concurrency Control: guides/rate-limiting.md
           - Custom Executors: guides/custom-executors.md
           - Job Cancellation: guides/job-cancellation.md
           - Completion Tracking: guides/completion-tracking.md

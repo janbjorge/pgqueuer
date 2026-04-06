@@ -42,7 +42,6 @@ def is_async_callable(obj: Callable[..., object] | object) -> bool:
 class EntrypointExecutorParameters:
     concurrency_limit: int
     func: Entrypoint
-    requests_per_second: float
     retry_timer: timedelta
     serialized_dispatch: bool
     accepts_context: bool = False

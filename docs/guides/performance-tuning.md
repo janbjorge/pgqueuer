@@ -33,11 +33,6 @@ await pgq.run(batch_size=20, max_concurrent_tasks=100)
 @pgq.entrypoint("resize_image", concurrency_limit=4)
 async def resize_image(job: Job) -> None:
     ...
-
-# Per-entrypoint rate cap
-@pgq.entrypoint("send_sms", requests_per_second=10.0)
-async def send_sms(job: Job) -> None:
-    ...
 ```
 
 Use per-entrypoint limits when specific tasks share a scarce external resource (e.g., an API

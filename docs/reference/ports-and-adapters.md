@@ -7,7 +7,7 @@ Accepted
 ## Context
 
 PgQueuer's flat package layout (~27 modules) has grown organically. Job lifecycle management,
-rate limiting, and scheduling logic live inside `QueueManager` and `SchedulerManager`, but
+concurrency control, and scheduling logic live inside `QueueManager` and `SchedulerManager`, but
 these classes directly instantiate `Queries` in their `__post_init__` methods and reach into
 PostgreSQL-specific notification, heartbeat, and buffering infrastructure. This makes it
 impossible to unit-test core dispatch logic without a running PostgreSQL instance.
@@ -81,7 +81,6 @@ class ScheduleRepositoryPort(Protocol):
 
 ```python
 class NotificationPort(Protocol):
-    async def notify_entrypoint_rps(self, entrypoint_count) -> None: ...
     async def notify_job_cancellation(self, ids) -> None: ...
     async def notify_health_check(self, health_check_event_id) -> None: ...
 ```

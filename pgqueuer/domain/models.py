@@ -12,7 +12,6 @@ import asyncio
 import dataclasses
 import traceback
 import uuid
-from collections import deque
 from collections.abc import MutableMapping
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
@@ -43,7 +42,7 @@ class Event(BaseModel):
     Attributes:
         channel: The PostgreSQL channel the event belongs to.
         sent_at: The timestamp when the event was sent.
-        type: "table_changed_event" or "requests_per_second_event"
+        type: The event type discriminator.
         received_at: The timestamp when the event was received.
     """
 
@@ -65,6 +64,8 @@ class Event(BaseModel):
         return self.received_at - self.sent_at
 
 
+
+
 class TableChangedEvent(Event):
     """
     A class representing an event in a PostgreSQL channel.
@@ -77,18 +78,6 @@ class TableChangedEvent(Event):
     type: Literal["table_changed_event"]
     operation: OPERATIONS
     table: str
-
-
-class RequestsPerSecondEvent(Event):
-    """
-    A class representing an event in a PostgreSQL channel.
-
-    Attributes:
-        entrypoint: The entrypoint to debounce
-    """
-
-    type: Literal["requests_per_second_event"]
-    entrypoint_count: dict[str, int]
 
 
 class CancellationEvent(Event):
@@ -119,7 +108,7 @@ class HealthCheckEvent(Event):
 class AnyEvent(
     RootModel[
         Annotated[
-            TableChangedEvent | RequestsPerSecondEvent | CancellationEvent | HealthCheckEvent,
+            TableChangedEvent | CancellationEvent | HealthCheckEvent,
             Field(discriminator="type"),
         ]
     ]
@@ -233,7 +222,6 @@ class Context:
 
 @dataclasses.dataclass
 class EntrypointStatistics:
-    samples: deque[tuple[int, datetime]]
     concurrency_limiter: asyncio.Semaphore | nullcontext
 
 

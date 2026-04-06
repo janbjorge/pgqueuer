@@ -228,7 +228,6 @@ class PgQueuer:
         self,
         name: str,
         *,
-        requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
@@ -242,7 +241,6 @@ class PgQueuer:
     ) -> Callable[[EntrypointTypeVar], EntrypointTypeVar]:
         return self.qm.entrypoint(
             name=name,
-            requests_per_second=requests_per_second,
             concurrency_limit=concurrency_limit,
             retry_timer=retry_timer,
             serialized_dispatch=serialized_dispatch,
