@@ -302,12 +302,6 @@ class QueueManager:
                         concurrency_limit=concurrency_limit,
                         accepts_context=accepts_context,
                         on_failure=on_failure,
-                        # Deprecated -- still passed so custom executors
-                        # keep working during the deprecation window.
-                        connection=self.connection,
-                        channel=self.channel,
-                        queries=self.queries,
-                        shutdown=self.shutdown,
                     )
                 ),
             )

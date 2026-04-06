@@ -16,9 +16,9 @@ Specific coupling problems:
 
 - `QueueManager.__post_init__` hardcodes `self.queries = queries.Queries(self.connection)`.
 - `SchedulerManager.__post_init__` does the same.
-- `EntrypointExecutorParameters` bundles `connection`, `queries`, `channel`, and `shutdown`
-  alongside executor config, even though no executor implementation reads the infrastructure
-  fields.
+- `EntrypointExecutorParameters` previously bundled `connection`, `queries`, `channel`, and
+  `shutdown` alongside executor config, even though no executor implementation read the
+  infrastructure fields (now removed).
 - `tracing.TRACER` is a module-level mutable singleton instead of an injected dependency.
 - The `Queries` class is simultaneously the interface definition and the PostgreSQL
   implementation.
@@ -177,7 +177,7 @@ so existing imports keep working.
 
 ### Migration Phases
 
-**Phase 0** — Deprecate unused infrastructure fields in executor parameters.
+**Phase 0** — ~~Deprecate unused infrastructure fields in executor parameters.~~ Done — deprecated fields removed.
 
 **Phase 1** — Extract port protocols. Purely additive.
 
@@ -218,6 +218,6 @@ Phase 3 ──┘
 | Risk | Mitigation |
 |------|-----------|
 | Breaking `from pgqueuer import X` | Every moved module gets a re-export shim at the old path |
-| Custom executors using deprecated `parameters.connection` | Deprecation warnings first, removal deferred to next major version |
+| Custom executors using removed `parameters.connection` | Deprecated with warnings in prior release; now removed |
 | Circular imports during restructure | Move leaf modules first; one module per commit with full test suite |
 | `tracing.TRACER` global removal | Global kept as fallback; injected value takes precedence |
