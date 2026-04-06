@@ -378,6 +378,7 @@ class InMemoryQueries:
                     j["status"] = "failed"
                     j["updated"] = now
                     j["queue_manager_id"] = None
+                self._remove_dedupe_for_job(jid)
             else:
                 self._jobs.pop(jid, None)
                 self._remove_dedupe_for_job(jid)

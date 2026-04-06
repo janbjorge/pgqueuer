@@ -168,6 +168,22 @@ async def test_inmemory_list_failed_respects_limit(queries: InMemoryQueries) -> 
     assert len(failed) == 2
 
 
+async def test_inmemory_failed_releases_dedupe_key(queries: InMemoryQueries) -> None:
+    """A held/failed job must release its dedupe_key so a new job can be enqueued."""
+    await queries.enqueue("ep", b"first", priority=1, dedupe_key="unique-key")
+    qm_id = uuid.uuid4()
+    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    assert len(jobs) == 1
+
+    # Hold the job as failed
+    await queries.log_jobs([(jobs[0], "failed", None)])
+
+    # A new job with the same dedupe_key should succeed (matches PostgreSQL behavior
+    # where the unique index only covers status IN ('queued', 'picked'))
+    ids = await queries.enqueue("ep", b"second", priority=1, dedupe_key="unique-key")
+    assert len(ids) == 1
+
+
 # ---------------------------------------------------------------------------
 # Integration: PgQueuer with on_failure="hold"
 # ---------------------------------------------------------------------------
@@ -389,3 +405,31 @@ async def test_on_failure_accepts_valid_values(
 
     @pgq.entrypoint(f"good_ep_{good_value}", on_failure=good_value)  # type: ignore[arg-type]
     async def handler(job: Job) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# Integration: failed job releases dedupe_key (PostgreSQL)
+# ---------------------------------------------------------------------------
+
+
+async def test_pg_failed_releases_dedupe_key(apgdriver: AsyncpgDriver) -> None:
+    """A held/failed job must release its dedupe_key so a new job can be enqueued."""
+    queries = Queries(apgdriver)
+    pgq = PgQueuer(apgdriver)
+
+    @pgq.entrypoint("dedupe_hold", on_failure="hold")
+    async def handler(job: Job) -> None:
+        raise RuntimeError("fail")
+
+    await queries.enqueue("dedupe_hold", b"first", priority=1, dedupe_key="dk1")
+
+    async with async_timeout.timeout(10):
+        await pgq.run(dequeue_timeout=timedelta(seconds=0.1), mode=QueueExecutionMode.drain)
+
+    failed = await queries.list_failed_jobs()
+    assert len(failed) == 1
+
+    # A new job with the same dedupe_key should succeed because the failed job
+    # is excluded from the unique index (status IN ('queued', 'picked')).
+    ids = await queries.enqueue("dedupe_hold", b"second", priority=1, dedupe_key="dk1")
+    assert len(ids) == 1
