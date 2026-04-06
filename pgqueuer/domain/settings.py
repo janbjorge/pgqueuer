@@ -174,11 +174,6 @@ class DBSettings(BaseSettings):
     # e.g., processing times and outcomes.
     statistics_table: str = Field(default=add_prefix("pgqueuer_statistics"))
 
-    # Type of ENUM defining possible statuses for entries in the
-    # statistics table, such as 'exception' or 'successful'.
-    # TODO: Remove in future release
-    statistics_table_status_type: str = Field(default=add_prefix("pgqueuer_statistics_status"))
-
     # Type of ENUM defining statuses for queue jobs, such as 'queued' or 'picked'.
     queue_status_type: str = Field(default=add_prefix("pgqueuer_status"))
 
