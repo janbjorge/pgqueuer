@@ -180,7 +180,7 @@ class QueryBuilderEnvironment:
     DROP TABLE      IF EXISTS   {self.settings.schedules_table};
     DROP TABLE      IF EXISTS   {self.settings.queue_table_log};
     DROP TYPE       IF EXISTS   {self.settings.queue_status_type};
-    DROP TYPE       IF EXISTS   {self.settings.statistics_table_status_type};
+    DROP TYPE       IF EXISTS   {add_prefix("pgqueuer_statistics_status")};
     """  # noqa
 
     def build_upgrade_queries(self) -> Generator[str, None, None]:
