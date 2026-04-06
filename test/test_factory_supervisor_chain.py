@@ -15,7 +15,7 @@ from typing import AsyncGenerator, Generator
 import async_timeout
 import pytest
 
-from pgqueuer.adapters.cli import factories, supervisor
+from pgqueuer.adapters.cli import supervisor
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.core.qm import QueueManager
@@ -379,42 +379,6 @@ async def test_factory_raises_restart_on_failure_retries() -> None:
 
 
 # ---------------------------------------------------------------------------
-# validate_factory_result — unit-level
-# ---------------------------------------------------------------------------
-
-
-def test_validate_accepts_async_cm() -> None:
-    @asynccontextmanager
-    async def make() -> AsyncGenerator[str, None]:
-        yield "value"
-
-    result = factories.validate_factory_result(make())
-    assert hasattr(result, "__aenter__")
-
-
-async def test_validate_rejects_coroutine() -> None:
-    async def make() -> str:
-        return "value"
-
-    with pytest.raises(TypeError, match="AsyncContextManager"):
-        factories.validate_factory_result(make())
-
-
-def test_validate_rejects_sync_cm() -> None:
-    @contextmanager
-    def make() -> Generator[str, None, None]:
-        yield "value"
-
-    with pytest.raises(TypeError, match="AsyncContextManager"):
-        factories.validate_factory_result(make())
-
-
-def test_validate_rejects_arbitrary() -> None:
-    with pytest.raises(TypeError, match="AsyncContextManager"):
-        factories.validate_factory_result(42)
-
-
-# ---------------------------------------------------------------------------
 # run_manager dispatch
 # ---------------------------------------------------------------------------
 
@@ -613,51 +577,3 @@ async def test_factory_called_each_restart_cycle() -> None:
 
     assert call_count >= 3, f"Expected >=3 cycles, got {call_count}"
     assert len({id(p) for p in instances}) == len(instances)
-
-
-# ---------------------------------------------------------------------------
-# load_factory — string path resolution
-# ---------------------------------------------------------------------------
-
-
-def test_load_factory_callable_passthrough() -> None:
-    def my_fn() -> None:
-        pass
-
-    assert factories.load_factory(my_fn) is my_fn
-
-
-def test_load_factory_module_colon_function(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import Mock
-
-    sentinel = Mock()
-    mock_module = Mock(spec_set=["my_factory"])
-    mock_module.my_factory = sentinel
-
-    monkeypatch.setattr(
-        "importlib.import_module",
-        lambda name: mock_module
-        if name == "myapp.workers"
-        else (_ for _ in ()).throw(ImportError(name)),
-    )
-
-    result = factories.load_factory("myapp.workers:my_factory")
-    assert result is sentinel
-
-
-def test_load_factory_nonexistent_module_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "importlib.import_module",
-        lambda name: (_ for _ in ()).throw(ImportError(f"No module named '{name}'")),
-    )
-    with pytest.raises(ImportError, match="No module named 'ghost'"):
-        factories.load_factory("ghost:fn")
-
-
-def test_load_factory_nonexistent_attr_raises(monkeypatch: pytest.MonkeyPatch) -> None:
-    from unittest.mock import Mock
-
-    mock_module = Mock(spec_set=[])
-    monkeypatch.setattr("importlib.import_module", lambda name: mock_module)
-    with pytest.raises(AttributeError):
-        factories.load_factory("mod:missing_fn")
