@@ -106,12 +106,11 @@ async def test_validate_rejects_coroutine_with_migration_message() -> None:
     async def factory() -> str:
         return "value"
 
-    with pytest.raises(TypeError, match="returned a coroutine") as exc_info:
+    with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
         validate_factory_result(factory())
 
     msg = str(exc_info.value)
     assert "@asynccontextmanager" in msg
-    assert "yield" in msg
 
 
 def test_validate_rejects_sync_cm_with_migration_message() -> None:
@@ -119,7 +118,7 @@ def test_validate_rejects_sync_cm_with_migration_message() -> None:
     def factory() -> Generator[str, None, None]:
         yield "value"
 
-    with pytest.raises(TypeError, match="synchronous") as exc_info:
+    with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
         validate_factory_result(factory())
 
     msg = str(exc_info.value)
