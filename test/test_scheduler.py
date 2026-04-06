@@ -5,7 +5,17 @@ from unittest.mock import Mock
 import pytest
 
 from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.models import CronEntrypoint, CronExpression, CronExpressionEntrypoint, Schedule
+from pgqueuer.executors import (
+    ScheduleExecutor,
+    ScheduleExecutorFactoryParameters,
+)
+from pgqueuer.models import (
+    CronEntrypoint,
+    CronExpression,
+    CronExpressionEntrypoint,
+    Schedule,
+    ScheduleContext,
+)
 from pgqueuer.qb import DBSettings
 from pgqueuer.sm import SchedulerManager
 
@@ -349,3 +359,118 @@ async def test_multi_instance_single_task_execution(
         assert all(sid == schedule_ids[0] for sid in schedule_ids), (
             "All executions should be for the same schedule"
         )
+
+
+# ============================================================================
+# TESTS FOR ScheduleContext
+# ============================================================================
+
+
+async def test_schedule_executor_without_context() -> None:
+    """Schedule handler without accepts_context still works (backward compat)."""
+    received_schedules: list[Schedule] = []
+
+    async def handler(schedule: Schedule) -> None:
+        received_schedules.append(schedule)
+
+    params = ScheduleExecutorFactoryParameters(
+        entrypoint="no_ctx",
+        expression="* * * * *",
+        func=handler,
+        clean_old=False,
+        accepts_context=False,
+    )
+    executor = ScheduleExecutor(parameters=params)
+
+    fake_schedule = Schedule(
+        id=1,
+        expression=CronExpression("* * * * *"),
+        heartbeat=datetime.now(timezone.utc),
+        created=datetime.now(timezone.utc),
+        updated=datetime.now(timezone.utc),
+        next_run=datetime.now(timezone.utc),
+        status="queued",
+        entrypoint=CronEntrypoint("no_ctx"),
+    )
+    context = ScheduleContext(resources={"key": "value"})
+    await executor.execute(fake_schedule, context)
+
+    assert len(received_schedules) == 1
+    assert received_schedules[0] is fake_schedule
+
+
+async def test_schedule_executor_with_context() -> None:
+    """Schedule handler with accepts_context receives ScheduleContext."""
+    received: list[tuple[Schedule, ScheduleContext]] = []
+
+    async def handler(schedule: Schedule, ctx: ScheduleContext) -> None:
+        received.append((schedule, ctx))
+
+    params = ScheduleExecutorFactoryParameters(
+        entrypoint="with_ctx",
+        expression="* * * * *",
+        func=handler,
+        clean_old=False,
+        accepts_context=True,
+    )
+    executor = ScheduleExecutor(parameters=params)
+
+    fake_schedule = Schedule(
+        id=1,
+        expression=CronExpression("* * * * *"),
+        heartbeat=datetime.now(timezone.utc),
+        created=datetime.now(timezone.utc),
+        updated=datetime.now(timezone.utc),
+        next_run=datetime.now(timezone.utc),
+        status="queued",
+        entrypoint=CronEntrypoint("with_ctx"),
+    )
+    context = ScheduleContext(resources={"db": "pool"})
+    await executor.execute(fake_schedule, context)
+
+    assert len(received) == 1
+    assert received[0][0] is fake_schedule
+    assert received[0][1] is context
+    assert received[0][1].resources["db"] == "pool"
+
+
+async def test_schedule_context_resources_via_scheduler(
+    scheduler: SchedulerManager,
+    mocker: Mock,
+) -> None:
+    """Scheduled handler registered with accepts_context=True receives resources via dispatch."""
+    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+    past_timestamp = int(mocked_now.timestamp()) - 60
+    mocker.patch(
+        "pgqueuer.core.executors.croniter",
+        return_value=mocker.Mock(get_next=mocker.Mock(return_value=past_timestamp)),
+    )
+
+    scheduler.resources = {"shared_key": "shared_value"}
+    received_resources: list[dict] = []
+
+    async def handler(schedule: Schedule, ctx: ScheduleContext) -> None:
+        received_resources.append(dict(ctx.resources))
+
+    scheduler.schedule("ctx_test", "* * * * *", accepts_context=True)(handler)
+
+    await asyncio.gather(
+        scheduler.run(),
+        shutdown_Scheduler_after(scheduler),
+    )
+
+    assert len(received_resources) >= 1
+    assert received_resources[0] == {"shared_key": "shared_value"}
+
+
+async def test_schedule_context_default_empty_resources() -> None:
+    """ScheduleContext defaults to an empty dict when no resources are provided."""
+    context = ScheduleContext()
+    assert context.resources == {}
+
+
+async def test_scheduler_resources_default_empty() -> None:
+    """SchedulerManager.resources defaults to an empty dict."""
+    sm = SchedulerManager(Mock())
+    assert sm.resources == {}

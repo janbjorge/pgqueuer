@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import MutableMapping
 from contextlib import suppress
 from datetime import timedelta
 from typing import Callable
@@ -33,6 +34,7 @@ class SchedulerManager:
     """
 
     connection: Driver
+    resources: MutableMapping = dataclasses.field(default_factory=dict)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -55,12 +57,6 @@ class SchedulerManager:
         if self.queries is None:
             self.queries = queries.Queries(self.connection)
 
-    # TODO: Propagate shared 'resources' mapping into scheduled job execution.
-    # Consider approaches:
-    #   A) Allow schedule functions to optionally accept (schedule, resources)
-    #      via arity inspection (backward compatible).
-    #   B) Introduce a ScheduleContext dataclass with a .resources field mirroring job Context.
-    # Current workaround: users close over PgQueuer.resources when defining scheduled functions.
     def schedule(
         self,
         entrypoint: str,
@@ -71,7 +67,8 @@ class SchedulerManager:
         ]
         | None = None,
         clean_old: bool = False,
-    ) -> Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
+        accepts_context: bool = False,
+    ) -> Callable[[executors.ScheduleCrontab], executors.ScheduleCrontab]:
         """
         Register a new job with a cron schedule.
 
@@ -108,13 +105,14 @@ class SchedulerManager:
 
         executor_factory = executor_factory or executors.ScheduleExecutor
 
-        def register(func: executors.AsyncCrontab) -> executors.AsyncCrontab:
+        def register(func: executors.ScheduleCrontab) -> executors.ScheduleCrontab:
             self.registry[key] = executor_factory(
                 executors.ScheduleExecutorFactoryParameters(
                     entrypoint=entrypoint,
                     expression=expression,
                     func=func,
                     clean_old=clean_old,
+                    accepts_context=accepts_context,
                 )
             )
             return func
@@ -214,8 +212,9 @@ class SchedulerManager:
 
         task_manager.add(asyncio.create_task(heartbeat()))
 
+        context = models.ScheduleContext(resources=self.resources)
         try:
-            await executor.execute(schedule)
+            await executor.execute(schedule, context)
         except Exception:
             logconfig.logger.exception(
                 "Exception while processing entrypoint/expression: %s/%s",

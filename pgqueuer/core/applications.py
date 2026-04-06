@@ -19,9 +19,9 @@ from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
-    AsyncCrontab,
     EntrypointExecutorParameters,
     EntrypointTypeVar,
+    ScheduleCrontab,
     ScheduleExecutorFactoryParameters,
 )
 from pgqueuer.core.qm import QueueManager
@@ -81,6 +81,7 @@ class PgQueuer:
         )
         self.sm = SchedulerManager(
             self.connection,
+            resources=self.resources,
             queries=self.queries,  # type: ignore[arg-type]
         )
         self.qm.shutdown = self.shutdown
@@ -259,10 +260,12 @@ class PgQueuer:
         ]
         | None = None,
         clean_old: bool = False,
-    ) -> Callable[[AsyncCrontab], AsyncCrontab]:
+        accepts_context: bool = False,
+    ) -> Callable[[ScheduleCrontab], ScheduleCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,
             expression=expression,
             executor_factory=executor_factory,
             clean_old=clean_old,
+            accepts_context=accepts_context,
         )

@@ -219,6 +219,20 @@ class Context:
 
 
 @dataclasses.dataclass
+class ScheduleContext:
+    """
+    Runtime context for scheduled tasks, mirroring Context for queue jobs.
+
+    Attributes:
+        resources: A mutable mapping for user-provided, pre-initialized shared
+            resources (e.g. DB pools, HTTP clients, ML models, caches). Always a
+            mapping; never None. Users can mutate this at runtime if needed.
+    """
+
+    resources: MutableMapping = dataclasses.field(default_factory=dict)
+
+
+@dataclasses.dataclass
 class EntrypointStatistics:
     concurrency_limiter: asyncio.Semaphore | nullcontext
 
