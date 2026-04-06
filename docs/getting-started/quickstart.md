@@ -10,18 +10,20 @@ if you haven't done that yet.
 
 ## 1. Define a Consumer
 
-Create a file called `myapp.py`. PgQueuer uses a factory pattern: you write an `async`
-function that returns a configured `PgQueuer` instance.
+Create a file called `myapp.py`. PgQueuer uses a factory pattern: you write an
+`@asynccontextmanager` function that yields a configured `PgQueuer` instance.
 
 === "asyncpg"
 
     ```python
+    from contextlib import asynccontextmanager
     from datetime import datetime
     import asyncpg
     from pgqueuer import PgQueuer
     from pgqueuer.models import Job, Schedule
 
-    async def main() -> PgQueuer:
+    @asynccontextmanager
+    async def main():
         connection = await asyncpg.connect()
         pgq = PgQueuer.from_asyncpg_connection(connection)
 
@@ -33,18 +35,20 @@ function that returns a configured `PgQueuer` instance.
         async def cleanup(schedule: Schedule) -> None:
             print(f"Hourly cleanup: {datetime.now()!r}")
 
-        return pgq
+        yield pgq
     ```
 
 === "asyncpg pool"
 
     ```python
+    from contextlib import asynccontextmanager
     from datetime import datetime
     import asyncpg
     from pgqueuer import PgQueuer
     from pgqueuer.models import Job, Schedule
 
-    async def main() -> PgQueuer:
+    @asynccontextmanager
+    async def main():
         pool = await asyncpg.create_pool()
         pgq = PgQueuer.from_asyncpg_pool(pool)
 
@@ -56,18 +60,20 @@ function that returns a configured `PgQueuer` instance.
         async def cleanup(schedule: Schedule) -> None:
             print(f"Hourly cleanup: {datetime.now()!r}")
 
-        return pgq
+        yield pgq
     ```
 
 === "psycopg"
 
     ```python
+    from contextlib import asynccontextmanager
     from datetime import datetime
     import psycopg
     from pgqueuer import PgQueuer
     from pgqueuer.models import Job, Schedule
 
-    async def main() -> PgQueuer:
+    @asynccontextmanager
+    async def main():
         connection = await psycopg.AsyncConnection.connect(autocommit=True)
         pgq = PgQueuer.from_psycopg_connection(connection)
 
@@ -79,7 +85,7 @@ function that returns a configured `PgQueuer` instance.
         async def cleanup(schedule: Schedule) -> None:
             print(f"Hourly cleanup: {datetime.now()!r}")
 
-        return pgq
+        yield pgq
     ```
 
 === "In-Memory (testing)"
@@ -110,7 +116,7 @@ function that returns a configured `PgQueuer` instance.
   and sets up a `QueueManager` and `SchedulerManager`.
 - `@pgq.entrypoint("fetch")` registers an async function to handle jobs with entrypoint name `"fetch"`.
 - `@pgq.schedule("cleanup", "0 * * * *")` registers a cron task that runs every hour.
-- Returning the `PgQueuer` instance tells the CLI how to start your application.
+- Yielding the `PgQueuer` instance tells the CLI how to start your application.
 
 ---
 
@@ -122,7 +128,7 @@ pgq run myapp:main
 
 The `run` command:
 
-1. Imports `myapp` and calls `main()` to get the `PgQueuer` instance.
+1. Imports `myapp` and enters the `main()` context manager to get the `PgQueuer` instance.
 2. Registers signal handlers for graceful shutdown (`SIGTERM`, `SIGINT`).
 3. Starts the `QueueManager` (job processing) and `SchedulerManager` (cron tasks) concurrently.
 4. Listens on the `ch_pgqueuer` NOTIFY channel for new work.

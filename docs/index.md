@@ -53,11 +53,13 @@ PgQueuer uses battle-tested PostgreSQL primitives to deliver jobs safely and fas
 Define a consumer, register job handlers, and run:
 
 ```python
+from contextlib import asynccontextmanager
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.models import Job
 
-async def main() -> PgQueuer:
+@asynccontextmanager
+async def main():
     connection = await asyncpg.connect()
     pgq = PgQueuer.from_asyncpg_connection(connection)
 
@@ -65,7 +67,7 @@ async def main() -> PgQueuer:
     async def send_email(job: Job) -> None:
         print(f"Sending email: {job.payload}")
 
-    return pgq
+    yield pgq
 ```
 
 ```bash

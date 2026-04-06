@@ -69,13 +69,15 @@ jitter.
 
 ```python
 import asyncpg
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.executors import RetryWithBackoffEntrypointExecutor
 from pgqueuer.models import Job
 
-async def create_pgqueuer() -> PgQueuer:
+@asynccontextmanager
+async def create_pgqueuer():
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
     pgq = PgQueuer(driver)
@@ -92,7 +94,7 @@ async def create_pgqueuer() -> PgQueuer:
     async def retry_with_backoff(job: Job) -> None:
         print(f"Processing job: {job!r}")
 
-    return pgq
+    yield pgq
 ```
 
 ### Parameters
