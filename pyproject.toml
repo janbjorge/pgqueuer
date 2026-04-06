@@ -185,7 +185,6 @@ ignore_imports = [
     # during the migration period. Future work will further decouple these.
     "pgqueuer.core.qm -> pgqueuer.adapters.persistence.qb",
     "pgqueuer.core.qm -> pgqueuer.adapters.persistence.queries",
-    "pgqueuer.core.qm -> pgqueuer.adapters.tracing",
     "pgqueuer.core.sm -> pgqueuer.adapters.persistence.queries",
     "pgqueuer.core.completion -> pgqueuer.adapters.persistence.qb",
     "pgqueuer.core.completion -> pgqueuer.adapters.persistence.queries",

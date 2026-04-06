@@ -22,7 +22,6 @@ from typing import AsyncGenerator, Callable, get_args
 
 import anyio
 
-from pgqueuer.adapters import tracing
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import (
     buffers,
@@ -35,7 +34,7 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.ports import RepositoryPort
+from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
