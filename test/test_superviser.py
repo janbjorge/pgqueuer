@@ -179,8 +179,9 @@ async def test_runit_restart_on_failure(
 
     pg_queuer.run = failing_run  # type: ignore
 
+    @asynccontextmanager
     async def foo():  # type: ignore
-        return pg_queuer
+        yield pg_queuer
 
     # Run runit in the background
     runit_task = asyncio.create_task(

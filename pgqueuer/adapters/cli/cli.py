@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Awaitable, Callable
+from typing import Callable
 
 import typer
 from tabulate import tabulate
@@ -144,35 +144,38 @@ def main(
 def create_default_queries_factory(
     config: AppConfig,
     settings: qb.DBSettings,
-) -> Callable[..., Awaitable[queries.Queries]]:
+) -> Callable[..., contextlib.AbstractAsyncContextManager[queries.Queries]]:
     """
     This is the default implementation of a factory that returns an instance of Queries.
     It attempts asyncpg first, then psycopg.
     """
 
-    async def factory() -> queries.Queries:
+    @contextlib.asynccontextmanager
+    async def factory() -> AsyncGenerator[queries.Queries, None]:
         with contextlib.suppress(ImportError):
             import asyncpg
 
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-            return queries.Queries(
+            yield queries.Queries(
                 AsyncpgDriver(await asyncpg.connect(dsn=config.dsn)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),
             )
+            return
         with contextlib.suppress(ImportError):
             import psycopg
 
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-            return queries.Queries(
+            yield queries.Queries(
                 PsycopgDriver(await psycopg.AsyncConnection.connect(config.dsn, autocommit=True)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),
             )
+            return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
     return factory
@@ -192,7 +195,7 @@ async def yield_queries(
         factory_fn = factories.load_factory(config.factory_fn_ref)
     else:
         factory_fn = create_default_queries_factory(config, settings)
-    async with factories.run_factory(factory_fn()) as q:
+    async with factories.validate_factory_result(factory_fn()) as q:
         yield q
 
 

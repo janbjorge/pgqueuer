@@ -1,6 +1,7 @@
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import cast
+from typing import AsyncGenerator, cast
 
 import pytest
 
@@ -27,8 +28,9 @@ async def test_shutdown_without_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     shutdown_event = asyncio.Event()
     dummy = DummyManager()
 
-    async def factory() -> qm.QueueManager:
-        return cast(qm.QueueManager, dummy)
+    @asynccontextmanager
+    async def factory() -> AsyncGenerator[qm.QueueManager, None]:
+        yield cast(qm.QueueManager, dummy)
 
     async def run_manager(manager: DummyManager, *args: object, **kwargs: object) -> None:
         await manager.run()

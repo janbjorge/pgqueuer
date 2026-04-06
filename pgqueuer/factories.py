@@ -2,10 +2,10 @@
 
 from pgqueuer.adapters.cli.factories import (
     load_factory,
-    run_factory,
+    validate_factory_result,
 )
 
 __all__ = [
     "load_factory",
-    "run_factory",
+    "validate_factory_result",
 ]
