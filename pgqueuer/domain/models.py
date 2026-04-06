@@ -64,8 +64,6 @@ class Event(BaseModel):
         return self.received_at - self.sent_at
 
 
-
-
 class TableChangedEvent(Event):
     """
     A class representing an event in a PostgreSQL channel.

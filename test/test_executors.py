@@ -55,7 +55,6 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
             func=async_function,
@@ -81,7 +80,6 @@ async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
             func=async_function,
@@ -122,7 +120,6 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
             func=async_function,
@@ -148,7 +145,6 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-
             retry_timer=timedelta(seconds=300),
             serialized_dispatch=False,
             func=async_function,

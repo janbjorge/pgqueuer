@@ -387,7 +387,6 @@ def test_database_retry_executor_backoff_caps_at_max_delay() -> None:
         parameters=EntrypointExecutorParameters(
             concurrency_limit=0,
             func=_async_noop,
-
             retry_timer=timedelta(seconds=10),
             serialized_dispatch=False,
         ),
@@ -733,7 +732,6 @@ async def test_database_retry_executor_chains_cause() -> None:
         parameters=EntrypointExecutorParameters(
             concurrency_limit=0,
             func=handler,
-
             retry_timer=timedelta(0),
             serialized_dispatch=False,
         ),

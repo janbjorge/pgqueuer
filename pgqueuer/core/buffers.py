@@ -252,5 +252,3 @@ class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     """
     Specialized TimedOverflowBuffer for handling heartbeats.
     """
-
-
