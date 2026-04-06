@@ -111,7 +111,7 @@ uv run pytest -m "not integration"       # Skip integration tests (no DB needed)
 | Classes             | CamelCase         | `QueueManager`, `DuplicateJobError` |
 | Functions/methods   | snake_case        | `register_executor`, `fetch_jobs`  |
 | Constants/aliases   | UPPER_SNAKE_CASE  | `JOB_STATUS`, `EVENT_TYPES`       |
-| Private members     | Leading underscore | `_dispatch`, `_SENTINEL`           |
+| Private members     | Leading underscore | `_dispatch`, `_buffer`             |
 | Test functions      | `test_` prefix    | `test_queries_put`                 |
 | Fixtures            | snake_case        | `apgdriver`, `dsn`                 |
 
@@ -148,7 +148,7 @@ Port protocols: `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPo
 
 ### Deprecation Pattern
 
-When deprecating dataclass fields, use a module-level `_SENTINEL = object()` default with a `warnings.warn(..., DeprecationWarning, stacklevel=2)` check in `__post_init__`. Follow the existing pattern in `pgqueuer/executors.py`.
+When deprecating dataclass fields, use a module-level `_SENTINEL = object()` default with a `warnings.warn(..., DeprecationWarning, stacklevel=2)` check in `__post_init__`.
 
 ### Dependency Injection
 

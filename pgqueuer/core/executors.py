@@ -7,7 +7,6 @@ import dataclasses
 import functools
 import inspect
 import random
-import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
@@ -17,8 +16,6 @@ from croniter import croniter
 
 from pgqueuer.core import helpers
 from pgqueuer.domain import errors, models, types
-
-_SENTINEL = object()
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
@@ -50,27 +47,6 @@ class EntrypointExecutorParameters:
     serialized_dispatch: bool
     accepts_context: bool = False
     on_failure: types.OnFailure = "delete"
-
-    # Deprecated fields -- kept for backward compatibility with custom executors.
-    channel: object = dataclasses.field(default=_SENTINEL, repr=False)
-    connection: object = dataclasses.field(default=_SENTINEL, repr=False)
-    queries: object = dataclasses.field(default=_SENTINEL, repr=False)
-    shutdown: object = dataclasses.field(default=_SENTINEL, repr=False)
-
-    def __post_init__(self) -> None:
-        deprecated = [
-            name
-            for name in ("channel", "connection", "queries", "shutdown")
-            if getattr(self, name) is not _SENTINEL
-        ]
-        if deprecated:
-            warnings.warn(
-                f"Passing {', '.join(deprecated)} to EntrypointExecutorParameters is "
-                "deprecated and will be removed in a future version. "
-                "These fields are unused by executors.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
 
 @dataclasses.dataclass
@@ -243,26 +219,6 @@ class ScheduleExecutorFactoryParameters:
     expression: str
     func: AsyncCrontab
     clean_old: bool
-
-    # Deprecated fields -- kept for backward compatibility with custom executors.
-    connection: object = dataclasses.field(default=_SENTINEL, repr=False)
-    queries: object = dataclasses.field(default=_SENTINEL, repr=False)
-    shutdown: object = dataclasses.field(default=_SENTINEL, repr=False)
-
-    def __post_init__(self) -> None:
-        deprecated = [
-            name
-            for name in ("connection", "queries", "shutdown")
-            if getattr(self, name) is not _SENTINEL
-        ]
-        if deprecated:
-            warnings.warn(
-                f"Passing {', '.join(deprecated)} to ScheduleExecutorFactoryParameters is "
-                "deprecated and will be removed in a future version. "
-                "These fields are unused by executors.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
 
 
 @dataclasses.dataclass
