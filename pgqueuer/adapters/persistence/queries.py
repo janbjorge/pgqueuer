@@ -584,29 +584,6 @@ class Queries:
             )
         ]
 
-    async def notify_entrypoint_rps(self, entrypoint_count: dict[str, int]) -> None:
-        """
-        Send a requests-per-second event notification for an entrypoint.
-
-        Emits a 'requests_per_second_event' notification via the PostgreSQL NOTIFY
-        system to inform other components about the current request rate for an
-        entrypoint. This can be used to adjust processing rates or trigger scaling.
-
-        Args:
-            entrypoint (str): The entrypoint for which the event is being sent.
-            quantity (int): The number of requests per second to report.
-        """
-        if entrypoint_count:
-            await self.driver.execute(
-                self.qbq.build_notify_query(),
-                models.RequestsPerSecondEvent(
-                    channel=self.qbq.settings.channel,
-                    entrypoint_count=entrypoint_count,
-                    sent_at=helpers.utc_now(),
-                    type="requests_per_second_event",
-                ).model_dump_json(),
-            )
-
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """
         Send a cancellation event notification for specific job IDs.

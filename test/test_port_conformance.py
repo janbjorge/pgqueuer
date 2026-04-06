@@ -37,7 +37,7 @@ def test_queries_has_schedule_repository_methods() -> None:
 
 
 def test_queries_has_notification_methods() -> None:
-    required = {"notify_entrypoint_rps", "notify_job_cancellation", "notify_health_check"}
+    required = {"notify_job_cancellation", "notify_health_check"}
     assert required <= set(dir(Queries))
 
 
@@ -84,7 +84,7 @@ def test_inmemory_has_schedule_repository_methods() -> None:
 
 
 def test_inmemory_has_notification_methods() -> None:
-    required = {"notify_entrypoint_rps", "notify_job_cancellation", "notify_health_check"}
+    required = {"notify_job_cancellation", "notify_health_check"}
     assert required <= set(dir(InMemoryQueries))
 
 

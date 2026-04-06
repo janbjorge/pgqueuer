@@ -624,16 +624,6 @@ class InMemoryQueries:
 
     # -- Notification methods --------------------------------------------------
 
-    async def notify_entrypoint_rps(self, entrypoint_count: dict[str, int]) -> None:
-        if entrypoint_count:
-            event = models.RequestsPerSecondEvent(
-                channel=self.qbq.settings.channel,
-                entrypoint_count=entrypoint_count,
-                sent_at=_utc_now(),
-                type="requests_per_second_event",
-            )
-            self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
-
     async def notify_job_cancellation(self, ids: list[JobId]) -> None:
         event = models.CancellationEvent(
             channel=self.qbq.settings.channel,

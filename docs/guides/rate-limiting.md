@@ -1,19 +1,7 @@
-# Rate Limiting & Concurrency
+# Concurrency Control
 
-PgQueuer provides fine-grained control over job execution frequency and concurrency at the
+PgQueuer provides fine-grained control over job execution concurrency at the
 entrypoint level.
-
-## Rate Limiting
-
-Define a maximum number of requests per second for a specific job type:
-
-```python
-@pgq.entrypoint("data_processing", requests_per_second=10)
-async def process_data(job: Job) -> None:
-    pass
-```
-
-Jobs that exceed the rate limit are held and retried within the same batch cycle.
 
 ## Concurrency Limiting
 
@@ -58,7 +46,6 @@ You can combine multiple controls on a single entrypoint:
 ```python
 @pgq.entrypoint(
     "api_call",
-    requests_per_second=5,
     concurrency_limit=3,
 )
 async def call_external_api(job: Job) -> None:

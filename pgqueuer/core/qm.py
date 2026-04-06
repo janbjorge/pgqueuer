@@ -3,7 +3,6 @@ Queue Manager module for handling job queues and dispatching jobs.
 
 This module defines the `QueueManager` class, which manages job queues, dispatches
 jobs to registered entrypoints, and handles database connections and events.
-It also provides utility functions and types for job execution and rate limiting.
 """
 
 from __future__ import annotations
@@ -13,11 +12,9 @@ import contextlib
 import dataclasses
 import sys
 import uuid
-from collections import Counter, deque
 from collections.abc import MutableMapping
 from contextlib import nullcontext, suppress
 from datetime import timedelta
-from math import isfinite
 from typing import AsyncGenerator, Callable, get_args
 
 import anyio
@@ -45,8 +42,8 @@ class QueueManager:
     Manages job queues and dispatches jobs to registered entrypoints.
 
     The `QueueManager` handles the lifecycle of jobs, including dequeueing,
-    dispatching to entrypoint functions, handling rate limiting, concurrency
-    limits, and managing cancellations.
+    dispatching to entrypoint functions, handling concurrency limits, and
+    managing cancellations.
 
     Attributes:
         connection (db.Driver): The database driver used for database operations.
@@ -213,7 +210,6 @@ class QueueManager:
 
         self.entrypoint_registry[name] = executor
         self.entrypoint_statistics[name] = models.EntrypointStatistics(
-            samples=deque(maxlen=1_000),
             concurrency_limiter=asyncio.Semaphore(executor.parameters.concurrency_limit)
             if executor.parameters.concurrency_limit > 0
             else nullcontext(),
@@ -223,7 +219,6 @@ class QueueManager:
         self,
         name: str,
         *,
-        requests_per_second: float = float("inf"),
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
         serialized_dispatch: bool = False,
@@ -242,8 +237,6 @@ class QueueManager:
 
         Args:
             name (str): The name of the entrypoint as referenced in the job queue.
-            requests_per_second (float): Max number of jobs per second to process for
-                this entrypoint.
             concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
@@ -257,18 +250,11 @@ class QueueManager:
 
         Raises:
             RuntimeError: If the entrypoint name is already registered.
-            ValueError: If `requests_per_second` or `concurrency_limit` are negative.
+            ValueError: If `concurrency_limit` is negative.
         """
 
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
-
-        # Check requests_per_second type / value range.
-        if not isinstance(requests_per_second, (float, int)):
-            raise ValueError("Rate must be float | int.")
-
-        if requests_per_second < 0:
-            raise ValueError("Rate must be greater or eq. to zero.")
 
         # Check concurrency_limit type / value range.
         if not isinstance(concurrency_limit, int):
@@ -295,7 +281,6 @@ class QueueManager:
                 executor_factory(
                     executors.EntrypointExecutorParameters(
                         func=func,
-                        requests_per_second=requests_per_second,
                         retry_timer=retry_timer,
                         serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
@@ -308,28 +293,6 @@ class QueueManager:
 
         return register
 
-    def observed_requests_per_second(
-        self,
-        entrypoint: str,
-        epsilon: timedelta = timedelta(milliseconds=0.01),
-    ) -> float:
-        """
-        Calculate the observed requests per second for an entrypoint.
-
-        Args:
-            entrypoint (str): The entrypoint to calculate the rate for.
-            epsilon (timedelta): Small time delta to prevent division by zero.
-
-        Returns:
-            float: The observed requests per second.
-        """
-        samples = self.entrypoint_statistics[entrypoint].samples
-        if not samples:
-            return 0.0
-        timespan = helpers.utc_now() - min(t for _, t in samples) + epsilon
-        requests = sum(c for c, _ in samples)
-        return requests / timespan.total_seconds()
-
     def entrypoints_below_capacity_limits(self) -> set[str]:
         """
         Determine which entrypoints are below their configured capacity limits.
@@ -340,25 +303,19 @@ class QueueManager:
 
         def below_capacity_limit(
             entrypoint: str,
-            executor: executors.AbstractEntrypointExecutor,
         ) -> bool:
-            below_rps_limit = (
-                self.observed_requests_per_second(entrypoint)
-                < executor.parameters.requests_per_second
-            )
-            below_concurrency_limit = not (
+            return not (
                 isinstance(
                     c_limiter := self.entrypoint_statistics[entrypoint].concurrency_limiter,
                     asyncio.Semaphore,
                 )
                 and c_limiter.locked()
             )
-            return below_rps_limit and below_concurrency_limit
 
         return {
             entrypoint
-            for entrypoint, executor in self.entrypoint_registry.items()
-            if below_capacity_limit(entrypoint, executor)
+            for entrypoint in self.entrypoint_registry
+            if below_capacity_limit(entrypoint)
         }
 
     async def fetch_jobs(
@@ -371,7 +328,7 @@ class QueueManager:
 
         This method retrieves a batch of jobs that match the current capacity constraints
         of each entrypoint. It ensures that jobs are fetched only when the QueueManager
-        is operational and that rate limits and concurrency controls are respected.
+        is operational and that concurrency controls are respected.
         """
 
         while not self.shutdown.is_set():
@@ -396,17 +353,6 @@ class QueueManager:
 
             for job in jobs:
                 yield job
-
-    async def update_rps_stats(self, events: list[str]) -> None:
-        """Update rate-per-second statistics for the given entrypoints."""
-        if events:
-            await self.queries.notify_entrypoint_rps(
-                {
-                    k: v
-                    for k, v in Counter(events).items()
-                    if isfinite(self.entrypoint_registry[k].parameters.requests_per_second)
-                }
-            )
 
     async def verify_structure(self) -> None:
         """
@@ -564,10 +510,6 @@ class QueueManager:
                 timeout=heartbeat_buffer_timeout / 4,
                 callback=self.queries.update_heartbeat,
             ) as hbuff,
-            buffers.RequestsPerSecondBuffer(
-                max_size=batch_size,
-                callback=self.update_rps_stats,
-            ) as rpsbuff,
             tm.TaskManager() as task_manager,
             self.connection,
         ):
@@ -579,7 +521,6 @@ class QueueManager:
                 self.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
-                    statistics=self.entrypoint_statistics,
                     canceled=self.job_context,
                     pending_health_check=self.pending_health_check,
                 ),
@@ -594,7 +535,6 @@ class QueueManager:
 
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
-                    await rpsbuff.add(job.entrypoint)
                     self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,

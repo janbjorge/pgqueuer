@@ -13,10 +13,10 @@ components
     ``None``.
 
 ``build_default_router``
-    Convenience factory that wires handlers for the four canonical
-    back-end events (*table-changed*, *requests-per-second*,
-    *cancellation*, *health-check*).  It injects application state via
-    closures, avoiding a bulky context object.
+    Convenience factory that wires handlers for the canonical
+    back-end events (*table-changed*, *cancellation*, *health-check*).
+    It injects application state via closures, avoiding a bulky context
+    object.
 
 ``PGNoticeEventListener``
     A thin ``asyncio.Queue`` subclass used by the default
@@ -82,7 +82,6 @@ class EventRouter:
 def default_event_router(
     *,
     notice_event_queue: PGNoticeEventListener,
-    statistics: MutableMapping[str, models.EntrypointStatistics],
     canceled: MutableMapping[models.JobId, models.Context],
     pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[models.HealthCheckEvent]],
 ) -> EventRouter:
@@ -93,11 +92,6 @@ def default_event_router(
     @router.register("table_changed_event")
     def _table_changed(evt: models.TableChangedEvent) -> None:
         notice_event_queue.put_nowait(evt)
-
-    @router.register("requests_per_second_event")
-    def _requests_per_second(evt: models.RequestsPerSecondEvent) -> None:  #
-        for entrypoint, count in evt.entrypoint_count.items():
-            statistics[entrypoint].samples.append((count, evt.sent_at))
 
     @router.register("cancellation_event")
     def _cancellation(evt: models.CancellationEvent) -> None:

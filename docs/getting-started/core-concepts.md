@@ -58,7 +58,6 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 | Parameter | Type | Default | Effect |
 |-----------|------|---------|--------|
 | `name` | `str` | (required) | Entrypoint name -- must match what producers enqueue |
-| `requests_per_second` | `float` | `inf` | Max throughput for this entrypoint |
 | `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint |
 | `serialized_dispatch` | `bool` | `False` | Process jobs one at a time (equivalent to `concurrency_limit=1`) |
 | `retry_timer` | `timedelta` | `0` (disabled) | Re-queue jobs whose heartbeat has gone stale |
@@ -207,6 +206,6 @@ See [Database Setup](../reference/database-setup.md) for full schema details and
 Now that you understand the building blocks:
 
 - **[Scheduling](../guides/scheduling.md)** -- set up cron-style recurring tasks
-- **[Rate Limiting](../guides/rate-limiting.md)** -- throttle job execution
+- **[Concurrency Control](../guides/rate-limiting.md)** -- limit parallel job execution
 - **[Reliability](../guides/reliability.md)** -- retries, idempotency, and audit trails
 - **[Deployment](../guides/deployment.md)** -- run workers in production

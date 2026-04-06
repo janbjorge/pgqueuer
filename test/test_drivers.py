@@ -198,7 +198,6 @@ async def test_event_listener(
             channel,
             default_event_router(
                 notice_event_queue=listener,
-                statistics={},
                 canceled={},
                 pending_health_check={},
             ),

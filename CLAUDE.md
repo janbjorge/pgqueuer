@@ -40,11 +40,11 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
 - **`domain/`** — Pure models, types, settings, errors. No imports from other layers.
 - **`ports/`** — Protocol definitions (`Driver`, `RepositoryPort`, `SchemaManagementPort`, etc.). No imports from adapters or core.
 - **`core/`** — Business logic:
-  - `qm.py` — `QueueManager`: dequeue loop, dispatch, rate limiting, concurrency control, health checks
+  - `qm.py` — `QueueManager`: dequeue loop, dispatch, concurrency control, health checks
   - `sm.py` — `SchedulerManager`: cron-based recurring tasks
   - `applications.py` — `PgQueuer`: top-level orchestrator combining QM + SM
   - `executors.py` — `AbstractEntrypointExecutor` / `AbstractScheduleExecutor` and default implementations
-  - `buffers.py` — Batched async buffers for heartbeats, job status logs, RPS stats
+  - `buffers.py` — Batched async buffers for heartbeats, job status logs
   - `listeners.py` — PG NOTIFY event routing
   - `tm.py` — `TaskManager` for background task lifecycle
   - `heartbeat.py`, `cache.py`, `helpers.py`, `retries.py`, `logconfig.py`
