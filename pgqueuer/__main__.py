@@ -1,6 +1,6 @@
 import contextlib
 
-from pgqueuer import cli
+from pgqueuer.adapters.cli import cli
 
 
 def main() -> None:

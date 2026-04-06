@@ -8,12 +8,13 @@ from anyio import CancelScope
 from async_timeout import timeout
 
 from pgqueuer import db
-from pgqueuer.listeners import (
+from pgqueuer.core.listeners import (
     EventRouter,
     PGNoticeEventListener,
     default_event_router,
     initialize_notice_event_listener,
 )
+from pgqueuer.domain.settings import DBSettings, add_prefix
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
@@ -23,7 +24,6 @@ from pgqueuer.models import (
     JobId,
     TableChangedEvent,
 )
-from pgqueuer.qb import DBSettings, add_prefix
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 

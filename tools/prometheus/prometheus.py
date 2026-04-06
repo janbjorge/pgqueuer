@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import Response
 
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.settings import add_prefix
 from pgqueuer.models import LogStatistics, QueueStatistics
-from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
 ReduceFn: TypeAlias = Callable[[Iterable[float]], float]

@@ -7,8 +7,8 @@ import pytest
 from pgqueuer import db
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import CronExpressionEntrypoint, Job, Schedule
-from pgqueuer.qb import DBSettings
 from test.helpers import wait_until_empty_queue
 
 

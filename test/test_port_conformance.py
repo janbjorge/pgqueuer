@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.adapters.tracing.logfire import LogfireTracing
+from pgqueuer.adapters.tracing.sentry import SentryTracing
 from pgqueuer.queries import Queries
-from pgqueuer.tracing import LogfireTracing, SentryTracing
 
 
 def test_queries_has_queue_repository_methods() -> None:

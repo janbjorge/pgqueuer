@@ -19,12 +19,12 @@ from pydantic import AwareDatetime, BaseModel
 from tabulate import tabulate
 from tqdm.asyncio import tqdm
 
-from pgqueuer import PgQueuer, logconfig, types
+from pgqueuer import PgQueuer, types
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
+from pgqueuer.domain.settings import add_prefix
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
-from pgqueuer.qb import add_prefix
 from pgqueuer.queries import Queries
 
 
@@ -485,29 +485,31 @@ def main(
 
 
 if __name__ == "__main__":
-    from pgqueuer import logconfig
+    from pgqueuer.core import logconfig as _logconfig
 
-    logconfig.setup_fancy_logger(logconfig.LogLevel.INFO)
+    _logconfig.setup_fancy_logger(_logconfig.LogLevel.INFO)
     if os.environ.get("LOGFIRE", "0") == "1":
         import logfire
 
-        from pgqueuer import tracing
+        from pgqueuer.adapters import tracing as _tracing
+        from pgqueuer.adapters.tracing.logfire import LogfireTracing
 
         logfire.configure(service_name="pgqueuer")
 
-        tracing.set_tracing_class(tracing.LogfireTracing())
+        _tracing.set_tracing_class(LogfireTracing())
 
     if sentry_dsn := os.environ.get("SENTRY_DSN"):
         import sentry_sdk
 
-        from pgqueuer import tracing
+        from pgqueuer.adapters import tracing as _tracing
+        from pgqueuer.adapters.tracing.sentry import SentryTracing
 
         sentry_sdk.init(
             dsn=sentry_dsn,
             sample_rate=1,
             traces_sample_rate=1.0,
         )
-        tracing.set_tracing_class(tracing.SentryTracing())
+        _tracing.set_tracing_class(SentryTracing())
 
     with suppress(KeyboardInterrupt):
         app()

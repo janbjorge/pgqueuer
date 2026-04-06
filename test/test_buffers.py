@@ -5,8 +5,8 @@ from itertools import count
 
 import pytest
 
-from pgqueuer.buffers import JobStatusLogBuffer
 from pgqueuer.core import helpers as pg_helpers
+from pgqueuer.core.buffers import JobStatusLogBuffer
 from pgqueuer.models import JOB_STATUS, Job, TracebackRecord
 from test.helpers import mocked_job
 

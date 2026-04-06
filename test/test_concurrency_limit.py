@@ -9,8 +9,8 @@ import async_timeout
 import pytest
 
 from pgqueuer.db import Driver
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
-from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from pgqueuer.types import JobId

@@ -4,8 +4,8 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
 from pgqueuer import db, queries
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
-from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import JobId
 

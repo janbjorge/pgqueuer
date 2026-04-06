@@ -13,7 +13,7 @@ PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
 ## Basic Usage
 
 ```python
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 
 async with CompletionWatcher(driver) as watcher:
     status = await watcher.wait_for(job_id)
@@ -51,7 +51,7 @@ The watcher monitors a job's progression until it reaches a **terminal state**:
 
 ```python
 from asyncio import gather
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 
 image_ids   = await qm.queries.enqueue(["render_img"]   * 20, [b"..."] * 20, [0] * 20)
 report_ids  = await qm.queries.enqueue(["generate_pdf"] * 10, [b"..."] * 10, [0] * 10)
@@ -80,7 +80,7 @@ Block until every supplied job finishes; return statuses in the same order as th
 import asyncio
 from datetime import timedelta
 from pgqueuer import db, models
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 
 
 async def wait_for_all(

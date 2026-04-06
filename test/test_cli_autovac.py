@@ -1,6 +1,6 @@
 from typer.testing import CliRunner
 
-from pgqueuer.cli import app
+from pgqueuer.adapters.cli.cli import app
 
 
 def test_autovac_command() -> None:
