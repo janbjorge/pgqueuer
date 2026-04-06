@@ -9,12 +9,14 @@ The simplest deployment: one process, one `QueueManager`.
 
 ```python
 # myapp.py
+from contextlib import asynccontextmanager
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Job
 
-async def main() -> PgQueuer:
+@asynccontextmanager
+async def main():
     conn = await asyncpg.connect()
     driver = AsyncpgDriver(conn)
     pgq = PgQueuer(driver)
@@ -23,7 +25,7 @@ async def main() -> PgQueuer:
     async def process_order(job: Job) -> None:
         ...
 
-    return pgq
+    yield pgq
 ```
 
 ```bash

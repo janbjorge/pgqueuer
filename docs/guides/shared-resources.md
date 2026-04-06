@@ -18,11 +18,13 @@ You pass a mutable mapping when constructing `PgQueuer` (or `QueueManager` direc
 
 ```python
 import asyncpg
+from contextlib import asynccontextmanager
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Job
 
-async def build_pgqueuer() -> PgQueuer:
+@asynccontextmanager
+async def build_pgqueuer():
     conn = await asyncpg.connect()
     driver = AsyncpgDriver(conn)
 
@@ -42,7 +44,7 @@ async def build_pgqueuer() -> PgQueuer:
         # Use shared objects without recreating them
         ...
 
-    return pgq
+    yield pgq
 ```
 
 Internally this mapping is passed into each `Context` as `context.resources`. All jobs receive

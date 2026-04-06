@@ -40,10 +40,12 @@ celery -A celery_app worker -l info
 ```python
 # pgqueuer_app.py
 import asyncpg
+from contextlib import asynccontextmanager
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Job
 
+@asynccontextmanager
 async def create_pgq():
     conn = await asyncpg.connect()
     driver = AsyncpgDriver(conn)
@@ -54,7 +56,7 @@ async def create_pgq():
         x, y = job.payload
         return x + y
 
-    return pgq
+    yield pgq
 ```
 
 ```bash
@@ -115,10 +117,12 @@ celery -A celery_scheduled worker -B -l info
 
 ```python
 import asyncpg
+from contextlib import asynccontextmanager
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Schedule
 
+@asynccontextmanager
 async def create_pgq():
     conn = await asyncpg.connect()
     driver = AsyncpgDriver(conn)
@@ -128,7 +132,7 @@ async def create_pgq():
     async def cleanup(schedule: Schedule):
         print("Cleaning up...")
 
-    return pgq
+    yield pgq
 ```
 
 ```bash

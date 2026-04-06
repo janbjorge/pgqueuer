@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import os
 from dataclasses import dataclass
 from datetime import timedelta
@@ -437,7 +438,11 @@ def listen(
 def run(
     factory_fn: str = typer.Argument(
         ...,
-        help="Path to a function returning a Queries instance.",
+        help="Path to a factory function (module:function).",
+    ),
+    factory_args: list[str] = typer.Argument(
+        None,
+        help="Extra arguments forwarded to the factory (pass after --).",
     ),
     dequeue_timeout: float = typer.Option(
         30.0,
@@ -483,12 +488,18 @@ def run(
 ) -> None:
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
+
+    Extra arguments after -- are forwarded to the factory function.
     """
     logconfig.setup_fancy_logger(log_level)
 
+    factory = factories.load_factory(factory_fn)
+    if factory_args:
+        factory = functools.partial(factory, factory_args)
+
     asyncio_run(
         supervisor.runit(
-            factories.load_factory(factory_fn),
+            factory,
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
             restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),

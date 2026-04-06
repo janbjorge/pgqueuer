@@ -125,12 +125,14 @@ pgq schedules --remove fetch_db
 ## Example: Full Setup with Scheduling
 
 ```python
+from contextlib import asynccontextmanager
 from datetime import datetime
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.models import Job, Schedule
 
-async def main() -> PgQueuer:
+@asynccontextmanager
+async def main():
     connection = await asyncpg.connect()
     pgq = PgQueuer.from_asyncpg_connection(connection)
 
@@ -150,7 +152,7 @@ async def main() -> PgQueuer:
     async def daily_cleanup(schedule: Schedule) -> None:
         print(f"Running cleanup at {datetime.now()}")
 
-    return pgq
+    yield pgq
 ```
 
 ```bash

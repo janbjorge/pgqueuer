@@ -255,16 +255,11 @@ pgq run my_module:factory
       SHUTDOWN        (if --restart-on-failure)
 ```
 
-### Factory Return Types
+### Factory Contract
 
-| Return type | Cleanup support |
-|-------------|-----------------|
-| Simple `async` function returning the manager | No cleanup hook |
-| `@asynccontextmanager` yielding the manager | Code after `yield` runs on shutdown |
-| Sync context manager | Same, but synchronous |
-
-The recommended pattern for production is an async context manager so connections are
-closed cleanly on shutdown:
+The factory **must** return an `AsyncContextManager` (typically via `@asynccontextmanager`).
+Bare awaitables and sync context managers are **not** accepted — passing one raises
+`TypeError` with migration instructions.
 
 ```python
 from contextlib import asynccontextmanager
@@ -274,31 +269,42 @@ from pgqueuer import PgQueuer
 @asynccontextmanager
 async def create_pgqueuer():
     conn = await asyncpg.connect()
-    try:
-        pgq = PgQueuer.from_asyncpg_connection(conn)
+    pgq = PgQueuer.from_asyncpg_connection(conn)
 
-        @pgq.entrypoint("fetch")
-        async def process(job): ...
+    @pgq.entrypoint("fetch")
+    async def process(job): ...
 
-        yield pgq
-    finally:
-        await conn.close()
+    yield pgq
 ```
 
 ```bash
 pgq run myapp:create_pgqueuer
 ```
 
+Extra arguments after `--` are forwarded to the factory as `list[str]`:
+
+```bash
+pgq run myapp:create_pgqueuer -- --region us-east-1 --workers 4
+```
+
+```python
+@asynccontextmanager
+async def create_pgqueuer(args: list[str]):
+    # parse args however you like
+    ...
+    yield pgq
+```
+
 ### Key Points
 
 - **Factory runs on each restart**: With `--restart-on-failure`, the factory executes again
   after failures, creating fresh connections and state.
-- **Context managers enable cleanup**: Use async context managers to close connections on shutdown.
-- **Callables enable dynamic configuration**: Pass lambdas or `functools.partial` for runtime
-  parameters.
+- **Async context manager is required**: Use `@asynccontextmanager` with `yield`.
+- **Extra args via `--`**: Arguments after `--` are passed as `list[str]` to the factory.
+  Factories that don't need args simply omit the parameter.
 - **Shutdown is graceful**: In-flight jobs complete before teardown runs.
 
-See `examples/consumer.py` and `examples/callable_factory/` in the repository for working examples.
+See `examples/consumer.py` in the repository for a working example.
 
 ---
 
