@@ -100,16 +100,24 @@ async def process_without_context(job: Job) -> None:
 
 ## Scheduled Tasks
 
-Currently, scheduled tasks do **not** automatically receive `resources` as a second argument.
-Access them via closure:
+Scheduled tasks can receive a `ScheduleContext` with shared resources by setting
+`accepts_context=True`:
 
 ```python
-pgq = PgQueuer(driver, resources={"http": http_client})
+from pgqueuer.models import Schedule, ScheduleContext
 
-@pgq.schedule("refresh_cache", "*/5 * * * *")
-async def refresh_cache(schedule):
-    http = pgq.resources["http"]
+@pgq.schedule("refresh_cache", "*/5 * * * *", accepts_context=True)
+async def refresh_cache(schedule: Schedule, ctx: ScheduleContext) -> None:
+    http = ctx.resources["http"]
     await http.get("https://api.example.com/ping")
+```
+
+Tasks registered without `accepts_context` continue to work with just the schedule argument:
+
+```python
+@pgq.schedule("simple_task", "*/5 * * * *")
+async def simple_task(schedule: Schedule) -> None:
+    await perform_task()
 ```
 
 ## Testing With Resources
@@ -129,5 +137,5 @@ async def demo(job: Job) -> None:
 | Initialization | Passed at construction: `PgQueuer(..., resources=...)` |
 | Scope | Shared across all jobs in the same process |
 | Mutation | Visible to subsequent jobs |
-| Scheduled jobs | Use closure access (for now) |
+| Scheduled jobs | `accepts_context=True` for `ScheduleContext` |
 | Custom executors | Receive via `context.resources` |

@@ -3,6 +3,7 @@
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
+    AsyncContextCrontab,
     AsyncContextEntrypoint,
     AsyncCrontab,
     AsyncEntrypoint,
@@ -12,6 +13,7 @@ from pgqueuer.core.executors import (
     EntrypointExecutorParameters,
     EntrypointTypeVar,
     RetryWithBackoffEntrypointExecutor,
+    ScheduleCrontab,
     ScheduleExecutor,
     ScheduleExecutorFactoryParameters,
     is_async_callable,
@@ -20,6 +22,7 @@ from pgqueuer.core.executors import (
 __all__ = [
     "AbstractEntrypointExecutor",
     "AbstractScheduleExecutor",
+    "AsyncContextCrontab",
     "AsyncContextEntrypoint",
     "AsyncCrontab",
     "AsyncEntrypoint",
@@ -29,6 +32,7 @@ __all__ = [
     "EntrypointExecutorParameters",
     "EntrypointTypeVar",
     "RetryWithBackoffEntrypointExecutor",
+    "ScheduleCrontab",
     "ScheduleExecutor",
     "ScheduleExecutorFactoryParameters",
     "is_async_callable",

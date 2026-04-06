@@ -13,6 +13,7 @@ from pgqueuer.domain.models import (
     LogStatistics,
     QueueStatistics,
     Schedule,
+    ScheduleContext,
     TableChangedEvent,
     TracebackRecord,
 )
@@ -47,6 +48,7 @@ __all__ = [
     "OPERATIONS",
     "QueueStatistics",
     "Schedule",
+    "ScheduleContext",
     "ScheduleId",
     "TableChangedEvent",
     "TracebackRecord",

@@ -94,6 +94,23 @@ Examples:
 Use trailing seconds, not leading seconds. For example, `*/3 * * * * *` is **not** "every 3
 seconds"; use `* * * * * */3` instead.
 
+## Accessing Shared Resources
+
+Scheduled tasks can access shared resources (HTTP clients, database pools, etc.)
+by setting `accepts_context=True`. The handler then receives a second argument,
+`ScheduleContext`, whose `.resources` mapping mirrors the one passed to `PgQueuer`:
+
+```python
+from pgqueuer.models import Schedule, ScheduleContext
+
+@pgq.schedule("sync_data", "0 * * * *", accepts_context=True)
+async def sync_data(schedule: Schedule, ctx: ScheduleContext) -> None:
+    db = ctx.resources["db_pool"]
+    await db.execute("SELECT 1")
+```
+
+See [Shared Resources](shared-resources.md) for full details.
+
 ## Cleaning Up Old Schedules
 
 When `clean_old=True`, PgQueuer deletes any **existing** database schedules whose entrypoint

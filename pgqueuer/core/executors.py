@@ -24,6 +24,10 @@ EntrypointTypeVar = TypeVar("EntrypointTypeVar", bound=Entrypoint)
 
 
 AsyncCrontab: TypeAlias = Callable[[models.Schedule], Awaitable[None]]
+AsyncContextCrontab: TypeAlias = Callable[
+    [models.Schedule, models.ScheduleContext], Awaitable[None]
+]
+ScheduleCrontab: TypeAlias = AsyncCrontab | AsyncContextCrontab
 
 
 def is_async_callable(obj: Callable[..., object] | object) -> bool:
@@ -216,8 +220,9 @@ class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
 class ScheduleExecutorFactoryParameters:
     entrypoint: str
     expression: str
-    func: AsyncCrontab
+    func: ScheduleCrontab
     clean_old: bool
+    accepts_context: bool = False
 
 
 @dataclasses.dataclass
@@ -232,12 +237,16 @@ class AbstractScheduleExecutor(ABC):
     parameters: ScheduleExecutorFactoryParameters
 
     @abstractmethod
-    async def execute(self, schedule: models.Schedule) -> None:
+    async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
         """
         Execute the given crontab.
 
         This method must be implemented by subclasses to define the specific behavior of job
         execution.
+
+        Args:
+            schedule (models.Schedule): The schedule being executed.
+            context (models.ScheduleContext): The context for the scheduled task.
         """
 
     def get_next(self) -> datetime:
@@ -271,10 +280,18 @@ class ScheduleExecutor(AbstractScheduleExecutor):
     It is a concrete implementation of AbstractScheduleExecutor.
     """
 
-    async def execute(self, schedule: models.Schedule) -> None:
+    accepts_context: bool = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.accepts_context = self.parameters.accepts_context
+
+    async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
         """
         Execute the job using the wrapped function.
 
         This method calls the provided asynchronous function when the job is triggered.
         """
-        await self.parameters.func(schedule)
+        if self.accepts_context:
+            await cast(AsyncContextCrontab, self.parameters.func)(schedule, context)
+        else:
+            await cast(AsyncCrontab, self.parameters.func)(schedule)
