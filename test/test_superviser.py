@@ -11,7 +11,8 @@ from unittest.mock import ANY, MagicMock, patch
 import async_timeout
 import pytest
 
-from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager, supervisor
+from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
+from pgqueuer.adapters.cli import supervisor
 from pgqueuer.errors import FailingListenerError
 from pgqueuer.models import HealthCheckEvent
 from pgqueuer.types import QueueExecutionMode

@@ -209,7 +209,7 @@ await queries.enqueue(
 Wait for jobs to finish and get their final status:
 
 ```python
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 
 # Enqueue a job
 job_ids = await queries.enqueue("process_video", video_data)

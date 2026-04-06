@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from pgqueuer.buffers import HeartbeatBuffer
-from pgqueuer.heartbeat import Heartbeat
+from pgqueuer.core.buffers import HeartbeatBuffer
+from pgqueuer.core.heartbeat import Heartbeat
 from pgqueuer.types import JobId
 
 

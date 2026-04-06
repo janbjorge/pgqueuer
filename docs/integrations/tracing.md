@@ -22,10 +22,11 @@ with PGQueuer:
 
 ```python
 import logfire
-from pgqueuer import tracing
+from pgqueuer.adapters import tracing
+from pgqueuer.adapters.tracing.logfire import LogfireTracing
 
 logfire.configure()
-tracing.set_tracing_class(tracing.LogfireTracing())
+tracing.set_tracing_class(LogfireTracing())
 ```
 
 With this setup, trace context is added to job headers when you enqueue messages.
@@ -42,13 +43,14 @@ Initialise the Sentry SDK with your DSN, then set the tracer class:
 
 ```python
 import sentry_sdk
-from pgqueuer import tracing
+from pgqueuer.adapters import tracing
+from pgqueuer.adapters.tracing.sentry import SentryTracing
 
 sentry_sdk.init(
     dsn="https://<key>@o1.ingest.sentry.io/<project>",
     traces_sample_rate=1.0,
 )
-tracing.set_tracing_class(tracing.SentryTracing())
+tracing.set_tracing_class(SentryTracing())
 ```
 
 Job headers will include Sentry tracing information so that consumer spans are linked to
@@ -58,5 +60,6 @@ for advanced configuration options.
 
 ## Switching Tracers
 
-Only one tracer can be active at a time. Call `tracing.set_tracing_class()` with the
-desired tracer implementation before starting producers or consumers.
+Only one tracer can be active at a time. Call `set_tracing_class()` from
+`pgqueuer.adapters.tracing` with the desired tracer implementation before starting
+producers or consumers.

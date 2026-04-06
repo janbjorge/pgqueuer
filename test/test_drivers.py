@@ -7,6 +7,17 @@ import asyncpg
 import psycopg
 import pytest
 
+from pgqueuer.adapters.persistence.qb import (
+    QueryBuilderEnvironment,
+    QueryQueueBuilder,
+    QuerySchedulerBuilder,
+)
+from pgqueuer.core.helpers import utc_now
+from pgqueuer.core.listeners import (
+    PGNoticeEventListener,
+    default_event_router,
+    initialize_notice_event_listener,
+)
 from pgqueuer.db import (
     AsyncpgDriver,
     AsyncpgPoolDriver,
@@ -15,19 +26,8 @@ from pgqueuer.db import (
     SyncDriver,
     SyncPsycopgDriver,
 )
-from pgqueuer.helpers import utc_now
-from pgqueuer.listeners import (
-    PGNoticeEventListener,
-    default_event_router,
-    initialize_notice_event_listener,
-)
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import TableChangedEvent
-from pgqueuer.qb import (
-    DBSettings,
-    QueryBuilderEnvironment,
-    QueryQueueBuilder,
-    QuerySchedulerBuilder,
-)
 from pgqueuer.types import Channel
 
 

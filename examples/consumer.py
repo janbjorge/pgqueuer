@@ -7,8 +7,8 @@ from typing import AsyncGenerator
 import asyncpg
 
 from pgqueuer import PgQueuer
+from pgqueuer.core.logconfig import logger
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.logconfig import logger
 from pgqueuer.models import Job, Schedule
 
 

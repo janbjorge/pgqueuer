@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import pytest
 from typer.testing import CliRunner
 
-from pgqueuer.cli import app
+from pgqueuer.adapters.cli.cli import app
 
 
 def _env_from_dsn(dsn: str) -> dict[str, str]:
@@ -54,7 +54,7 @@ def test_cli_run_handles_sigint_gracefully(dsn: str) -> None:
     cmd = [
         sys.executable,
         "-m",
-        "pgqueuer.cli",
+        "pgqueuer.adapters.cli.cli",
         "run",
         "examples.consumer:main",
         "--dequeue-timeout",

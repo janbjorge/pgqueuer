@@ -13,8 +13,8 @@ except ImportError:
     from asyncio import run as asyncio_run  # type: ignore[assignment]
 
 from pgqueuer.db import AsyncpgDriver, dsn
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
-from pgqueuer.qb import DBSettings
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 

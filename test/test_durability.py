@@ -1,6 +1,6 @@
 import pytest
 
-from pgqueuer.qb import Durability, DurabilityPolicy
+from pgqueuer.domain.settings import Durability, DurabilityPolicy
 
 
 @pytest.mark.parametrize(

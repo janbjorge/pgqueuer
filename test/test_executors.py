@@ -8,6 +8,7 @@ from typing import Awaitable, Callable
 import anyio
 import pytest
 
+from pgqueuer.core.helpers import timer
 from pgqueuer.db import Driver
 from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded
 from pgqueuer.executors import (
@@ -17,7 +18,6 @@ from pgqueuer.executors import (
     RetryWithBackoffEntrypointExecutor,
     is_async_callable,
 )
-from pgqueuer.helpers import timer
 from pgqueuer.models import Context, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries

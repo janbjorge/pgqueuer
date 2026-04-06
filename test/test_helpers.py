@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from pgqueuer.helpers import (
+from pgqueuer.core.helpers import (
     ExponentialBackoff,
     add_schema_to_dsn,
     merge_tracing_headers,

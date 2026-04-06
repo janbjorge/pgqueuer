@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from pgqueuer import db
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import QueueExecutionMode

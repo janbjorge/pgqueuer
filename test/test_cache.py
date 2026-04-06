@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 import time_machine
 
-from pgqueuer.cache import TTLCache
+from pgqueuer.core.cache import TTLCache
 
 
 async def test_initial_fetch() -> None:

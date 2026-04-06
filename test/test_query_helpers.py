@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from pgqueuer.query_helpers import NormedEnqueueParam, normalize_enqueue_params
+from pgqueuer.adapters.persistence.query_helpers import NormedEnqueueParam, normalize_enqueue_params
 
 
 def test_normalize_single_entrypoint() -> None:

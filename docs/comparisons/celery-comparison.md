@@ -155,7 +155,7 @@ import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
-from pgqueuer.completion import CompletionWatcher
+from pgqueuer.core.completion import CompletionWatcher
 
 async def wait_for_job() -> None:
     conn = await asyncpg.connect()

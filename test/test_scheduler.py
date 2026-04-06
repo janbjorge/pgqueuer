@@ -5,6 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from pgqueuer.db import AsyncpgDriver, Driver
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.executors import (
     ScheduleExecutor,
     ScheduleExecutorFactoryParameters,
@@ -16,7 +17,6 @@ from pgqueuer.models import (
     Schedule,
     ScheduleContext,
 )
-from pgqueuer.qb import DBSettings
 from pgqueuer.sm import SchedulerManager
 
 
