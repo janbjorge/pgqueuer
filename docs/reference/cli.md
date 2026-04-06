@@ -298,7 +298,7 @@ pgq run myapp:create_pgqueuer
   parameters.
 - **Shutdown is graceful**: In-flight jobs complete before teardown runs.
 
-See `examples/consumer.py` and `examples/callable_factory/` in the repository for working examples.
+See `examples/consumer.py` in the repository for a working example.
 
 ---
 

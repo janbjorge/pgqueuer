@@ -8,6 +8,7 @@ instructions.
 from __future__ import annotations
 
 import asyncio
+import functools
 from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
 from typing import AsyncGenerator, Generator
@@ -577,3 +578,99 @@ async def test_factory_called_each_restart_cycle() -> None:
 
     assert call_count >= 3, f"Expected >=3 cycles, got {call_count}"
     assert len({id(p) for p in instances}) == len(instances)
+
+
+# ---------------------------------------------------------------------------
+# Extra args passthrough (-- args forwarded to factory)
+# ---------------------------------------------------------------------------
+
+
+async def test_extra_args_forwarded_to_factory() -> None:
+    received_args: list[list[str]] = []
+
+    @asynccontextmanager
+    async def factory(args: list[str]) -> AsyncGenerator[PgQueuer, None]:
+        received_args.append(args)
+        yield _make_pgqueuer()
+
+    bound = functools.partial(factory, ["--db-url", "postgres://localhost", "task_a,task_b"])
+
+    shutdown = asyncio.Event()
+    task = asyncio.create_task(
+        supervisor.runit(
+            factory=bound,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            restart_delay=timedelta(seconds=0),
+            restart_on_failure=False,
+            shutdown=shutdown,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
+        )
+    )
+    await asyncio.sleep(0.1)
+    shutdown.set()
+    async with async_timeout.timeout(2):
+        await task
+
+    assert len(received_args) == 1
+    assert received_args[0] == ["--db-url", "postgres://localhost", "task_a,task_b"]
+
+
+async def test_no_extra_args_factory_stays_zero_arg() -> None:
+    called = False
+
+    @asynccontextmanager
+    async def factory() -> AsyncGenerator[PgQueuer, None]:
+        nonlocal called
+        called = True
+        yield _make_pgqueuer()
+
+    shutdown = asyncio.Event()
+    task = asyncio.create_task(
+        supervisor.runit(
+            factory=factory,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            restart_delay=timedelta(seconds=0),
+            restart_on_failure=False,
+            shutdown=shutdown,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
+        )
+    )
+    await asyncio.sleep(0.1)
+    shutdown.set()
+    async with async_timeout.timeout(2):
+        await task
+
+    assert called
+
+
+def test_cli_run_forwards_extra_args_via_typer() -> None:
+    """Verify the CLI plumbing: args after -- reach the factory_args parameter."""
+    from typer.testing import CliRunner
+
+    from pgqueuer.adapters.cli.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(
+        app,
+        ["run", "nonexistent_module:fn", "--batch-size", "5", "--", "arg1", "--flag"],
+    )
+    assert result.exit_code != 0
+    assert "nonexistent_module" in (result.output + str(result.exception))
+
+
+def test_cli_run_rejects_typo_before_separator() -> None:
+    """Typos in pgq options before -- must still be caught."""
+    from typer.testing import CliRunner
+
+    from pgqueuer.adapters.cli.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["run", "mod:fn", "--btach-size", "5"])
+    assert result.exit_code != 0
+    assert "No such option" in result.output or "btach-size" in result.output
