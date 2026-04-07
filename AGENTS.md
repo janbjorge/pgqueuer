@@ -95,7 +95,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `buffers.py` — Batched async buffers for heartbeats, job status logs
   - `listeners.py` — PG NOTIFY event routing
   - `tm.py` — `TaskManager` for background task lifecycle
-  - `heartbeat.py`, `cache.py`, `helpers.py`, `retries.py`, `logconfig.py`
+  - `heartbeat.py`, `cache.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
   - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
   - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`
@@ -168,9 +168,10 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 | Classes             | CamelCase         | `QueueManager`, `DuplicateJobError` |
 | Functions/methods   | snake_case        | `register_executor`, `fetch_jobs`  |
 | Constants/aliases   | UPPER_SNAKE_CASE  | `JOB_STATUS`, `EVENT_TYPES`       |
-| Private members     | Leading underscore | `_dispatch`, `_buffer`             |
 | Test functions      | `test_` prefix    | `test_queries_put`                 |
 | Fixtures            | snake_case        | `apgdriver`, `dsn`                 |
+
+**No leading-underscore prefixes.** Python has no real public/private distinction. Use plain `snake_case` for all methods and attributes — pick a descriptive name instead of hiding it behind a prefix.
 
 ### Error Handling
 

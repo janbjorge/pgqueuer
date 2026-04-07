@@ -15,9 +15,7 @@ from pgqueuer.domain import models
 
 @dataclass
 class Heartbeat:
-    """
-    Asynchronous context manager that sends heartbeats at regular intervals to a buffer.
-    """
+    """Async context manager that sends periodic heartbeats to a buffer."""
 
     job_id: models.JobId
     interval: timedelta
@@ -26,38 +24,23 @@ class Heartbeat:
         init=False,
         default_factory=asyncio.Event,
     )
+    heartbeat_task: asyncio.Task[None] | None = field(
+        init=False,
+        default=None,
+    )
 
     async def __aenter__(self) -> Self:
-        """
-        Enter the asynchronous context manager.
-
-        Starts the heartbeat process by scheduling the first heartbeat.
-
-        Returns:
-            Heartbeat: The Heartbeat instance itself.
-        """
         if self.interval > timedelta(seconds=0):
-            self.buffer.tm.add(asyncio.create_task(self.send_heartbeat()))
+            self.heartbeat_task = asyncio.create_task(self.send_heartbeat())
         return self
 
     async def __aexit__(self, *_: object) -> None:
-        """
-        Exit the asynchronous context manager.
-
-        Stops the heartbeat process and flushes any remaining heartbeats in the buffer.
-
-        Args:
-            exc_type: The exception type, if any.
-            exc_val: The exception value, if any.
-            exc_tb: The traceback, if any.
-        """
         self.shutdown.set()
+        if self.heartbeat_task is not None:
+            with suppress(asyncio.CancelledError):
+                await self.heartbeat_task
 
     async def send_heartbeat(self) -> None:
-        """
-        Send a heartbeat by adding a JobId to the buffer and scheduling the next heartbeat.
-        """
-
         while not self.shutdown.is_set():
             try:
                 await self.buffer.add(self.job_id)
@@ -66,6 +49,6 @@ class Heartbeat:
             finally:
                 with suppress(TimeoutError, asyncio.TimeoutError):
                     await asyncio.wait_for(
-                        asyncio.create_task(self.shutdown.wait()),
+                        self.shutdown.wait(),
                         timeout=self.interval.total_seconds(),
                     )
