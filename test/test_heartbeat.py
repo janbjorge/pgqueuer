@@ -1,11 +1,22 @@
 import asyncio
 from datetime import datetime, timedelta
+from typing import Awaitable, Callable
 
 import pytest
 
 from pgqueuer.core.buffers import HeartbeatBuffer
 from pgqueuer.core.heartbeat import Heartbeat
 from pgqueuer.types import JobId
+
+
+class _FakeHeartbeatSink:
+    """Test double satisfying the HeartbeatSink protocol."""
+
+    def __init__(self, fn: Callable[[list[JobId]], Awaitable[None]]) -> None:
+        self._fn = fn
+
+    async def update_heartbeat(self, job_ids: list[JobId]) -> None:
+        await self._fn(job_ids)
 
 
 @pytest.mark.parametrize(
@@ -26,7 +37,7 @@ async def test_heartbeat_interval(interval: timedelta) -> None:
         HeartbeatBuffer(
             max_size=1_000,
             timeout=interval,
-            callback=callback,
+            repository=_FakeHeartbeatSink(callback),
         ) as buffer,
         Heartbeat(
             JobId(1),
@@ -51,7 +62,7 @@ async def test_heartbeat_max_size(max_size: int) -> None:
         HeartbeatBuffer(
             max_size=max_size,
             timeout=timedelta(seconds=0.01),
-            callback=callback,
+            repository=_FakeHeartbeatSink(callback),
         ) as buffer,
         Heartbeat(
             JobId(1),
@@ -65,15 +76,16 @@ async def test_heartbeat_max_size(max_size: int) -> None:
 
 
 async def test_heartbeat_keeps_buffer_ticking() -> None:
-    async def noop(_: list[JobId]) -> None:
-        pass
+    class _NoopSink:
+        async def update_heartbeat(self, _: list[JobId]) -> None:
+            pass
 
     class DummyBuffer(HeartbeatBuffer):
         def __init__(self) -> None:
             super().__init__(
                 max_size=10,
                 timeout=timedelta(seconds=0),
-                callback=noop,
+                repository=_NoopSink(),
             )
             self.received = 0
 

@@ -501,14 +501,14 @@ class QueueManager:
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
-                callback=self.queries.log_jobs,
+                repository=self.queries,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 # Flush will be mainly driven by timeouts, but allow flush if
                 # backlog becomes too large.
                 max_size=batch_size**2,
                 timeout=heartbeat_buffer_timeout / 4,
-                callback=self.queries.update_heartbeat,
+                repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
             self.connection,
