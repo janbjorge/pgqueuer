@@ -54,6 +54,7 @@ class TimedOverflowBuffer(Generic[T]):
     """
 
     max_size: int
+    _: dataclasses.KW_ONLY
     timeout: timedelta = dataclasses.field(
         default_factory=lambda: timedelta(seconds=0.1),
     )
@@ -270,7 +271,7 @@ class JobStatusLogBuffer(
     Specialized TimedOverflowBuffer for handling Job/Status-log.
     """
 
-    repository: JobLogSink = dataclasses.field(default=None)  # type: ignore[assignment]
+    repository: JobLogSink
 
     async def flush_items(
         self,
@@ -291,7 +292,7 @@ class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     Specialized TimedOverflowBuffer for handling heartbeats.
     """
 
-    repository: HeartbeatSink = dataclasses.field(default=None)  # type: ignore[assignment]
+    repository: HeartbeatSink
 
     async def flush_items(self, items: list[models.JobId]) -> None:
         await self.repository.update_heartbeat(items)
