@@ -1,4 +1,15 @@
-# PgQueuer v0.27.0
+# PgQueuer v1.0.0
+
+This is the first stable release of PgQueuer. It includes significant breaking
+changes that clean up the API surface, enforce the hexagonal architecture, and
+remove deprecated code paths. The goal is to establish a solid, maintainable
+foundation — from v1.0.0 onward, PgQueuer follows **semantic versioning**
+strictly: patch releases for bug fixes, minor releases for backward-compatible
+features, and major releases only when breaking changes are unavoidable.
+
+If you are upgrading from v0.26.x, expect a one-time migration effort. The
+checklist at the bottom covers every change. Once migrated, the public API is
+stable and will not break without a major version bump.
 
 ## Breaking Changes
 
@@ -15,7 +26,7 @@ def resize_image(job: Job) -> None:
     img = cpu_bound_resize(job.payload)
 ```
 
-**After (v0.27.0):**
+**After (v1.0.0):**
 
 ```python
 import asyncio
@@ -55,7 +66,7 @@ def factory():
     yield PgQueuer(...)
 ```
 
-**After (v0.27.0 — only this form is accepted):**
+**After (v1.0.0 — only this form is accepted):**
 
 ```python
 from contextlib import asynccontextmanager
