@@ -192,17 +192,19 @@ class InMemoryQueries:
         queue_manager_id: uuid.UUID,
         entrypoints: dict[str, EntrypointExecutionParameter],
     ) -> tuple[dict[str, int], int, set[str]]:
-        """Count picked jobs per entrypoint and track which have picked jobs."""
+        """Count picked jobs per entrypoint (globally) and track which have picked jobs."""
         picked_per_ep: dict[str, int] = {}
         total_picked = 0
         ep_has_picked: set[str] = set()
         for j in self._jobs.values():
-            if j["status"] == "picked" and j["queue_manager_id"] == queue_manager_id:
-                ep = j["entrypoint"]
-                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
+            if j["status"] != "picked":
+                continue
+            ep = j["entrypoint"]
+            if j["queue_manager_id"] == queue_manager_id:
                 total_picked += 1
-            if j["status"] == "picked" and j["entrypoint"] in entrypoints:
-                ep_has_picked.add(j["entrypoint"])
+            if ep in entrypoints:
+                ep_has_picked.add(ep)
+                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
         return picked_per_ep, total_picked, ep_has_picked
 
     def _collect_queued_candidates(
