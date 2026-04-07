@@ -32,12 +32,10 @@ class EntrypointExecutionParameter:
 
     Attributes:
         retry_after (timedelta): Time to wait before retrying.
-        serialized (bool): Whether execution is serialized.
-        concurrency_limit (int): Max number of concurrent executions.
+        concurrency_limit (int): Max number of concurrent executions (0 = unlimited).
     """
 
     retry_after: timedelta
-    serialized: bool
     concurrency_limit: int
 
 

@@ -231,7 +231,6 @@ class PgQueuer:
         *,
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
-        serialized_dispatch: bool = False,
         accepts_context: bool = False,
         on_failure: OnFailure = "delete",
         executor_factory: Callable[
@@ -244,7 +243,6 @@ class PgQueuer:
             name=name,
             concurrency_limit=concurrency_limit,
             retry_timer=retry_timer,
-            serialized_dispatch=serialized_dispatch,
             accepts_context=accepts_context,
             on_failure=on_failure,
             executor_factory=executor_factory,

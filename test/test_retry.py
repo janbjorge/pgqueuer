@@ -232,7 +232,7 @@ async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> 
     qm = QueueManager(apgdriver)
     calls = Counter[JobId]()
 
-    @qm.entrypoint("fetch", retry_timer=retry_timer, serialized_dispatch=True)
+    @qm.entrypoint("fetch", retry_timer=retry_timer, concurrency_limit=1)
     async def fetch(context: Job) -> None:
         calls[context.id] += 1
         await event.wait()
@@ -346,7 +346,6 @@ async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver)
     execution_params = {
         entrypoint: queries.EntrypointExecutionParameter(
             retry_after=retry_timer,
-            serialized=False,
             concurrency_limit=concurrency_limit,
         )
     }

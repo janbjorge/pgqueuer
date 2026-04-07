@@ -25,13 +25,13 @@ async def consumer(
 ) -> defaultdict[str, list[Job]]:
     consumed = defaultdict[str, list[Job]](list)
 
-    @qm.entrypoint("serialized_dispatch_true", serialized_dispatch=True)
+    @qm.entrypoint("serialized_dispatch_true", concurrency_limit=1)
     async def serialized_dispatch_true(job: Job) -> None:
         consumed["serialized_dispatch_true"].append(job)
         await asyncio.sleep(0.1)
         await raises(lock)
 
-    @qm.entrypoint("serialized_dispatch_false", serialized_dispatch=False)
+    @qm.entrypoint("serialized_dispatch_false")
     async def fetch(job: Job) -> None:
         consumed["serialized_dispatch_false"].append(job)
         await asyncio.sleep(0.1)
@@ -62,7 +62,7 @@ async def locked_consumer(
 ) -> defaultdict[str, list[Job]]:
     consumed = defaultdict[str, list[Job]](list)
 
-    @qm.entrypoint("serialized_dispatch_true", serialized_dispatch=True)
+    @qm.entrypoint("serialized_dispatch_true", concurrency_limit=1)
     async def serialized_dispatch_true(job: Job) -> None:
         consumed["serialized_dispatch_true"].append(job)
         await asyncio.sleep(0.1)
@@ -140,7 +140,7 @@ async def test_no_jobs_processed_when_locked(
     await enqueue(queries, size=n_tasks)
     picked_job = await queries.dequeue(
         1,
-        {"serialized_dispatch_true": EntrypointExecutionParameter(timedelta(seconds=30), True, 0)},
+        {"serialized_dispatch_true": EntrypointExecutionParameter(timedelta(seconds=30), 1)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
     )
@@ -201,7 +201,7 @@ async def test_mixed_serialized_and_concurrent_processing(
 async def test_single_consumer_serialized_behavior(
     apgdriver: Driver,
     n_tasks: int = 50,
-    wait: int = 1,  # Set wait time to 1 second
+    wait: int = 10,
 ) -> None:
     n_consumers = 1
     lock = asyncio.Lock()

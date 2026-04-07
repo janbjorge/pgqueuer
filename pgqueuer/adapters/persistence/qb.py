@@ -406,25 +406,12 @@ class QueryQueueBuilder:
         t = self.settings.queue_table
         t_log = self.settings.queue_table_log
         return f"""WITH
--- Unpack per-entrypoint parameters.
--- effective_limit folds serialized (=1) and concurrency_limit into one
--- value; 0 means unlimited.
+-- Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.
 params AS (
     SELECT
-        e.entrypoint,
-        e.retry_after,
-        CASE
-            WHEN e.serialized             THEN 1
-            WHEN e.concurrency_limit > 0  THEN e.concurrency_limit
-            ELSE 0
-        END AS effective_limit
-    FROM (
-        SELECT
-            UNNEST($2::text[])     AS entrypoint,
-            UNNEST($3::interval[]) AS retry_after,
-            UNNEST($4::boolean[])  AS serialized,
-            UNNEST($5::bigint[])   AS concurrency_limit
-    ) e
+        UNNEST($2::text[])     AS entrypoint,
+        UNNEST($3::interval[]) AS retry_after,
+        UNNEST($4::bigint[])   AS concurrency_limit
 ),
 
 -- Per-entrypoint count of picked jobs (global, all workers).
@@ -440,7 +427,7 @@ picked AS (
 worker_load AS (
     SELECT COUNT(*) AS total
     FROM {t}
-    WHERE queue_manager_id = $6
+    WHERE queue_manager_id = $5
       AND entrypoint = ANY($2)
 ),
 
@@ -452,11 +439,11 @@ eligible AS (
     LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
     WHERE q.execute_after < NOW()
       -- per-worker max-concurrent-tasks cap
-      AND ($7::BIGINT IS NULL
-           OR (SELECT total FROM worker_load) < $7)
-      -- per-entrypoint concurrency (covers serialized too)
-      AND (p.effective_limit = 0
-           OR COALESCE(pk.total, 0) < p.effective_limit)
+      AND ($6::BIGINT IS NULL
+           OR (SELECT total FROM worker_load) < $6)
+      -- per-entrypoint concurrency
+      AND (p.concurrency_limit <= 0
+           OR COALESCE(pk.total, 0) < p.concurrency_limit)
       -- queued jobs  OR  stale picked jobs eligible for retry
       AND (   q.status = 'queued'
            OR (    q.status = 'picked'
@@ -473,7 +460,7 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $6
+        queue_manager_id = $5
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
 ),

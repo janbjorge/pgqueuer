@@ -305,7 +305,6 @@ class Queries:
             batch_size,
             list(entrypoints.keys()),
             [x.retry_after for x in entrypoints.values()],
-            [x.serialized for x in entrypoints.values()],
             [x.concurrency_limit for x in entrypoints.values()],
             queue_manager_id,
             global_concurrency_limit,

@@ -157,7 +157,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
         100,
         {
             "test_emit_stable_changed_update": EntrypointExecutionParameter(
-                timedelta(seconds=300), False, 0
+                timedelta(seconds=300), 0
             )
         },
         uuid.uuid4(),

@@ -17,7 +17,7 @@ from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
-EP = EntrypointExecutionParameter(timedelta(0), False, 0)
+EP = EntrypointExecutionParameter(timedelta(0), 0)
 
 
 # ---------------------------------------------------------------------------

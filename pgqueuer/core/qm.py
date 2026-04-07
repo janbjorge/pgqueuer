@@ -211,7 +211,6 @@ class QueueManager:
         *,
         concurrency_limit: int = 0,
         retry_timer: timedelta = timedelta(seconds=0),
-        serialized_dispatch: bool = False,
         accepts_context: bool = False,
         on_failure: types.OnFailure = "delete",
         executor_factory: Callable[
@@ -229,9 +228,8 @@ class QueueManager:
             name (str): The name of the entrypoint as referenced in the job queue.
             concurrency_limit (int): Max number of concurrent jobs allowed for this
                 entrypoint across all workers. Enforced at the database level.
-                0 means unlimited.
+                0 means unlimited. Use 1 for serialized (one-at-a-time) dispatch.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
-            serialized_dispatch (bool): Whether to serialize dispatching of jobs.
             accepts_context (bool): When True, invoke the entrypoint with both job and context.
             on_failure (OnFailure): What to do when a job fails terminally. ``"delete"``
                 removes the job (default); ``"hold"`` parks it with status ``'failed'``
@@ -248,16 +246,11 @@ class QueueManager:
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
-        # Check concurrency_limit type / value range.
         if not isinstance(concurrency_limit, int):
             raise ValueError("Concurrency limit must be int.")
 
         if concurrency_limit < 0:
             raise ValueError("Concurrency limit must be greater or eq. to zero.")
-
-        # Check serialized_dispatch type.
-        if not isinstance(serialized_dispatch, bool):
-            raise ValueError("Serialized dispatch must be boolean")
 
         if not isinstance(accepts_context, bool):
             raise ValueError("accepts_context must be boolean")
@@ -274,7 +267,6 @@ class QueueManager:
                     executors.EntrypointExecutorParameters(
                         func=func,
                         retry_timer=retry_timer,
-                        serialized_dispatch=serialized_dispatch,
                         concurrency_limit=concurrency_limit,
                         accepts_context=accepts_context,
                         on_failure=on_failure,
@@ -311,7 +303,6 @@ class QueueManager:
             entrypoints = {
                 x: EntrypointExecutionParameter(
                     retry_after=self.entrypoint_registry[x].parameters.retry_timer,
-                    serialized=self.entrypoint_registry[x].parameters.serialized_dispatch,
                     concurrency_limit=self.entrypoint_registry[x].parameters.concurrency_limit,
                 )
                 for x in self.entrypoints_below_capacity_limits()

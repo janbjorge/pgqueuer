@@ -47,7 +47,6 @@ class EntrypointExecutorParameters:
     concurrency_limit: int
     func: Entrypoint
     retry_timer: timedelta
-    serialized_dispatch: bool
     accepts_context: bool = False
     on_failure: types.OnFailure = "delete"
 

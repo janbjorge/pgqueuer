@@ -87,7 +87,7 @@ async def test_performance_enqueue_dequeue() -> None:
     t0 = time.perf_counter()
     dequeued = await queries.dequeue(
         n,
-        {"perf_ep": EntrypointExecutionParameter(timedelta(0), False, 0)},
+        {"perf_ep": EntrypointExecutionParameter(timedelta(0), 0)},
         qm_id,
         None,
     )
