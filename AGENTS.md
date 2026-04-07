@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PgQueuer is a Python library using PostgreSQL for job queuing. Python >=3.10, async-first, MIT-licensed.
+PgQueuer is a Python library that turns PostgreSQL into a job queue using `LISTEN/NOTIFY` for instant notifications and `FOR UPDATE SKIP LOCKED` for worker coordination. Supports async (asyncpg, psycopg) and sync (psycopg) drivers, with an in-memory adapter for testing. Python >=3.10, async-first, MIT-licensed.
 
 ## Project Structure
 
@@ -79,6 +79,59 @@ uv run pytest -vv --log-cli-level=INFO   # Verbose with live log output
 uv run pytest -m "not integration"       # Skip integration tests (no DB needed)
 ```
 
+## Architecture
+
+PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `import-linter` rules in `pyproject.toml`.
+
+### Layer Structure inside `pgqueuer/`
+
+- **`domain/`** — Pure models, types, settings, errors. No imports from other layers.
+- **`ports/`** — Protocol definitions (`Driver`, `RepositoryPort`, `SchemaManagementPort`, etc.). No imports from adapters or core.
+- **`core/`** — Business logic:
+  - `qm.py` — `QueueManager`: dequeue loop, dispatch, concurrency control, health checks
+  - `sm.py` — `SchedulerManager`: cron-based recurring tasks
+  - `applications.py` — `PgQueuer`: top-level orchestrator combining QM + SM
+  - `executors.py` — `AbstractEntrypointExecutor` / `AbstractScheduleExecutor` and default implementations
+  - `buffers.py` — Batched async buffers for heartbeats, job status logs
+  - `listeners.py` — PG NOTIFY event routing
+  - `tm.py` — `TaskManager` for background task lifecycle
+  - `heartbeat.py`, `cache.py`, `helpers.py`, `retries.py`, `logconfig.py`
+- **`adapters/`** — Concrete implementations:
+  - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
+  - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`
+  - `inmemory/` — In-memory driver and queries for testing without Postgres
+  - `tracing/` — Logfire, Sentry, OpenTelemetry integrations
+  - `cli/` — CLI commands (run, install, dashboard, etc.)
+
+### Import Rules (enforced by lint-imports)
+
+1. **Domain** (`pgqueuer/domain/`) must NOT import from adapters or core
+2. **Ports** (`pgqueuer/ports/`) must NOT import from adapters or core (one exception: `ports.driver -> core.tm`)
+3. **Core** (`pgqueuer/core/`) must NOT import from adapters (several temporary exceptions listed in `pyproject.toml`)
+
+Port protocols: `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPort`, `SchemaManagementPort`. The `Queries` class satisfies all four via structural subtyping. Core code should depend on protocols, not `Queries` directly.
+
+### Top-level Shim Modules
+
+Files like `pgqueuer/qm.py`, `pgqueuer/queries.py`, `pgqueuer/models.py`, etc. at the package root are **re-export shims** that import from the layered modules. The public API (`pgqueuer/__init__.py`) exposes `PgQueuer`, `QueueManager`, `SchedulerManager`, `Queries`, `Job`, driver classes, etc.
+
+### Key Patterns
+
+- **Dataclasses** for internal state (`QueueManager`, `Queries`, executors)
+- **Pydantic BaseModel** for data transfer objects (`Job`, `Event`, `Schedule`, `Log`)
+- **Decorator registration**: `@pgq.entrypoint("name")`, `@pgq.schedule("name", "*/5 * * * *")`
+- **Factory classmethods**: `from_asyncpg_connection()`, `from_psycopg_connection()`, `in_memory()`
+- **Async-only**: all entrypoints must be async (`async def`); core logic is fully async
+- **Buffer pattern**: `JobStatusLogBuffer`, `HeartbeatBuffer` for batched async I/O
+
+### Deprecation Pattern
+
+When deprecating dataclass fields, use a module-level `_SENTINEL = object()` default with a `warnings.warn(..., DeprecationWarning, stacklevel=2)` check in `__post_init__`.
+
+### Dependency Injection
+
+`QueueManager` and `SchedulerManager` accept an optional `queries` argument (default=None). When omitted, they auto-create `Queries(self.connection)`. Prefer injecting a mock for tests.
+
 ## Code Style
 
 ### Formatting and Linting
@@ -86,13 +139,16 @@ uv run pytest -m "not integration"       # Skip integration tests (no DB needed)
 - **Formatter/linter**: ruff (line-length=100)
 - **Lint rules**: C, E, F, I, PIE, Q, RET, RSE, SIM, W, C90 (max-complexity=15)
 - **isort**: combined-as-imports, furthest-to-closest relative imports
+- **Mypy** strict mode with Pydantic plugin, targets Python 3.10.
 
-### Import Ordering
+### Import Rules
 
 1. `from __future__ import annotations` (required in every file)
 2. Standard library
 3. Third-party packages
 4. Internal imports using absolute paths (`from pgqueuer.domain.models import Job`)
+
+**No local imports.** All imports must be at module top level. The only exception is `if TYPE_CHECKING:` blocks for avoiding circular imports at runtime.
 
 ### Type Annotations
 
@@ -102,7 +158,7 @@ uv run pytest -m "not integration"       # Skip integration tests (no DB needed)
 - Use `Literal` for string unions: `Literal["queued", "picked", "successful"]`
 - Use `Protocol` for structural subtyping (port interfaces)
 - Use `TypeAlias` for complex callable types
-- Target `python_version = "3.10"` in mypy
+- **Avoid `Any`** at nearly all cost. The codebase only uses it on driver protocol boundaries for variadic `*args` in SQL query methods -- nowhere else. Use proper types, generics, protocols, or `object` instead.
 
 ### Naming Conventions
 
@@ -127,32 +183,12 @@ uv run pytest -m "not integration"       # Skip integration tests (no DB needed)
 
 Google-style when present: `Args:`, `Returns:`, `Raises:` sections. Not every method needs one -- omit for trivial/private methods.
 
-### Key Patterns
+### Guiding Principles
 
-- **Dataclasses** for internal state (`QueueManager`, `Queries`, executors)
-- **Pydantic BaseModel** for data transfer objects (`Job`, `Event`, `Schedule`, `Log`)
-- **Decorator registration**: `@pgq.entrypoint("name")`, `@pgq.schedule("name", "*/5 * * * *")`
-- **Factory classmethods**: `from_asyncpg_connection()`, `from_psycopg_connection()`, `in_memory()`
-- **Async-only**: all entrypoints must be async (`async def`); core logic is fully async
-- **Buffer pattern**: `JobStatusLogBuffer`, `HeartbeatBuffer` for batched async I/O
-
-## Hexagonal Architecture (Ports & Adapters)
-
-The codebase enforces layered boundaries via `import-linter`. Rules:
-
-1. **Domain** (`pgqueuer/domain/`) must NOT import from adapters or core
-2. **Ports** (`pgqueuer/ports/`) must NOT import from adapters or core
-3. **Core** (`pgqueuer/core/`) must NOT import from adapters (exceptions listed in `pyproject.toml` for migration period)
-
-Port protocols: `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPort`, `SchemaManagementPort`. The `Queries` class satisfies all four via structural subtyping. Core code should depend on protocols, not `Queries` directly.
-
-### Deprecation Pattern
-
-When deprecating dataclass fields, use a module-level `_SENTINEL = object()` default with a `warnings.warn(..., DeprecationWarning, stacklevel=2)` check in `__post_init__`.
-
-### Dependency Injection
-
-`QueueManager` and `SchedulerManager` accept an optional `queries` argument (default=None). When omitted, they auto-create `Queries(self.connection)`. Prefer injecting a mock for tests.
+- **Follow existing patterns.** Before writing new code, read surrounding modules to match conventions (naming, structure, error handling, dataclass usage, etc.). Do not invent new patterns when an established one exists.
+- **Readability and correctness above speed.** Follow the Zen of Python -- explicit is better than implicit, simple is better than complex, readability counts. Never sacrifice clarity or correctness for performance unless there is a measured, proven need.
+- **Every change must be proven correct by a test.** Never accept a code change without an accompanying test. Tests must be narrow and precise -- test exactly the behavior being changed, not broad integration sweeps.
+- **Every user-facing feature must be documented.** New public APIs, exceptions, executor classes, CLI commands, and behavior changes require corresponding documentation in `docs/`. Update existing guides (e.g., `reliability.md`, `custom-executors.md`, `core-concepts.md`) and create new guide pages when the feature warrants its own topic. Keep the `mkdocs.yml` nav in sync.
 
 ## Testing Conventions
 
@@ -161,6 +197,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - Annotate all test function parameters: `async def test_foo(apgdriver: db.Driver, N: int) -> None:`
 - Use `@pytest.mark.parametrize` for multi-value testing
 - Fixtures create a **fresh database per test** via `CREATE DATABASE ... TEMPLATE`
+- Key fixtures in `test/conftest.py`: `dsn` (per-test DB URL), `apgdriver` (AsyncpgDriver), `pgdriver` (SyncPsycopgDriver)
 - In-memory tests (`test_inmemory.py`) don't need Postgres
 
 ## Commit Conventions
