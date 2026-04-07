@@ -207,7 +207,7 @@ any of these paths, update to the canonical location:
 | `pgqueuer.logconfig`    | `pgqueuer.core.logconfig`                         |
 | `pgqueuer.qb`           | `pgqueuer.domain.settings` / `pgqueuer.adapters.persistence.qb` |
 | `pgqueuer.query_helpers` | `pgqueuer.adapters.persistence.query_helpers`    |
-| `pgqueuer.retries`      | `pgqueuer.core.retries`                           |
+| `pgqueuer.retries`      | Removed entirely (see breaking change #14)        |
 | `pgqueuer.supervisor`   | `pgqueuer.adapters.cli.supervisor`                |
 | `pgqueuer.tm`           | `pgqueuer.core.tm`                                |
 | `pgqueuer.tracing`      | `pgqueuer.ports.tracing` + `pgqueuer.adapters.tracing.*` |
@@ -215,6 +215,45 @@ any of these paths, update to the canonical location:
 Public API shims (`pgqueuer.models`, `pgqueuer.queries`, `pgqueuer.executors`,
 `pgqueuer.errors`, `pgqueuer.db`, `pgqueuer.qm`, `pgqueuer.sm`,
 `pgqueuer.applications`, `pgqueuer.factories`, `pgqueuer.types`) are unchanged.
+
+### 12. `serialized_dispatch` parameter removed
+
+The `serialized_dispatch` parameter has been removed from `@pgq.entrypoint()`,
+`QueueManager.entrypoint()`, `PgQueuer.entrypoint()`, and
+`EntrypointExecutorParameters`. Use `concurrency_limit=1` instead, which provides
+the same one-at-a-time semantics but enforced at the database level.
+
+```python
+# Before
+@pgq.entrypoint("my_job", serialized_dispatch=True)
+
+# After
+@pgq.entrypoint("my_job", concurrency_limit=1)
+```
+
+### 13. Concurrency limit is now global (database-enforced)
+
+`concurrency_limit` on entrypoints is now enforced globally at the database level
+via the dequeue SQL query, not per-worker via in-memory semaphores. This means
+the limit applies across all workers, not just within a single process.
+
+The `entrypoint()` decorator API is unchanged — you still pass
+`concurrency_limit=N`. But the enforcement is stricter: if you set
+`concurrency_limit=5`, at most 5 jobs run across your entire fleet, not 5 per
+worker.
+
+### 14. `RetryManager` removed
+
+The `RetryManager` class (`pgqueuer.core.retries`) has been deleted. It was an
+internal retry-with-backoff wrapper used by buffers. If you imported it directly,
+remove the import — retry logic is now handled inline by `TimedOverflowBuffer`.
+
+### 15. Buffer API: callbacks replaced with port injection
+
+`TimedOverflowBuffer` no longer accepts a `callback` parameter. Instead,
+subclasses override the `flush_items()` template method and inject a repository
+port. This only affects users who subclassed `TimedOverflowBuffer`,
+`JobStatusLogBuffer`, or `HeartbeatBuffer` directly.
 
 ---
 
@@ -385,6 +424,12 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Moved `TracingConfig`, `TRACER`, and `set_tracing_class()` from
   `pgqueuer.adapters.tracing` to `pgqueuer.ports.tracing` (resolves core→adapter
   import violation).
+- Simplified `TimedOverflowBuffer` internals — removed exponential backoff retry
+  machinery in favor of simple re-queue on flush failure.
+- Concurrency enforcement moved from per-worker semaphores to database-level
+  `FOR UPDATE SKIP LOCKED` with row counting, providing correct global limits.
+- Consolidated all agent/AI guidance into `AGENTS.md` (previously split between
+  `CLAUDE.md` and `AGENTS.md`).
 - Replaced PNG logo with SVG PQ monogram in docs.
 - Fixed Mermaid diagrams for light/dark mode readability, then replaced them with
   ASCII art to eliminate text overlap.
@@ -414,9 +459,18 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 7. **`statistics_table_status_type`:** Remove any references to this `DBSettings` field.
 8. **Custom schedule executors:** Add `context: ScheduleContext` parameter to
    your `execute()` method.
-9. **Internal imports:** If you imported from `pgqueuer.buffers`, `pgqueuer.qb`,
-   `pgqueuer.helpers`, etc., update to canonical paths (see table above).
-10. **Removed imports:** Delete any imports of `SyncEntrypoint`,
+9. **`serialized_dispatch`:** Replace `serialized_dispatch=True` with
+   `concurrency_limit=1`.
+10. **Concurrency semantics:** `concurrency_limit` is now global across all
+    workers (database-enforced), not per-process. Review limits if you relied on
+    per-worker behavior.
+11. **Internal imports:** If you imported from `pgqueuer.buffers`, `pgqueuer.qb`,
+    `pgqueuer.helpers`, etc., update to canonical paths (see table above).
+12. **`RetryManager`:** Remove any imports of `RetryManager` from
+    `pgqueuer.core.retries` — the module is deleted.
+13. **Custom buffers:** If you subclassed `TimedOverflowBuffer`, replace
+    `callback` parameter with a `flush_items()` method override.
+14. **Removed imports:** Delete any imports of `SyncEntrypoint`,
     `SyncContextEntrypoint`, or `run_factory`.
-11. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+15. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
