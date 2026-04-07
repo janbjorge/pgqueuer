@@ -2,6 +2,7 @@ import asyncio
 import uuid
 from datetime import timedelta
 from itertools import count
+from typing import Awaitable, Callable
 
 import pytest
 
@@ -9,6 +10,16 @@ from pgqueuer.core import helpers as pg_helpers
 from pgqueuer.core.buffers import JobStatusLogBuffer
 from pgqueuer.models import JOB_STATUS, Job, TracebackRecord
 from test.helpers import mocked_job
+
+
+class _FakeJobLogSink:
+    """Test double satisfying the JobLogSink protocol."""
+
+    def __init__(self, fn: Callable[[list], Awaitable[None]]) -> None:
+        self._fn = fn
+
+    async def log_jobs(self, items: list) -> None:
+        await self._fn(items)
 
 
 def job_faker(
@@ -35,7 +46,7 @@ async def test_job_buffer_max_size(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         for _ in range(max_size - 1):
             await buffer.add((job_faker(), "successful", None))
@@ -61,7 +72,7 @@ async def test_job_buffer_timeout(
     async with JobStatusLogBuffer(
         max_size=N * 2,
         timeout=timeout,
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         for _ in range(N):
             await buffer.add((job_faker(), "successful", None))
@@ -86,7 +97,7 @@ async def test_job_buffer_flush_on_exit(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         for _ in range(max_size - 2):
             await buffer.add((job_faker(), "successful", None))
@@ -110,7 +121,7 @@ async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         for _ in range(flushes):
             for _ in range(max_size):
@@ -139,7 +150,7 @@ async def test_job_buffer_flush_on_exception(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=0.01),
-        callback=faulty_helper,
+        repository=_FakeJobLogSink(faulty_helper),
     ) as buffer:
         for _ in range(max_size):
             await buffer.add((job_faker(), "successful", None))
@@ -165,7 +176,7 @@ async def test_job_buffer_flush_order(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         items = [(job_faker(), "successful") for _ in range(max_size)]
         for item in items:
@@ -187,7 +198,7 @@ async def test_job_buffer_concurrent_adds(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
 
         async def add_items(n: int) -> None:
@@ -214,7 +225,7 @@ async def test_job_buffer_empty_flush() -> None:
     async with JobStatusLogBuffer(
         max_size=10,
         timeout=timedelta(seconds=0.1),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ):
         # Do not add any items and let the buffer flush on exit
         pass
@@ -235,7 +246,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
     async with JobStatusLogBuffer(
         max_size=max_size,
         timeout=timedelta(seconds=100),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         # First flush
         for _ in range(max_size):
@@ -265,7 +276,7 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
     async with JobStatusLogBuffer(
         max_size=N**2,  # max size must be gt. N.
         timeout=timedelta(seconds=60),  # must be gt. run time of 'for loop' in the with block.
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     ) as buffer:
         for item in items:
             await buffer.add(item)
@@ -295,7 +306,7 @@ async def test_job_buffer_retry_uses_jitter(monkeypatch: pytest.MonkeyPatch) -> 
     buffer = JobStatusLogBuffer(
         max_size=2,
         timeout=timedelta(seconds=1),
-        callback=failing_callback,
+        repository=_FakeJobLogSink(failing_callback),
     )
 
     await buffer.add((job_faker(), "successful", None))
@@ -326,7 +337,7 @@ async def test_job_buffer_retry_skips_jitter_on_shutdown(
     buffer = JobStatusLogBuffer(
         max_size=2,
         timeout=timedelta(seconds=1),
-        callback=failing_callback,
+        repository=_FakeJobLogSink(failing_callback),
     )
 
     await buffer.add((job_faker(), "successful", None))
@@ -345,7 +356,7 @@ async def test_job_buffer_flush_returns_when_lock_held() -> None:
     buffer = JobStatusLogBuffer(
         max_size=1,
         timeout=timedelta(seconds=1),
-        callback=helper,
+        repository=_FakeJobLogSink(helper),
     )
 
     await buffer.add((job_faker(), "successful", None))

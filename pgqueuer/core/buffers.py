@@ -14,7 +14,7 @@ import dataclasses
 import time
 from contextlib import suppress
 from datetime import timedelta
-from typing import AsyncGenerator, Awaitable, Callable, Generic, TypeVar
+from typing import AsyncGenerator, Generic, Protocol, TypeVar
 
 from typing_extensions import Self
 
@@ -31,8 +31,8 @@ class TimedOverflowBuffer(Generic[T]):
 
     The `TimedOverflowBuffer` class collects items in a buffer and flushes them
     when either the maximum number of items (`max_size`) is reached or a specified
-    timeout (`timeout`) has elapsed since the last flush. Flushing involves invoking
-    an asynchronous callback with the accumulated items.
+    timeout (`timeout`) has elapsed since the last flush. Flushing invokes
+    :meth:`flush_items`, which subclasses must override to process the batch.
 
     The class includes mechanisms for retrying failed flush operations and ensures
     a graceful shutdown by attempting to flush remaining items before exit.
@@ -41,8 +41,6 @@ class TimedOverflowBuffer(Generic[T]):
         max_size (int): The maximum number of items to buffer before triggering a flush.
         timeout (timedelta): The maximum duration to wait before automatically flushing
             the buffer, regardless of size.
-        callback (Callable[[list[T]], Awaitable[None]]): The asynchronous callable invoked
-            during a flush operation to process the buffered items.
         retry_backoff (helpers.ExponentialBackoff): A backoff strategy used to retry
             failed flush operations during normal operation.
         shutdown_backoff (helpers.ExponentialBackoff): A backoff strategy used during
@@ -56,7 +54,6 @@ class TimedOverflowBuffer(Generic[T]):
     """
 
     max_size: int
-    callback: Callable[[list[T]], Awaitable[None]]
     timeout: timedelta = dataclasses.field(
         default_factory=lambda: timedelta(seconds=0.1),
     )
@@ -146,13 +143,17 @@ class TimedOverflowBuffer(Generic[T]):
         while not self.events.empty() and time.time() < deadline:
             yield await self.events.get()
 
+    async def flush_items(self, items: list[T]) -> None:
+        """Process a batch of flushed items. Subclasses must override this."""
+        raise NotImplementedError
+
     async def flush(self) -> None:
         """
-        Flush the accumulated items in the buffer by invoking the provided asynchronous callable.
+        Flush the accumulated items in the buffer via :meth:`flush_items`.
 
         Collects all items currently in the buffer by consuming the events from
         the internal queue using `pop_until`. Once a batch is available, a
-        `RetryManager` attempts to invoke the provided asynchronous callable.
+        `RetryManager` attempts to invoke :meth:`flush_items`.
         Failures cause the batch to be re-queued while the manager handles the
         appropriate backoff strategy outside of the flush lock.
         """
@@ -167,7 +168,7 @@ class TimedOverflowBuffer(Generic[T]):
             return
 
         succeeded = await self.retry_manager.execute_with_retry(
-            self.callback,
+            self.flush_items,
             items,
             use_shutdown_backoff=self.shutdown.is_set(),
         )
@@ -234,6 +235,28 @@ class TimedOverflowBuffer(Generic[T]):
                 break
 
 
+class JobLogSink(Protocol):
+    """Narrow port: accepts batched job status log entries."""
+
+    async def log_jobs(
+        self,
+        job_status: list[
+            tuple[
+                models.Job,
+                models.JOB_STATUS,
+                models.TracebackRecord | None,
+            ]
+        ],
+    ) -> None: ...
+
+
+class HeartbeatSink(Protocol):
+    """Narrow port: accepts batched heartbeat updates."""
+
+    async def update_heartbeat(self, job_ids: list[models.JobId]) -> None: ...
+
+
+@dataclasses.dataclass
 class JobStatusLogBuffer(
     TimedOverflowBuffer[
         tuple[
@@ -247,8 +270,28 @@ class JobStatusLogBuffer(
     Specialized TimedOverflowBuffer for handling Job/Status-log.
     """
 
+    repository: JobLogSink = dataclasses.field(default=None)  # type: ignore[assignment]
 
+    async def flush_items(
+        self,
+        items: list[
+            tuple[
+                models.Job,
+                models.JOB_STATUS,
+                models.TracebackRecord | None,
+            ]
+        ],
+    ) -> None:
+        await self.repository.log_jobs(items)
+
+
+@dataclasses.dataclass
 class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
     """
     Specialized TimedOverflowBuffer for handling heartbeats.
     """
+
+    repository: HeartbeatSink = dataclasses.field(default=None)  # type: ignore[assignment]
+
+    async def flush_items(self, items: list[models.JobId]) -> None:
+        await self.repository.update_heartbeat(items)
