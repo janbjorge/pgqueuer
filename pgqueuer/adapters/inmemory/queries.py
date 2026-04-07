@@ -191,11 +191,10 @@ class InMemoryQueries:
         self,
         queue_manager_id: uuid.UUID,
         entrypoints: dict[str, EntrypointExecutionParameter],
-    ) -> tuple[dict[str, int], int, set[str]]:
-        """Count picked jobs per entrypoint (globally) and track which have picked jobs."""
+    ) -> tuple[dict[str, int], int]:
+        """Count picked jobs per entrypoint (globally) and this worker's total."""
         picked_per_ep: dict[str, int] = {}
         total_picked = 0
-        ep_has_picked: set[str] = set()
         for j in self._jobs.values():
             if j["status"] != "picked":
                 continue
@@ -203,9 +202,8 @@ class InMemoryQueries:
             if j["queue_manager_id"] == queue_manager_id:
                 total_picked += 1
             if ep in entrypoints:
-                ep_has_picked.add(ep)
                 picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
-        return picked_per_ep, total_picked, ep_has_picked
+        return picked_per_ep, total_picked
 
     def _collect_queued_candidates(
         self,
@@ -248,9 +246,8 @@ class InMemoryQueries:
         candidates: list[dict[str, Any]],
         entrypoints: dict[str, EntrypointExecutionParameter],
         picked_per_ep: dict[str, int],
-        ep_has_picked: set[str],
     ) -> list[dict[str, Any]]:
-        """Select jobs respecting concurrency and serialization constraints."""
+        """Select jobs respecting concurrency constraints."""
         selected: list[dict[str, Any]] = []
         seen: set[int] = set()
         for j in candidates:
@@ -263,11 +260,6 @@ class InMemoryQueries:
             ep = j["entrypoint"]
             params = entrypoints[ep]
 
-            # serialized_dispatch: at most 1 picked job per entrypoint
-            if params.serialized and ep in ep_has_picked:
-                continue
-
-            # concurrency_limit: check current count
             if (
                 params.concurrency_limit > 0
                 and picked_per_ep.get(ep, 0) >= params.concurrency_limit
@@ -275,7 +267,6 @@ class InMemoryQueries:
                 continue
 
             selected.append(j)
-            ep_has_picked.add(ep)
             picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
 
         return selected
@@ -316,9 +307,7 @@ class InMemoryQueries:
 
         now = _utc_now()
 
-        picked_per_ep, total_picked, ep_has_picked = self._count_picked_jobs(
-            queue_manager_id, entrypoints
-        )
+        picked_per_ep, total_picked = self._count_picked_jobs(queue_manager_id, entrypoints)
 
         # Apply global concurrency limit
         if global_concurrency_limit is not None and total_picked >= global_concurrency_limit:
@@ -336,7 +325,6 @@ class InMemoryQueries:
             [*queued_candidates, *retry_candidates],
             entrypoints,
             picked_per_ep,
-            ep_has_picked,
         )
 
         # Update matched jobs
