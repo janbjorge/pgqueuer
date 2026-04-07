@@ -403,119 +403,86 @@ class QueryQueueBuilder:
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     def build_dequeue_query(self) -> str:
+        t = self.settings.queue_table
+        t_log = self.settings.queue_table_log
         return f"""WITH
-    entrypoint_execution_params AS (
+-- Unpack per-entrypoint parameters.
+-- effective_limit folds serialized (=1) and concurrency_limit into one
+-- value; 0 means unlimited.
+params AS (
+    SELECT
+        e.entrypoint,
+        e.retry_after,
+        CASE
+            WHEN e.serialized             THEN 1
+            WHEN e.concurrency_limit > 0  THEN e.concurrency_limit
+            ELSE 0
+        END AS effective_limit
+    FROM (
         SELECT
-            UNNEST($2::text[])      AS entrypoint,
-            UNNEST($3::interval[])  AS retry_after,
-            UNNEST($4::boolean[])   AS serialized,
-            UNNEST($5::bigint[])    AS concurrency_limit
-    ),
-    jobs_by_queue_manager_entrypoint AS (
-        SELECT COUNT(*), entrypoint
-        FROM {self.settings.queue_table}
-        WHERE
-                queue_manager_id IS NOT NULL
-            AND queue_manager_id = $6
-            AND entrypoint = ANY($2)
-        GROUP BY entrypoint
-    ),
-    jobs_by_queue_manager AS (
-        SELECT
-            COUNT(*) AS qm_count
-        FROM {self.settings.queue_table}
-        WHERE
-                queue_manager_id IS NOT NULL
-            AND queue_manager_id = $6
-            AND entrypoint = ANY($2)
-    ),
-    next_job_queued AS (
-        SELECT {self.settings.queue_table}.id
-        FROM {self.settings.queue_table}
-        INNER JOIN entrypoint_execution_params
-        ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
-        LEFT JOIN jobs_by_queue_manager_entrypoint
-        ON jobs_by_queue_manager_entrypoint.entrypoint = {self.settings.queue_table}.entrypoint
-        WHERE
-                {self.settings.queue_table}.entrypoint = ANY($2)
-            AND {self.settings.queue_table}.status = 'queued'
-            AND {self.settings.queue_table}.execute_after < NOW()
-            AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
-            AND NOT (
-                entrypoint_execution_params.serialized AND EXISTS (
-                    SELECT 1
-                    FROM {self.settings.queue_table} existing_job
-                    WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
-                    AND existing_job.status = 'picked'
-                )
-            )
-            AND (
-                entrypoint_execution_params.concurrency_limit <= 0
-                OR jobs_by_queue_manager_entrypoint.count IS NULL
-                OR jobs_by_queue_manager_entrypoint.count < entrypoint_execution_params.concurrency_limit
-            )
-        ORDER BY {self.settings.queue_table}.priority DESC, {self.settings.queue_table}.id ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT $1
-    ),
-    next_job_retry AS (
-        SELECT {self.settings.queue_table}.id
-        FROM {self.settings.queue_table}
-        INNER JOIN entrypoint_execution_params
-        ON entrypoint_execution_params.entrypoint = {self.settings.queue_table}.entrypoint
-        WHERE
-                {self.settings.queue_table}.entrypoint = ANY($2)
-            AND {self.settings.queue_table}.status = 'picked'
-            AND {self.settings.queue_table}.execute_after < NOW()
-            AND entrypoint_execution_params.retry_after > interval '0'
-            AND {self.settings.queue_table}.heartbeat < NOW() - entrypoint_execution_params.retry_after
-            AND ($7::BIGINT IS NULL OR (SELECT qm_count FROM jobs_by_queue_manager) < $7)
-            AND NOT (
-                entrypoint_execution_params.serialized AND EXISTS (
-                    SELECT 1
-                    FROM {self.settings.queue_table} existing_job
-                    WHERE existing_job.entrypoint = {self.settings.queue_table}.entrypoint
-                    AND existing_job.status = 'picked'
-                )
-            )
-            AND (
-                entrypoint_execution_params.concurrency_limit <= 0
-                OR COALESCE(
-                    (
-                        SELECT SUM(j.count)
-                        FROM jobs_by_queue_manager_entrypoint j
-                        WHERE j.entrypoint = {self.settings.queue_table}.entrypoint
-                    ),
-                    0
-                ) < entrypoint_execution_params.concurrency_limit
-            )
-        ORDER BY {self.settings.queue_table}.heartbeat DESC, {self.settings.queue_table}.id ASC
-        FOR UPDATE SKIP LOCKED
-        LIMIT $1
-    ),
-    combined_jobs AS (
-        SELECT DISTINCT id
-        FROM (
-            SELECT id FROM next_job_queued
-            UNION ALL
-            SELECT id FROM next_job_retry
-        ) AS combined
-    ),
-    updated AS (
-        UPDATE {self.settings.queue_table}
-        SET status = 'picked', updated = NOW(), heartbeat = NOW(), queue_manager_id = $6
-        WHERE id = ANY(SELECT id FROM combined_jobs)
-        RETURNING *
-    ), queue_log AS (
-        INSERT INTO {self.settings.queue_table_log} (
-            job_id,
-            status,
-            entrypoint,
-            priority
-        ) SELECT id, status, entrypoint, priority FROM updated
-    )
-    SELECT * FROM updated ORDER BY priority DESC, id ASC;
-    """  # noqa
+            UNNEST($2::text[])     AS entrypoint,
+            UNNEST($3::interval[]) AS retry_after,
+            UNNEST($4::boolean[])  AS serialized,
+            UNNEST($5::bigint[])   AS concurrency_limit
+    ) e
+),
+
+-- Per-entrypoint count of picked jobs (global, all workers).
+picked AS (
+    SELECT entrypoint, COUNT(*) AS total
+    FROM {t}
+    WHERE queue_manager_id IS NOT NULL
+      AND entrypoint = ANY($2)
+    GROUP BY entrypoint
+),
+
+-- This worker's total picked jobs (scalar, for max_concurrent_tasks).
+worker_load AS (
+    SELECT COUNT(*) AS total
+    FROM {t}
+    WHERE queue_manager_id = $6
+      AND entrypoint = ANY($2)
+),
+
+-- Eligible jobs: new (queued) or stale (picked past retry window).
+eligible AS (
+    SELECT q.id
+    FROM {t} q
+    JOIN      params p  ON p.entrypoint  = q.entrypoint
+    LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
+    WHERE q.execute_after < NOW()
+      -- per-worker max-concurrent-tasks cap
+      AND ($7::BIGINT IS NULL
+           OR (SELECT total FROM worker_load) < $7)
+      -- per-entrypoint concurrency (covers serialized too)
+      AND (p.effective_limit = 0
+           OR COALESCE(pk.total, 0) < p.effective_limit)
+      -- queued jobs  OR  stale picked jobs eligible for retry
+      AND (   q.status = 'queued'
+           OR (    q.status = 'picked'
+               AND p.retry_after > interval '0'
+               AND q.heartbeat  < NOW() - p.retry_after))
+    ORDER BY q.priority DESC, q.id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1
+),
+
+-- Atomically claim the jobs and log the pick event.
+claimed AS (
+    UPDATE {t}
+    SET status = 'picked',
+        updated   = NOW(),
+        heartbeat = NOW(),
+        queue_manager_id = $6
+    WHERE id IN (SELECT id FROM eligible)
+    RETURNING *
+),
+log_pick AS (
+    INSERT INTO {t_log} (job_id, status, entrypoint, priority)
+    SELECT id, status, entrypoint, priority FROM claimed
+)
+SELECT * FROM claimed ORDER BY priority DESC, id ASC;
+"""  # noqa
 
     def build_has_queued_work(self) -> str:
         return f"""

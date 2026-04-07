@@ -51,7 +51,6 @@ class QueueManager:
         shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
         queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
-        entrypoint_statistics (dict[str, models.EntrypointStatistics]): Statistics for entrypoints.
         queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
             including cancellation scopes.
@@ -76,10 +75,6 @@ class QueueManager:
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
-        init=False,
-        default_factory=dict,
-    )
-    entrypoint_statistics: dict[str, models.EntrypointStatistics] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -209,11 +204,6 @@ class QueueManager:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
         self.entrypoint_registry[name] = executor
-        self.entrypoint_statistics[name] = models.EntrypointStatistics(
-            concurrency_limiter=asyncio.Semaphore(executor.parameters.concurrency_limit)
-            if executor.parameters.concurrency_limit > 0
-            else nullcontext(),
-        )
 
     def entrypoint(
         self,
@@ -237,7 +227,9 @@ class QueueManager:
 
         Args:
             name (str): The name of the entrypoint as referenced in the job queue.
-            concurrency_limit (int): Max number of concurrent jobs allowed for this entrypoint.
+            concurrency_limit (int): Max number of concurrent jobs allowed for this
+                entrypoint across all workers. Enforced at the database level.
+                0 means unlimited.
             retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             serialized_dispatch (bool): Whether to serialize dispatching of jobs.
             accepts_context (bool): When True, invoke the entrypoint with both job and context.
@@ -295,28 +287,12 @@ class QueueManager:
 
     def entrypoints_below_capacity_limits(self) -> set[str]:
         """
-        Determine which entrypoints are below their configured capacity limits.
+        Return all registered entrypoint names.
 
-        Returns:
-            set[str]: A set of entrypoint names that are below capacity.
+        Concurrency limits are enforced at the database level, so all
+        entrypoints are always eligible for dequeue attempts.
         """
-
-        def below_capacity_limit(
-            entrypoint: str,
-        ) -> bool:
-            return not (
-                isinstance(
-                    c_limiter := self.entrypoint_statistics[entrypoint].concurrency_limiter,
-                    asyncio.Semaphore,
-                )
-                and c_limiter.locked()
-            )
-
-        return {
-            entrypoint
-            for entrypoint in self.entrypoint_registry
-            if below_capacity_limit(entrypoint)
-        }
+        return set(self.entrypoint_registry)
 
     async def fetch_jobs(
         self,
@@ -341,9 +317,17 @@ class QueueManager:
                 for x in self.entrypoints_below_capacity_limits()
             }
 
+            # Cap batch_size to the smallest concurrency limit so a single
+            # dequeue never picks more jobs than the tightest entrypoint allows.
+            effective_batch = min(
+                (p.concurrency_limit for p in entrypoints.values() if p.concurrency_limit > 0),
+                default=batch_size,
+            )
+            effective_batch = min(batch_size, effective_batch)
+
             if not (
                 jobs := await self.queries.dequeue(
-                    batch_size=batch_size,
+                    batch_size=effective_batch,
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
                     global_concurrency_limit=global_concurrency_limit,
@@ -608,12 +592,8 @@ class QueueManager:
                 executor.parameters.retry_timer / 2,
                 hbuff,
             ),
-            self.entrypoint_statistics[job.entrypoint].concurrency_limiter,
         ):
             try:
-                # Run the job unless it has already been cancelled. Check this here because jobs
-                # can be cancelled between when they are dequeued and when they acquire the
-                # concurrency limit semaphore.
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     await executor.execute(job, ctx)

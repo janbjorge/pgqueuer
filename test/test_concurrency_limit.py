@@ -3,22 +3,14 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
-from itertools import count
 
 import async_timeout
 import pytest
 
 from pgqueuer.db import Driver
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
-from pgqueuer.types import JobId
-
-
-async def _inspect_queue_jobs(jids: list[JobId], driver: Driver) -> list[Job]:
-    sql = f"""SELECT * FROM {DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
-    return [Job.model_validate(x) for x in await driver.fetch(sql, jids)]
 
 
 @dataclass
@@ -37,55 +29,41 @@ class Tally:
             self.active -= 1
 
 
-async def consumer(qm: QueueManager, tally: Tally, limit: int) -> None:
-    @qm.entrypoint("fetch", concurrency_limit=limit)
-    async def fetch(job: Job) -> None:
-        async with tally:
-            await asyncio.sleep(0.001)
-
-    await qm.run(dequeue_timeout=timedelta(seconds=0))
-
-
-async def enqueue(
-    queries: Queries,
-    size: int,
-    cnt: count = count(),
-) -> None:
-    assert size > 0
-    await queries.enqueue(
-        ["fetch"] * size,
-        [f"{next(cnt)}".encode() for _ in range(size)],
-        [0] * size,
-    )
-
-
-@pytest.mark.parametrize("n_consumers", (1, 4))
+@pytest.mark.parametrize("n_consumers", (1, 2, 4))
 @pytest.mark.parametrize("max_concurrency", (1, 5, 10))
 async def test_max_concurrency(
     n_consumers: int,
     max_concurrency: int,
     apgdriver: Driver,
     n_tasks: int = 500,
-    wait: int = 1,
+    wait: int = 2,
 ) -> None:
-    await enqueue(Queries(apgdriver), size=n_tasks)
+    """concurrency_limit is enforced globally across all workers."""
+    await Queries(apgdriver).enqueue(
+        ["fetch"] * n_tasks,
+        [f"{i}".encode() for i in range(n_tasks)],
+        [0] * n_tasks,
+    )
 
-    tallys = [Tally() for _ in range(n_consumers)]
+    shared = Tally()
     qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
 
-    async def dequeue() -> None:
-        consumers = [consumer(q, tally, max_concurrency) for q, tally in zip(qms, tallys)]
-        await asyncio.gather(*consumers)
+    async def run_consumer(qm: QueueManager) -> None:
+        @qm.entrypoint("fetch", concurrency_limit=max_concurrency)
+        async def fetch(job: Job) -> None:
+            async with shared:
+                await asyncio.sleep(0.001)
+
+        await qm.run(dequeue_timeout=timedelta(seconds=0))
 
     async def timer() -> None:
         await asyncio.sleep(wait)
         for q in qms:
             q.shutdown.set()
 
-    await asyncio.gather(timer(), dequeue())
+    await asyncio.gather(timer(), *(run_consumer(q) for q in qms))
 
-    for tally in tallys:
-        assert 0 < tally.max_active <= max_concurrency
+    assert 0 < shared.max_active <= max_concurrency
 
 
 @pytest.mark.parametrize("concurrency_limit", (1, 5, 10))
