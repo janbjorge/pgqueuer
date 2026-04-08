@@ -51,7 +51,7 @@ class SchedulerManager:
         """
         Initialize the Scheduler after dataclass fields have been set.
 
-        Sets up the  instance using the provided database connection
+        Sets up the queries instance using the provided database connection
         when no queries instance was injected.
         """
         if self.queries is None:

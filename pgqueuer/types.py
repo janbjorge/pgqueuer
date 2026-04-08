@@ -8,6 +8,7 @@ from pgqueuer.domain.types import (
     CronEntrypoint,
     CronExpression,
     JobId,
+    OnFailure,
     QueueExecutionMode,
     ScheduleId,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "CronEntrypoint",
     "CronExpression",
     "JobId",
+    "OnFailure",
     "QueueExecutionMode",
     "ScheduleId",
 ]
