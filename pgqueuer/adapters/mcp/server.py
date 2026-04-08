@@ -41,7 +41,7 @@ Ctx = Context[ServerSession, PgQueuerDatabase, object]
 # These are the ONLY knobs an agent can turn; keep them simple and bounded.
 # ---------------------------------------------------------------------------
 
-Tail = Annotated[
+Limit = Annotated[
     int,
     "Maximum number of rows to return. Must be a positive integer. "
     "Default 50. Higher values return more history but increase response size.",
@@ -165,7 +165,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
     async def queue_stats(
         ctx: Ctx,
         period: TimePeriod | None = None,
-        tail: Tail = 50,
+        limit: Limit = 50,
     ) -> list[dict[str, object]]:
         """Aggregated job processing statistics bucketed by second.
 
@@ -187,16 +187,16 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         Parameters:
           - period: ISO-8601 duration to look back (e.g. 'PT1H' for the last hour).
                     If omitted, returns all available history.
-          - tail:   max rows to return, most recent first (default 50).
+          - limit:  max rows to return, most recent first (default 50).
 
         Example use cases:
           - "How many jobs succeeded in the last hour?" -> period='PT1H'
-          - "Show me the last 200 stats entries" -> tail=200
+          - "Show me the last 200 stats entries" -> limit=200
         """
         d = _db(ctx)
         await d.fetch(d.qbq.build_aggregate_log_data_to_statistics_query())
         interval = _parse_interval(period)
-        return await d.fetch(d.qbq.build_log_statistics_query(), tail, interval)
+        return await d.fetch(d.qbq.build_log_statistics_query(), limit, interval)
 
     @mcp.tool()
     async def throughput_summary(

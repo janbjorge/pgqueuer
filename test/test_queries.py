@@ -159,7 +159,7 @@ async def test_clear_queue(
     await q.clear_queue(None)
     assert sum(x.count for x in await q.queue_size()) == 0
     assert sum(x.status == "deleted" for x in await q.queue_log()) == N
-    assert sum(x.count for x in await q.log_statistics(tail=None) if x.status == "deleted") == N
+    assert sum(x.count for x in await q.log_statistics(limit=None) if x.status == "deleted") == N
     assert sum(x.status == "deleted" for x in await q.queue_log()) == N
 
     # Test delete one(1).
@@ -501,12 +501,12 @@ async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     assert dedupe_key in raised.value.dedupe_key
 
 
-@pytest.mark.parametrize("tail", (None, 10))
+@pytest.mark.parametrize("limit", (None, 10))
 @pytest.mark.parametrize("last", (None, timedelta(minutes=5)))
 @pytest.mark.parametrize("N", (2, 10))
 async def test_log_statistics(
     apgdriver: db.Driver,
-    tail: int | None,
+    limit: int | None,
     last: timedelta | None,
     N: int,
 ) -> None:
@@ -529,7 +529,7 @@ async def test_log_statistics(
         await q.log_jobs([(job, "successful", None)])
 
     # Fetch statistics
-    stats = await q.log_statistics(tail=tail, last=last)
+    stats = await q.log_statistics(limit=limit, last=last)
 
     assert sum(x.count for x in stats if x.status == "queued") == N
     assert sum(x.count for x in stats if x.status == "picked") == N
