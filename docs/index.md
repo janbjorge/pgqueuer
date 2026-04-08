@@ -112,9 +112,9 @@ That's it. Just PostgreSQL and your application code.
 
     ---
 
-    `RetryWithBackoffEntrypointExecutor` handles transient failures with
-    exponential backoff. Heartbeat monitoring detects crashed workers,
-    and `retry_timer` re-queues stalled jobs.
+    `DatabaseRetryEntrypointExecutor` converts exceptions into
+    database-level retries with exponential backoff. Heartbeat
+    monitoring detects crashed workers and re-queues stalled jobs.
 
 -   **Observability**
 

@@ -68,32 +68,6 @@ async def flaky_api(job: Job) -> None:
 See [Database-Level Retry](retry.md) for full details, backoff configuration, and
 traceability queries.
 
-### Per-attempt retry: transient errors
-
-Use `RetryWithBackoffEntrypointExecutor` to automatically retry a job function when it raises
-an exception, before the job is marked as failed. This is suitable for transient errors such
-as network timeouts or rate-limited APIs.
-
-```python
-from datetime import timedelta
-from pgqueuer.executors import RetryWithBackoffEntrypointExecutor
-
-@pgq.entrypoint(
-    "send_email",
-    executor_factory=lambda parameters: RetryWithBackoffEntrypointExecutor(
-        parameters=parameters,
-        max_attempts=5,
-        max_delay=timedelta(seconds=30),
-        max_time=timedelta(minutes=2),
-    ),
-)
-async def send_email(job: Job) -> None:
-    await smtp_client.send(job.payload)
-```
-
-See [Custom Executors](custom-executors.md#retry-with-backoff-executor) for full parameter
-details.
-
 ### Holding terminal failures for manual re-queue
 
 Set `on_failure="hold"` on an entrypoint to keep the job in the queue table with
@@ -105,23 +79,25 @@ See [Holding Failed Jobs](hold-failed-jobs.md) for the full guide with use cases
 ### Worker-crash recovery: stalled jobs
 
 If a worker process crashes mid-job, the job remains in `picked` state with a stale heartbeat.
-Configure `retry_timer` on the `@entrypoint()` decorator to automatically re-queue jobs
-whose heartbeat has not been updated within the specified window:
+The global `heartbeat_timeout` on `pgq.run()` controls when stale jobs become eligible for
+re-pickup by another worker:
 
 ```python
 from datetime import timedelta
 
-@pgq.entrypoint("send_email", retry_timer=timedelta(minutes=5))
-async def send_email(job: Job) -> None:
-    await smtp_client.send(job.payload)
+await pgq.run(
+    dequeue_timeout=timedelta(seconds=5),
+    batch_size=10,
+    heartbeat_timeout=timedelta(minutes=5),
+)
 ```
 
 Any worker can then claim and re-run the stalled job. See
 [Heartbeat Monitoring](heartbeat.md) for stall detection queries.
 
 !!! warning "Design for re-execution"
-    A job recovered via `retry_timer` **will run again from the start**. Ensure your job
-    functions are idempotent, or checkpoint progress externally so a restart is safe.
+    A recovered job **will run again from the start**. Ensure your job functions are
+    idempotent, or checkpoint progress externally so a restart is safe.
 
 ## Idempotency
 
@@ -192,8 +168,7 @@ or use `pgq dashboard` from the CLI.
 | Concern | Mechanism |
 |---------|-----------|
 | Durable retry across workers | `RetryRequested` / `DatabaseRetryEntrypointExecutor` |
-| In-process transient errors | `RetryWithBackoffEntrypointExecutor` |
-| Worker crash recovery | `retry_timer` + heartbeat |
+| Worker crash recovery | `heartbeat_timeout` |
 | Terminal failure parking | `on_failure="hold"` |
 | Duplicate enqueue prevention | `dedupe_key` unique constraint |
 | Failure inspection | `pgqueuer_log` with traceback |

@@ -47,72 +47,11 @@ async def notification_task(job: Job) -> None:
     pass
 ```
 
-## Retry with Backoff Executor
-
-`RetryWithBackoffEntrypointExecutor` handles transient failures with exponential backoff and
-jitter.
-
-### Features
-
-1. **Automatic retries** on failure — reduces manual intervention.
-2. **Exponential backoff** — progressively longer delays between attempts.
-3. **Jitter** — randomised delays to avoid thundering herd on retries.
-4. **Configurable limits** — max attempts, backoff cap, and total retry time.
-
-### When to Use It
-
-- Calling rate-limited or occasionally unavailable external APIs
-- Handling transient network timeouts or disconnections
-- Retrying database operations during brief contention or outages
-
-### Example
-
-```python
-import asyncpg
-from contextlib import asynccontextmanager
-from datetime import timedelta
-from pgqueuer import PgQueuer
-from pgqueuer.db import AsyncpgDriver
-from pgqueuer.executors import RetryWithBackoffEntrypointExecutor
-from pgqueuer.models import Job
-
-@asynccontextmanager
-async def create_pgqueuer():
-    connection = await asyncpg.connect()
-    driver = AsyncpgDriver(connection)
-    pgq = PgQueuer(driver)
-
-    @pgq.entrypoint(
-        "retry_with_backoff",
-        executor_factory=lambda parameters: RetryWithBackoffEntrypointExecutor(
-            parameters=parameters,
-            max_attempts=5,
-            max_delay=timedelta(seconds=0.5),
-            max_time=timedelta(seconds=1),
-        ),
-    )
-    async def retry_with_backoff(job: Job) -> None:
-        print(f"Processing job: {job!r}")
-
-    yield pgq
-```
-
-### Parameters
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `max_attempts` | — | Maximum number of retry attempts |
-| `max_delay` | — | Cap on exponential backoff delay between retries |
-| `max_time` | — | Maximum total time allowed for all retry attempts combined |
-| `initial_delay` | `0.1` | Initial delay in seconds before the first retry |
-| `backoff_multiplier` | `2.0` | Multiplier applied to delay after each retry |
-| `jitter` | `random()` | Callable returning a random float to add jitter to delays |
-
 ## Database Retry Executor
 
 `DatabaseRetryEntrypointExecutor` converts unhandled exceptions into database-level retries
-via `RetryRequested`. Unlike `RetryWithBackoffEntrypointExecutor` (which retries in-process),
-this executor re-queues the job in the database so any worker can pick it up after the delay.
+via `RetryRequested`. The job is re-queued in the database so any worker can pick it up after
+the delay — retries survive worker restarts.
 
 ### When to Use It
 
