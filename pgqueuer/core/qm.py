@@ -210,7 +210,6 @@ class QueueManager:
         name: str,
         *,
         concurrency_limit: int = 0,
-        retry_timer: timedelta = timedelta(seconds=0),
         accepts_context: bool = False,
         on_failure: types.OnFailure = "delete",
         executor_factory: Callable[
@@ -229,7 +228,6 @@ class QueueManager:
             concurrency_limit (int): Max number of concurrent jobs allowed for this
                 entrypoint across all workers. Enforced at the database level.
                 0 means unlimited. Use 1 for serialized (one-at-a-time) dispatch.
-            retry_timer (timedelta): Duration to wait before retrying 'picked' jobs.
             accepts_context (bool): When True, invoke the entrypoint with both job and context.
             on_failure (OnFailure): What to do when a job fails terminally. ``"delete"``
                 removes the job (default); ``"hold"`` parks it with status ``'failed'``
@@ -266,7 +264,6 @@ class QueueManager:
                 executor_factory(
                     executors.EntrypointExecutorParameters(
                         func=func,
-                        retry_timer=retry_timer,
                         concurrency_limit=concurrency_limit,
                         accepts_context=accepts_context,
                         on_failure=on_failure,
@@ -290,6 +287,7 @@ class QueueManager:
         self,
         batch_size: int,
         global_concurrency_limit: int | None,
+        heartbeat_timeout: timedelta,
     ) -> AsyncGenerator[models.Job, None]:
         """
         Fetch jobs from the queue that are ready for processing, yielding them one at a time.
@@ -302,7 +300,6 @@ class QueueManager:
         while not self.shutdown.is_set():
             entrypoints = {
                 x: EntrypointExecutionParameter(
-                    retry_after=self.entrypoint_registry[x].parameters.retry_timer,
                     concurrency_limit=self.entrypoint_registry[x].parameters.concurrency_limit,
                 )
                 for x in self.entrypoints_below_capacity_limits()
@@ -322,6 +319,7 @@ class QueueManager:
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
                     global_concurrency_limit=global_concurrency_limit,
+                    heartbeat_timeout=heartbeat_timeout,
                 )
             ):
                 break
@@ -444,6 +442,7 @@ class QueueManager:
         mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous,
         max_concurrent_tasks: int | None = None,
         shutdown_on_listener_failure: bool = False,
+        heartbeat_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
         """
         Run the main loop to process jobs from the queue.
@@ -458,15 +457,16 @@ class QueueManager:
                 queue is empty then shutdown.
             max_concurrent_tasks (int|None, default=None): Limit the total number of tasks that
                 can run at the same time. If unspecified or None, there is no limit.
+            heartbeat_timeout (timedelta): Duration after which a picked job with a stale
+                heartbeat becomes eligible for re-pickup by another worker. Heartbeats
+                are sent automatically at half this interval. Defaults to 30 seconds.
         Raises:
             RuntimeError: If required database columns or types are missing.
         """
 
         await self.verify_structure()
 
-        heartbeat_buffer_timeout = helpers.retry_timer_buffer_timeout(
-            [x.parameters.retry_timer for x in self.entrypoint_registry.values()]
-        )
+        self._heartbeat_timeout = heartbeat_timeout
 
         max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
 
@@ -482,7 +482,7 @@ class QueueManager:
                 # Flush will be mainly driven by timeouts, but allow flush if
                 # backlog becomes too large.
                 max_size=batch_size**2,
-                timeout=heartbeat_buffer_timeout / 4,
+                timeout=heartbeat_timeout / 4,
                 repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
@@ -509,7 +509,9 @@ class QueueManager:
             )
 
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(batch_size, max_concurrent_tasks):
+                async for job in self.fetch_jobs(
+                    batch_size, max_concurrent_tasks, heartbeat_timeout
+                ):
                     self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,
@@ -572,15 +574,13 @@ class QueueManager:
 
         executor = self.entrypoint_registry[job.entrypoint]
 
-        # Send heartbeats several times within ``retry_timer`` to keep the job
-        # alive while it is running.
         active_tracer = self.tracer or tracing.TRACER.tracer
         trace_context = active_tracer.trace_process(job) if active_tracer else nullcontext()
         async with (
             trace_context,
             heartbeat.Heartbeat(
                 job.id,
-                executor.parameters.retry_timer / 2,
+                self._heartbeat_timeout / 2,
                 hbuff,
             ),
         ):

@@ -65,9 +65,10 @@ async def test_dedupe_key_freed_after_log(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs) == 1
     await queries.log_jobs([(jobs[0], "successful", None)])
@@ -88,9 +89,10 @@ async def test_dequeue_basic(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs) == 1
     assert jobs[0].entrypoint == "ep"
@@ -108,9 +110,10 @@ async def test_dequeue_priority_ordering(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs) == 3
     priorities = [j.priority for j in jobs]
@@ -123,9 +126,10 @@ async def test_dequeue_execute_after(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     # Job is in the future, shouldn't be dequeued
     assert len(jobs) == 0
@@ -139,14 +143,14 @@ async def test_dequeue_serialized_dispatch(queries: InMemoryQueries) -> None:
         [0, 0],
     )
     qm_id = uuid.uuid4()
-    params = {"ep": EntrypointExecutionParameter(timedelta(0), 1)}
+    params = {"ep": EntrypointExecutionParameter(1)}
 
     # First dequeue should get 1 job (concurrency_limit=1 = only one at a time)
-    jobs = await queries.dequeue(10, params, qm_id, None)
+    jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs) == 1
 
     # Second dequeue should get 0 (first is still picked)
-    jobs2 = await queries.dequeue(10, params, qm_id, None)
+    jobs2 = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs2) == 0
 
 
@@ -158,12 +162,12 @@ async def test_dequeue_concurrency_limit(queries: InMemoryQueries) -> None:
         [0, 0, 0],
     )
     qm_id = uuid.uuid4()
-    params = {"ep": EntrypointExecutionParameter(timedelta(0), 2)}
+    params = {"ep": EntrypointExecutionParameter(2)}
 
-    jobs = await queries.dequeue(10, params, qm_id, None)
+    jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs) == 2
 
-    jobs2 = await queries.dequeue(10, params, qm_id, None)
+    jobs2 = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs2) == 0
 
 
@@ -175,12 +179,16 @@ async def test_dequeue_global_concurrency_limit(queries: InMemoryQueries) -> Non
         [0, 0, 0],
     )
     qm_id = uuid.uuid4()
-    params = {"ep": EntrypointExecutionParameter(timedelta(0), 0)}
+    params = {"ep": EntrypointExecutionParameter(0)}
 
-    jobs = await queries.dequeue(10, params, qm_id, global_concurrency_limit=1)
+    jobs = await queries.dequeue(
+        10, params, qm_id, global_concurrency_limit=1, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 1
 
-    jobs2 = await queries.dequeue(10, params, qm_id, global_concurrency_limit=1)
+    jobs2 = await queries.dequeue(
+        10, params, qm_id, global_concurrency_limit=1, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs2) == 0
 
 
@@ -189,10 +197,9 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
     """Picked jobs with expired heartbeat should be retried."""
     await queries.enqueue("ep", None)
     qm_id = uuid.uuid4()
-    retry_after = timedelta(seconds=1)
-    params = {"ep": EntrypointExecutionParameter(retry_after, 0)}
+    params = {"ep": EntrypointExecutionParameter(0)}
 
-    jobs = await queries.dequeue(10, params, qm_id, None)
+    jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs) == 1
 
     # Manually make heartbeat old
@@ -202,7 +209,7 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
     queries._jobs[job_id]["heartbeat"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
     # Now dequeue again - should retry the stale job
-    jobs2 = await queries.dequeue(10, params, qm_id, None)
+    jobs2 = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert len(jobs2) == 1
     assert jobs2[0].id == jobs[0].id
 
@@ -210,14 +217,16 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
 @pytest.mark.asyncio
 async def test_dequeue_empty_entrypoints(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    jobs = await queries.dequeue(10, {}, uuid.uuid4(), None)
+    jobs = await queries.dequeue(
+        10, {}, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 0
 
 
 @pytest.mark.asyncio
 async def test_dequeue_batch_size_validation(queries: InMemoryQueries) -> None:
     with pytest.raises(ValueError):
-        await queries.dequeue(0, {}, uuid.uuid4(), None)
+        await queries.dequeue(0, {}, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30))
 
 
 # ---------------------------------------------------------------------------
@@ -231,9 +240,10 @@ async def test_log_jobs_removes_from_queue(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 
@@ -247,9 +257,10 @@ async def test_log_jobs_adds_to_log(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 
@@ -323,9 +334,10 @@ async def test_update_heartbeat(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     old_hb = jobs[0].heartbeat
     await asyncio.sleep(0.01)
@@ -345,9 +357,10 @@ async def test_queue_log_lifecycle(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 
@@ -369,9 +382,10 @@ async def test_log_statistics(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 
@@ -391,9 +405,10 @@ async def test_job_status(queries: InMemoryQueries) -> None:
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 

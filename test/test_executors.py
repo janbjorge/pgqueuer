@@ -29,7 +29,6 @@ from test.helpers import mocked_job
 
 class MultiprocessingExecutor(AbstractEntrypointExecutor):
     def __init__(self) -> None:
-        self.retry_timer = timedelta(seconds=10)
         self.concurrency_limit = 2
         self.queue: MPQueue[object] = MPQueue()
 
@@ -54,7 +53,6 @@ async def test_entrypoint_executor_async(apgdriver: Driver) -> None:
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-            retry_timer=timedelta(seconds=300),
             func=async_function,
         )
     )
@@ -78,7 +76,6 @@ async def test_entrypoint_executor_async_with_context(apgdriver: Driver) -> None
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-            retry_timer=timedelta(seconds=300),
             func=async_function,
             accepts_context=True,
         )
@@ -100,7 +97,6 @@ def test_sync_entrypoint_raises_type_error(accepts_context: bool) -> None:
         EntrypointExecutor(
             EntrypointExecutorParameters(
                 concurrency_limit=10,
-                retry_timer=timedelta(seconds=300),
                 func=sync_fn,  # type: ignore[arg-type]
                 accepts_context=accepts_context,
             )
@@ -116,7 +112,6 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-            retry_timer=timedelta(seconds=300),
             func=async_function,
             accepts_context=True,
         )
@@ -140,7 +135,6 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
     executor = EntrypointExecutor(
         EntrypointExecutorParameters(
             concurrency_limit=10,
-            retry_timer=timedelta(seconds=300),
             func=async_function,
         )
     )
@@ -157,7 +151,6 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
 async def test_custom_threading_executor() -> None:
     class ThreadingExecutor(AbstractEntrypointExecutor):
         def __init__(self) -> None:
-            self.retry_timer = timedelta(seconds=5)
             self.concurrency_limit = 5
             self.result = list[bytes]()
 
@@ -386,7 +379,6 @@ async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Dr
 
     parameters = EntrypointExecutorParameters(
         concurrency_limit=10,
-        retry_timer=timedelta(seconds=300),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(
@@ -421,7 +413,6 @@ async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver
 
     parameters = EntrypointExecutorParameters(
         concurrency_limit=10,
-        retry_timer=timedelta(seconds=300),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(
@@ -471,7 +462,6 @@ async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driv
 
     parameters = EntrypointExecutorParameters(
         concurrency_limit=10,
-        retry_timer=timedelta(seconds=300),
         func=raises,
     )
     exc = RetryWithBackoffEntrypointExecutor(

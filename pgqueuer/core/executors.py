@@ -46,7 +46,6 @@ def is_async_callable(obj: Callable[..., object] | object) -> bool:
 class EntrypointExecutorParameters:
     concurrency_limit: int
     func: Entrypoint
-    retry_timer: timedelta
     accepts_context: bool = False
     on_failure: types.OnFailure = "delete"
 
