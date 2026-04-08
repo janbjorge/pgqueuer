@@ -709,7 +709,7 @@ class InMemoryQueries:
                 s["heartbeat"] = now
                 s["updated"] = now
 
-    async def peak_schedule(self) -> list[models.Schedule]:
+    async def peek_schedule(self) -> list[models.Schedule]:
         return [models.Schedule.model_validate(s) for s in self._schedules.values()]
 
     async def delete_schedule(

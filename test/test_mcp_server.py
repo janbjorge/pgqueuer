@@ -134,7 +134,7 @@ class TestMcpToolsIntegration:
         assert rows == []
 
     async def test_schedules_empty(self, mcpdb: PgQueuerDatabase) -> None:
-        rows = await mcpdb.fetch(mcpdb.qbs.build_peak_schedule_query())
+        rows = await mcpdb.fetch(mcpdb.qbs.build_peek_schedule_query())
         assert rows == []
 
     async def test_stats_aggregation(

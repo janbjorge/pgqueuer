@@ -339,7 +339,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
           - last_run is null: the schedule has never executed since registration.
         """
         d = _db(ctx)
-        return await d.fetch(d.qbs.build_peak_schedule_query())
+        return await d.fetch(d.qbs.build_peek_schedule_query())
 
     # ===================================================================
     # WORKER HEALTH

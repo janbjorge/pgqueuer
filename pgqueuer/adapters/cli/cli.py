@@ -528,7 +528,7 @@ def schedules(
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
                 await q.delete_schedule(schedule_ids, schedule_names)
-            await display_schedule(await q.peak_schedule())
+            await display_schedule(await q.peek_schedule())
 
     asyncio_run(run_async())
 

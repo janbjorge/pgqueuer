@@ -30,7 +30,7 @@ def test_queries_has_schedule_repository_methods() -> None:
         "fetch_schedule",
         "set_schedule_queued",
         "update_schedule_heartbeat",
-        "peak_schedule",
+        "peek_schedule",
         "delete_schedule",
         "clear_schedule",
     }
@@ -77,7 +77,7 @@ def test_inmemory_has_schedule_repository_methods() -> None:
         "fetch_schedule",
         "set_schedule_queued",
         "update_schedule_heartbeat",
-        "peak_schedule",
+        "peek_schedule",
         "delete_schedule",
         "clear_schedule",
     }
