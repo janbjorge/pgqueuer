@@ -11,72 +11,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import random
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Generator
+from typing import Generator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from croniter import croniter
 
 from pgqueuer.core import listeners
 from pgqueuer.domain import models
-
-
-@dataclass
-class ExponentialBackoff:
-    """
-    A utility class for calculating exponential backoff delays.
-
-    Attributes:
-        start_delay (float): The starting delay for the backoff.
-        multiplier (float): The factor by which the delay increases on each step.
-        max_delay (timedelta): The maximum sleep duration allowed in the backoff sequence.
-        current_delay (float): The current delay in the backoff sequence.
-    """
-
-    start_delay: timedelta = field(default=timedelta(seconds=0.01))
-    multiplier: float = field(default=2)
-    max_delay: timedelta = field(default=timedelta(seconds=10))
-    current_delay: timedelta = field(init=False)
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the delay to the starting delay value.
-        """
-        if self.multiplier <= 1:
-            raise ValueError(f"Multiplier must be greater than 1, but got {self.multiplier}.")
-        self.current_delay = self.start_delay
-
-    def next_delay(self) -> timedelta:
-        """
-        Calculate and return the next delay in the backoff sequence.
-
-        Returns:
-            float: The updated delay value, capped at max_limit.
-        """
-        self.current_delay = min(self.current_delay * self.multiplier, self.max_delay)
-        return self.current_delay
-
-    def reset(self) -> None:
-        """
-        Reset the delay to the starting delay value.
-        """
-        self.current_delay = self.start_delay
-
-
-@contextlib.contextmanager
-def timer() -> Generator[Callable[[], timedelta], None, None]:
-    """
-    Context manager to measure elapsed time.
-
-    Yields a callable that returns the elapsed time as a timedelta.
-    """
-    enter = datetime.now()
-    exit: None | datetime = None
-    try:
-        yield lambda: (exit or datetime.now()) - enter
-    finally:
-        exit = datetime.now()
 
 
 def utc_now() -> datetime:
@@ -121,28 +63,6 @@ def wait_for_notice_event(
         return None
 
     return asyncio.create_task(suppressed_timeout())
-
-
-def retry_timer_buffer_timeout(
-    dts: list[timedelta],
-    *,
-    _default: timedelta = timedelta(hours=24),
-    _t0: timedelta = timedelta(seconds=0),
-) -> timedelta:
-    """
-    Returns the smallest timedelta from the input list `dts` that is greater than `_t0`.
-    If no such timedelta exists, returns `_default`.
-
-    Parameters:
-        dts (list[timedelta]): A list of timedelta objects to evaluate.
-        _default (timedelta, optional): The fallback value returned if no valid timedelta is found.
-            Defaults to 24 hours.
-        _t0 (timedelta, optional): The minimum threshold timedelta. Defaults to 0 seconds.
-
-    Returns:
-        timedelta: The smallest valid timedelta from the list or `_default` if none found.
-    """
-    return min((dt for dt in dts if dt > _t0), default=_default)
 
 
 def timeout_with_jitter(
