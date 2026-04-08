@@ -454,6 +454,10 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   adapter now correctly releases the `dedupe_key` when a job is held with
   `status='failed'`, and validates the `'failed'` enum value at startup.
 
+- **Typo: `peak_schedule` renamed to `peek_schedule`:** The method
+  `Queries.peak_schedule()` and `ScheduleRepositoryPort.peak_schedule()` were
+  renamed to `peek_schedule()` to fix the misspelling.
+
 ---
 
 ## Other Changes
@@ -475,6 +479,8 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Reduced test suite from 695 to 599 tests by removing duplicate and
   over-parametrized cases.
 - Fixed docs CI workflow runner label.
+- Added `OnFailure` type to `pgqueuer.types` re-exports.
+- Added OpenTelemetry section to the tracing integration guide.
 
 ---
 
