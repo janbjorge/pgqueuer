@@ -40,3 +40,4 @@ SortOrder = Literal["ASC", "DESC"]
 CronEntrypoint = NewType("CronEntrypoint", str)
 CronExpression = NewType("CronExpression", str)
 ScheduleId = NewType("ScheduleId", int)
+SCHEDULE_STATUS = Literal["queued", "picked"]

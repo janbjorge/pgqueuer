@@ -25,6 +25,7 @@ from pgqueuer.domain.types import (
     EVENT_TYPES,
     JOB_STATUS,
     OPERATIONS,
+    SCHEDULE_STATUS,
     Channel,
     CronEntrypoint,
     CronExpression,
@@ -250,7 +251,7 @@ class Schedule(BaseModel):
     updated: AwareDatetime
     next_run: AwareDatetime
     last_run: AwareDatetime | None = None
-    status: JOB_STATUS
+    status: SCHEDULE_STATUS
     entrypoint: CronEntrypoint
 
 
