@@ -445,13 +445,13 @@ async def test_schedule_lifecycle(queries: InMemoryQueries) -> None:
     )
 
     await queries.insert_schedule({key: timedelta(seconds=0)})
-    schedules = await queries.peak_schedule()
+    schedules = await queries.peek_schedule()
     assert len(schedules) == 1
     assert schedules[0].entrypoint == "my_cron"
 
     # Insert again should be no-op (ON CONFLICT DO NOTHING)
     await queries.insert_schedule({key: timedelta(seconds=0)})
-    schedules = await queries.peak_schedule()
+    schedules = await queries.peek_schedule()
     assert len(schedules) == 1
 
     # Fetch schedule (should pick it since next_run <= now)
@@ -461,12 +461,12 @@ async def test_schedule_lifecycle(queries: InMemoryQueries) -> None:
 
     # Set back to queued
     await queries.set_schedule_queued({fetched[0].id})
-    schedules = await queries.peak_schedule()
+    schedules = await queries.peek_schedule()
     assert schedules[0].status == "queued"
 
     # Delete by entrypoint
     await queries.delete_schedule(set(), {CronEntrypoint("my_cron")})
-    schedules = await queries.peak_schedule()
+    schedules = await queries.peek_schedule()
     assert len(schedules) == 0
 
 
@@ -481,7 +481,7 @@ async def test_clear_schedule(queries: InMemoryQueries) -> None:
     )
     await queries.insert_schedule({key: timedelta(seconds=0)})
     await queries.clear_schedule()
-    schedules = await queries.peak_schedule()
+    schedules = await queries.peek_schedule()
     assert len(schedules) == 0
 
 

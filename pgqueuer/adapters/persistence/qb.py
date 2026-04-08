@@ -831,7 +831,7 @@ class QuerySchedulerBuilder:
     def build_update_schedule_heartbeat(self) -> str:
         return f"""UPDATE {self.settings.schedules_table} SET heartbeat = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501
 
-    def build_peak_schedule_query(self) -> str:
+    def build_peek_schedule_query(self) -> str:
         return f"""SELECT * FROM {self.settings.schedules_table} ORDER BY last_run ASC"""
 
     def build_delete_schedule_query(self) -> str:

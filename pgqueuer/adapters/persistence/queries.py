@@ -657,11 +657,11 @@ class Queries:
             list(ids),
         )
 
-    async def peak_schedule(self) -> list[models.Schedule]:
+    async def peek_schedule(self) -> list[models.Schedule]:
         return [
             models.Schedule.model_validate(row)
             for row in await self.driver.fetch(
-                self.qbs.build_peak_schedule_query(),
+                self.qbs.build_peek_schedule_query(),
             )
         ]
 
