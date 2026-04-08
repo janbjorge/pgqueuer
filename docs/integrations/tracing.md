@@ -1,7 +1,8 @@
 # Distributed Tracing
 
 PGQueuer supports distributed tracing through optional integrations with
-[Logfire](https://logfire.pydantic.dev/) and [Sentry](https://docs.sentry.io/).
+[Logfire](https://logfire.pydantic.dev/), [Sentry](https://docs.sentry.io/),
+and [OpenTelemetry](https://opentelemetry.io/).
 These tools allow you to visualize job execution and measure performance across
 producer and consumer boundaries.
 
@@ -11,9 +12,11 @@ producer and consumer boundaries.
 pip install pgqueuer[logfire]
 # or
 pip install pgqueuer[sentry]
+# or
+pip install pgqueuer[opentelemetry]
 ```
 
-You can install both extras simultaneously if you need to switch between them.
+You can install multiple extras simultaneously if you need to switch between them.
 
 ## Using Logfire
 
@@ -57,6 +60,26 @@ Job headers will include Sentry tracing information so that consumer spans are l
 the producing transaction. See the
 [Sentry Python documentation](https://docs.sentry.io/platforms/python/)
 for advanced configuration options.
+
+## Using OpenTelemetry
+
+Configure your `TracerProvider`, then register the tracer with PGQueuer:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from pgqueuer.adapters import tracing
+from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
+
+trace.set_tracer_provider(TracerProvider())
+tracing.set_tracing_class(OpenTelemetryTracing())
+```
+
+The adapter follows OTel
+[messaging semantic conventions](https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/):
+`send` spans for enqueue, `process` spans for job execution, with W3C
+TraceContext and Baggage propagation through job headers. Compatible with
+Jaeger, Datadog, and any OTel-compatible backend.
 
 ## Switching Tracers
 
