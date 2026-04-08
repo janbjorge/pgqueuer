@@ -13,12 +13,12 @@ from typing import Any, overload
 
 from pydantic_core import to_json
 
-from pgqueuer.adapters import tracing
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.core.helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
+from pgqueuer.ports import tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
