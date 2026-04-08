@@ -255,6 +255,43 @@ subclasses override the `flush_items()` template method and inject a repository
 port. This only affects users who subclassed `TimedOverflowBuffer`,
 `JobStatusLogBuffer`, or `HeartbeatBuffer` directly.
 
+### 16. `retry_timer` replaced with global `heartbeat_timeout`
+
+The per-entrypoint `retry_timer` parameter has been removed from `@pgq.entrypoint()`,
+`QueueManager.entrypoint()`, `PgQueuer.entrypoint()`, and
+`EntrypointExecutorParameters`. It is replaced by a single `heartbeat_timeout`
+parameter on `QueueManager.run()` / `PgQueuer.run()` (default: 30 seconds).
+
+Previously, each entrypoint could set its own timer controlling when stale "picked"
+jobs became eligible for re-pickup. Now a single global timeout applies to all
+entrypoints. Heartbeats are sent automatically at half the timeout interval.
+
+```python
+# Before
+@pgq.entrypoint("send_email", retry_timer=timedelta(seconds=60))
+async def send_email(job: Job) -> None: ...
+
+await pgq.run(dequeue_timeout=timedelta(seconds=5), batch_size=10)
+
+# After
+@pgq.entrypoint("send_email")  # retry_timer removed
+async def send_email(job: Job) -> None: ...
+
+await pgq.run(
+    dequeue_timeout=timedelta(seconds=5),
+    batch_size=10,
+    heartbeat_timeout=timedelta(seconds=60),  # global, applies to all entrypoints
+)
+```
+
+**How to migrate:**
+
+- Remove `retry_timer=...` from all `@pgq.entrypoint()` calls.
+- Add `heartbeat_timeout=...` to your `pgq.run()` call if the default of 30s is
+  not suitable. If you had different retry timers per entrypoint, use the maximum.
+- Note: stale job retries are now always enabled (previously `retry_timer=0`
+  disabled them).
+
 ---
 
 ## New Features
@@ -470,7 +507,10 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
     `pgqueuer.core.retries` — the module is deleted.
 13. **Custom buffers:** If you subclassed `TimedOverflowBuffer`, replace
     `callback` parameter with a `flush_items()` method override.
-14. **Removed imports:** Delete any imports of `SyncEntrypoint`,
+14. **`retry_timer`:** Remove `retry_timer=...` from all `@pgq.entrypoint()` calls.
+    Add `heartbeat_timeout=...` to `pgq.run()` if the 30s default doesn't fit. If
+    you had varying per-entrypoint timers, use the maximum value.
+15. **Removed imports:** Delete any imports of `SyncEntrypoint`,
     `SyncContextEntrypoint`, or `run_factory`.
-15. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+16. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
