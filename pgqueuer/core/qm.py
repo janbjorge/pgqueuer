@@ -466,8 +466,6 @@ class QueueManager:
 
         await self.verify_structure()
 
-        self._heartbeat_timeout = heartbeat_timeout
-
         max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
 
         if max_concurrent_tasks < 2 * batch_size:
@@ -516,7 +514,9 @@ class QueueManager:
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,
                     )
-                    task_manager.add(asyncio.create_task(self._dispatch(job, jbuff, hbuff)))
+                    task_manager.add(
+                        asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
+                    )
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
@@ -553,6 +553,7 @@ class QueueManager:
         job: models.Job,
         jbuff: buffers.JobStatusLogBuffer,
         hbuff: buffers.HeartbeatBuffer,
+        heartbeat_timeout: timedelta,
     ) -> None:
         """
         Dispatch a job to its associated entrypoint executor.
@@ -580,7 +581,7 @@ class QueueManager:
             trace_context,
             heartbeat.Heartbeat(
                 job.id,
-                self._heartbeat_timeout / 2,
+                heartbeat_timeout / 2,
                 hbuff,
             ),
         ):

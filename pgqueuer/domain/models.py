@@ -161,10 +161,7 @@ class Job(BaseModel):
 
 
 class Log(BaseModel):
-    """
-    Represents a job with attributes such as ID, priority,
-    creation time, status, entrypoint, and optional payload.
-    """
+    """Represents a job status log entry recording a state transition."""
 
     created: AwareDatetime
     job_id: JobId

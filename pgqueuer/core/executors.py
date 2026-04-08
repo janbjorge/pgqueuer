@@ -174,11 +174,7 @@ class RetryWithBackoffEntrypointExecutor(EntrypointExecutor):
                             else self.max_delay.total_seconds()
                         )
                         await asyncio.sleep(min(self.exponential_delay(attempt), max_delay))
-        except (
-            TimeoutError,
-            asyncio.exceptions.TimeoutError,
-            asyncio.TimeoutError,
-        ) as e:
+        except (TimeoutError, asyncio.TimeoutError) as e:
             raise errors.MaxTimeExceeded(self.max_time) from e
 
 
