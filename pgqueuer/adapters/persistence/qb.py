@@ -409,9 +409,8 @@ class QueryQueueBuilder:
 -- Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.
 params AS (
     SELECT
-        UNNEST($2::text[])     AS entrypoint,
-        UNNEST($3::interval[]) AS retry_after,
-        UNNEST($4::bigint[])   AS concurrency_limit
+        UNNEST($2::text[])   AS entrypoint,
+        UNNEST($3::bigint[]) AS concurrency_limit
 ),
 
 -- Per-entrypoint count of picked jobs (global, all workers).
@@ -427,11 +426,11 @@ picked AS (
 worker_load AS (
     SELECT COUNT(*) AS total
     FROM {t}
-    WHERE queue_manager_id = $5
+    WHERE queue_manager_id = $4
       AND entrypoint = ANY($2)
 ),
 
--- Eligible jobs: new (queued) or stale (picked past retry window).
+-- Eligible jobs: new (queued) or stale (picked past heartbeat timeout).
 eligible AS (
     SELECT q.id
     FROM {t} q
@@ -439,16 +438,15 @@ eligible AS (
     LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
     WHERE q.execute_after < NOW()
       -- per-worker max-concurrent-tasks cap
-      AND ($6::BIGINT IS NULL
-           OR (SELECT total FROM worker_load) < $6)
+      AND ($5::BIGINT IS NULL
+           OR (SELECT total FROM worker_load) < $5)
       -- per-entrypoint concurrency
       AND (p.concurrency_limit <= 0
            OR COALESCE(pk.total, 0) < p.concurrency_limit)
-      -- queued jobs  OR  stale picked jobs eligible for retry
+      -- queued jobs  OR  stale picked jobs (heartbeat timed out)
       AND (   q.status = 'queued'
            OR (    q.status = 'picked'
-               AND p.retry_after > interval '0'
-               AND q.heartbeat  < NOW() - p.retry_after))
+               AND q.heartbeat < NOW() - $6::interval))
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED
     LIMIT $1
@@ -460,7 +458,7 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $5
+        queue_manager_id = $4
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
 ),

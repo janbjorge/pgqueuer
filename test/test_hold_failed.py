@@ -17,7 +17,7 @@ from pgqueuer.domain.types import QueueExecutionMode
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
-EP = EntrypointExecutionParameter(timedelta(0), 0)
+EP = EntrypointExecutionParameter(0)
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +29,9 @@ async def test_inmemory_hold_keeps_job(queries: InMemoryQueries) -> None:
     """on_failure='hold' keeps the job in the queue with status='failed'."""
     await queries.enqueue("ep", b"important-payload", priority=1)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 1
     job = jobs[0]
 
@@ -48,7 +50,9 @@ async def test_inmemory_delete_removes_job(queries: InMemoryQueries) -> None:
     """Default on_failure='delete' removes the job from the queue."""
     await queries.enqueue("ep", b"payload", priority=1)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     job = jobs[0]
 
     await queries.log_jobs([(job, "exception", None)])
@@ -65,7 +69,9 @@ async def test_inmemory_mixed_batch(queries: InMemoryQueries) -> None:
         [1, 1],
     )
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 2
 
     await queries.log_jobs(
@@ -84,10 +90,14 @@ async def test_inmemory_failed_not_dequeued(queries: InMemoryQueries) -> None:
     """Failed jobs are not returned by dequeue."""
     await queries.enqueue("ep", b"payload", priority=1)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     await queries.log_jobs([(jobs[0], "failed", None)])
 
-    jobs2 = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs2 = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs2) == 0
 
 
@@ -95,13 +105,17 @@ async def test_inmemory_requeue_moves_to_queued(queries: InMemoryQueries) -> Non
     """requeue_jobs moves failed jobs back to queued."""
     await queries.enqueue("ep", b"payload", priority=5)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     await queries.log_jobs([(jobs[0], "failed", None)])
 
     await queries.requeue_jobs([jobs[0].id])
 
     # Now dequeue should return the job
-    jobs2 = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs2 = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs2) == 1
     assert jobs2[0].id == jobs[0].id
     assert jobs2[0].attempts == 0
@@ -112,19 +126,25 @@ async def test_inmemory_requeue_resets_attempts(queries: InMemoryQueries) -> Non
     """Re-queued jobs have attempts reset to 0."""
     await queries.enqueue("ep", b"payload", priority=1)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     job = jobs[0]
 
     # Simulate a few retries then hold
     await queries.retry_job(job, timedelta(0), None)
     await queries.retry_job(job, timedelta(0), None)
-    jobs2 = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs2 = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert jobs2[0].attempts == 2
 
     await queries.log_jobs([(jobs2[0], "failed", None)])
     await queries.requeue_jobs([jobs2[0].id])
 
-    jobs3 = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs3 = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert jobs3[0].attempts == 0
 
 
@@ -132,7 +152,9 @@ async def test_inmemory_requeue_ignores_non_failed(queries: InMemoryQueries) -> 
     """requeue_jobs only affects jobs with status='failed'."""
     await queries.enqueue("ep", b"payload", priority=1)
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     await queries.requeue_jobs([jobs[0].id])
     failed = await queries.list_failed_jobs()
     assert len(failed) == 0
@@ -144,7 +166,9 @@ async def test_inmemory_list_failed_ordered_by_created(queries: InMemoryQueries)
         await queries.enqueue("ep", f"job-{i}".encode(), priority=1)
 
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     for j in jobs:
         await queries.log_jobs([(j, "failed", None)])
 
@@ -160,7 +184,9 @@ async def test_inmemory_list_failed_respects_limit(queries: InMemoryQueries) -> 
         await queries.enqueue("ep", f"job-{i}".encode(), priority=1)
 
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     for j in jobs:
         await queries.log_jobs([(j, "failed", None)])
 
@@ -172,7 +198,9 @@ async def test_inmemory_failed_releases_dedupe_key(queries: InMemoryQueries) -> 
     """A held/failed job must release its dedupe_key so a new job can be enqueued."""
     await queries.enqueue("ep", b"first", priority=1, dedupe_key="unique-key")
     qm_id = uuid.uuid4()
-    jobs = await queries.dequeue(10, {"ep": EP}, qm_id, None)
+    jobs = await queries.dequeue(
+        10, {"ep": EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 1
 
     # Hold the job as failed

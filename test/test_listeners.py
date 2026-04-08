@@ -155,13 +155,10 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
 
     await Queries(apgdriver).dequeue(
         100,
-        {
-            "test_emit_stable_changed_update": EntrypointExecutionParameter(
-                timedelta(seconds=300), 0
-            )
-        },
+        {"test_emit_stable_changed_update": EntrypointExecutionParameter(0)},
         uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     await asyncio.sleep(0.1)
     assert len(evnets) == 0

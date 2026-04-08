@@ -227,14 +227,14 @@ class InMemoryQueries:
         self,
         now: datetime,
         entrypoints: dict[str, EntrypointExecutionParameter],
+        heartbeat_timeout: timedelta,
     ) -> list[dict[str, Any]]:
-        """Collect retry candidates sorted by heartbeat ASC, id ASC."""
+        """Collect stale picked jobs whose heartbeat has exceeded the timeout."""
         candidates: list[dict[str, Any]] = []
         for j in self._jobs.values():
             if j["status"] != "picked" or j["entrypoint"] not in entrypoints:
                 continue
-            params = entrypoints[j["entrypoint"]]
-            if params.retry_after <= timedelta(0) or now - j["heartbeat"] < params.retry_after:
+            if now - j["heartbeat"] < heartbeat_timeout:
                 continue
             candidates.append(j)
         candidates.sort(key=lambda j: (j["heartbeat"], j["id"]))
@@ -298,6 +298,7 @@ class InMemoryQueries:
         entrypoints: dict[str, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
+        heartbeat_timeout: timedelta,
     ) -> list[models.Job]:
         if batch_size < 1:
             raise ValueError("Batch size must be greater than or equal to one (1)")
@@ -318,7 +319,7 @@ class InMemoryQueries:
             remaining = min(remaining, global_concurrency_limit - total_picked)
 
         queued_candidates = self._collect_queued_candidates(now, entrypoints)
-        retry_candidates = self._collect_retry_candidates(now, entrypoints)
+        retry_candidates = self._collect_retry_candidates(now, entrypoints, heartbeat_timeout)
 
         selected = self._select_jobs(
             remaining,

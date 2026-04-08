@@ -198,6 +198,7 @@ class PgQueuer:
         mode: QueueExecutionMode = QueueExecutionMode.continuous,
         max_concurrent_tasks: int | None = None,
         shutdown_on_listener_failure: bool = False,
+        heartbeat_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
         """
         Run both QueueManager and SchedulerManager concurrently.
@@ -213,6 +214,7 @@ class PgQueuer:
                     mode=mode,
                     max_concurrent_tasks=max_concurrent_tasks,
                     shutdown_on_listener_failure=shutdown_on_listener_failure,
+                    heartbeat_timeout=heartbeat_timeout,
                 )
             ),
             asyncio.create_task(self.sm.run()),
@@ -230,7 +232,6 @@ class PgQueuer:
         name: str,
         *,
         concurrency_limit: int = 0,
-        retry_timer: timedelta = timedelta(seconds=0),
         accepts_context: bool = False,
         on_failure: OnFailure = "delete",
         executor_factory: Callable[
@@ -242,7 +243,6 @@ class PgQueuer:
         return self.qm.entrypoint(
             name=name,
             concurrency_limit=concurrency_limit,
-            retry_timer=retry_timer,
             accepts_context=accepts_context,
             on_failure=on_failure,
             executor_factory=executor_factory,

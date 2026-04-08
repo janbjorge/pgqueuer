@@ -28,14 +28,12 @@ class QueryBuilderEnvironmentPort(Protocol):
 @dataclasses.dataclass
 class EntrypointExecutionParameter:
     """
-    Job execution parameters like retry, concurrency.
+    Job execution parameters passed to dequeue.
 
     Attributes:
-        retry_after (timedelta): Time to wait before retrying.
         concurrency_limit (int): Max number of concurrent executions (0 = unlimited).
     """
 
-    retry_after: timedelta
     concurrency_limit: int
 
 
@@ -53,6 +51,7 @@ class QueueRepositoryPort(Protocol):
         entrypoints: dict[str, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
+        heartbeat_timeout: timedelta,
     ) -> list[models.Job]: ...
 
     @overload

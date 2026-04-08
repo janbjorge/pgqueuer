@@ -275,26 +275,14 @@ class Queries:
         entrypoints: dict[str, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
+        heartbeat_timeout: timedelta,
     ) -> list[models.Job]:
         """
         Retrieve and update jobs from the queue to be processed.
 
-        Selects jobs from the queue that match the specified entrypoints and updates
-        their status to 'picked'. The selection prioritizes 'queued' jobs but can
-        also include 'picked' jobs that have exceeded the retry timer, allowing
-        for retries of stalled jobs.
-
-        Args:
-            batch_size (int): The maximum number of jobs to retrieve.
-            entrypoints (set[str]): A set of entrypoints to filter the jobs.
-            retry_timer (timedelta | None): The duration after which 'picked' jobs
-                are considered for retry. If None, retry logic is skipped.
-
-        Returns:
-            list[models.Job]: A list of Job instances representing the dequeued jobs.
-
-        Raises:
-            ValueError: If batch_size is less than 1 or retry_timer is negative.
+        Selects jobs that are queued or whose heartbeat has gone stale
+        (exceeding heartbeat_timeout), locks them with FOR UPDATE SKIP
+        LOCKED, and atomically sets their status to 'picked'.
         """
 
         if batch_size < 1:
@@ -304,10 +292,10 @@ class Queries:
             self.qbq.build_dequeue_query(),
             batch_size,
             list(entrypoints.keys()),
-            [x.retry_after for x in entrypoints.values()],
             [x.concurrency_limit for x in entrypoints.values()],
             queue_manager_id,
             global_concurrency_limit,
+            heartbeat_timeout,
         )
         return [models.Job.model_validate(row) for row in rows]
 

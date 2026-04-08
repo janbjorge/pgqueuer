@@ -46,11 +46,11 @@ async def consumer(driver: AsyncpgDriver) -> None:
 
     for i in range(1, 10):
 
-        @qm.entrypoint(f"fetch_{i}", retry_timer=timedelta(minutes=2), concurrency_limit=1)
+        @qm.entrypoint(f"fetch_{i}", concurrency_limit=1)
         async def process_message(job: Job) -> None:
             await asyncio.sleep(3)
 
-    @qm.entrypoint("fetch_0", retry_timer=timedelta(minutes=3), concurrency_limit=1)
+    @qm.entrypoint("fetch_0", concurrency_limit=1)
     async def fetch2(job: Job) -> None:
         assert job.payload
         print("fetch_0 start", job.payload.decode(), datetime.now().astimezone())

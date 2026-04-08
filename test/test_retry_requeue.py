@@ -61,9 +61,10 @@ async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> Non
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs) == 1
     job = jobs[0]
@@ -81,9 +82,10 @@ async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> Non
     # Verify via dequeue that the job is eligible again and has attempts=1
     jobs_again = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs_again) == 1
     assert jobs_again[0].id == ids[0]
@@ -96,9 +98,10 @@ async def test_inmemory_retry_job_writes_log_entry(queries: InMemoryQueries) -> 
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
 
     await queries.retry_job(jobs[0], timedelta(0), None)
@@ -387,7 +390,6 @@ def test_database_retry_executor_backoff_caps_at_max_delay() -> None:
         parameters=EntrypointExecutorParameters(
             concurrency_limit=0,
             func=_async_noop,
-            retry_timer=timedelta(seconds=10),
         ),
         max_attempts=10,
         initial_delay=timedelta(seconds=1),
@@ -571,16 +573,20 @@ async def test_retry_with_delay_prevents_immediate_dequeue(
     """A retried job with non-zero delay is not dequeued until execute_after passes."""
     await queries.enqueue("ep", b"x", priority=0)
     qm_id = uuid.uuid4()
-    ep_params = {"ep": EntrypointExecutionParameter(timedelta(0), 0)}
+    ep_params = {"ep": EntrypointExecutionParameter(0)}
 
-    jobs = await queries.dequeue(10, ep_params, qm_id, None)
+    jobs = await queries.dequeue(
+        10, ep_params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs) == 1
 
     # Retry with a 1-hour delay
     await queries.retry_job(jobs[0], timedelta(hours=1), None)
 
     # Immediate dequeue should return nothing — execute_after is in the future
-    jobs_after = await queries.dequeue(10, ep_params, qm_id, None)
+    jobs_after = await queries.dequeue(
+        10, ep_params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
     assert len(jobs_after) == 0
 
     # But the job is still in the queue (status=queued)
@@ -653,9 +659,10 @@ async def test_inmemory_retry_job_stores_traceback(queries: InMemoryQueries) -> 
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(timedelta(0), 0)},
+        {"ep": EntrypointExecutionParameter(0)},
         qm_id,
         None,
+        heartbeat_timeout=timedelta(seconds=30),
     )
 
     tbr = TracebackRecord.from_exception(
@@ -731,7 +738,6 @@ async def test_database_retry_executor_chains_cause() -> None:
         parameters=EntrypointExecutorParameters(
             concurrency_limit=0,
             func=handler,
-            retry_timer=timedelta(0),
         ),
         max_attempts=5,
         initial_delay=timedelta(0),

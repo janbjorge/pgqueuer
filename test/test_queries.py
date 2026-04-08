@@ -37,9 +37,10 @@ async def test_queries_next_jobs(
     seen = list[int]()
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         for job in jobs:
             payoad = job.payload
@@ -69,10 +70,11 @@ async def test_queries_next_jobs_concurrent(
 
     async def consumer() -> None:
         while jobs := await q.dequeue(
-            entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 1)},
+            entrypoints={"placeholder": queries.EntrypointExecutionParameter(1)},
             batch_size=10,
             queue_manager_id=uuid.uuid4(),
             global_concurrency_limit=1000,
+            heartbeat_timeout=timedelta(seconds=30),
         ):
             for job in jobs:
                 payload = job.payload
@@ -115,9 +117,10 @@ async def test_move_job_log(
 
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         for job in jobs:
             await q.log_jobs([(job, "successful", None)])
@@ -188,10 +191,11 @@ async def test_queue_priority(
     )
 
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         for job in next_jobs:
             jobs.append(job)
@@ -218,9 +222,10 @@ async def test_queue_retry_timer(
     # Pick all jobs, and mark then as "in progress"
     while _ := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         ...
 
@@ -228,11 +233,10 @@ async def test_queue_retry_timer(
         len(
             await q.dequeue(
                 batch_size=10,
-                entrypoints={
-                    "placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)
-                },
+                entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
                 queue_manager_id=uuid.uuid4(),
                 global_concurrency_limit=1000,
+                heartbeat_timeout=timedelta(seconds=30),
             ),
         )
         == 0
@@ -243,10 +247,11 @@ async def test_queue_retry_timer(
 
     # Re-fetch, should get the same number of jobs as queued (N).
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(retry_timer, 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=retry_timer,
     ):
         jobs.extend(next_jobs)
 
@@ -274,12 +279,11 @@ async def test_queue_log_queued_picked_successful(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
-            "test_queue_log_queued_picked_successful": queries.EntrypointExecutionParameter(
-                timedelta(days=1), 0
-            )
+            "test_queue_log_queued_picked_successful": queries.EntrypointExecutionParameter(0)
         },
         queue_manager_id=queue_manager_id,
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         picked_jobs.extend(jobs)
 
@@ -370,12 +374,11 @@ async def test_queue_log_queued_picked_exception(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
-            "test_queue_log_queued_picked_exception": queries.EntrypointExecutionParameter(
-                timedelta(days=1), 0
-            )
+            "test_queue_log_queued_picked_exception": queries.EntrypointExecutionParameter(0)
         },
         queue_manager_id=queue_manager_id,
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     ):
         picked_jobs.extend(jobs)
 
@@ -515,10 +518,11 @@ async def test_log_statistics(
 
     # Log jobs
     jobs = await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
         batch_size=N,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(jobs) == N
     for job in jobs:
@@ -539,10 +543,11 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.enqueue("header_task", None, headers=headers)
 
     jobs = await q.dequeue(
-        entrypoints={"header_task": queries.EntrypointExecutionParameter(timedelta(days=1), 0)},
+        entrypoints={"header_task": queries.EntrypointExecutionParameter(0)},
         batch_size=1,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
     )
 
     assert len(jobs) == 1
