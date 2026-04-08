@@ -76,8 +76,6 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
     Executes the provided function when processing a job.
     """
 
-    accepts_context: bool = dataclasses.field(init=False)
-
     def __post_init__(self) -> None:
         if not is_async_callable(cast(Callable[..., object], self.parameters.func)):
             raise TypeError(
@@ -86,7 +84,6 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
                 "Wrap blocking code with asyncio.to_thread(): "
                 "async def my_entry(job): await asyncio.to_thread(blocking_fn, job)"
             )
-        self.accepts_context = self.parameters.accepts_context
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
         """
@@ -96,7 +93,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             job (models.Job): The job to execute.
             context (models.Context): The context for the job.
         """
-        if self.accepts_context:
+        if self.parameters.accepts_context:
             await cast(AsyncContextEntrypoint, self.parameters.func)(job, context)
         else:
             await cast(AsyncEntrypoint, self.parameters.func)(job)
@@ -198,18 +195,13 @@ class ScheduleExecutor(AbstractScheduleExecutor):
     It is a concrete implementation of AbstractScheduleExecutor.
     """
 
-    accepts_context: bool = dataclasses.field(init=False)
-
-    def __post_init__(self) -> None:
-        self.accepts_context = self.parameters.accepts_context
-
     async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
         """
         Execute the job using the wrapped function.
 
         This method calls the provided asynchronous function when the job is triggered.
         """
-        if self.accepts_context:
+        if self.parameters.accepts_context:
             await cast(AsyncContextCrontab, self.parameters.func)(schedule, context)
         else:
             await cast(AsyncCrontab, self.parameters.func)(schedule)
