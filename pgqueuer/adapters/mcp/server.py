@@ -41,7 +41,7 @@ Ctx = Context[ServerSession, PgQueuerDatabase, object]
 # These are the ONLY knobs an agent can turn; keep them simple and bounded.
 # ---------------------------------------------------------------------------
 
-Limit = Annotated[
+Tail = Annotated[
     int,
     "Maximum number of rows to return. Must be a positive integer. "
     "Default 50. Higher values return more history but increase response size.",
@@ -165,7 +165,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
     async def queue_stats(
         ctx: Ctx,
         period: TimePeriod | None = None,
-        limit: Limit = 50,
+        limit: Tail = 50,
     ) -> list[dict[str, object]]:
         """Aggregated job processing statistics bucketed by second.
 
