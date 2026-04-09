@@ -37,9 +37,11 @@ Typical usage::
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import MutableMapping, TypeAlias, TypeVar
 
 from pgqueuer.core import logconfig
@@ -131,3 +133,20 @@ async def initialize_notice_event_listener(
             )
 
     await connection.add_listener(channel, _process_payload)
+
+
+def wait_for_notice_event(
+    queue: PGNoticeEventListener,
+    timeout: timedelta,
+) -> asyncio.Task[models.TableChangedEvent | None]:
+    """Wait for a table change event with a timeout, returning None on expiry."""
+
+    async def suppressed_timeout() -> models.TableChangedEvent | None:
+        with contextlib.suppress(asyncio.TimeoutError):
+            return await asyncio.wait_for(
+                queue.get(),
+                timeout=timeout.total_seconds(),
+            )
+        return None
+
+    return asyncio.create_task(suppressed_timeout())

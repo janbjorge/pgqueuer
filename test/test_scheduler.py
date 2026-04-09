@@ -75,7 +75,7 @@ async def test_scheduler_register_accepts_three_second_expression(
         pass
 
     mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
-    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+    mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
 
     scheduler.schedule("sample_task", "* * * * * */3")(sample_task)
 
@@ -98,7 +98,7 @@ async def test_scheduler_trailing_seconds_field_is_documented_behavior(
         pass
 
     mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
-    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+    mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
 
     scheduler.schedule("sample_task_seconds_last", "* * * * * */3")(sample_task)
     scheduler.schedule("sample_task_seconds_first", "*/3 * * * * *")(sample_task)
@@ -125,7 +125,7 @@ async def test_scheduler_trailing_seconds_field_is_documented_behavior(
 async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due
@@ -155,7 +155,7 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
 async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due
@@ -187,7 +187,7 @@ async def test_schedule_storage_and_retrieval(
 ) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due
@@ -302,7 +302,7 @@ async def test_multi_instance_single_task_execution(
     This is the primary test demonstrating Issue #536.
     """
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=datetime.now(timezone.utc) + timedelta(hours=1),
     )
 
@@ -440,7 +440,7 @@ async def test_schedule_context_resources_via_scheduler(
 ) -> None:
     """Scheduled handler registered with accepts_context=True receives resources via dispatch."""
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
-    mocker.patch("pgqueuer.core.helpers.utc_now", return_value=mocked_now)
+    mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
     past_timestamp = int(mocked_now.timestamp()) - 60
     mocker.patch(
         "pgqueuer.core.executors.croniter",

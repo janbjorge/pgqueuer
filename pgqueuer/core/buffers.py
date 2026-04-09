@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import random
 from contextlib import suppress
 from datetime import timedelta
 from typing import Generic, Protocol, TypeVar
 
 from typing_extensions import Self
 
-from pgqueuer.core import helpers, logconfig
+from pgqueuer.core import logconfig
 from pgqueuer.domain import models
 
 T = TypeVar("T")
@@ -121,7 +122,7 @@ class TimedOverflowBuffer(Generic[T]):
             with suppress(asyncio.TimeoutError, TimeoutError):
                 await asyncio.wait_for(
                     self.shutdown.wait(),
-                    timeout=helpers.timeout_with_jitter(self.timeout).total_seconds(),
+                    timeout=self.timeout.total_seconds() * random.uniform(0.8, 1.2),
                 )
 
 

@@ -11,8 +11,12 @@ from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
 
 from croniter import croniter
 
-from pgqueuer.core import helpers
 from pgqueuer.domain import errors, models, types
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
@@ -172,7 +176,7 @@ class AbstractScheduleExecutor(ABC):
             datetime: The next scheduled datetime in UTC.
         """
         return datetime.fromtimestamp(
-            croniter(self.parameters.expression, start_time=helpers.utc_now()).get_next(),
+            croniter(self.parameters.expression, start_time=utc_now()).get_next(),
             timezone.utc,
         )
 
@@ -183,7 +187,7 @@ class AbstractScheduleExecutor(ABC):
         Returns:
             timedelta: The time difference between now and the next scheduled run.
         """
-        return self.get_next() - helpers.utc_now()
+        return self.get_next() - utc_now()
 
 
 @dataclasses.dataclass

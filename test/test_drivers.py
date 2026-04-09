@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 from typing import AsyncContextManager, AsyncGenerator, Callable
 
 import asyncpg
@@ -12,7 +13,6 @@ from pgqueuer.adapters.persistence.qb import (
     QueryQueueBuilder,
     QuerySchedulerBuilder,
 )
-from pgqueuer.core.helpers import utc_now
 from pgqueuer.core.listeners import (
     PGNoticeEventListener,
     default_event_router,
@@ -187,7 +187,7 @@ async def test_event_listener(
         payload = TableChangedEvent(
             channel=channel,
             operation="update",
-            sent_at=utc_now(),
+            sent_at=datetime.now(timezone.utc),
             table="foo",
             type="table_changed_event",
         )
