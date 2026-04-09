@@ -543,18 +543,18 @@ class Queries:
 
     async def log_statistics(
         self,
-        tail: int | None,
+        limit: int | None,
         last: timedelta | None = None,
     ) -> list[models.LogStatistics]:
         """
         Retrieve job processing statistics from the log.
 
         Fetches entries from the statistics table, optionally limited by the number
-        of recent entries (`tail`) and a time window (`last`). This information
+        of recent entries (`limit`) and a time window (`last`). This information
         can be used for monitoring and analysis.
 
         Args:
-            tail (int | None): The maximum number of recent entries to retrieve.
+            limit (int | None): The maximum number of recent entries to retrieve.
             last (timedelta | None): The time window to consider (e.g., last hour).
 
         Returns:
@@ -566,7 +566,7 @@ class Queries:
             models.LogStatistics.model_validate(x)
             for x in await self.driver.fetch(
                 self.qbq.build_log_statistics_query(),
-                tail,
+                limit,
                 last,
             )
         ]

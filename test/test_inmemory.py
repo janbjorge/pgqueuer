@@ -389,7 +389,7 @@ async def test_log_statistics(queries: InMemoryQueries) -> None:
     )
     await queries.log_jobs([(jobs[0], "successful", None)])
 
-    stats = await queries.log_statistics(tail=10)
+    stats = await queries.log_statistics(limit=10)
     assert len(stats) > 0
     assert any(s.entrypoint == "ep" for s in stats)
 

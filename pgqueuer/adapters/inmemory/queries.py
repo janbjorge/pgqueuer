@@ -573,7 +573,7 @@ class InMemoryQueries:
 
     async def log_statistics(
         self,
-        tail: int | None,
+        limit: int | None,
         last: timedelta | None = None,
     ) -> list[models.LogStatistics]:
         # Step 1: aggregate un-aggregated log entries into _statistics
@@ -614,8 +614,8 @@ class InMemoryQueries:
         # Sort by id DESC
         result.sort(key=lambda r: r["id"], reverse=True)
 
-        if tail is not None:
-            result = result[:tail]
+        if limit is not None:
+            result = result[:limit]
 
         return [models.LogStatistics.model_validate(r) for r in result]
 

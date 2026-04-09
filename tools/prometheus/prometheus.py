@@ -100,7 +100,7 @@ def create_metrics_router() -> APIRouter:
     async def metrics(queries: Queries = Depends(get_queries)) -> Response:
         queue_statistics = await queries.queue_size()
         log_statistics = await queries.log_statistics(
-            tail=None,
+            limit=None,
             last=timedelta(minutes=5),
         )
         return Response(

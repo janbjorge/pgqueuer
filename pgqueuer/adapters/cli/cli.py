@@ -270,12 +270,12 @@ async def display_schedule(schedules: list[models.Schedule]) -> None:
 async def fetch_and_display(
     q: queries.Queries,
     interval: timedelta | None,
-    tail: int,
+    limit: int,
 ) -> None:
     clear_and_home = "\033[2J\033[H"
     while True:
         print(clear_and_home, end="")
-        await display_stats(await q.log_statistics(tail))
+        await display_stats(await q.log_statistics(limit))
         if interval is None:
             return
         await asyncio.sleep(interval.total_seconds())
@@ -404,17 +404,17 @@ def dashboard(
         "-i",
         "--interval",
     ),
-    tail: int = typer.Option(
+    limit: int = typer.Option(
         25,
         "-n",
-        "--tail",
+        "--limit",
     ),
 ) -> None:
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await fetch_and_display(q, interval_td, tail)
+            await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
 

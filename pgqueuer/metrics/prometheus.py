@@ -131,6 +131,6 @@ async def collect_metrics(
         ...     return await collect_metrics(queries)
     """
     queue_statistics = await repository.queue_size()
-    log_statistics = await repository.log_statistics(tail=None, last=last)
+    log_statistics = await repository.log_statistics(limit=None, last=last)
     names = metric_names or MetricNames()
     return "\n".join(aggregated_statistics(queue_statistics, log_statistics, names))

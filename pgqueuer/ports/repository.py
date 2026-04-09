@@ -124,7 +124,7 @@ class QueueRepositoryPort(Protocol):
 
     async def log_statistics(
         self,
-        tail: int | None,
+        limit: int | None,
         last: timedelta | None = None,
     ) -> list[models.LogStatistics]: ...
 
