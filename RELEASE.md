@@ -292,6 +292,66 @@ await pgq.run(
 - Note: stale job retries are now always enabled (previously `retry_timer=0`
   disabled them).
 
+### 17. `RetryWithBackoffEntrypointExecutor` removed
+
+The in-process retry executor `RetryWithBackoffEntrypointExecutor` has been removed
+along with its associated exceptions `MaxRetriesExceeded` and `MaxTimeExceeded`, and
+the `async-timeout` dependency.
+
+**How to migrate:** Use `DatabaseRetryEntrypointExecutor` instead (retries at the
+database level, surviving worker restarts):
+
+```python
+# Before
+from pgqueuer.executors import RetryWithBackoffEntrypointExecutor
+
+@pgq.entrypoint(
+    "my_task",
+    executor_factory=lambda p: RetryWithBackoffEntrypointExecutor(
+        parameters=p, max_attempts=5, max_delay=timedelta(seconds=10),
+    ),
+)
+
+# After
+from pgqueuer.executors import DatabaseRetryEntrypointExecutor
+
+@pgq.entrypoint(
+    "my_task",
+    executor_factory=lambda p: DatabaseRetryEntrypointExecutor(
+        parameters=p, max_attempts=5, max_delay=timedelta(minutes=5),
+    ),
+)
+```
+
+### 18. Tracing adapter re-exports removed
+
+`pgqueuer.adapters.tracing` no longer re-exports `TracingConfig`, `TRACER`,
+`set_tracing_class()`, or `TracingProtocol`. Import from `pgqueuer.ports.tracing`
+instead:
+
+```python
+# Before
+from pgqueuer.adapters.tracing import TRACER, set_tracing_class
+
+# After
+from pgqueuer.ports.tracing import TRACER, set_tracing_class
+```
+
+### 19. `log_statistics()` parameter renamed: `tail` → `limit`
+
+The `tail` parameter on `Queries.log_statistics()` has been renamed to `limit` for
+consistency with other methods.
+
+```python
+# Before
+stats = await queries.log_statistics(tail=100)
+
+# After
+stats = await queries.log_statistics(limit=100)
+```
+
+Positional calls (`log_statistics(100)`) are unaffected.
+
 ---
 
 ## New Features
@@ -481,6 +541,12 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Fixed docs CI workflow runner label.
 - Added `OnFailure` type to `pgqueuer.types` re-exports.
 - Added OpenTelemetry section to the tracing integration guide.
+- Removed `async-timeout` from dependencies (no longer needed).
+- Removed dead internal helpers: `ExponentialBackoff`, `timer()`,
+  `retry_timer_buffer_timeout()`.
+- Removed dead `EntrypointStatistics` class from `pgqueuer.domain.models`.
+- Added `has_function()` and `has_trigger()` to `SchemaManagementPort` for
+  schema introspection.
 
 ---
 
@@ -516,7 +582,13 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 14. **`retry_timer`:** Remove `retry_timer=...` from all `@pgq.entrypoint()` calls.
     Add `heartbeat_timeout=...` to `pgq.run()` if the 30s default doesn't fit. If
     you had varying per-entrypoint timers, use the maximum value.
-15. **Removed imports:** Delete any imports of `SyncEntrypoint`,
+15. **`RetryWithBackoffEntrypointExecutor`:** Replace with
+    `DatabaseRetryEntrypointExecutor`. Remove imports of `MaxRetriesExceeded`
+    and `MaxTimeExceeded`.
+16. **Tracing imports:** Change `from pgqueuer.adapters.tracing import ...` to
+    `from pgqueuer.ports.tracing import ...`.
+17. **`log_statistics(tail=...)`:** Rename keyword to `limit=...`.
+18. **Removed imports:** Delete any imports of `SyncEntrypoint`,
     `SyncContextEntrypoint`, or `run_factory`.
-16. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+19. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
