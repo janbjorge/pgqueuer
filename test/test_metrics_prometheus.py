@@ -32,7 +32,7 @@ class FakeQueries:
 
     async def log_statistics(
         self,
-        tail: int | None,
+        limit: int | None,
         last: timedelta | None = None,
     ) -> list[LogStatistics]:
         return self.log_stats
