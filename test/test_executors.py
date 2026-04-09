@@ -116,7 +116,6 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
     job = mocked_job(payload=b"context_forward_ref")
     job_context = Context(anyio.CancelScope(), resources={"marker": "forward"})
 
-    assert executor.accepts_context
     assert executor.parameters.accepts_context
 
     await executor.execute(job, job_context)
@@ -138,7 +137,6 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
     job = mocked_job(payload=b"no_context")
     job_context = Context(anyio.CancelScope(), resources={"marker": "unused"})
 
-    assert not executor.accepts_context
     assert not executor.parameters.accepts_context
 
     await executor.execute(job, job_context)
