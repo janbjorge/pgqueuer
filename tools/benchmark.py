@@ -491,25 +491,25 @@ if __name__ == "__main__":
     if os.environ.get("LOGFIRE", "0") == "1":
         import logfire
 
-        from pgqueuer.adapters import tracing as _tracing
         from pgqueuer.adapters.tracing.logfire import LogfireTracing
+        from pgqueuer.ports.tracing import set_tracing_class
 
         logfire.configure(service_name="pgqueuer")
 
-        _tracing.set_tracing_class(LogfireTracing())
+        set_tracing_class(LogfireTracing())
 
     if sentry_dsn := os.environ.get("SENTRY_DSN"):
         import sentry_sdk
 
-        from pgqueuer.adapters import tracing as _tracing
         from pgqueuer.adapters.tracing.sentry import SentryTracing
+        from pgqueuer.ports.tracing import set_tracing_class
 
         sentry_sdk.init(
             dsn=sentry_dsn,
             sample_rate=1,
             traces_sample_rate=1.0,
         )
-        _tracing.set_tracing_class(SentryTracing())
+        set_tracing_class(SentryTracing())
 
     with suppress(KeyboardInterrupt):
         app()
