@@ -15,7 +15,7 @@ from pydantic_core import to_json
 
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
-from pgqueuer.core.helpers import merge_tracing_headers
+from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
 from pgqueuer.ports import tracing

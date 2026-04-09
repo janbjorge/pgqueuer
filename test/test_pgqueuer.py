@@ -84,7 +84,7 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: PgQueuer)
 async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due
@@ -114,7 +114,7 @@ async def test_scheduler_runs_tasks(scheduler: PgQueuer, mocker: Mock) -> None:
 async def test_heartbeat_updates(scheduler: PgQueuer, mocker: Mock) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due
@@ -146,7 +146,7 @@ async def test_schedule_storage_and_retrieval(
 ) -> None:
     mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
     mocker.patch(
-        "pgqueuer.core.helpers.utc_now",
+        "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
     )
     # Mock croniter to return a time in the past, making the task immediately due

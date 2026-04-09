@@ -24,8 +24,7 @@ if TYPE_CHECKING:
 from pydantic_core import to_json
 
 from pgqueuer.adapters.persistence import qb, query_helpers
-from pgqueuer.core import helpers
-from pgqueuer.core.helpers import merge_tracing_headers
+from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports import tracing
@@ -587,7 +586,7 @@ class Queries:
             models.CancellationEvent(
                 channel=self.qbq.settings.channel,
                 ids=ids,
-                sent_at=helpers.utc_now(),
+                sent_at=datetime.now(timezone.utc),
                 type="cancellation_event",
             ).model_dump_json(),
         )

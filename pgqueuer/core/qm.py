@@ -25,7 +25,6 @@ from pgqueuer.core import (
     cache,
     executors,
     heartbeat,
-    helpers,
     listeners,
     logconfig,
     tm,
@@ -529,7 +528,7 @@ class QueueManager:
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
 
-                event_task = helpers.wait_for_notice_event(
+                event_task = listeners.wait_for_notice_event(
                     notice_event_listener,
                     await self._effective_dequeue_timeout(dequeue_timeout),
                 )

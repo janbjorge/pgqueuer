@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Sequence
+from typing import Generator, Sequence
 
 
 @dataclass
@@ -52,3 +52,18 @@ def normalize_enqueue_params(
         dedupe_key=normed_dedupe_key,
         headers=normed_headers,
     )
+
+
+def merge_tracing_headers(
+    headers: list[dict | None],
+    trace_headers: Generator[dict | None, None, None],
+) -> list[dict]:
+    """Merge tracing headers into the existing headers for each entrypoint."""
+    return [
+        {**(h or {}), **(t or {})}
+        for h, t in zip(
+            headers,
+            trace_headers,
+            strict=True,
+        )
+    ]

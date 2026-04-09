@@ -1,64 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from contextlib import nullcontext
-from datetime import timedelta
 
 import pytest
 
-from pgqueuer.core.helpers import (
-    add_schema_to_dsn,
-    merge_tracing_headers,
-    timeout_with_jitter,
-    utc_now,
-)
-
-
-async def test_perf_counter_dt() -> None:
-    assert utc_now().tzinfo is not None
-
-
-def test_delay_within_jitter_range() -> None:
-    base_timeout = timedelta(seconds=10)
-    jitter_span = (0.8, 1.2)
-
-    # Call the function multiple times to check the jitter range
-    for _ in range(100):
-        delay = timeout_with_jitter(base_timeout, jitter_span)
-        base_delay = base_timeout.total_seconds()
-        assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
-
-
-def test_delay_is_timedelta() -> None:
-    base_timeout = timedelta(seconds=5)
-    delay = timeout_with_jitter(base_timeout)
-    assert isinstance(delay, timedelta)
-
-
-def test_custom_jitter_range() -> None:
-    base_timeout = timedelta(seconds=8)
-    jitter_span = (0.5, 1.5)
-
-    # Call the function multiple times to check the custom jitter range
-    for _ in range(100):
-        delay = timeout_with_jitter(base_timeout, jitter_span)
-        base_delay = base_timeout.total_seconds()
-        assert base_delay * jitter_span[0] <= delay.total_seconds() <= base_delay * jitter_span[1]
-
-
-@pytest.mark.parametrize(
-    "span,raises",
-    [
-        ((-0.2, 0.2), True),
-        ((0, 1), True),
-        ((1.3, 0.5), False),
-    ],
-)
-def test_jitter_span_validation(span: tuple[float, float], raises: bool) -> None:
-    cm = pytest.raises(ValueError) if raises else nullcontext()
-
-    with cm:
-        timeout_with_jitter(timedelta(seconds=1), span)
+from pgqueuer.adapters.cli.cli import _add_schema_to_dsn
+from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 
 
 @pytest.mark.parametrize(
@@ -98,25 +45,25 @@ def test_add_schema_to_empty_dsn() -> None:
     dsn = "postgresql://user:password@host:port/dbname"
     schema = "myschema"
     expected = "postgresql://user:password@host:port/dbname?options=-csearch_path%3Dmyschema"
-    assert add_schema_to_dsn(dsn, schema) == expected
+    assert _add_schema_to_dsn(dsn, schema) == expected
 
 
 def test_add_schema_to_dsn_with_existing_query() -> None:
     dsn = "postgresql://user:password@host:port/dbname?sslmode=require"
     schema = "myschema"
     expected = "postgresql://user:password@host:port/dbname?sslmode=require&options=-csearch_path%3Dmyschema"
-    assert add_schema_to_dsn(dsn, schema) == expected
+    assert _add_schema_to_dsn(dsn, schema) == expected
 
 
 def test_raise_on_existing_search_path() -> None:
     dsn = "postgresql://user:password@host:port/dbname?options=-c+search_path=otherschema"
     schema = "myschema"
     with pytest.raises(ValueError, match="search_path is already set in the options parameter."):
-        add_schema_to_dsn(dsn, schema)
+        _add_schema_to_dsn(dsn, schema)
 
 
 def test_preserve_other_options_and_add_search_path() -> None:
     dsn = "postgresql://user:password@host:port/dbname?options=-cother_option=foo"
     schema = "myschema"
     expected = "postgresql://user:password@host:port/dbname?options=-cother_option%3Dfoo&options=-csearch_path%3Dmyschema"
-    assert add_schema_to_dsn(dsn, schema) == expected
+    assert _add_schema_to_dsn(dsn, schema) == expected
