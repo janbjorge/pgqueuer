@@ -547,6 +547,8 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Removed dead `EntrypointStatistics` class from `pgqueuer.domain.models`.
 - Added `has_function()` and `has_trigger()` to `SchemaManagementPort` for
   schema introspection.
+- Deleted `pgqueuer/core/helpers.py` — functions moved to their natural modules
+  (`listeners.py`, `executors.py`, `query_helpers.py`, etc.).
 
 ---
 
