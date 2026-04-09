@@ -12,13 +12,24 @@ import asyncio
 import contextlib
 import random
 from datetime import datetime, timedelta, timezone
-from typing import Generator
+from typing import Callable, Generator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from croniter import croniter
 
 from pgqueuer.core import listeners
 from pgqueuer.domain import models
+
+
+@contextlib.contextmanager
+def timer() -> Generator[Callable[[], timedelta], None, None]:
+    """Context manager to measure elapsed time."""
+    enter = datetime.now()
+    exit: None | datetime = None
+    try:
+        yield lambda: (exit or datetime.now()) - enter
+    finally:
+        exit = datetime.now()
 
 
 def utc_now() -> datetime:
