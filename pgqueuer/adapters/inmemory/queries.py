@@ -84,6 +84,12 @@ class InMemoryQueries:
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         return True
 
+    async def has_function(self, function: str) -> bool:
+        return True
+
+    async def has_trigger(self, trigger: str) -> bool:
+        return True
+
     # -- enqueue ---------------------------------------------------------------
 
     @overload
