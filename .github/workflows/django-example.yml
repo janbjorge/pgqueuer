@@ -1,0 +1,86 @@
+name: Django Example E2E
+
+on:
+  push:
+    paths:
+      - "examples/django_example/**"
+  pull_request:
+    paths:
+      - "examples/django_example/**"
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pgqueuer_demo
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_DB: pgqueuer_demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: examples/django_example
+        run: |
+          pip install django psycopg2-binary asyncpg
+          pip install -e ../..
+
+      - name: Run migrations
+        working-directory: examples/django_example
+        run: python manage.py migrate
+
+      - name: Install PGQueuer tables
+        working-directory: examples/django_example
+        run: pgqueuer install
+
+      - name: E2E test — enqueue and process job
+        working-directory: examples/django_example
+        run: |
+          python manage.py shell -c "
+          import asyncio, json, os
+          from myapp.models import EmailJob
+          from pgqueuer.db import AsyncpgDriver
+          from pgqueuer.queries import Queries
+          import asyncpg
+
+          # Create a job in DB
+          job = EmailJob.objects.create(recipient='test@example.com', subject='CI Test', body='Hello', status='pending')
+          assert job.status == 'pending'
+          print(f'Created job {job.id}')
+
+          # Enqueue with PGQueuer
+          async def enqueue():
+              conn = await asyncpg.connect(host='localhost', user='postgres', password='postgres', database='pgqueuer_demo')
+              driver = AsyncpgDriver(conn)
+              q = Queries(driver)
+              jid = await q.enqueue('send_email', json.dumps({'job_db_id': job.id, 'recipient': 'test@example.com', 'subject': 'CI Test', 'body': 'Hello'}).encode())
+              await conn.close()
+              return jid
+
+          jid = asyncio.run(enqueue())
+          print(f'Enqueued PGQueuer job {jid}')
+          assert jid is not None
+          print('E2E test passed: job enqueued successfully')
+          "
