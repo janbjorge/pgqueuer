@@ -8,12 +8,10 @@ and statistical data structures for logging and monitoring.
 
 from __future__ import annotations
 
-import asyncio
 import dataclasses
 import traceback
 import uuid
 from collections.abc import MutableMapping
-from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, NamedTuple
 
@@ -227,11 +225,6 @@ class ScheduleContext:
     """
 
     resources: MutableMapping = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass
-class EntrypointStatistics:
-    concurrency_limiter: asyncio.Semaphore | nullcontext
 
 
 ###### Schedules ######

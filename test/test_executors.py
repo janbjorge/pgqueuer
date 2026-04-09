@@ -8,14 +8,11 @@ from typing import Awaitable, Callable
 import anyio
 import pytest
 
-from pgqueuer.core.helpers import timer
 from pgqueuer.db import Driver
-from pgqueuer.errors import MaxRetriesExceeded, MaxTimeExceeded
 from pgqueuer.executors import (
     AbstractEntrypointExecutor,
     EntrypointExecutor,
     EntrypointExecutorParameters,
-    RetryWithBackoffEntrypointExecutor,
     is_async_callable,
 )
 from pgqueuer.models import Context, Job
@@ -119,7 +116,6 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
     job = mocked_job(payload=b"context_forward_ref")
     job_context = Context(anyio.CancelScope(), resources={"marker": "forward"})
 
-    assert executor.accepts_context
     assert executor.parameters.accepts_context
 
     await executor.execute(job, job_context)
@@ -141,7 +137,6 @@ async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) 
     job = mocked_job(payload=b"no_context")
     job_context = Context(anyio.CancelScope(), resources={"marker": "unused"})
 
-    assert not executor.accepts_context
     assert not executor.parameters.accepts_context
 
     await executor.execute(job, job_context)
@@ -367,113 +362,6 @@ def test_is_async_callable_sync_dunder_call_returning_coroutine() -> None:
             return async_inner(job)
 
     assert is_async_callable(HybridCallable()) is False
-
-
-async def test_retry_with_backoff_entrypoint_executor_max_attempts(apgdriver: Driver) -> None:
-    jobs = list[Job]()
-
-    async def raises(job: Job) -> None:
-        await asyncio.sleep(0)
-        jobs.append(job)
-        raise ValueError
-
-    parameters = EntrypointExecutorParameters(
-        concurrency_limit=10,
-        func=raises,
-    )
-    exc = RetryWithBackoffEntrypointExecutor(
-        parameters,
-        initial_delay=0,
-        jitter=lambda: 0,
-    )
-
-    exc.max_attempts = 5
-    exc.max_time = timedelta(seconds=300)
-    mj = mocked_job()
-    with pytest.raises(MaxRetriesExceeded):
-        await exc.execute(
-            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_attempts_2"})
-        )
-    assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
-
-    exc.max_attempts = 10
-    exc.max_time = timedelta(seconds=300)
-    mj = mocked_job()
-    with pytest.raises(MaxRetriesExceeded):
-        await exc.execute(
-            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_time_1"})
-        )
-    assert sum(j.id == mj.id for j in jobs) == exc.max_attempts
-
-
-async def test_retry_with_backoff_entrypoint_executor_max_time(apgdriver: Driver) -> None:
-    async def raises(_: Job) -> None:
-        await asyncio.sleep(0.01)
-        raise ValueError
-
-    parameters = EntrypointExecutorParameters(
-        concurrency_limit=10,
-        func=raises,
-    )
-    exc = RetryWithBackoffEntrypointExecutor(
-        parameters,
-        initial_delay=0,
-        jitter=lambda: 0,
-    )
-
-    exc.max_attempts = 1000
-    exc.max_time = timedelta(seconds=0.01)
-    mj = mocked_job()
-    with (
-        timer() as elp,
-        pytest.raises(MaxTimeExceeded),
-    ):
-        await exc.execute(
-            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_max_time_2"})
-        )
-
-    leeway = 1.1
-    assert elp() * leeway >= exc.max_time
-
-    exc.max_attempts = 1000
-    exc.max_time = timedelta(seconds=0.1)
-    mj = mocked_job()
-    with (
-        timer() as elp,
-        pytest.raises(MaxTimeExceeded),
-    ):
-        await exc.execute(
-            mj, Context(anyio.CancelScope(), resources={"test_key": "retry_until_pass"})
-        )
-
-    assert elp() * leeway >= exc.max_time
-
-
-async def test_retry_with_backoff_entrypoint_executor_until_pass(apgdriver: Driver) -> None:
-    N = 10
-    jobs = list[Job]()
-
-    async def raises(job: Job) -> None:
-        await asyncio.sleep(0.001)
-        jobs.append(job)
-        if len(jobs) > N:
-            return
-        raise ValueError
-
-    parameters = EntrypointExecutorParameters(
-        concurrency_limit=10,
-        func=raises,
-    )
-    exc = RetryWithBackoffEntrypointExecutor(
-        parameters,
-        initial_delay=0,
-        jitter=lambda: 0,
-    )
-
-    exc.max_attempts = 1000
-    exc.max_time = timedelta(seconds=0.1)
-    mj = mocked_job()
-    await exc.execute(mj, Context(anyio.CancelScope()))
 
 
 def test_is_async_callable_inspect_vs_call_attribute() -> None:

@@ -126,20 +126,17 @@ With `initial_delay=1s`, `backoff_multiplier=2.0`, `max_delay=60s`:
 | 5 | 32s |
 | 6+ | 60s (capped) |
 
-## Retry vs. Other Retry Mechanisms
+## Retry vs. Heartbeat Recovery
 
-PgQueuer has three retry mechanisms, each suited to a different failure mode:
+PgQueuer has two complementary retry mechanisms:
 
 | Mechanism | Scope | When to use |
 |-----------|-------|-------------|
-| `RetryRequested` | Database-level | Transient failures where you want the job to survive across worker restarts and be visible to any worker |
-| `RetryWithBackoffEntrypointExecutor` | In-process | Transient failures where retrying immediately in the same worker is sufficient |
-| `retry_timer` | Worker-crash recovery | Stalled jobs whose worker has crashed without updating the heartbeat |
+| `RetryRequested` / `DatabaseRetryEntrypointExecutor` | Database-level | Transient failures where you want the job to survive across worker restarts and be visible to any worker |
+| Heartbeat timeout | Worker-crash recovery | Stalled jobs whose worker has crashed without updating the heartbeat |
 
-**Key difference:** `RetryRequested` re-queues the job in the database, so any worker can
-pick it up. `RetryWithBackoffEntrypointExecutor` retries within the same process, so if the
-worker crashes mid-retry the attempts are lost. Use database-level retry when durability
-across restarts matters.
+`RetryRequested` re-queues the job in the database, so any worker can pick it up.
+Heartbeat recovery handles the case where a worker crashes without raising an exception.
 
 ## Traceability
 

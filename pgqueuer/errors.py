@@ -3,8 +3,6 @@
 from pgqueuer.domain.errors import (
     DuplicateJobError,
     FailingListenerError,
-    MaxRetriesExceeded,
-    MaxTimeExceeded,
     PgqException,
     RetryException,
     RetryRequested,
@@ -13,8 +11,6 @@ from pgqueuer.domain.errors import (
 __all__ = [
     "DuplicateJobError",
     "FailingListenerError",
-    "MaxRetriesExceeded",
-    "MaxTimeExceeded",
     "PgqException",
     "RetryException",
     "RetryRequested",

@@ -32,14 +32,6 @@ class RetryRequested(RetryException):
         self.reason = reason
 
 
-class MaxRetriesExceeded(RetryException):
-    """Exception raised when all retry attempts have been exhausted."""
-
-
-class MaxTimeExceeded(RetryException):
-    """Exception raised when the maximum time limit for retries has been exceeded."""
-
-
 class DuplicateJobError(PgqException):
     """Raised when enqueue violates a deduplication constraint."""
 
