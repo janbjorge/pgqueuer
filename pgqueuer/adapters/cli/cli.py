@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
 from typing import Callable
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import typer
 from tabulate import tabulate
@@ -16,7 +15,6 @@ from typer import Context
 from typing_extensions import AsyncGenerator
 
 from pgqueuer.adapters.cli import factories, supervisor
-from pgqueuer.adapters.drivers import dsn
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.domain import models, types
@@ -46,48 +44,17 @@ class VerifyMode(Enum):
     ABSENT = "absent"
 
 
-def _add_schema_to_dsn(dsn_str: str, schema: str) -> str:
-    """Add a search_path schema to a PostgreSQL DSN, raising if one already exists."""
-    parts = urlparse(dsn_str)
-    query = parse_qs(parts.query)
-    options = query.get("options", [])
-    if any(opt.startswith("-c search_path=") for opt in options):
-        raise ValueError("search_path is already set in the options parameter.")
-    options.append(f"-csearch_path={schema}")
-    query["options"] = options
-    return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
-
-
 @dataclass
 class AppConfig:
     """Application configuration for PGQueuer CLI."""
 
     prefix: str = ""
     pg_dsn: str = ""
-    pg_host: str = ""
-    pg_port: str = "5432"
-    pg_user: str = ""
-    pg_database: str = ""
-    pg_password: str = ""
-    pg_schema: str = ""
     factory_fn_ref: str | None = None
 
     def setup_env(self) -> None:
         if self.prefix:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
-
-    @property
-    def dsn(self) -> str:
-        computed_dsn = self.pg_dsn or dsn(
-            database=self.pg_database,
-            password=self.pg_password,
-            port=self.pg_port,
-            user=self.pg_user,
-            host=self.pg_host,
-        )
-        if self.pg_schema is not None:
-            computed_dsn = _add_schema_to_dsn(computed_dsn, self.pg_schema)
-        return computed_dsn
 
 
 @app.callback()
@@ -99,39 +66,14 @@ def main(
         envvar="PGQUEUER_PREFIX",
     ),
     pg_dsn: str = typer.Option(
-        None,
-        help="Database DSN.",
+        "",
+        help=(
+            "PostgreSQL connection string (DSN). "
+            "When omitted, standard libpq env vars "
+            "(PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT) are used. "
+            "Use PGOPTIONS for search_path."
+        ),
         envvar="PGDSN",
-    ),
-    pg_host: str = typer.Option(
-        None,
-        help="Database host.",
-        envvar="PGHOST",
-    ),
-    pg_port: str = typer.Option(
-        "5432",
-        help="Database port.",
-        envvar="PGPORT",
-    ),
-    pg_user: str = typer.Option(
-        None,
-        help="Database user.",
-        envvar="PGUSER",
-    ),
-    pg_database: str = typer.Option(
-        None,
-        help="Database name.",
-        envvar="PGDATABASE",
-    ),
-    pg_password: str = typer.Option(
-        None,
-        help="Database password.",
-        envvar="PGPASSWORD",
-    ),
-    pg_schema: str = typer.Option(
-        None,
-        help="Database schema.",
-        envvar="PGSCHEMA",
     ),
     factory_fn_ref: str | None = typer.Option(
         None,
@@ -143,12 +85,6 @@ def main(
     config = AppConfig(
         prefix=prefix,
         pg_dsn=pg_dsn,
-        pg_host=pg_host,
-        pg_port=pg_port,
-        pg_user=pg_user,
-        pg_database=pg_database,
-        pg_password=pg_password,
-        pg_schema=pg_schema,
         factory_fn_ref=factory_fn_ref,
     )
     config.setup_env()
@@ -172,7 +108,7 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
             yield queries.Queries(
-                AsyncpgDriver(await asyncpg.connect(dsn=config.dsn)),
+                AsyncpgDriver(await asyncpg.connect(dsn=config.pg_dsn or None)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),
@@ -184,7 +120,9 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             yield queries.Queries(
-                PsycopgDriver(await psycopg.AsyncConnection.connect(config.dsn, autocommit=True)),
+                PsycopgDriver(
+                    await psycopg.AsyncConnection.connect(config.pg_dsn or "", autocommit=True)
+                ),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),

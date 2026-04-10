@@ -12,7 +12,7 @@ try:
 except ImportError:
     from asyncio import run as asyncio_run  # type: ignore[assignment]
 
-from pgqueuer.db import AsyncpgDriver, dsn
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
@@ -61,7 +61,7 @@ async def consumer(driver: AsyncpgDriver) -> None:
 
 
 async def main() -> None:
-    connection = await asyncpg.connect(dsn())
+    connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
 
     await producer(driver)

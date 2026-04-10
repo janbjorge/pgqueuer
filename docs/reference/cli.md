@@ -314,10 +314,9 @@ All commands accept the following connection options:
 
 | Flag | Env Variable | Description |
 |------|-------------|-------------|
-| `--pg-dsn` | `PGQUEUER_PG_DSN` | Full PostgreSQL DSN (overrides individual settings) |
-| `--pg-host` | `PGHOST` | Database host |
-| `--pg-port` | `PGPORT` | Database port |
-| `--pg-user` | `PGUSER` | Database user |
-| `--pg-password` | `PGPASSWORD` | Database password |
-| `--pg-database` | `PGDATABASE` | Database name |
-| `--pg-schema` | — | PostgreSQL schema for PgQueuer objects |
+| `--pg-dsn` | `PGDSN` | Full PostgreSQL connection string (DSN) |
+| `--prefix` | `PGQUEUER_PREFIX` | Prefix for PgQueuer database objects |
+
+When `--pg-dsn` is omitted, the database drivers (asyncpg / psycopg) read standard
+libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
+`PGDATABASE`. Use `PGOPTIONS="-csearch_path=myschema"` to set a custom schema.
