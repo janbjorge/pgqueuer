@@ -430,25 +430,49 @@ worker_load AS (
       AND entrypoint = ANY($2)
 ),
 
--- Eligible jobs: new (queued) or stale (picked past heartbeat timeout).
-eligible AS (
+-- New queued jobs (uses partial index WHERE status = 'queued').
+next_queued AS (
     SELECT q.id
     FROM {t} q
     JOIN      params p  ON p.entrypoint  = q.entrypoint
     LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
-    WHERE q.execute_after < NOW()
-      -- per-worker max-concurrent-tasks cap
+    WHERE q.status = 'queued'
+      AND q.execute_after < NOW()
       AND ($5::BIGINT IS NULL
            OR (SELECT total FROM worker_load) < $5)
-      -- per-entrypoint concurrency
       AND (p.concurrency_limit <= 0
            OR COALESCE(pk.total, 0) < p.concurrency_limit)
-      -- queued jobs  OR  stale picked jobs (heartbeat timed out)
-      AND (   q.status = 'queued'
-           OR (    q.status = 'picked'
-               AND q.heartbeat < NOW() - $6::interval))
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED
+    LIMIT $1
+),
+
+-- Stale picked jobs whose heartbeat timed out (uses partial index WHERE status = 'picked').
+next_stale AS (
+    SELECT q.id
+    FROM {t} q
+    JOIN      params p  ON p.entrypoint  = q.entrypoint
+    LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
+    WHERE q.status = 'picked'
+      AND q.heartbeat < NOW() - $6::interval
+      AND q.execute_after < NOW()
+      AND ($5::BIGINT IS NULL
+           OR (SELECT total FROM worker_load) < $5)
+      AND (p.concurrency_limit <= 0
+           OR COALESCE(pk.total, 0) < p.concurrency_limit)
+    ORDER BY q.priority DESC, q.id ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT $1
+),
+
+-- Merge both sets, keeping priority order, capped to batch size.
+eligible AS (
+    SELECT id FROM (
+        SELECT id, 0 AS src FROM next_queued
+        UNION ALL
+        SELECT id, 1 AS src FROM next_stale
+    ) combined
+    ORDER BY src, id
     LIMIT $1
 ),
 
