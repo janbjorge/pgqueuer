@@ -3,23 +3,23 @@ from typing import cast
 import psycopg
 from flask import Flask, Response, g, jsonify, request
 
-from pgqueuer import db
+from pgqueuer.db import SyncPsycopgDriver
 from pgqueuer.queries import SyncQueries
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
 
-    def get_driver() -> db.SyncPsycopgDriver:
+    def get_driver() -> SyncPsycopgDriver:
         if "driver" not in g:
-            conn = psycopg.connect(db.dsn(), autocommit=True)
-            g.driver = db.SyncPsycopgDriver(conn)
+            conn = psycopg.connect("", autocommit=True)
+            g.driver = SyncPsycopgDriver(conn)
 
-        return cast(db.SyncPsycopgDriver, g.driver)
+        return cast(SyncPsycopgDriver, g.driver)
 
     @app.teardown_appcontext
     def teardown_db(exception: BaseException | None) -> None:
-        driver = cast(db.SyncPsycopgDriver | None, g.pop("driver", None))
+        driver = cast(SyncPsycopgDriver | None, g.pop("driver", None))
 
         if driver is not None:
             driver._connection.close()

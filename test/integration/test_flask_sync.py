@@ -4,6 +4,7 @@ import sys
 from http import HTTPStatus
 from pathlib import Path
 from typing import Generator
+from urllib.parse import urlparse
 
 import pytest
 from flask.testing import FlaskClient
@@ -11,22 +12,18 @@ from flask.testing import FlaskClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from examples.flask_sync_usage import create_app
-from pgqueuer import db as pgq_db
 
 
 @pytest.fixture(scope="function")
-def client() -> Generator[FlaskClient, None, None]:
+def client(monkeypatch: pytest.MonkeyPatch, dsn: str) -> Generator[FlaskClient, None, None]:
+    parsed = urlparse(dsn)
+    monkeypatch.setenv("PGHOST", parsed.hostname or "")
+    monkeypatch.setenv("PGPORT", str(parsed.port or 5432))
+    monkeypatch.setenv("PGUSER", parsed.username or "")
+    monkeypatch.setenv("PGPASSWORD", parsed.password or "")
+    monkeypatch.setenv("PGDATABASE", parsed.path.lstrip("/"))
     with create_app().test_client() as client:
         yield client
-
-
-@pytest.fixture(autouse=True)
-async def patch_dsn_fn(
-    monkeypatch: pytest.MonkeyPatch,
-    dsn: str,
-) -> None:
-    """Patch the DSN function to return the provided DSN."""
-    monkeypatch.setattr(pgq_db, "dsn", lambda: dsn)
 
 
 def test_enqueue_and_size(client: FlaskClient) -> None:

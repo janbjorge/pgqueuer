@@ -21,7 +21,7 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer import PgQueuer, types
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver, dsn
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
 from pgqueuer.domain.settings import add_prefix
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
@@ -181,8 +181,8 @@ _shared_inmem: RepositoryPort | None = None
 
 
 def _get_conninfo(driver: DriverEnum) -> str:
-    """Return connection string, or empty for the in-memory driver."""
-    return "" if driver == DriverEnum.mem else dsn()
+    """Return connection string. Empty means libpq env vars are used."""
+    return ""
 
 
 async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort:

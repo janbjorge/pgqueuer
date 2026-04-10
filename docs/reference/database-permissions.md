@@ -86,7 +86,7 @@ CREATE SCHEMA pgq;
 GRANT USAGE ON SCHEMA pgq TO pgqueuer_app;
 
 -- Install into the dedicated schema
-pgq --pg-schema pgq install
+PGOPTIONS="-csearch_path=pgq" pgq install
 ```
 
 This separates PgQueuer objects from application tables and makes privilege management

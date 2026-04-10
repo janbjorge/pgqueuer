@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 
 import asyncpg
 
-from pgqueuer.db import AsyncpgDriver, dsn
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.models import Schedule
 from pgqueuer.sm import SchedulerManager
 
@@ -12,7 +12,7 @@ from pgqueuer.sm import SchedulerManager
 @asynccontextmanager
 async def create_scheduler() -> AsyncGenerator[SchedulerManager, None]:
     # Establish a connection to PostgreSQL
-    connection = await asyncpg.connect(dsn())
+    connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
     sm = SchedulerManager(driver)
 
