@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
 from typing import Callable
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import typer
 from tabulate import tabulate
@@ -46,18 +45,6 @@ class VerifyMode(Enum):
     ABSENT = "absent"
 
 
-def _add_schema_to_dsn(dsn_str: str, schema: str) -> str:
-    """Add a search_path schema to a PostgreSQL DSN, raising if one already exists."""
-    parts = urlparse(dsn_str)
-    query = parse_qs(parts.query)
-    options = query.get("options", [])
-    if any(opt.startswith("-c search_path=") for opt in options):
-        raise ValueError("search_path is already set in the options parameter.")
-    options.append(f"-csearch_path={schema}")
-    query["options"] = options
-    return urlunparse(parts._replace(query=urlencode(query, doseq=True)))
-
-
 @dataclass
 class AppConfig:
     """Application configuration for PGQueuer CLI."""
@@ -78,16 +65,19 @@ class AppConfig:
 
     @property
     def dsn(self) -> str:
-        computed_dsn = self.pg_dsn or dsn(
+        if self.pg_dsn:
+            if self.pg_schema:
+                sep = "&" if "?" in self.pg_dsn else "?"
+                return f"{self.pg_dsn}{sep}options=-csearch_path%3D{self.pg_schema}"
+            return self.pg_dsn
+        return dsn(
             database=self.pg_database,
             password=self.pg_password,
             port=self.pg_port,
             user=self.pg_user,
             host=self.pg_host,
+            schema=self.pg_schema,
         )
-        if self.pg_schema is not None:
-            computed_dsn = _add_schema_to_dsn(computed_dsn, self.pg_schema)
-        return computed_dsn
 
 
 @app.callback()

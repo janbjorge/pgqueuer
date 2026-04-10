@@ -11,6 +11,7 @@ def dsn(
     password: str = "",
     database: str = "",
     port: str = "",
+    schema: str = "",
 ) -> str:
     """
     Construct a PostgreSQL DSN (Data Source Name) from parameters or environment variables.
@@ -27,4 +28,7 @@ def dsn(
     password = password or os.getenv("PGPASSWORD", "")
     database = database or os.getenv("PGDATABASE", "")
     port = port or os.getenv("PGPORT", "")
-    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    base = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+    if schema:
+        return f"{base}?options=-csearch_path%3D{schema}"
+    return base
