@@ -202,6 +202,15 @@ Google-style when present: `Args:`, `Returns:`, `Raises:` sections. Not every me
 - Key fixtures in `test/conftest.py`: `dsn` (per-test DB URL), `apgdriver` (AsyncpgDriver), `pgdriver` (SyncPsycopgDriver)
 - In-memory tests (`test_inmemory.py`) don't need Postgres
 
+## Versioning
+
+PgQueuer follows **strict semantic versioning** (SemVer) from v1.0.0 onward:
+- **Patch** (1.0.x): Bug fixes only, no API changes.
+- **Minor** (1.x.0): New features, fully backward-compatible.
+- **Major** (x.0.0): Breaking changes — reserved for when there is no alternative.
+
+Never introduce a breaking change in a patch or minor release. If a change would break any public API (function signatures, class fields, import paths, CLI behavior, database schema), it requires a major version bump.
+
 ## Commit Conventions
 
 ### Title Format
