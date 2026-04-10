@@ -185,8 +185,7 @@ async def execute(self, schedule: Schedule, context: ScheduleContext) -> None: .
 
 `TracingConfig`, `TRACER`, and `set_tracing_class()` moved from
 `pgqueuer.adapters.tracing` to `pgqueuer.ports.tracing`. The adapter module
-re-exports them for backward compatibility, so most code continues to work. However,
-`from pgqueuer.adapters.tracing import TracingConfig` is deprecated — use
+no longer re-exports them (see breaking change #18). Use
 `from pgqueuer.ports.tracing import TracingConfig` instead.
 
 ### 11. Internal shim modules removed from package root
@@ -202,7 +201,7 @@ any of these paths, update to the canonical location:
 | `pgqueuer.cli`          | `pgqueuer.adapters.cli.cli`                       |
 | `pgqueuer.completion`   | `pgqueuer.core.completion`                        |
 | `pgqueuer.heartbeat`    | `pgqueuer.core.heartbeat`                         |
-| `pgqueuer.helpers`      | `pgqueuer.core.helpers`                           |
+| `pgqueuer.helpers`      | Removed entirely (see breaking change #20)        |
 | `pgqueuer.listeners`    | `pgqueuer.core.listeners`                         |
 | `pgqueuer.logconfig`    | `pgqueuer.core.logconfig`                         |
 | `pgqueuer.qb`           | `pgqueuer.domain.settings` / `pgqueuer.adapters.persistence.qb` |
@@ -351,6 +350,50 @@ stats = await queries.log_statistics(limit=100)
 ```
 
 Positional calls (`log_statistics(100)`) are unaffected.
+
+### 20. CLI connection options simplified — `dsn()` helper removed
+
+The 6 individual connection CLI options (`--pg-host`, `--pg-port`, `--pg-user`,
+`--pg-database`, `--pg-password`, `--pg-schema`) and the `dsn()` helper function
+have been removed. Both asyncpg and psycopg natively read standard libpq
+environment variables (`PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGPORT`)
+when no DSN is provided.
+
+**What was removed:**
+
+- CLI options: `--pg-host`, `--pg-port`, `--pg-user`, `--pg-database`,
+  `--pg-password`, `--pg-schema`
+- `dsn()` function from `pgqueuer.adapters.drivers` and `pgqueuer.db`
+- `AppConfig` fields: `pg_host`, `pg_port`, `pg_user`, `pg_database`,
+  `pg_password`, `pg_schema`
+
+**What stays:**
+
+- `--pg-dsn` / `PGDSN` — pass a full connection string
+- `--prefix` / `PGQUEUER_PREFIX` — prefix for PgQueuer database objects
+
+**How to migrate:**
+
+```bash
+# Before
+pgq --pg-host localhost --pg-user myuser --pg-database mydb install
+
+# After — use standard libpq env vars
+PGHOST=localhost PGUSER=myuser PGDATABASE=mydb pgq install
+
+# Before
+pgq --pg-schema myschema install
+
+# After — use standard PGOPTIONS env var
+PGOPTIONS="-csearch_path=myschema" pgq install
+
+# Before (in code)
+from pgqueuer.db import dsn
+connection = await asyncpg.connect(dsn())
+
+# After — asyncpg reads env vars natively
+connection = await asyncpg.connect()
+```
 
 ---
 
@@ -549,6 +592,9 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   schema introspection.
 - Deleted `pgqueuer/core/helpers.py` — functions moved to their natural modules
   (`listeners.py`, `executors.py`, `query_helpers.py`, etc.).
+- Removed `dsn()` helper from `pgqueuer.adapters.drivers` and `pgqueuer.db` —
+  use `asyncpg.connect()` or `psycopg.connect("")` which read libpq env vars
+  natively.
 
 ---
 
@@ -590,7 +636,11 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 16. **Tracing imports:** Change `from pgqueuer.adapters.tracing import ...` to
     `from pgqueuer.ports.tracing import ...`.
 17. **`log_statistics(tail=...)`:** Rename keyword to `limit=...`.
-18. **Removed imports:** Delete any imports of `SyncEntrypoint`,
-    `SyncContextEntrypoint`, or `run_factory`.
-19. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+18. **CLI connection options:** Replace `--pg-host`, `--pg-user`, etc. with
+    standard libpq env vars (`PGHOST`, `PGUSER`, etc.). Replace `--pg-schema`
+    with `PGOPTIONS="-csearch_path=..."`. Replace `from pgqueuer.db import dsn`
+    with `asyncpg.connect()` (no args).
+19. **Removed imports:** Delete any imports of `SyncEntrypoint`,
+    `SyncContextEntrypoint`, `run_factory`, or `dsn`.
+20. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
