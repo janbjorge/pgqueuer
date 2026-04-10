@@ -1340,7 +1340,6 @@ name = "pgqueuer"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
-    { name = "async-timeout" },
     { name = "croniter" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1354,7 +1353,6 @@ asyncpg = [
     { name = "asyncpg" },
 ]
 dev = [
-    { name = "async-timeout" },
     { name = "asyncpg" },
     { name = "asyncpg-stubs" },
     { name = "fastapi" },
@@ -1410,11 +1408,14 @@ sentry = [
     { name = "sentry-sdk" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "async-timeout" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "anyio", specifier = ">=4.0" },
-    { name = "async-timeout", specifier = ">=5.0.1" },
-    { name = "async-timeout", marker = "extra == 'dev'", specifier = ">=4.0.3" },
     { name = "asyncpg", marker = "extra == 'asyncpg'", specifier = ">=0.30.0" },
     { name = "asyncpg", marker = "extra == 'dev'" },
     { name = "asyncpg", marker = "extra == 'mcp'", specifier = ">=0.30.0" },
@@ -1463,6 +1464,9 @@ requires-dist = [
     { name = "uvloop", marker = "sys_platform != 'win32'", specifier = ">=0.22.0" },
 ]
 provides-extras = ["asyncpg", "psycopg", "logfire", "sentry", "opentelemetry", "fastapi", "mcp", "dev", "docs"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "async-timeout", specifier = ">=5.0.1" }]
 
 [[package]]
 name = "platformdirs"
