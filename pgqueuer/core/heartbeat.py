@@ -42,13 +42,14 @@ class Heartbeat:
 
     async def send_heartbeat(self) -> None:
         while not self.shutdown.is_set():
+            with suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    self.shutdown.wait(),
+                    timeout=self.interval.total_seconds(),
+                )
+            if self.shutdown.is_set():
+                break
             try:
                 await self.buffer.add(self.job_id)
             except Exception as e:
                 logconfig.logger.exception("Failed to send heartbeat: %s", e)
-            finally:
-                with suppress(TimeoutError, asyncio.TimeoutError):
-                    await asyncio.wait_for(
-                        self.shutdown.wait(),
-                        timeout=self.interval.total_seconds(),
-                    )
