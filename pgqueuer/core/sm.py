@@ -12,6 +12,7 @@ import croniter
 from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, logconfig, tm
 from pgqueuer.domain import models
+from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 
@@ -45,6 +46,10 @@ class SchedulerManager:
             init=False,
             default_factory=dict,
         )
+    )
+    active_heartbeat_ids: set[ScheduleId] = dataclasses.field(
+        init=False,
+        default_factory=set,
     )
 
     def __post_init__(self) -> None:
@@ -148,6 +153,7 @@ class SchedulerManager:
             tm.TaskManager() as task_manager,
             self.connection,
         ):
+            task_manager.add(asyncio.create_task(self._heartbeat_loop()))
             while not self.shutdown.is_set():
                 scheduled = await self.queries.fetch_schedule(
                     {k: v.next_in() for k, v in self.registry.items()}
@@ -163,7 +169,6 @@ class SchedulerManager:
                                     )
                                 ],
                                 schedule,
-                                task_manager,
                             ),
                         )
                     )
@@ -185,7 +190,6 @@ class SchedulerManager:
         self,
         executor: executors.AbstractScheduleExecutor,
         schedule: models.Schedule,
-        task_manager: tm.TaskManager,
     ) -> None:
         """
         Dispatch a scheduled job for execution.
@@ -195,23 +199,14 @@ class SchedulerManager:
                 responsible for running the job.
             schedule (models.Schedule): The schedule object containing details
                 of the job to be executed.
-            task_manager (tm.TaskManager): The task manager to manage the
-                execution tasks.
         """
         logconfig.logger.debug(
             "Dispatching entrypoint/expression: %s/%s",
             schedule.entrypoint,
             schedule.expression,
         )
-        shutdown = asyncio.Event()
 
-        async def heartbeat() -> None:
-            while not shutdown.is_set() and not self.shutdown.is_set():
-                await self.queries.update_schedule_heartbeat({schedule.id})
-                await asyncio.sleep(1)
-
-        task_manager.add(asyncio.create_task(heartbeat()))
-
+        self.active_heartbeat_ids.add(schedule.id)
         context = models.ScheduleContext(resources=self.resources)
         try:
             await executor.execute(schedule, context)
@@ -228,7 +223,20 @@ class SchedulerManager:
                 schedule.expression,
             )
         finally:
-            shutdown.set()
+            self.active_heartbeat_ids.discard(schedule.id)
             await asyncio.shield(
                 self.queries.set_schedule_queued({schedule.id}),
             )
+
+    async def _heartbeat_loop(self) -> None:
+        """Send batched heartbeat updates for all active schedules."""
+        while not self.shutdown.is_set():
+            if self.active_heartbeat_ids:
+                await self.queries.update_schedule_heartbeat(
+                    set(self.active_heartbeat_ids),
+                )
+            with suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    self.shutdown.wait(),
+                    timeout=1.0,
+                )
