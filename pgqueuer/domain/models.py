@@ -30,6 +30,12 @@ from pgqueuer.domain.types import (
     ScheduleId,
 )
 
+
+def utc_now() -> datetime:
+    """Return the current time in UTC."""
+    return datetime.now(timezone.utc)
+
+
 ###### Events ######
 
 
@@ -267,7 +273,7 @@ class TracebackRecord(BaseModel):
     ) -> TracebackRecord:
         return cls(
             job_id=job_id,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=utc_now(),
             exception_type=exc.__class__.__name__,
             exception_message=str(exc),
             traceback="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),

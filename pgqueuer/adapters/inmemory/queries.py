@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any, overload
 
 from pydantic_core import to_json
@@ -17,14 +17,11 @@ from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
+from pgqueuer.domain.models import utc_now
 from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
 from pgqueuer.ports import tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
-
-
-def _utc_now() -> datetime:
-    return datetime.now(timezone.utc)
 
 
 @dataclasses.dataclass
@@ -141,7 +138,7 @@ class InMemoryQueries:
             if dk is not None and dk in self._dedupe_index:
                 raise errors.DuplicateJobError(normed.dedupe_key)
 
-        now = _utc_now()
+        now = utc_now()
         ids: list[JobId] = []
 
         for i in range(len(normed.entrypoint)):
@@ -312,7 +309,7 @@ class InMemoryQueries:
         if not entrypoints:
             return []
 
-        now = _utc_now()
+        now = utc_now()
 
         picked_per_ep, total_picked = self._count_picked_jobs(queue_manager_id, entrypoints)
 
@@ -366,7 +363,7 @@ class InMemoryQueries:
             ]
         ],
     ) -> None:
-        now = _utc_now()
+        now = utc_now()
         for job, status, tb in job_status:
             jid = int(job.id)
             if status == "failed":
@@ -401,7 +398,7 @@ class InMemoryQueries:
         delay: timedelta,
         traceback_record: models.TracebackRecord | None,
     ) -> None:
-        now = _utc_now()
+        now = utc_now()
         jid = int(job.id)
         j = self._jobs.get(jid)
         if j is not None:
@@ -428,7 +425,7 @@ class InMemoryQueries:
     # -- requeue_jobs ----------------------------------------------------------
 
     async def requeue_jobs(self, ids: list[JobId]) -> None:
-        now = _utc_now()
+        now = utc_now()
         for jid in ids:
             j = self._jobs.get(int(jid))
             if j is not None and j["status"] == "failed":
@@ -466,7 +463,7 @@ class InMemoryQueries:
     # -- mark_job_as_cancelled -------------------------------------------------
 
     async def mark_job_as_cancelled(self, ids: list[JobId]) -> None:
-        now = _utc_now()
+        now = utc_now()
         for jid in ids:
             job_dict = self._jobs.pop(int(jid), None)
             if job_dict is not None:
@@ -492,7 +489,7 @@ class InMemoryQueries:
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
-            now = _utc_now()
+            now = utc_now()
             to_remove = [jid for jid, j in self._jobs.items() if j["entrypoint"] in eps]
             for jid in to_remove:
                 j = self._jobs.pop(jid)
@@ -548,7 +545,7 @@ class InMemoryQueries:
     # -- update_heartbeat ------------------------------------------------------
 
     async def update_heartbeat(self, job_ids: list[JobId]) -> None:
-        now = _utc_now()
+        now = utc_now()
         unique_ids = {int(jid) for jid in job_ids}
         for jid in unique_ids:
             if jid in self._jobs:
@@ -608,7 +605,7 @@ class InMemoryQueries:
         result = list(self._statistics)
 
         if last is not None:
-            cutoff = _utc_now() - last
+            cutoff = utc_now() - last
             result = [r for r in result if r["created"] >= cutoff]
 
         # Sort by id DESC
@@ -625,7 +622,7 @@ class InMemoryQueries:
         event = models.CancellationEvent(
             channel=self.qbq.settings.channel,
             ids=ids,
-            sent_at=_utc_now(),
+            sent_at=utc_now(),
             type="cancellation_event",
         )
         self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
@@ -633,7 +630,7 @@ class InMemoryQueries:
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         event = models.HealthCheckEvent(
             channel=self.qbq.settings.channel,
-            sent_at=_utc_now(),
+            sent_at=utc_now(),
             type="health_check_event",
             id=health_check_event_id,
         )
@@ -645,7 +642,7 @@ class InMemoryQueries:
         self,
         schedules: dict[models.CronExpressionEntrypoint, timedelta],
     ) -> None:
-        now = _utc_now()
+        now = utc_now()
         for key, delay in schedules.items():
             # ON CONFLICT DO NOTHING: skip if expression+entrypoint exists
             exists = any(
@@ -675,7 +672,7 @@ class InMemoryQueries:
         self,
         entrypoints: dict[models.CronExpressionEntrypoint, timedelta],
     ) -> list[models.Schedule]:
-        now = _utc_now()
+        now = utc_now()
         selected: list[dict[str, Any]] = []
 
         ep_set = {(k.expression, k.entrypoint): v for k, v in entrypoints.items()}
@@ -699,7 +696,7 @@ class InMemoryQueries:
         return [models.Schedule.model_validate(s) for s in selected]
 
     async def set_schedule_queued(self, ids: set[ScheduleId]) -> None:
-        now = _utc_now()
+        now = utc_now()
         for sid in ids:
             s = self._schedules.get(int(sid))
             if s is not None:
@@ -708,7 +705,7 @@ class InMemoryQueries:
                 s["updated"] = now
 
     async def update_schedule_heartbeat(self, ids: set[ScheduleId]) -> None:
-        now = _utc_now()
+        now = utc_now()
         for sid in ids:
             s = self._schedules.get(int(sid))
             if s is not None:
@@ -757,7 +754,7 @@ class InMemoryQueries:
 
     async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
-        now = _utc_now()
+        now = utc_now()
         ep_set = set(entrypoints)
         candidates = [
             j["execute_after"]
@@ -780,7 +777,7 @@ class InMemoryQueries:
         """Construct and deliver a ``TableChangedEvent`` via the driver."""
         event = models.TableChangedEvent(
             channel=self.qbq.settings.channel,
-            sent_at=_utc_now(),
+            sent_at=utc_now(),
             type="table_changed_event",
             operation=operation,
             table=self.qbe.settings.queue_table,

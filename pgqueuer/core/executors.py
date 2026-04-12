@@ -12,11 +12,7 @@ from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
 from croniter import croniter
 
 from pgqueuer.domain import errors, models, types
-
-
-def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
-
+from pgqueuer.domain.models import utc_now
 
 AsyncEntrypoint: TypeAlias = Callable[[models.Job], Awaitable[None]]
 AsyncContextEntrypoint: TypeAlias = Callable[[models.Job, models.Context], Awaitable[None]]
