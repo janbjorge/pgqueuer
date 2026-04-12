@@ -220,6 +220,14 @@ class SchemaManagementPort(Protocol):
 
     async def has_user_defined_enum(self, key: str, enum: str) -> bool: ...
 
+    async def verify_schema(
+        self,
+        tables: list[str],
+        columns: list[tuple[str, str]],
+        enums: list[tuple[str, str]],
+        indexes: list[tuple[str, str]],
+    ) -> list[dict[str, str | None]]: ...
+
     async def has_function(self, function: str) -> bool: ...
 
     async def has_trigger(self, trigger: str) -> bool: ...

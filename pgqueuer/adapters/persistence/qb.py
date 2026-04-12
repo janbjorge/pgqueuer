@@ -320,6 +320,72 @@ class QueryBuilderEnvironment:
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
 
+    def build_verify_schema_query(self) -> str:
+        return """
+        WITH expected_tables AS (
+            SELECT unnest($1::text[]) AS table_name
+        ),
+        expected_columns AS (
+            SELECT unnest($2::text[]) AS table_name,
+                   unnest($3::text[]) AS column_name
+        ),
+        expected_enums AS (
+            SELECT unnest($4::text[]) AS enum_label,
+                   unnest($5::text[]) AS type_name
+        ),
+        expected_indexes AS (
+            SELECT unnest($6::text[]) AS table_name,
+                   unnest($7::text[]) AS index_name
+        ),
+        missing_tables AS (
+            SELECT et.table_name
+            FROM expected_tables et
+            WHERE NOT EXISTS (
+                SELECT 1 FROM information_schema.columns isc
+                WHERE isc.table_schema = current_schema()
+                  AND isc.table_name = et.table_name
+            )
+        ),
+        missing_columns AS (
+            SELECT ec.table_name, ec.column_name
+            FROM expected_columns ec
+            WHERE NOT EXISTS (
+                SELECT 1 FROM information_schema.columns isc
+                WHERE isc.table_schema = current_schema()
+                  AND isc.table_name = ec.table_name
+                  AND isc.column_name = ec.column_name
+            )
+        ),
+        missing_enums AS (
+            SELECT ee.enum_label, ee.type_name
+            FROM expected_enums ee
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pg_enum pe
+                JOIN pg_type pt ON pe.enumtypid = pt.oid
+                WHERE pe.enumlabel = ee.enum_label
+                  AND pt.typname = ee.type_name
+            )
+        ),
+        missing_indexes AS (
+            SELECT ei.table_name, ei.index_name
+            FROM expected_indexes ei
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pg_indexes pi
+                WHERE pi.tablename = ei.table_name
+                  AND pi.indexname = ei.index_name
+                  AND pi.schemaname = current_schema()
+            )
+        )
+        SELECT 'table' AS check_type, table_name AS name, NULL AS detail
+            FROM missing_tables
+        UNION ALL
+        SELECT 'column', table_name, column_name FROM missing_columns
+        UNION ALL
+        SELECT 'enum', type_name, enum_label FROM missing_enums
+        UNION ALL
+        SELECT 'index', table_name, index_name FROM missing_indexes
+        """
+
     def build_alter_durability_query(self) -> Generator[str, None, None]:
         durability = self.settings.durability.config
         yield f"""ALTER TABLE {self.settings.queue_table} SET {"LOGGED" if durability.queue_table == "" else "UNLOGGED"};"""  # noqa

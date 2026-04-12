@@ -236,6 +236,29 @@ class Queries:
         (row,) = rows
         return row["exists"]
 
+    async def verify_schema(
+        self,
+        tables: list[str],
+        columns: list[tuple[str, str]],
+        enums: list[tuple[str, str]],
+        indexes: list[tuple[str, str]],
+    ) -> list[dict[str, str | None]]:
+        """Check all schema requirements in a single query.
+
+        Returns a list of dicts with keys 'check_type', 'name', 'detail'
+        for each missing item. Empty list means schema is valid.
+        """
+        return await self.driver.fetch(
+            self.qbe.build_verify_schema_query(),
+            tables,
+            [t for t, _ in columns],
+            [c for _, c in columns],
+            [label for label, _ in enums],
+            [typ for _, typ in enums],
+            [t for t, _ in indexes],
+            [i for _, i in indexes],
+        )
+
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
         rows = await self.driver.fetch(self.qbe.build_user_types_query())

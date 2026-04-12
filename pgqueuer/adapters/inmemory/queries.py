@@ -84,6 +84,15 @@ class InMemoryQueries:
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         return True
 
+    async def verify_schema(
+        self,
+        tables: list[str],
+        columns: list[tuple[str, str]],
+        enums: list[tuple[str, str]],
+        indexes: list[tuple[str, str]],
+    ) -> list[dict[str, str | None]]:
+        return []
+
     async def has_function(self, function: str) -> bool:
         return True
 
