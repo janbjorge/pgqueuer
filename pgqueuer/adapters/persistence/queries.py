@@ -14,7 +14,7 @@ import asyncio
 import dataclasses
 import uuid
 from contextlib import suppress
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import TYPE_CHECKING, overload
 
 if TYPE_CHECKING:
@@ -586,7 +586,7 @@ class Queries:
             models.CancellationEvent(
                 channel=self.qbq.settings.channel,
                 ids=ids,
-                sent_at=datetime.now(timezone.utc),
+                sent_at=models.utc_now(),
                 type="cancellation_event",
             ).model_dump_json(),
         )
@@ -607,7 +607,7 @@ class Queries:
             self.qbq.build_notify_query(),
             models.HealthCheckEvent(
                 channel=self.qbq.settings.channel,
-                sent_at=datetime.now(timezone.utc),
+                sent_at=models.utc_now(),
                 type="health_check_event",
                 id=health_check_event_id,
             ).model_dump_json(),
