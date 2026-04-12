@@ -229,7 +229,8 @@ class CompletionWatcher:
             for jid, status in await self.q.job_status(list(self.waiters.keys())):
                 if self._is_terminal(status):
                     for waiter in self.waiters.pop(jid, []):
-                        waiter.set_result(status)
+                        if not waiter.done():
+                            waiter.set_result(status)
 
     # ----------------------------- helper methods ---------------------------
     def _is_terminal(self, status: models.JOB_STATUS) -> bool:
