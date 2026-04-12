@@ -103,7 +103,7 @@ def default_event_router(
 
     @router.register("health_check_event")
     def _health_check_event(evt: models.HealthCheckEvent) -> None:
-        if fut := pending_health_check.get(evt.id):
+        if (fut := pending_health_check.get(evt.id)) and not fut.done():
             fut.set_result(evt)
 
     return router

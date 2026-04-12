@@ -122,6 +122,9 @@ class QueueManager:
 
         Returns:
             models.HealthCheckEvent: The received health check event.
+
+        Raises:
+            FailingListenerError: If the health check times out.
         """
         health_check_event_id = uuid.uuid4()
         fut = asyncio.Future[models.HealthCheckEvent]()
@@ -134,11 +137,7 @@ class QueueManager:
                 timeout.total_seconds(),
             )
         except (TimeoutError, asyncio.TimeoutError):
-            fut.set_exception(errors.FailingListenerError)
-            return await fut
-        except Exception as e:
-            fut.set_exception(e)
-            return await fut
+            raise errors.FailingListenerError from None
         finally:
             self.pending_health_check.pop(health_check_event_id, None)
 
