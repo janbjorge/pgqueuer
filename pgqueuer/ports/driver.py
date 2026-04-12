@@ -74,6 +74,10 @@ class Driver(Protocol):
         """
         raise NotImplementedError
 
+    async def notify(self, channel: str, payload: str) -> None:
+        """Send a NOTIFY on *channel* with *payload*."""
+        raise NotImplementedError
+
     @property
     def shutdown(self) -> asyncio.Event:
         """

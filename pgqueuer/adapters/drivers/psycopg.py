@@ -79,12 +79,17 @@ class PsycopgDriver(Driver):
         await cursor.execute(query, args or None)
         return cursor.statusmessage or ""
 
+    async def notify(self, channel: str, payload: str) -> None:
+        await self.execute("SELECT pg_notify($1, $2)", channel, payload)
+
     async def add_listener(
         self,
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        await self._connection.execute(f"LISTEN {channel};")
+        if not channel.isidentifier():
+            raise ValueError(f"Invalid channel name: {channel!r}")
+        await self._connection.execute(f"LISTEN {channel}")
 
         async def notify_watcher() -> None:
             while not self.shutdown.is_set():
