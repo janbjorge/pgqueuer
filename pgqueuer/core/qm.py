@@ -117,25 +117,15 @@ class QueueManager:
         """
         Perform a health check by sending a notification and waiting for a response.
 
-        Args:
-            timeout (timedelta): Maximum time to wait for the health check response.
-
-        Returns:
-            models.HealthCheckEvent: The received health check event.
-
         Raises:
             FailingListenerError: If the health check times out.
         """
         health_check_event_id = uuid.uuid4()
         fut = asyncio.Future[models.HealthCheckEvent]()
         self.pending_health_check[health_check_event_id] = fut
-
-        await self.queries.notify_health_check(health_check_event_id)
         try:
-            return await asyncio.wait_for(
-                asyncio.shield(fut),
-                timeout.total_seconds(),
-            )
+            await self.queries.notify_health_check(health_check_event_id)
+            return await asyncio.wait_for(fut, timeout.total_seconds())
         except (TimeoutError, asyncio.TimeoutError):
             raise errors.FailingListenerError from None
         finally:
