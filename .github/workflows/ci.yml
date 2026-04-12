@@ -224,6 +224,26 @@ jobs:
       - name: Run Mypy Type Check
         if: ${{ always() }}
         run: uv run mypy .
+      - name: Validate PR Title (Conventional Commits)
+        if: ${{ always() && github.event_name == 'pull_request' }}
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+          requireScope: false
+          subjectPattern: ^[a-z].+[^.]$
+          subjectPatternError: "Subject must start lowercase and not end with a period"
   complete-pipeline:
     if: github.event_name != 'schedule'
     needs: [validate-benchmark, run-tests, run-windows-tests, run-checks]
