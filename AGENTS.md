@@ -159,6 +159,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - Use `Protocol` for structural subtyping (port interfaces)
 - Use `TypeAlias` for complex callable types
 - **Avoid `Any`** at nearly all cost. The codebase only uses it on driver protocol boundaries for variadic `*args` in SQL query methods -- nowhere else. Use proper types, generics, protocols, or `object` instead.
+- **Generic constructors over type-annotated assignments** for typed stdlib objects: `fut = asyncio.Future[MyType]()` not `fut: asyncio.Future[MyType] = asyncio.Future()`.
 - **No `# type: ignore` in production code.** `type: ignore` comments are forbidden in `pgqueuer/`. Fix the underlying type issue instead (use `dataclasses.KW_ONLY`, protocols, generics, overloads, etc.). `# type: ignore` is acceptable in test code only.
 
 ### Naming Conventions
