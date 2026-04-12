@@ -204,33 +204,43 @@ Google-style when present: `Args:`, `Returns:`, `Raises:` sections. Not every me
 
 ## Commit Conventions
 
+This project follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+
 ### Title Format
 
-All commit titles must follow this format:
-
 ```
-{Title} (#{PR_ID})
+<type>[optional scope]: <description> (#{PR_ID})
 ```
 
-- **Title**: Imperative mood, starting with a capital letter.
-- **PR reference**: End with the PR number in parentheses, prefixed with `#`.
+- **type**: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`
+- **scope** (optional): area of the codebase, e.g. `cli`, `qm`, `sm`, `schema`, `drivers`, `inmemory`
+- **description**: imperative mood, lowercase, no period at the end
+- **`!` after type/scope**: marks a breaking change (e.g. `feat!:` or `feat(cli)!:`)
+- **PR reference**: end with the PR number in parentheses, prefixed with `#`
 
-Examples:
+### Examples
 
 ```
-Add heartbeat buffer flush on shutdown (#87)
-Fix duplicate job detection in concurrent workers (#91)
+feat(qm): add global concurrency limit (#92)
+fix: restore partial index usage in dequeue CTE (#607)
+feat!: simplify CLI connection config, remove dsn() helper (#605)
+docs: add custom executor guide (#88)
+refactor(core): extract heartbeat into standalone module (#95)
+test: add parametrized dequeue batch tests (#100)
+chore: bump ruff to 0.8 (#101)
 ```
+
+### Body and Footer
+
+- Body: present tense, wrap at 72 characters. Explain **why**, not just what.
+- Footer: use `BREAKING CHANGE: <description>` for breaking changes (in addition to or instead of `!` in the title).
 
 ### Rationale
 
-- `git log --oneline` gives a clean, readable history.
+- `git log --oneline` gives a clean, typed, scannable history.
 - `git blame` gives immediate context.
 - The `#{PR_ID}` suffix implicitly links to the PR in GitHub.
-
-### Body and Trailers
-
-Present tense, wrap at 72 characters. Reference additional context in the body when needed. See `CONTRIBUTING.md`.
+- Types enable automated changelogs and semantic versioning.
 
 ## CI Matrix
 

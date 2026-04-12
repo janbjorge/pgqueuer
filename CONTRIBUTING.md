@@ -32,9 +32,16 @@ While the prerequisites above must be satisfied prior to having your pull reques
 
 ### Git Commit Messages
 
-* Use the present tense ("Add feature" not "Added feature").
-* Limit the first line to 72 characters or less.
-* Reference issues and pull requests liberally after the first line.
+This project uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). See the full specification in [AGENTS.md](AGENTS.md#commit-conventions).
+
+```
+<type>[optional scope]: <description> (#{PR_ID})
+```
+
+* **type**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, etc.
+* Use imperative mood, lowercase description, no trailing period.
+* Append `!` after type/scope for breaking changes (e.g. `feat!:`).
+* Reference the PR number at the end: `(#123)`.
 
 ### Python Styleguide
 
