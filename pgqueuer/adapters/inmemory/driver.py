@@ -58,10 +58,7 @@ class InMemoryDriver:
 
     # -- In-memory notification ------------------------------------------------
 
-    def deliver(self, channel: str, payload: str) -> None:
-        """Push *payload* to all registered listeners on *channel*.
-
-        This is the in-memory equivalent of ``pg_notify(channel, payload)``.
-        """
+    async def notify(self, channel: str, payload: str) -> None:
+        """Push *payload* to all registered listeners on *channel*."""
         for cb in self._listeners.get(channel, ()):
             cb(payload)

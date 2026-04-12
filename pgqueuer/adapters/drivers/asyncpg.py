@@ -51,6 +51,10 @@ class AsyncpgDriver(Driver):
         async with self._lock:
             return await self._connection.execute(query, *args)
 
+    async def notify(self, channel: str, payload: str) -> None:
+        async with self._lock:
+            await self._connection.execute("SELECT pg_notify($1, $2)", channel, payload)
+
     async def add_listener(
         self,
         channel: str,
@@ -116,6 +120,9 @@ class AsyncpgPoolDriver(Driver):
         *args: Any,
     ) -> str:
         return await self._pool.execute(query, *args)
+
+    async def notify(self, channel: str, payload: str) -> None:
+        await self._pool.execute("SELECT pg_notify($1, $2)", channel, payload)
 
     async def add_listener(
         self,

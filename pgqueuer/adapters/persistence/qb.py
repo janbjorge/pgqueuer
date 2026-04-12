@@ -612,9 +612,6 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
     LIMIT $1
     """
 
-    def build_notify_query(self) -> str:
-        return f"""SELECT pg_notify('{self.settings.channel}', $1)"""
-
     def build_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
 

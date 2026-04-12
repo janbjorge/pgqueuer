@@ -188,7 +188,7 @@ class InMemoryQueries:
             )
             self._next_log_id += 1
 
-        self._emit_table_changed("insert")
+        await self.emit_table_changed("insert")
         return ids
 
     # -- dequeue ---------------------------------------------------------------
@@ -423,7 +423,7 @@ class InMemoryQueries:
                 }
             )
             self._next_log_id += 1
-            self._emit_table_changed("update")
+            await self.emit_table_changed("update")
 
     # -- requeue_jobs ----------------------------------------------------------
 
@@ -450,7 +450,7 @@ class InMemoryQueries:
                     }
                 )
                 self._next_log_id += 1
-                self._emit_table_changed("update")
+                await self.emit_table_changed("update")
 
     # -- list_failed_jobs ------------------------------------------------------
 
@@ -628,7 +628,7 @@ class InMemoryQueries:
             sent_at=_utc_now(),
             type="cancellation_event",
         )
-        self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
 
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         event = models.HealthCheckEvent(
@@ -637,7 +637,7 @@ class InMemoryQueries:
             type="health_check_event",
             id=health_check_event_id,
         )
-        self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
 
     # -- Schedule methods ------------------------------------------------------
 
@@ -776,7 +776,7 @@ class InMemoryQueries:
         for k in to_remove:
             del self._dedupe_index[k]
 
-    def _emit_table_changed(self, operation: models.OPERATIONS) -> None:
+    async def emit_table_changed(self, operation: models.OPERATIONS) -> None:
         """Construct and deliver a ``TableChangedEvent`` via the driver."""
         event = models.TableChangedEvent(
             channel=self.qbq.settings.channel,
@@ -785,4 +785,4 @@ class InMemoryQueries:
             operation=operation,
             table=self.qbe.settings.queue_table,
         )
-        self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
