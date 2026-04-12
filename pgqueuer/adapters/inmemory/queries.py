@@ -625,7 +625,7 @@ class InMemoryQueries:
             sent_at=utc_now(),
             type="cancellation_event",
         )
-        self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
 
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         event = models.HealthCheckEvent(
@@ -634,7 +634,7 @@ class InMemoryQueries:
             type="health_check_event",
             id=health_check_event_id,
         )
-        self.driver.deliver(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
 
     # -- Schedule methods ------------------------------------------------------
 

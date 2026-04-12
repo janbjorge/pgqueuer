@@ -581,8 +581,8 @@ class Queries:
         Args:
             ids (list[models.JobId]): The IDs of the jobs that have been cancelled.
         """
-        await self.driver.execute(
-            self.qbq.build_notify_query(),
+        await self.driver.notify(
+            self.qbq.settings.channel,
             models.CancellationEvent(
                 channel=self.qbq.settings.channel,
                 ids=ids,
@@ -603,8 +603,8 @@ class Queries:
             event (models.HealthCheckEvent): The health check event containing
                 details about the system's health status.
         """
-        await self.driver.execute(
-            self.qbq.build_notify_query(),
+        await self.driver.notify(
+            self.qbq.settings.channel,
             models.HealthCheckEvent(
                 channel=self.qbq.settings.channel,
                 sent_at=models.utc_now(),

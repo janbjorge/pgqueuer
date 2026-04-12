@@ -26,7 +26,6 @@ from pgqueuer.db import (
     SyncDriver,
     SyncPsycopgDriver,
 )
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import TableChangedEvent
 from pgqueuer.types import Channel
 
@@ -120,12 +119,7 @@ async def test_notify(
 
         # Send from a separate connection to avoid self-notify edge cases.
         async with driver(dsn) as ad:
-            await ad.execute(
-                QueryQueueBuilder(
-                    DBSettings(channel=channel),
-                ).build_notify_query(),
-                payload,
-            )
+            await ad.notify(channel, payload)
 
         assert await asyncio.wait_for(event, timeout=1) == payload
 
@@ -205,10 +199,7 @@ async def test_event_listener(
 
         # Send from a separate connection to avoid self-notify edge cases.
         async with driver(dsn) as dd:
-            await dd.execute(
-                QueryQueueBuilder(DBSettings(channel=channel)).build_notify_query(),
-                payload.model_dump_json(),
-            )
+            await dd.notify(channel, payload.model_dump_json())
 
         assert (await asyncio.wait_for(listener.get(), timeout=1)) == payload
 
