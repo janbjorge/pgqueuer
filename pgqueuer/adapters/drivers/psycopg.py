@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from typing_extensions import Self
 
+from pgqueuer.core import logconfig
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.ports.driver import Driver, SyncDriver
 
@@ -91,7 +92,13 @@ class PsycopgDriver(Driver):
                     timeout=1.0,
                     stop_after=1,
                 ):
-                    callback(note.payload)
+                    try:
+                        callback(note.payload)
+                    except Exception:
+                        logconfig.logger.exception(
+                            "Unhandled error in NOTIFY callback for channel %s",
+                            channel,
+                        )
 
         self._tm.add(
             asyncio.create_task(
