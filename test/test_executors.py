@@ -182,7 +182,7 @@ async def test_custom_multiprocessing_executor() -> None:
 
 
 async def test_queue_manager_with_custom_executor(apgdriver: Driver) -> None:
-    qm = QueueManager(connection=apgdriver)
+    qm = QueueManager(connection=apgdriver, queries=Queries(apgdriver))
     results = []
 
     class CustomExecutor(AbstractEntrypointExecutor):

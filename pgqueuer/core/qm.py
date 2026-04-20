@@ -19,8 +19,6 @@ from typing import AsyncGenerator, Callable, get_args
 
 import anyio
 
-from pgqueuer.adapters.persistence import queries
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.core import (
     buffers,
     cache,
@@ -31,6 +29,7 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -71,7 +70,7 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: RepositoryPort = dataclasses.field(kw_only=True)
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -151,16 +150,6 @@ class QueueManager:
                     self.shutdown.wait(),
                     timeout=interval.total_seconds(),
                 )
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the QueueManager after dataclass fields have been set.
-
-        Sets up the `queries` instance using the provided database connection
-        when no queries instance was injected.
-        """
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
 
     def get_context(self, job_id: models.JobId) -> models.Context:
         """

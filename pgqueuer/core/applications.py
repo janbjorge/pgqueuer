@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.domain.settings import DBSettings
+from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -27,6 +27,7 @@ from pgqueuer.core.executors import (
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.domain.models import Channel
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
@@ -71,18 +72,18 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
-        # RepositoryPort | None is passed here; QueueManager/SchedulerManager will
-        # create default Queries instances if None, which satisfies their type contract.
+        if self.queries is None:
+            self.queries = Queries(self.connection)
         self.qm = QueueManager(
             self.connection,
             self.channel,
-            queries=self.queries,  # type: ignore[arg-type]
+            queries=self.queries,
             resources=self.resources,
         )
         self.sm = SchedulerManager(
             self.connection,
             resources=self.resources,
-            queries=self.queries,  # type: ignore[arg-type]
+            queries=self.queries,
         )
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown

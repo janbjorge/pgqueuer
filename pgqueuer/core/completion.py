@@ -7,11 +7,11 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from itertools import chain
 
-from pgqueuer.adapters.persistence import queries
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.core import tm
 from pgqueuer.domain import models
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.repository import QueueRepositoryPort
 
 
 @dataclass
@@ -83,6 +83,7 @@ class CompletionWatcher:
     """
 
     driver: Driver
+    queries: QueueRepositoryPort = field(kw_only=True)
     refresh_interval: timedelta = field(
         default_factory=lambda: timedelta(seconds=5),
     )
@@ -90,12 +91,6 @@ class CompletionWatcher:
     """Time-window in which multiple change triggers are coalesced into one."""
     debounce: timedelta = field(
         default_factory=lambda: timedelta(milliseconds=50),
-        repr=False,
-    )
-
-    # ----------------------------- internals --------------------------------
-    q: queries.Queries = field(
-        init=False,
         repr=False,
     )
     waiters: defaultdict[models.JobId, list[asyncio.Future[models.JOB_STATUS]]] = field(
@@ -125,9 +120,6 @@ class CompletionWatcher:
     )
 
     # ----------------------------- life-cycle --------------------------------
-    def __post_init__(self) -> None:
-        """Instantiate query helper once the dataclass has been created."""
-        self.q = queries.Queries(self.driver)
 
     async def __aenter__(self) -> "CompletionWatcher":
         """
@@ -227,7 +219,7 @@ class CompletionWatcher:
         job has reached a terminal state.
         """
         async with self.lock:
-            for jid, status in await self.q.job_status(list(self.waiters.keys())):
+            for jid, status in await self.queries.job_status(list(self.waiters.keys())):
                 if self._is_terminal(status):
                     for waiter in self.waiters.pop(jid, []):
                         if not waiter.done():

@@ -81,7 +81,7 @@ async def test_serialized_dispatch(
 ) -> None:
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver, queries=Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def dequeue() -> None:
         consumers = [consumer(q, lock) for q in qms]
@@ -104,7 +104,7 @@ async def test_serialized_dispatch_mixed(
 ) -> None:
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver, queries=Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def dequeue() -> list[defaultdict[str, list[Job]]]:
         consumers = [consumer(q, lock) for q in qms]
@@ -147,7 +147,7 @@ async def test_no_jobs_processed_when_locked(
     )
     assert len(picked_job) == 1, "Failed to pick a job for locking"
 
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver, queries=Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def dequeue() -> list[defaultdict[str, list[Job]]]:
         consumers = [locked_consumer(q) for q in qms]
@@ -176,7 +176,7 @@ async def test_mixed_serialized_and_concurrent_processing(
 ) -> None:
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver, queries=Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def dequeue() -> list[defaultdict[str, list[Job]]]:
         consumers = [consumer(q, lock) for q in qms]
@@ -207,7 +207,7 @@ async def test_single_consumer_serialized_behavior(
     n_consumers = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(apgdriver, queries=Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def dequeue() -> list[defaultdict[str, list[Job]]]:
         consumers = [consumer(q, lock) for q in qms]

@@ -180,12 +180,10 @@ type = "forbidden"
 source_modules = ["pgqueuer.core"]
 forbidden_modules = ["pgqueuer.adapters"]
 ignore_imports = [
-    # These core modules legitimately depend on adapter implementations
-    # during the migration period. Future work will further decouple these.
-    "pgqueuer.core.qm -> pgqueuer.adapters.persistence.queries",
-    "pgqueuer.core.sm -> pgqueuer.adapters.persistence.queries",
-    "pgqueuer.core.completion -> pgqueuer.adapters.persistence.queries",
+    # applications.py contains factory classmethods that must know concrete
+    # driver and adapter types — this is the sole wiring point.
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.asyncpg",
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.psycopg",
+    "pgqueuer.core.applications -> pgqueuer.adapters.persistence.queries",
     "pgqueuer.core.applications -> pgqueuer.adapters.inmemory",
 ]

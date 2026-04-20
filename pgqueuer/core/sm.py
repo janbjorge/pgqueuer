@@ -9,7 +9,6 @@ from typing import Callable
 
 import croniter
 
-from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, logconfig, tm
 from pgqueuer.domain import models
 from pgqueuer.domain.types import ScheduleId
@@ -40,7 +39,7 @@ class SchedulerManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
+    queries: RepositoryPort = dataclasses.field(kw_only=True)
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
@@ -51,16 +50,6 @@ class SchedulerManager:
         init=False,
         default_factory=set,
     )
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the Scheduler after dataclass fields have been set.
-
-        Sets up the queries instance using the provided database connection
-        when no queries instance was injected.
-        """
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
 
     def schedule(
         self,
