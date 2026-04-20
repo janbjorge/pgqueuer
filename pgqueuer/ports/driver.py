@@ -10,7 +10,19 @@ from typing import Any, Callable, Protocol
 
 from typing_extensions import Self
 
-from pgqueuer.core.tm import TaskManager
+
+class TaskManagerPort(Protocol):
+    """Protocol for managing background asyncio tasks."""
+
+    tasks: set[asyncio.Task]
+
+    def add(self, task: asyncio.Task) -> None: ...
+
+    async def gather_tasks(self, return_exceptions: bool = True) -> list[BaseException | None]: ...
+
+    async def __aenter__(self) -> "TaskManagerPort": ...
+
+    async def __aexit__(self, *_: object) -> None: ...
 
 
 class Driver(Protocol):
@@ -88,7 +100,7 @@ class Driver(Protocol):
         raise NotImplementedError
 
     @property
-    def tm(self) -> TaskManager:
+    def tm(self) -> TaskManagerPort:
         """
         TaskManager instance for managing background tasks.
 
