@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Callable, MutableMapping
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.adapters.persistence.qb import DBSettings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,

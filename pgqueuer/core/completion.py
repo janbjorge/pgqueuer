@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from itertools import chain
 
-from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.adapters.persistence import queries
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.core import tm
 from pgqueuer.domain import models
 from pgqueuer.ports.driver import Driver
@@ -137,7 +138,7 @@ class CompletionWatcher:
         * schedule an immediate status probe.
         """
         self.task_manager.add(asyncio.create_task(self._poll_for_change()))
-        await self.driver.add_listener(qb.DBSettings().channel, self._is_relevant_event)
+        await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 

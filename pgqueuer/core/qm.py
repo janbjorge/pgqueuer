@@ -19,7 +19,8 @@ from typing import AsyncGenerator, Callable, get_args
 
 import anyio
 
-from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.adapters.persistence import queries
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.core import (
     buffers,
     cache,
@@ -63,7 +64,7 @@ class QueueManager:
 
     connection: Driver
     channel: models.Channel = dataclasses.field(
-        default=models.Channel(qb.DBSettings().channel),
+        default=models.Channel(DBSettings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(
