@@ -173,10 +173,6 @@ name = "Ports must not import from adapters or core"
 type = "forbidden"
 source_modules = ["pgqueuer.ports"]
 forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
-ignore_imports = [
-    # ports/driver.py needs TaskManager from core for the protocol definition
-    "pgqueuer.ports.driver -> pgqueuer.core.tm",
-]
 
 [[tool.importlinter.contracts]]
 name = "Core must not import from adapters"
