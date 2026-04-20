@@ -12,7 +12,7 @@ from pgqueuer.queries import Queries
 
 async def test_listener_healthy_raises_on_timeout(apgdriver: db.Driver) -> None:
     """listener_healthy must raise FailingListenerError directly on timeout."""
-    qm = QueueManager(apgdriver, queries=Queries(apgdriver))
+    qm = QueueManager(Queries(apgdriver))
 
     # No listener set up, so the health check notification will never arrive.
     with pytest.raises(FailingListenerError):

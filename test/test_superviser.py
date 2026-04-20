@@ -22,13 +22,13 @@ from pgqueuer.types import QueueExecutionMode
 @pytest.fixture(scope="function")
 async def queue_manager(apgdriver: AsyncpgDriver) -> QueueManager:
     """Fixture to instantiate QueueManager."""
-    return QueueManager(connection=apgdriver, queries=Queries(apgdriver))
+    return QueueManager(Queries(apgdriver))
 
 
 @pytest.fixture(scope="function")
 async def scheduler_manager(apgdriver: AsyncpgDriver) -> SchedulerManager:
     """Fixture to instantiate SchedulerManager."""
-    return SchedulerManager(connection=apgdriver, queries=Queries(apgdriver))
+    return SchedulerManager(Queries(apgdriver))
 
 
 @pytest.fixture(scope="function")

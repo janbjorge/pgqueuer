@@ -36,13 +36,13 @@ def _make_pgqueuer() -> PgQueuer:
 def _make_queue_manager() -> QueueManager:
     driver = InMemoryDriver()
     queries = InMemoryQueries(driver=driver)
-    return QueueManager(connection=driver, queries=queries)
+    return QueueManager(queries)
 
 
 def _make_scheduler_manager() -> SchedulerManager:
     driver = InMemoryDriver()
     queries = InMemoryQueries(driver=driver)
-    return SchedulerManager(connection=driver, queries=queries)
+    return SchedulerManager(queries)
 
 
 # ---------------------------------------------------------------------------

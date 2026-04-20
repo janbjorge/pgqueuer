@@ -42,7 +42,7 @@ async def producer(driver: AsyncpgDriver) -> None:
 
 
 async def consumer(driver: AsyncpgDriver) -> None:
-    qm = QueueManager(driver, queries=Queries(driver))
+    qm = QueueManager(Queries(driver))
 
     for i in range(1, 10):
 

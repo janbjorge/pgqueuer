@@ -75,15 +75,13 @@ class PgQueuer:
         if self.queries is None:
             self.queries = Queries(self.connection)
         self.qm = QueueManager(
-            self.connection,
+            self.queries,
             self.channel,
-            queries=self.queries,
             resources=self.resources,
         )
         self.sm = SchedulerManager(
-            self.connection,
+            self.queries,
             resources=self.resources,
-            queries=self.queries,
         )
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown

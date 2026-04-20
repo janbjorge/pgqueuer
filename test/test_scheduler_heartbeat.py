@@ -11,7 +11,7 @@ from pgqueuer.sm import SchedulerManager
 
 async def test_scheduler_heartbeat_batches(apgdriver: db.Driver) -> None:
     """The heartbeat loop must send batched updates for all active schedule IDs."""
-    sm = SchedulerManager(apgdriver, queries=Queries(apgdriver))
+    sm = SchedulerManager(Queries(apgdriver))
 
     captured_calls: list[set[ScheduleId]] = []
 
@@ -45,7 +45,7 @@ async def test_scheduler_heartbeat_batches(apgdriver: db.Driver) -> None:
 
 async def test_scheduler_heartbeat_skips_when_empty(apgdriver: db.Driver) -> None:
     """The heartbeat loop must not call update when no schedules are active."""
-    sm = SchedulerManager(apgdriver, queries=Queries(apgdriver))
+    sm = SchedulerManager(Queries(apgdriver))
 
     call_count = 0
 

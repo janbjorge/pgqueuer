@@ -31,7 +31,6 @@ from pgqueuer.core import (
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
-from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -45,10 +44,10 @@ class QueueManager:
     managing cancellations.
 
     Attributes:
-        connection (db.Driver): The database driver used for database operations.
+        queries (RepositoryPort): Repository for job queue operations. The underlying
+            database driver is accessed via ``queries.driver``.
         channel (Channel): The PostgreSQL channel for notifications.
         shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
-        queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
         queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
@@ -61,7 +60,7 @@ class QueueManager:
             the periodic listener health-check times out.
     """
 
-    connection: Driver
+    queries: RepositoryPort
     channel: models.Channel = dataclasses.field(
         default=models.Channel(DBSettings().channel),
     )
@@ -70,7 +69,6 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(kw_only=True)
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -462,13 +460,13 @@ class QueueManager:
                 repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
-            self.connection,
+            self.queries.driver,
         ):
             periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
 
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
-                self.connection,
+                self.queries.driver,
                 self.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,

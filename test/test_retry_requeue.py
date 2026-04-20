@@ -424,7 +424,7 @@ def test_database_retry_executor_backoff_caps_at_max_delay() -> None:
 async def test_retry_requested_postgres(apgdriver: AsyncpgDriver) -> None:
     """Full retry lifecycle against real Postgres."""
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, queries=Queries(apgdriver))
+    qm = QueueManager(Queries(apgdriver))
     seen_attempts: list[int] = []
 
     @qm.entrypoint("pg_retry_ep")
@@ -468,7 +468,7 @@ async def test_retry_requested_postgres(apgdriver: AsyncpgDriver) -> None:
 async def test_retry_preserves_payload_postgres(apgdriver: AsyncpgDriver) -> None:
     """Payload survives retry in real Postgres — UPDATE keeps the row intact."""
     q = Queries(apgdriver)
-    qm = QueueManager(apgdriver, queries=Queries(apgdriver))
+    qm = QueueManager(Queries(apgdriver))
     payloads_seen: list[bytes | None] = []
 
     @qm.entrypoint("pg_payload_ep")

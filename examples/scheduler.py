@@ -15,7 +15,7 @@ async def create_scheduler() -> AsyncGenerator[SchedulerManager, None]:
     # Establish a connection to PostgreSQL
     connection = await asyncpg.connect()
     driver = AsyncpgDriver(connection)
-    sm = SchedulerManager(driver, queries=Queries(driver))
+    sm = SchedulerManager(Queries(driver))
 
     # Define and register recurring tasks using cron expressions
     # The cron expression "* * * * *" means the task will run every minute

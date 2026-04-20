@@ -82,7 +82,7 @@ async def test_health_check_callback_ignores_cancelled_future() -> None:
 
 async def test_completion_waiter_ignores_cancelled_future(apgdriver: db.Driver) -> None:
     """_refresh_waiters must not crash when a waiter future is already cancelled."""
-    qm = QueueManager(apgdriver, queries=Queries(apgdriver))
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("task")
     async def task(job: Job) -> None: ...
