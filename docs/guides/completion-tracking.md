@@ -14,8 +14,11 @@ PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
 
 ```python
 from pgqueuer.core.completion import CompletionWatcher
+from pgqueuer.queries import Queries
 
-async with CompletionWatcher(driver) as watcher:
+queries = Queries(driver)
+
+async with CompletionWatcher(driver, queries=queries) as watcher:
     status = await watcher.wait_for(job_id)
     # status: "successful", "exception", "canceled", or "deleted"
 ```
@@ -57,7 +60,7 @@ image_ids   = await qm.queries.enqueue(["render_img"]   * 20, [b"..."] * 20, [0]
 report_ids  = await qm.queries.enqueue(["generate_pdf"] * 10, [b"..."] * 10, [0] * 10)
 cleanup_ids = await qm.queries.enqueue(["cleanup"]      *  5, [b"..."] *  5, [0] *  5)
 
-async with CompletionWatcher(driver) as w:
+async with CompletionWatcher(driver, queries=queries) as w:
     img_statuses, pdf_statuses, clean_statuses = await gather(
         gather(*[w.wait_for(j) for j in image_ids]),
         gather(*[w.wait_for(j) for j in report_ids]),
@@ -81,6 +84,7 @@ import asyncio
 from datetime import timedelta
 from pgqueuer import db, models
 from pgqueuer.core.completion import CompletionWatcher
+from pgqueuer.queries import Queries
 
 
 async def wait_for_all(
@@ -91,6 +95,7 @@ async def wait_for_all(
 ) -> list[models.JOB_STATUS]:
     async with CompletionWatcher(
         driver,
+        queries=Queries(driver),
         refresh_interval=refresh_interval,
         debounce=debounce,
     ) as watcher:
@@ -111,6 +116,7 @@ async def wait_for_first(
 ) -> models.JOB_STATUS:
     async with CompletionWatcher(
         driver,
+        queries=Queries(driver),
         refresh_interval=refresh_interval,
         debounce=debounce,
     ) as watcher:
@@ -135,6 +141,6 @@ To maximise reliability without heavy polling:
    notifications when your channel is stable:
 
     ```python
-    async with CompletionWatcher(driver, refresh_interval=timedelta(minutes=5)) as w:
+    async with CompletionWatcher(driver, queries=Queries(driver), refresh_interval=timedelta(minutes=5)) as w:
         status = await w.wait_for(job_id)
     ```

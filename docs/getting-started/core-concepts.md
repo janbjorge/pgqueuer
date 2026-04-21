@@ -58,9 +58,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 | Parameter | Type | Default | Effect |
 |-----------|------|---------|--------|
 | `name` | `str` | (required) | Entrypoint name -- must match what producers enqueue |
-| `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint |
-| `serialized_dispatch` | `bool` | `False` | Process jobs one at a time (equivalent to `concurrency_limit=1`) |
-| `retry_timer` | `timedelta` | `0` (disabled) | Re-queue jobs whose heartbeat has gone stale |
+| `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint (database-enforced globally). Use `1` for serialized processing |
 | `accepts_context` | `bool` | `False` | Pass a `Context` object as the second argument |
 | `on_failure` | `"delete" \| "hold"` | `"delete"` | Hold failed jobs for manual re-queue instead of deleting |
 | `executor_factory` | callable | `None` | Custom executor class for retry logic, etc. |
