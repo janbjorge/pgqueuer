@@ -19,6 +19,7 @@ from pgqueuer.models import (
     JobId,
 )
 from pgqueuer.qm import QueueManager
+from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
 
 
@@ -81,7 +82,7 @@ async def test_health_check_callback_ignores_cancelled_future() -> None:
 
 async def test_completion_waiter_ignores_cancelled_future(apgdriver: db.Driver) -> None:
     """_refresh_waiters must not crash when a waiter future is already cancelled."""
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("task")
     async def task(job: Job) -> None: ...
@@ -89,7 +90,7 @@ async def test_completion_waiter_ignores_cancelled_future(apgdriver: db.Driver) 
     jids = await qm.queries.enqueue(["task"], [None], [0])
     await qm.run(mode=QueueExecutionMode.drain)
 
-    async with CompletionWatcher(apgdriver) as watcher:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as watcher:
         waiter = watcher.wait_for(jids[0])
         # Cancel the waiter before refresh resolves it.
         waiter.cancel()

@@ -172,6 +172,11 @@ async def apgdriver(dsn: str) -> AsyncGenerator[AsyncpgDriver, None]:
         await conn.close()
 
 
+@pytest.fixture
+def apg_queries(apgdriver: AsyncpgDriver) -> Queries:
+    return Queries(apgdriver)
+
+
 @pytest_asyncio.fixture(scope="function")
 async def pgdriver(dsn: str) -> AsyncGenerator[SyncPsycopgDriver, None]:
     conn = psycopg.connect(dsn, autocommit=True)

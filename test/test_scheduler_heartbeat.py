@@ -5,12 +5,13 @@ from unittest.mock import patch
 
 from pgqueuer import db
 from pgqueuer.domain.types import ScheduleId
+from pgqueuer.queries import Queries
 from pgqueuer.sm import SchedulerManager
 
 
 async def test_scheduler_heartbeat_batches(apgdriver: db.Driver) -> None:
     """The heartbeat loop must send batched updates for all active schedule IDs."""
-    sm = SchedulerManager(apgdriver)
+    sm = SchedulerManager(Queries(apgdriver))
 
     captured_calls: list[set[ScheduleId]] = []
 
@@ -44,7 +45,7 @@ async def test_scheduler_heartbeat_batches(apgdriver: db.Driver) -> None:
 
 async def test_scheduler_heartbeat_skips_when_empty(apgdriver: db.Driver) -> None:
     """The heartbeat loop must not call update when no schedules are active."""
-    sm = SchedulerManager(apgdriver)
+    sm = SchedulerManager(Queries(apgdriver))
 
     call_count = 0
 

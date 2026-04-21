@@ -9,12 +9,10 @@ from typing import Callable
 
 import croniter
 
-from pgqueuer.adapters.persistence import queries
 from pgqueuer.core import executors, logconfig, tm
 from pgqueuer.domain import models
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
-from pgqueuer.ports.driver import Driver
 
 
 @dataclasses.dataclass
@@ -22,25 +20,20 @@ class SchedulerManager:
     """
     Scheduler class responsible for managing and scheduling jobs using cron expressions.
 
-    This class registers job executors, maintains a schedule registry, and facilitates running
-    scheduled tasks based on cron expressions. The Scheduler interacts with the database to
-    manage task execution and state, and also handles asynchronous task management.
-
     Attributes:
-        connection (db.Driver): The database driver used for database operations.
-        shutdown (asyncio.Event): Event to signal when the Scheduler is shutting down.
-        queries (queries.Queries): Instance for executing database queries.
+        queries (RepositoryPort): Repository for schedule operations. The underlying
+            database driver is accessed via ``queries.driver``.
+        resources (MutableMapping): Shared resources propagated to scheduled task contexts.
         registry (dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor]):
             Registered job executors mapped to cron entrypoints and expressions.
     """
 
-    connection: Driver
+    queries: RepositoryPort
     resources: MutableMapping = dataclasses.field(default_factory=dict)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
     registry: dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor] = (
         dataclasses.field(
             init=False,
@@ -51,16 +44,6 @@ class SchedulerManager:
         init=False,
         default_factory=set,
     )
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the Scheduler after dataclass fields have been set.
-
-        Sets up the queries instance using the provided database connection
-        when no queries instance was injected.
-        """
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
 
     def schedule(
         self,
@@ -151,7 +134,7 @@ class SchedulerManager:
 
         async with (
             tm.TaskManager() as task_manager,
-            self.connection,
+            self.queries.driver,
         ):
             task_manager.add(asyncio.create_task(self._heartbeat_loop()))
             while not self.shutdown.is_set():

@@ -10,11 +10,12 @@ from pgqueuer import db
 from pgqueuer.core.completion import CompletionWatcher
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
+from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
 
 
 async def test_completion_successful(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None: ...
@@ -23,7 +24,7 @@ async def test_completion_successful(apgdriver: db.Driver) -> None:
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     await qm.run(mode=QueueExecutionMode.drain)
-    async with CompletionWatcher(apgdriver) as grp:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
 
     assert len(waiters) == N
@@ -31,7 +32,7 @@ async def test_completion_successful(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_already_successful(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None: ...
@@ -40,7 +41,7 @@ async def test_completion_already_successful(apgdriver: db.Driver) -> None:
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     await qm.run(mode=QueueExecutionMode.drain)
-    async with CompletionWatcher(apgdriver) as grp:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
 
     assert len(waiters) == N
@@ -48,7 +49,7 @@ async def test_completion_already_successful(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_exception(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:
@@ -58,7 +59,7 @@ async def test_completion_exception(apgdriver: db.Driver) -> None:
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
 
     await qm.run(mode=QueueExecutionMode.drain)
-    async with CompletionWatcher(apgdriver) as grp:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
 
     assert len(waiters) == N
@@ -66,13 +67,13 @@ async def test_completion_exception(apgdriver: db.Driver) -> None:
 
 
 async def test_for_completion_canceled(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     N = 25
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
     await qm.queries.mark_job_as_cancelled(jids)
 
-    async with CompletionWatcher(apgdriver) as grp:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
 
     assert len(waiters) == N
@@ -80,7 +81,7 @@ async def test_for_completion_canceled(apgdriver: db.Driver) -> None:
 
 
 async def test_completion_deleted(apgdriver: db.Driver) -> None:
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     N = 25
     jids = await qm.queries.enqueue(["fetch"] * N, [None] * N, [0] * N)
@@ -100,7 +101,7 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
         ]
     )
 
-    async with CompletionWatcher(apgdriver) as grp:
+    async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
 
     assert len(waiters) == N
@@ -109,7 +110,7 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
 async def test_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
-    assert CompletionWatcher(apgdriver)._is_terminal(status)  # type: ignore
+    assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)  # type: ignore
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ async def test_debounce_coalesces_burst(
     """
     watcher = CompletionWatcher(
         apgdriver,
+        queries=Queries(apgdriver),
         debounce=timedelta(milliseconds=20),
     )
     await watcher.__aenter__()
@@ -159,6 +161,7 @@ async def test_debounce_allows_separate_windows(
     """
     watcher = CompletionWatcher(
         apgdriver,
+        queries=Queries(apgdriver),
         debounce=timedelta(milliseconds=20),
     )
     await watcher.__aenter__()

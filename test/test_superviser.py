@@ -15,19 +15,20 @@ from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
 from pgqueuer.adapters.cli import supervisor
 from pgqueuer.errors import FailingListenerError
 from pgqueuer.models import HealthCheckEvent
+from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
 
 
 @pytest.fixture(scope="function")
 async def queue_manager(apgdriver: AsyncpgDriver) -> QueueManager:
     """Fixture to instantiate QueueManager."""
-    return QueueManager(connection=apgdriver)
+    return QueueManager(Queries(apgdriver))
 
 
 @pytest.fixture(scope="function")
 async def scheduler_manager(apgdriver: AsyncpgDriver) -> SchedulerManager:
     """Fixture to instantiate SchedulerManager."""
-    return SchedulerManager(connection=apgdriver)
+    return SchedulerManager(Queries(apgdriver))
 
 
 @pytest.fixture(scope="function")

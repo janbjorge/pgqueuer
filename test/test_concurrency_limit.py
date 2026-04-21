@@ -46,7 +46,7 @@ async def test_max_concurrency(
     )
 
     shared = Tally()
-    qms = [QueueManager(apgdriver) for _ in range(n_consumers)]
+    qms = [QueueManager(Queries(apgdriver)) for _ in range(n_consumers)]
 
     async def run_consumer(qm: QueueManager) -> None:
         @qm.entrypoint("fetch", concurrency_limit=max_concurrency)
@@ -79,7 +79,7 @@ async def test_concurrency_entrypoint_isolation(
         [0, 0] * N,
     )
 
-    qm = QueueManager(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
 
     @qm.entrypoint("fetch_1", concurrency_limit=concurrency_limit)
     async def fetch_1(job: Job) -> None:

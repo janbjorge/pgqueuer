@@ -19,7 +19,6 @@ from typing import AsyncGenerator, Callable, get_args
 
 import anyio
 
-from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import (
     buffers,
     cache,
@@ -30,8 +29,8 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
-from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -45,10 +44,10 @@ class QueueManager:
     managing cancellations.
 
     Attributes:
-        connection (db.Driver): The database driver used for database operations.
+        queries (RepositoryPort): Repository for job queue operations. The underlying
+            database driver is accessed via ``queries.driver``.
         channel (Channel): The PostgreSQL channel for notifications.
         shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
-        queries (queries.Queries): Instance for executing database queries.
         entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
         queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
         job_context (dict[models.JobId, models.Context]): Contexts for jobs,
@@ -61,16 +60,15 @@ class QueueManager:
             the periodic listener health-check times out.
     """
 
-    connection: Driver
+    queries: RepositoryPort
     channel: models.Channel = dataclasses.field(
-        default=models.Channel(qb.DBSettings().channel),
+        default=models.Channel(DBSettings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
     )
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
 
     # Per entrypoint
     entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
@@ -150,16 +148,6 @@ class QueueManager:
                     self.shutdown.wait(),
                     timeout=interval.total_seconds(),
                 )
-
-    def __post_init__(self) -> None:
-        """
-        Initialize the QueueManager after dataclass fields have been set.
-
-        Sets up the `queries` instance using the provided database connection
-        when no queries instance was injected.
-        """
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
 
     def get_context(self, job_id: models.JobId) -> models.Context:
         """
@@ -472,13 +460,13 @@ class QueueManager:
                 repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
-            self.connection,
+            self.queries.driver,
         ):
             periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
 
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
-                self.connection,
+                self.queries.driver,
                 self.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
