@@ -26,24 +26,25 @@ WHERE status = 'picked'
   AND heartbeat < NOW() - INTERVAL '5 minutes';
 ```
 
-## Retry Timer
+## Heartbeat Timeout
 
-The `retry_timer` parameter on the `@entrypoint()` decorator sets an interval after which
-jobs with a stale heartbeat are eligible to be re-picked by any available worker. This
-enables automatic recovery from crashed or stalled workers:
+The `heartbeat_timeout` parameter on `pgq.run()` / `QueueManager.run()` sets the
+duration after which a picked job with a stale heartbeat becomes eligible for
+re-pickup by any available worker. Heartbeats are sent automatically at half
+this interval. This enables automatic recovery from crashed or stalled workers:
 
 ```python
 from datetime import timedelta
 
-@pgq.entrypoint("my_task", retry_timer=timedelta(minutes=5))
-async def my_task(job: Job) -> None:
-    await do_work(job.payload)
+await pgq.run(
+    heartbeat_timeout=timedelta(minutes=5),
+)
 ```
 
-With `retry_timer` set, a job that stops updating its heartbeat for the specified duration
-will be retried by the next available worker.
+With `heartbeat_timeout` set, a job that stops updating its heartbeat for the
+specified duration will be retried by the next available worker.
 
 !!! note
-    The default `retry_timer` is `0` (disabled). Set it per entrypoint to match your
-    expected maximum job runtime plus a safety margin to avoid prematurely re-queuing
+    The default `heartbeat_timeout` is 30 seconds. Set it to match your expected
+    maximum job runtime plus a safety margin to avoid prematurely re-queuing
     legitimately long-running jobs.

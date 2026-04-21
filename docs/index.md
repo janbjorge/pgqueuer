@@ -98,7 +98,8 @@ That's it. Just PostgreSQL and your application code.
     ---
 
     Per-entrypoint `concurrency_limit` protects downstream services.
-    Or use `serialized_dispatch` to process jobs strictly one at a time.
+    Use `concurrency_limit=1` to process jobs strictly one at a time.
+    Limits are enforced globally at the database level across all workers.
 
 -   **Built-In Scheduler**
 

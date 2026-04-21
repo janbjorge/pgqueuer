@@ -25,11 +25,11 @@ with PGQueuer:
 
 ```python
 import logfire
-from pgqueuer.adapters import tracing
 from pgqueuer.adapters.tracing.logfire import LogfireTracing
+from pgqueuer.ports.tracing import set_tracing_class
 
 logfire.configure()
-tracing.set_tracing_class(LogfireTracing())
+set_tracing_class(LogfireTracing())
 ```
 
 With this setup, trace context is added to job headers when you enqueue messages.
@@ -46,14 +46,14 @@ Initialise the Sentry SDK with your DSN, then set the tracer class:
 
 ```python
 import sentry_sdk
-from pgqueuer.adapters import tracing
 from pgqueuer.adapters.tracing.sentry import SentryTracing
+from pgqueuer.ports.tracing import set_tracing_class
 
 sentry_sdk.init(
     dsn="https://<key>@o1.ingest.sentry.io/<project>",
     traces_sample_rate=1.0,
 )
-tracing.set_tracing_class(SentryTracing())
+set_tracing_class(SentryTracing())
 ```
 
 Job headers will include Sentry tracing information so that consumer spans are linked to
@@ -68,11 +68,11 @@ Configure your `TracerProvider`, then register the tracer with PGQueuer:
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from pgqueuer.adapters import tracing
 from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
+from pgqueuer.ports.tracing import set_tracing_class
 
 trace.set_tracer_provider(TracerProvider())
-tracing.set_tracing_class(OpenTelemetryTracing())
+set_tracing_class(OpenTelemetryTracing())
 ```
 
 The adapter follows OTel
