@@ -395,6 +395,63 @@ connection = await asyncpg.connect(dsn())
 connection = await asyncpg.connect()
 ```
 
+### 21. `QueueManager` and `SchedulerManager` constructor signature changed
+
+`QueueManager` and `SchedulerManager` no longer accept a `connection` parameter.
+The first positional argument is now `queries` (a `RepositoryPort`), and the
+database driver is accessed via `queries.driver`. This eliminates redundant
+double-passing of both a driver and a queries object wrapping that same driver.
+
+`CompletionWatcher` similarly now requires a `queries` keyword argument instead
+of constructing one internally.
+
+**Before (v0.26.x):**
+
+```python
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.qm import QueueManager
+from pgqueuer.sm import SchedulerManager
+
+driver = AsyncpgDriver(connection)
+qm = QueueManager(driver)
+sm = SchedulerManager(driver)
+```
+
+**After (v1.0.0):**
+
+```python
+from pgqueuer.db import AsyncpgDriver
+from pgqueuer.qm import QueueManager
+from pgqueuer.sm import SchedulerManager
+from pgqueuer.queries import Queries
+
+driver = AsyncpgDriver(connection)
+queries = Queries(driver)
+qm = QueueManager(queries)
+sm = SchedulerManager(queries)
+```
+
+**How to migrate:**
+
+- Replace `QueueManager(driver)` with `QueueManager(Queries(driver))`.
+- Replace `SchedulerManager(driver)` with `SchedulerManager(Queries(driver))`.
+- Replace `CompletionWatcher(driver)` with
+  `CompletionWatcher(driver, queries=Queries(driver))`.
+- If you accessed `qm.connection`, use `qm.queries.driver` instead.
+- If you accessed `sm.connection`, use `sm.queries.driver` instead.
+- `PgQueuer(driver)` is **unchanged** — it still accepts a driver and creates
+  `Queries` internally.
+
+### 22. `TaskManagerPort` protocol added to ports layer
+
+The `Driver` protocol's `tm` property now returns `TaskManagerPort` (defined in
+`pgqueuer.ports.driver`) instead of the concrete `TaskManager` class. This is
+only relevant if you implemented a custom driver and type-annotated the `tm`
+property with `TaskManager` explicitly.
+
+**How to migrate:** Change the return type annotation from `TaskManager` to
+`TaskManagerPort`, or rely on structural subtyping (no annotation needed).
+
 ---
 
 ## New Features
@@ -595,6 +652,21 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Removed `dsn()` helper from `pgqueuer.adapters.drivers` and `pgqueuer.db` —
   use `asyncpg.connect()` or `psycopg.connect("")` which read libpq env vars
   natively.
+- Moved `pg_notify` into the `Driver` protocol — drivers implement `notify()`
+  directly instead of the queries layer building a raw SQL string.
+- Consolidated `utc_now()` into a single utility in `pgqueuer.domain.models`.
+- Batched scheduler heartbeat updates for reduced DB round-trips.
+- Added PR title lint for Conventional Commits enforcement in CI.
+- Added `TaskManagerPort` protocol to `pgqueuer.ports.driver`, replacing the
+  concrete `TaskManager` import that violated the ports→core boundary.
+- `QueueManager` and `SchedulerManager` no longer auto-create `Queries` —
+  `PgQueuer.__post_init__` is the sole wiring point that constructs concrete
+  adapter instances.
+- Import-linter contracts expanded to 4: domain, ports, core, and metrics layers
+  are all independently validated. Only `core.applications` (the composition
+  root) retains adapter import exceptions.
+- Guarded `asyncio.Future` state transitions against race conditions.
+- Simplified `listener_healthy` timeout to raise `FailingListenerError` directly.
 
 ---
 
@@ -642,5 +714,16 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
     with `asyncpg.connect()` (no args).
 19. **Removed imports:** Delete any imports of `SyncEntrypoint`,
     `SyncContextEntrypoint`, `run_factory`, or `dsn`.
-20. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+20. **`QueueManager` / `SchedulerManager` constructors:** Replace
+    `QueueManager(driver)` with `QueueManager(Queries(driver))`. Replace
+    `SchedulerManager(driver)` with `SchedulerManager(Queries(driver))`.
+    Replace `qm.connection` / `sm.connection` with `qm.queries.driver` /
+    `sm.queries.driver`. `PgQueuer(driver)` is unchanged.
+21. **`CompletionWatcher`:** Replace `CompletionWatcher(driver)` with
+    `CompletionWatcher(driver, queries=Queries(driver))`.
+22. **Custom `Driver` implementations:** If you annotated the `tm` property
+    return type as `TaskManager`, change it to `TaskManagerPort` from
+    `pgqueuer.ports.driver` (or remove the annotation — structural subtyping
+    handles it).
+23. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
