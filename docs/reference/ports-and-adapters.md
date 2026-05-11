@@ -12,15 +12,15 @@ these classes directly instantiate `Queries` in their `__post_init__` methods an
 PostgreSQL-specific notification, heartbeat, and buffering infrastructure. This makes it
 impossible to unit-test core dispatch logic without a running PostgreSQL instance.
 
-Specific coupling problems:
+Specific coupling problems (pre-v1):
 
-- `QueueManager.__post_init__` hardcodes `self.queries = queries.Queries(self.connection)`.
-- `SchedulerManager.__post_init__` does the same.
-- `EntrypointExecutorParameters` previously bundled `connection`, `queries`, `channel`, and
+- `QueueManager.__post_init__` hardcoded `self.queries = queries.Queries(self.connection)`.
+- `SchedulerManager.__post_init__` did the same.
+- `EntrypointExecutorParameters` bundled `connection`, `queries`, `channel`, and
   `shutdown` alongside executor config, even though no executor implementation read the
-  infrastructure fields (now removed).
-- `tracing.TRACER` is a module-level mutable singleton instead of an injected dependency.
-- The `Queries` class is simultaneously the interface definition and the PostgreSQL
+  infrastructure fields.
+- `tracing.TRACER` was a module-level mutable singleton instead of an injected dependency.
+- The `Queries` class was simultaneously the interface definition and the PostgreSQL
   implementation.
 
 The `Driver` protocol in `db.py` and `TracingProtocol` in `tracing.py` already demonstrate
@@ -103,28 +103,38 @@ inheritance or registration required.
 
 ### Existing Ports (Already In Place)
 
-- **`Driver`** (`db.py`) — database execution abstraction. Adapters: `AsyncpgDriver`,
-  `AsyncpgPoolDriver`, `PsycopgDriver`.
-- **`TracingProtocol`** (`tracing.py`) — distributed tracing. Adapters: `LogfireTracing`,
-  `SentryTracing`.
+- **`Driver`** (`pgqueuer.ports.driver`) — database execution abstraction.
+  Methods: `fetch`, `execute`, `add_listener`, `notify`. Adapters:
+  `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `PsycopgPoolDriver`,
+  `SyncPsycopgDriver`, and the in-memory driver.
+- **`TracingProtocol`** (`pgqueuer.ports.tracing`) — distributed tracing.
+  Adapters: `LogfireTracing`, `SentryTracing`, `OpenTelemetryTracing`.
 
 ### Dependency Injection Pattern
 
-`QueueManager` and `SchedulerManager` accept an optional `queries` argument:
+`QueueManager` and `SchedulerManager` accept a `queries` argument (a `RepositoryPort`)
+as the first positional parameter. The underlying driver is accessed via
+`queries.driver`:
 
 ```python
 @dataclasses.dataclass
 class QueueManager:
-    connection: db.Driver
-    queries: RepositoryPort = dataclasses.field(default=None)  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.queries is None:
-            self.queries = queries.Queries(self.connection)
+    queries: RepositoryPort
+    channel: models.Channel = dataclasses.field(
+        default=models.Channel(DBSettings().channel),
+    )
 ```
 
-This preserves `QueueManager(connection)` for all existing callers while enabling mock
-injection for tests.
+Callers construct concrete adapters at the composition root:
+
+```python
+driver = AsyncpgDriver(connection)
+qm = QueueManager(Queries(driver))
+```
+
+`PgQueuer.__post_init__` is the single wiring point that builds `Queries(driver)`
+when a caller passes a `Driver` directly, so `PgQueuer(driver)` still works.
+`QueueManager` and `SchedulerManager` no longer build adapters themselves.
 
 ### Target Directory Layout
 
@@ -148,11 +158,11 @@ pgqueuer/
   core/
     qm.py                     # QueueManager
     sm.py                     # SchedulerManager
-    applications.py           # PgQueuer facade
+    applications.py           # PgQueuer facade (composition root)
     executors.py              # AbstractEntrypointExecutor, EntrypointExecutor
     listeners.py              # EventRouter, PGNoticeEventListener
     buffers.py                # TimedOverflowBuffer and typed variants
-    heartbeat.py, cache.py, helpers.py, retries.py, tm.py, logconfig.py, completion.py
+    heartbeat.py, cache.py, tm.py, logconfig.py, completion.py
 
   adapters/
     drivers/
@@ -171,8 +181,17 @@ pgqueuer/
       cli.py, supervisor.py, factories.py
 ```
 
-Old module paths (`pgqueuer/db.py`, `pgqueuer/queries.py`, etc.) become thin re-export shims
-so existing imports keep working.
+Public-API module paths remain available as thin re-export shims at the package
+root: `pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`, `pgqueuer.sm`,
+`pgqueuer.executors`, `pgqueuer.errors`, `pgqueuer.applications`,
+`pgqueuer.factories`, `pgqueuer.types`, and `pgqueuer.models`.
+
+Internal-only modules (`buffers`, `cache`, `cli`, `completion`, `heartbeat`,
+`listeners`, `logconfig`, `qb`, `query_helpers`, `supervisor`, `tm`, `tracing`)
+were exposed at the package root in pre-v1 releases. In v1.0.0 those shims were
+removed — import from the canonical location under `pgqueuer.core.*`,
+`pgqueuer.adapters.*`, or `pgqueuer.ports.*` instead. See breaking change #11
+in the v1.0.0 release notes for the full mapping.
 
 ### Migration Phases
 
@@ -216,7 +235,7 @@ Phase 3 ──┘
 
 | Risk | Mitigation |
 |------|-----------|
-| Breaking `from pgqueuer import X` | Every moved module gets a re-export shim at the old path |
-| Custom executors using removed `parameters.connection` | Deprecated with warnings in prior release; now removed |
-| Circular imports during restructure | Move leaf modules first; one module per commit with full test suite |
-| `tracing.TRACER` global removal | Global kept as fallback; injected value takes precedence |
+| Breaking `from pgqueuer import X` | Public-API shims (`pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`, `pgqueuer.sm`, `pgqueuer.executors`, etc.) preserved at the package root |
+| Custom executors using `parameters.connection` etc. | Deprecated with warnings in prior releases; removed in v1.0.0 |
+| Circular imports during restructure | Moved leaf modules first; one module per commit with full test suite |
+| `tracing.TRACER` global removal | Singleton lives in `pgqueuer.ports.tracing`; `set_tracing_class()` replaces direct assignment |

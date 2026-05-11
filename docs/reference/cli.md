@@ -161,6 +161,40 @@ pgq schedules --remove fetch_db
 
 ---
 
+### `failed`
+
+List jobs held with `status='failed'` for manual intervention. Held jobs come from
+entrypoints registered with `on_failure="hold"` — see [Holding Failed Jobs](../guides/hold-failed-jobs.md).
+
+**Options:**
+
+- `-n` / `--limit <number>` *(default: 25)*: Maximum number of jobs to display.
+
+```bash
+pgq failed
+pgq failed -n 100
+```
+
+Output: job ID, entrypoint, attempt count, creation time, and payload size.
+
+---
+
+### `requeue`
+
+Re-queue failed jobs by ID so they can be processed again. Status changes from
+`failed` back to `queued`, `execute_after` is set to `NOW()`, and `attempts` is
+reset to `0`.
+
+**Arguments:**
+
+- `ids` *(required)*: One or more job IDs to re-queue.
+
+```bash
+pgq requeue 42 43 44
+```
+
+---
+
 ### `run`
 
 Start a `QueueManager` to process jobs.

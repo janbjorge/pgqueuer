@@ -1,7 +1,9 @@
 # Concurrency Control
 
 PgQueuer provides fine-grained control over job execution concurrency at the
-entrypoint level.
+entrypoint level. Concurrency limits are enforced **globally** at the database
+level via the dequeue SQL query, not per-worker. If you set `concurrency_limit=5`,
+at most 5 jobs run across your entire fleet.
 
 ## Concurrency Limiting
 
@@ -16,17 +18,18 @@ async def process_data(job: Job) -> None:
 This is useful for protecting external services with connection pool limits or
 memory-intensive operations.
 
-## Serialized Dispatch
+## Serialized Processing
 
 Ensure jobs of the same type are processed strictly one at a time:
 
 ```python
-@pgq.entrypoint("shared_resource", serialized_dispatch=True)
+@pgq.entrypoint("shared_resource", concurrency_limit=1)
 async def process_shared_resource(job: Job) -> None:
     pass
 ```
 
-`serialized_dispatch=True` is equivalent to `concurrency_limit=1`.
+Setting `concurrency_limit=1` guarantees that only one job of this entrypoint runs
+at a time across all workers.
 
 ## Global Concurrency Limit
 
@@ -41,12 +44,13 @@ This limits the total across all entrypoints regardless of individual entrypoint
 
 ## Combining Controls
 
-You can combine multiple controls on a single entrypoint:
+You can combine concurrency limits with other entrypoint options:
 
 ```python
 @pgq.entrypoint(
     "api_call",
     concurrency_limit=3,
+    on_failure="hold",
 )
 async def call_external_api(job: Job) -> None:
     pass
@@ -54,9 +58,10 @@ async def call_external_api(job: Job) -> None:
 
 ## Configuring Timeouts
 
-Two additional parameters control job processing timing:
+Two parameters on `pgq.run()` control job processing timing:
 
-- **`dequeue_timeout`**: Maximum time (in seconds) to wait for new jobs before returning an
-  empty batch. Default: 30 seconds. Set at the `QueueManager` / `PgQueuer` level.
-- **`retry_timer`**: Interval to retry unprocessed jobs. Default: 0 (no retry timer).
-  Set per entrypoint via the `@entrypoint()` decorator.
+- **`dequeue_timeout`**: Maximum time to wait for new jobs before re-checking.
+  Default: 30 seconds.
+- **`heartbeat_timeout`**: Duration after which a picked job with a stale heartbeat
+  becomes eligible for re-pickup by another worker. Heartbeats are sent automatically
+  at half this interval. Default: 30 seconds.

@@ -79,6 +79,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Core Concepts: getting-started/core-concepts.md
+      - Upgrading from 0.x: getting-started/upgrading.md
   - Guides:
       - Job Processing:
           - Concurrency Control: guides/rate-limiting.md

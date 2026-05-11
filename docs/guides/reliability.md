@@ -134,7 +134,7 @@ handle poison jobs with a query:
 
 ```sql
 -- Jobs that have been re-picked more than 3 times (indicative of repeated failure)
--- Adjust threshold based on your retry_timer and expected job runtime
+-- Adjust threshold based on your heartbeat_timeout and expected job runtime
 SELECT id, entrypoint, status, heartbeat, updated
 FROM pgqueuer
 WHERE status = 'picked'

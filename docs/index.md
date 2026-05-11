@@ -98,7 +98,8 @@ That's it. Just PostgreSQL and your application code.
     ---
 
     Per-entrypoint `concurrency_limit` protects downstream services.
-    Or use `serialized_dispatch` to process jobs strictly one at a time.
+    Use `concurrency_limit=1` to process jobs strictly one at a time.
+    Limits are enforced globally at the database level across all workers.
 
 -   **Built-In Scheduler**
 
@@ -147,6 +148,22 @@ That's it. Just PostgreSQL and your application code.
     queued until their timestamp passes, then enter the normal priority
     queue.
 
+-   **Hold Failed Jobs**
+
+    ---
+
+    Set `on_failure="hold"` to park terminally failed jobs in the queue
+    table for human review. Inspect with `pgq failed`, fix the upstream
+    issue, and re-queue with `pgq requeue <id>`.
+
+-   **MCP Server**
+
+    ---
+
+    Optional MCP server with 11 read-only tools: queue size, throughput,
+    failures, stale jobs, schedules, schema. Works with Claude, Cursor,
+    and any MCP client.
+
 </div>
 
 ---
@@ -176,3 +193,4 @@ are backed by PostgreSQL and you want a simpler operational footprint.
 - **[Quick Start](getting-started/quickstart.md)** -- build your first consumer and producer in 5 minutes
 - **[Core Concepts](getting-started/core-concepts.md)** -- understand jobs, entrypoints, and the status lifecycle
 - **[Architecture](reference/architecture.md)** -- how data flows from producer to consumer
+- **[Upgrading from 0.x](getting-started/upgrading.md)** -- migration guide for users coming from pre-1.0 releases

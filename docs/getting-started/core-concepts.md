@@ -58,9 +58,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 | Parameter | Type | Default | Effect |
 |-----------|------|---------|--------|
 | `name` | `str` | (required) | Entrypoint name -- must match what producers enqueue |
-| `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint |
-| `serialized_dispatch` | `bool` | `False` | Process jobs one at a time (equivalent to `concurrency_limit=1`) |
-| `retry_timer` | `timedelta` | `0` (disabled) | Re-queue jobs whose heartbeat has gone stale |
+| `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint (database-enforced globally). Use `1` for serialized processing |
 | `accepts_context` | `bool` | `False` | Pass a `Context` object as the second argument |
 | `on_failure` | `"delete" \| "hold"` | `"delete"` | Hold failed jobs for manual re-queue instead of deleting |
 | `executor_factory` | callable | `None` | Custom executor class for retry logic, etc. |
@@ -95,8 +93,10 @@ Every job transitions through a series of states. The status is stored as the
             └───────────┘ └────────┘
 ```
 
-Jobs can also return to `queued`: a `picked` job may be retried via `RetryRequested`,
-and a `failed` job can be manually re-queued.
+Jobs can also return to `queued`: a `picked` job may be retried by raising
+[`RetryRequested`](../guides/retry.md) from the handler, and a `failed` job
+can be manually re-queued via `pgq requeue <id>` or
+[`Queries.requeue_jobs()`](../guides/hold-failed-jobs.md#re-queuing-failed-jobs).
 
 | Status | Meaning |
 |--------|---------|
@@ -104,7 +104,7 @@ and a `failed` job can be manually re-queued.
 | `picked` | A worker has claimed this job and is processing it |
 | `successful` | Handler completed without raising an exception |
 | `exception` | Handler raised an unhandled exception (traceback is logged) |
-| `failed` | Job held for manual review after terminal failure (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
+| `failed` | Job held for manual review after terminal failure. Inspect with `pgq failed` and re-queue with `pgq requeue <id>` (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
 | `canceled` | Job was canceled via `mark_job_as_cancelled()` |
 | `deleted` | Job was removed before being processed |
 

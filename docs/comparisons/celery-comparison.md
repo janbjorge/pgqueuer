@@ -162,8 +162,9 @@ async def wait_for_job() -> None:
     driver = AsyncpgDriver(conn)
     pgq = PgQueuer(driver)
 
-    job_ids = await Queries(driver).enqueue("add", b'{"x": 2, "y": 3}')
-    async with CompletionWatcher(driver) as watcher:
+    queries = Queries(driver)
+    job_ids = await queries.enqueue("add", b'{"x": 2, "y": 3}')
+    async with CompletionWatcher(driver, queries=queries) as watcher:
         status = await watcher.wait_for(job_ids[0])
         print(status)
 ```
