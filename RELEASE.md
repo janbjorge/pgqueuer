@@ -114,6 +114,8 @@ ALTER TYPE pgqueuer_status ADD VALUE IF NOT EXISTS 'failed';
 
 Both `pgq install` and `pgq upgrade` apply these automatically. If you manage
 schema manually, apply these migrations before starting upgraded workers.
+Table and type identifiers reflect the default unprefixed names; if you set
+`--prefix` / `PGQUEUER_PREFIX`, substitute your prefixed names accordingly.
 
 ### 5. Removed `requests_per_second` rate limiting
 
@@ -201,7 +203,7 @@ any of these paths, update to the canonical location:
 | `pgqueuer.cli`          | `pgqueuer.adapters.cli.cli`                       |
 | `pgqueuer.completion`   | `pgqueuer.core.completion`                        |
 | `pgqueuer.heartbeat`    | `pgqueuer.core.heartbeat`                         |
-| `pgqueuer.helpers`      | Removed entirely (see breaking change #20)        |
+| `pgqueuer.helpers`      | Removed entirely (see Other Changes)              |
 | `pgqueuer.listeners`    | `pgqueuer.core.listeners`                         |
 | `pgqueuer.logconfig`    | `pgqueuer.core.logconfig`                         |
 | `pgqueuer.qb`           | `pgqueuer.domain.settings` / `pgqueuer.adapters.persistence.qb` |
@@ -468,10 +470,11 @@ arguments, which is safer and easier to maintain. Custom drivers and the
 in-memory adapter can also intercept notifications directly instead of parsing
 emitted SQL.
 
-This is breaking for any custom `Driver` implementation — it must now implement
-the new `notify()` coroutine. Built-in drivers (`AsyncpgDriver`, `PsycopgDriver`,
-`SyncPsycopgDriver`, `AsyncpgPoolDriver`, `PsycopgPoolDriver`, and the in-memory
-driver) have been updated.
+This is breaking for any custom async `Driver` implementation — it must now
+implement the new `notify()` coroutine. Built-in async drivers (`AsyncpgDriver`,
+`AsyncpgPoolDriver`, `PsycopgDriver`, and the in-memory driver) have been
+updated. `SyncPsycopgDriver` is unaffected — it implements the separate
+`SyncDriver` protocol, which has no `notify()` method.
 
 **New method signature:**
 
@@ -683,7 +686,8 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Fixed docs CI workflow runner label.
 - Added `OnFailure` type to `pgqueuer.types` re-exports.
 - Added OpenTelemetry section to the tracing integration guide.
-- Removed `async-timeout` from dependencies (no longer needed).
+- Removed `async-timeout` from runtime dependencies (kept as a dev/test
+  dependency until tests migrate to `asyncio.timeout`).
 - Removed dead internal helpers: `ExponentialBackoff`, `timer()`,
   `retry_timer_buffer_timeout()`.
 - Removed dead `EntrypointStatistics` class from `pgqueuer.domain.models`.
@@ -765,8 +769,9 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
     return type as `TaskManager`, change it to `TaskManagerPort` from
     `pgqueuer.ports.driver` (or remove the annotation — structural subtyping
     handles it).
-23. **Custom `Driver` implementations — `notify()`:** Implement the new
-    `notify(channel, payload)` coroutine on any custom driver. Remove imports
-    of `build_notify_query` from `pgqueuer.adapters.persistence.qb`.
+23. **Custom async `Driver` implementations — `notify()`:** Implement the new
+    `notify(channel, payload)` coroutine on any custom async driver.
+    (`SyncDriver` is unaffected.) Remove imports of `build_notify_query` from
+    `pgqueuer.adapters.persistence.qb`.
 24. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
