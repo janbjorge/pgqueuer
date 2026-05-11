@@ -452,6 +452,48 @@ property with `TaskManager` explicitly.
 **How to migrate:** Change the return type annotation from `TaskManager` to
 `TaskManagerPort`, or rely on structural subtyping (no annotation needed).
 
+### 23. `Driver` protocol requires `notify()` method
+
+`pg_notify` has been moved out of the queries layer and into the `Driver`
+protocol. Drivers now send `NOTIFY` directly via a new abstract method instead
+of the queries layer building a raw SQL string. The
+`pgqueuer.adapters.persistence.qb.build_notify_query()` helper has been removed.
+
+**Why:** `pg_notify` is a transport concern — it pairs with `add_listener`,
+which already lived on `Driver`. Keeping it in the queries layer violated the
+ports/adapters boundary, forced the queries layer to know about NOTIFY
+mechanics, and required `build_notify_query()` to construct raw SQL by string
+interpolation. Each driver now uses its native notify API with parameterized
+arguments, which is safer and easier to maintain. Custom drivers and the
+in-memory adapter can also intercept notifications directly instead of parsing
+emitted SQL.
+
+This is breaking for any custom `Driver` implementation — it must now implement
+the new `notify()` coroutine. Built-in drivers (`AsyncpgDriver`, `PsycopgDriver`,
+`SyncPsycopgDriver`, `AsyncpgPoolDriver`, `PsycopgPoolDriver`, and the in-memory
+driver) have been updated.
+
+**New method signature:**
+
+```python
+class Driver(Protocol):
+    async def notify(self, channel: str, payload: str) -> None:
+        """Send a NOTIFY on *channel* with *payload*."""
+        ...
+```
+
+**How to migrate:** Add a `notify()` implementation to your custom driver. For
+example, with psycopg:
+
+```python
+async def notify(self, channel: str, payload: str) -> None:
+    async with self.connection.cursor() as cur:
+        await cur.execute("SELECT pg_notify(%s, %s)", (channel, payload))
+```
+
+Remove any imports of `build_notify_query` from
+`pgqueuer.adapters.persistence.qb`.
+
 ---
 
 ## New Features
@@ -652,8 +694,6 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Removed `dsn()` helper from `pgqueuer.adapters.drivers` and `pgqueuer.db` —
   use `asyncpg.connect()` or `psycopg.connect("")` which read libpq env vars
   natively.
-- Moved `pg_notify` into the `Driver` protocol — drivers implement `notify()`
-  directly instead of the queries layer building a raw SQL string.
 - Consolidated `utc_now()` into a single utility in `pgqueuer.domain.models`.
 - Batched scheduler heartbeat updates for reduced DB round-trips.
 - Added PR title lint for Conventional Commits enforcement in CI.
@@ -725,5 +765,8 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
     return type as `TaskManager`, change it to `TaskManagerPort` from
     `pgqueuer.ports.driver` (or remove the annotation — structural subtyping
     handles it).
-23. **Test:** Run your test suite. Breaking changes surface at decoration/startup
+23. **Custom `Driver` implementations — `notify()`:** Implement the new
+    `notify(channel, payload)` coroutine on any custom driver. Remove imports
+    of `build_notify_query` from `pgqueuer.adapters.persistence.qb`.
+24. **Test:** Run your test suite. Breaking changes surface at decoration/startup
     time, so problems are immediately visible.
