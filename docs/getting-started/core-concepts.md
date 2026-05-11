@@ -93,8 +93,10 @@ Every job transitions through a series of states. The status is stored as the
             └───────────┘ └────────┘
 ```
 
-Jobs can also return to `queued`: a `picked` job may be retried via `RetryRequested`,
-and a `failed` job can be manually re-queued.
+Jobs can also return to `queued`: a `picked` job may be retried by raising
+[`RetryRequested`](../guides/retry.md) from the handler, and a `failed` job
+can be manually re-queued via `pgq requeue <id>` or
+[`Queries.requeue_jobs()`](../guides/hold-failed-jobs.md#re-queuing-failed-jobs).
 
 | Status | Meaning |
 |--------|---------|
@@ -102,7 +104,7 @@ and a `failed` job can be manually re-queued.
 | `picked` | A worker has claimed this job and is processing it |
 | `successful` | Handler completed without raising an exception |
 | `exception` | Handler raised an unhandled exception (traceback is logged) |
-| `failed` | Job held for manual review after terminal failure (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
+| `failed` | Job held for manual review after terminal failure. Inspect with `pgq failed` and re-queue with `pgq requeue <id>` (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
 | `canceled` | Job was canceled via `mark_job_as_cancelled()` |
 | `deleted` | Job was removed before being processed |
 

@@ -144,11 +144,13 @@ From another process or script, push jobs into the queue:
 
     ```python
     import asyncpg
+    from pgqueuer.db import AsyncpgDriver
     from pgqueuer.queries import Queries
 
     async def enqueue_jobs():
         conn = await asyncpg.connect()
-        queries = Queries(conn)
+        driver = AsyncpgDriver(conn)
+        queries = Queries(driver)
         job_ids = await queries.enqueue(
             ["fetch"] * 10,        # entrypoint names
             [b"payload"] * 10,     # payloads (bytes)
@@ -173,7 +175,7 @@ From another process or script, push jobs into the queue:
 === "CLI"
 
     ```bash
-    pgq queue --entrypoint fetch --payload '{"key": "value"}'
+    pgq queue fetch '{"key": "value"}'
     ```
 
 `Queries.enqueue()` accepts lists for batch enqueuing. Each list element corresponds to one
@@ -200,8 +202,11 @@ You now have a working PgQueuer setup. Here's where to go from here:
 | Goal | Page |
 |------|------|
 | Understand the mental model | [Core Concepts](core-concepts.md) |
-| Add rate limiting or concurrency caps | [Rate Limiting](../guides/rate-limiting.md) |
+| Add concurrency caps | [Concurrency Control](../guides/rate-limiting.md) |
 | Set up cron-style recurring tasks | [Scheduling](../guides/scheduling.md) |
-| Handle transient failures with retries | [Custom Executors](../guides/custom-executors.md) |
+| Handle transient failures with retries | [Database-Level Retry](../guides/retry.md) |
+| Park failed jobs for human review | [Holding Failed Jobs](../guides/hold-failed-jobs.md) |
+| Wait for a job to finish from another process | [Completion Tracking](../guides/completion-tracking.md) |
 | Deploy workers to production | [Deployment](../guides/deployment.md) |
 | Test without PostgreSQL | [In-Memory Adapter](../reference/in-memory.md) |
+| Migrate from a 0.x release | [Upgrading from 0.x](upgrading.md) |

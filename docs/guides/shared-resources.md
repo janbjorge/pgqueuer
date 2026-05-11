@@ -123,7 +123,9 @@ async def simple_task(schedule: Schedule) -> None:
 ## Testing With Resources
 
 ```python
-qm = QueueManager(driver, resources={"flag": "test"})
+from pgqueuer.queries import Queries
+
+qm = QueueManager(Queries(driver), resources={"flag": "test"})
 
 @qm.entrypoint("demo")
 async def demo(job: Job) -> None:

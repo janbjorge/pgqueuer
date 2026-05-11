@@ -64,7 +64,7 @@ This creates the following objects in your database:
 | `pgqueuer_log` | Table | Completed job audit trail |
 | `pgqueuer_statistics` | Table | Job processing statistics |
 | `pgqueuer_schedules` | Table | Cron schedule definitions |
-| `pgqueuer_status` | Enum | Job status values (`queued`, `picked`, `successful`, `exception`, `canceled`, `deleted`) |
+| `pgqueuer_status` | Enum | Job status values (`queued`, `picked`, `successful`, `exception`, `canceled`, `deleted`, `failed`) |
 | `pgqueuer_changed` | Function | PL/pgSQL function that sends `pg_notify()` on queue changes |
 | `tg_pgqueuer_changed` | Trigger | Fires the notify function on INSERT/UPDATE/DELETE/TRUNCATE |
 

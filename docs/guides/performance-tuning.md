@@ -149,6 +149,6 @@ These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not 
 - [ ] Run `pgq autovac` after installation
 - [ ] Choose a `durability` level appropriate for your crash recovery requirements
 - [ ] Use `AsyncpgPoolDriver` for producers; a single connection for `QueueManager`
-- [ ] Set `retry_timer` to recover from worker crashes automatically
+- [ ] Set `heartbeat_timeout` on `pgq.run()` to recover from worker crashes automatically
 - [ ] Add `--shutdown-on-listener-failure` when running behind a PgBouncer pool
 - [ ] Monitor `pgqueuer_log` table size and prune if needed

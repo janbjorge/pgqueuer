@@ -25,6 +25,40 @@ For any driver:
 3. **Default isolation level** — Connections should maintain the default PostgreSQL
    isolation level unless explicitly modified.
 
+## Driver Protocol
+
+Every driver implements `pgqueuer.ports.driver.Driver`. Built-ins:
+`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `PsycopgPoolDriver`,
+`SyncPsycopgDriver`, and the in-memory driver. Custom drivers work anywhere a
+`Driver` is expected.
+
+Key methods:
+
+| Method | Purpose |
+|--------|---------|
+| `fetch(query, *args)` | Run a SELECT and return rows |
+| `execute(query, *args)` | Run a statement and return a status string |
+| `add_listener(channel, callback)` | Subscribe to `LISTEN` notifications |
+| `notify(channel, payload)` | Send `NOTIFY` on a channel |
+
+`notify()` replaces the removed `build_notify_query()` helper. Each driver sends
+`NOTIFY` via its native parameterized API instead of the queries layer building
+raw SQL. Custom drivers must implement it.
+
+```python
+class Driver(Protocol):
+    async def notify(self, channel: str, payload: str) -> None:
+        """Send a NOTIFY on *channel* with *payload*."""
+        ...
+```
+
+Example implementation (matches the built-in `PsycopgDriver`):
+
+```python
+async def notify(self, channel: str, payload: str) -> None:
+    await self.execute("SELECT pg_notify($1, $2)", channel, payload)
+```
+
 ## Asynchronous Drivers
 
 ### `AsyncpgDriver`

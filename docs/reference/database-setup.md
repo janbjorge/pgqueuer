@@ -15,7 +15,8 @@ PGQueuer uses four primary tables:
 ## Installation
 
 Install PgQueuer schema via the CLI. Make sure your PostgreSQL environment variables
-(`PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) are set, or use flags to specify credentials:
+(`PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`) are set, or pass `--pg-dsn` / set
+`PGDSN` with a full connection string:
 
 ```bash
 pgq install
