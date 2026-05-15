@@ -190,6 +190,11 @@ jobs:
       PYTHONASYNCIODEBUG: 1
       PYTHONDEBUG: 1
       PYTHONFAULTHANDLER: 1
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: root
+      PGDATABASE: pgq
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -198,8 +203,28 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
       - name: Install PGQueuer
         run: uv sync --all-extras --frozen
-      - name: Run Windows Shutdown Test
-        run: uv run pytest test/windows/test_shutdown.py --durations=10
+      - name: Start preinstalled PostgreSQL
+        shell: pwsh
+        run: |
+          $svc = Get-Service -Name "postgresql*" | Select-Object -First 1
+          if (-not $svc) { throw "PostgreSQL service not found on windows-latest runner" }
+          Set-Service -Name $svc.Name -StartupType Manual
+          Start-Service -Name $svc.Name
+          & "$env:PGBIN\pg_isready" -h $env:PGHOST -p $env:PGPORT
+      - name: Provision test database
+        shell: pwsh
+        run: |
+          & "$env:PGBIN\psql" -U $env:PGUSER -h $env:PGHOST -p $env:PGPORT -d postgres -c "CREATE DATABASE $env:PGDATABASE;"
+      - name: Run Windows Tests
+        run: uv run pytest test/windows/ --durations=10
+      - name: Force psycopg backend (drop asyncpg)
+        run: uv pip uninstall asyncpg
+      - name: Smoke `pgq install` / `pgq uninstall` against psycopg
+        run: |
+          uv run pgq install
+          uv run pgq verify --expect present
+          uv run pgq uninstall
+          uv run pgq verify --expect absent
   run-checks:
     if: github.event_name != 'schedule'
     name: Lint, Typecheck & Architecture

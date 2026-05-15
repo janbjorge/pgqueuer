@@ -82,6 +82,21 @@ conn.autocommit = True
 driver = PsycopgDriver(conn)
 ```
 
+!!! note "Windows event loop"
+    psycopg's async driver is not compatible with Python's default
+    `ProactorEventLoop` on Windows. Run your application under
+    `SelectorEventLoop` instead. On Python 3.12+ this is a one-liner:
+
+    ```python
+    import asyncio
+    asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop)
+    ```
+
+    On 3.11 use `asyncio.Runner(loop_factory=asyncio.SelectorEventLoop)`;
+    on 3.10 set `WindowsSelectorEventLoopPolicy` before `asyncio.run`.
+    The `pgq` CLI handles this automatically. See the
+    [psycopg async docs](https://www.psycopg.org/psycopg3/docs/advanced/async.html).
+
 ## Synchronous Driver
 
 ### `SyncPsycopgDriver`

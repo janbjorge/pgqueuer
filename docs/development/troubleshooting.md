@@ -39,6 +39,10 @@ the questions that quickly separate configuration issues from bugs.
 - Mixing `%s` and `$1` placeholders breaks prepared statement caching.
 - Async connections must be `await conn.close()`; sync connections should stay out of asyncio
   event loops.
+- **Windows event loop** — async psycopg rejects the default `ProactorEventLoop`. Use
+  `SelectorEventLoop` (e.g. `asyncio.run(main, loop_factory=asyncio.SelectorEventLoop)` on
+  3.12+). The `pgq` CLI does this for you; embedded use must opt in. See
+  [drivers reference](../reference/drivers.md#psycopgdriver) for full snippets.
 
 ## 4. PGQueuer Expectations
 
