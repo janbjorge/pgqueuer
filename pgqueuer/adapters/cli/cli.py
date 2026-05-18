@@ -4,10 +4,11 @@ import asyncio
 import contextlib
 import functools
 import os
+import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Callable
+from typing import Callable, Coroutine
 
 import typer
 from tabulate import tabulate
@@ -21,9 +22,30 @@ from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
 
 try:
-    from uvloop import run as asyncio_run
+    from uvloop import run as _asyncio_run
 except ImportError:
-    from asyncio import run as asyncio_run  # type: ignore[assignment]
+    from asyncio import run as _asyncio_run  # type: ignore[assignment]
+
+
+def asyncio_run(coro: Coroutine[object, object, object]) -> None:
+    if sys.platform != "win32":
+        _asyncio_run(coro)
+        return
+
+    # psycopg async rejects ProactorEventLoop (Windows default).
+    if sys.version_info >= (3, 12):
+        asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
+        return
+
+    if sys.version_info >= (3, 11):
+        with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
+            runner.run(coro)
+        return
+
+    # Python 3.10: no Runner, no loop_factory; mutate policy.
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    _asyncio_run(coro)
+
 
 app = typer.Typer(
     help=(
