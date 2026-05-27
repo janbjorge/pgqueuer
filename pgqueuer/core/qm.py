@@ -585,6 +585,17 @@ class QueueManager:
                     },
                 )
                 await self.queries.retry_job(job, retry_exc.delay, tbr)
+            except asyncio.CancelledError:
+                logconfig.logger.info(
+                    "Job canceled mid-flight for entrypoint/id: %s/%s",
+                    job.entrypoint,
+                    job.id,
+                )
+                # Shield the log write: the same CancelledError that landed us
+                # here would otherwise abort jbuff.add, leaving the row stuck
+                # at 'picked' (see GH #630).
+                await asyncio.shield(jbuff.add((job, "canceled", None)))
+                raise
             except Exception as e:
                 logconfig.logger.exception(
                     "Exception while processing entrypoint/job-id: %s/%s",
