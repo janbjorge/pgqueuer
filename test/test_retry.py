@@ -3,6 +3,8 @@ import asyncio.selector_events
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
+import pytest
+
 from pgqueuer import db, queries
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
@@ -380,4 +382,63 @@ async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver)
     )
     assert second_claim, (
         "expected new worker to reclaim stale picked job after heartbeat_timeout elapsed"
+    )
+
+
+@pytest.mark.xfail(
+    reason="GH #630 problem 2: when picked == concurrency_limit, the stale "
+    "branch of build_dequeue_query reuses the same concurrency gate as "
+    "next_queued, so pk.total >= limit blocks recovery. Fix is to drop "
+    "the gate from next_stale.",
+    strict=True,
+)
+async def test_stale_recovery_at_concurrency_limit(apgdriver: db.Driver) -> None:
+    """When stale-picked rows fill the concurrency limit, recovery must still re-pick them.
+
+    Reproduces problem 2 of GH #630. Setup: ``concurrency_limit=1``, one row
+    picked by worker A. A "dies" — row stays at ``status='picked'``. Heartbeat
+    goes stale. Worker B attempts dequeue — currently gets nothing because the
+    dequeue SQL applies the per-entrypoint concurrency gate to the stale branch
+    as well, and ``picked.total (1) >= concurrency_limit (1)``. Permanent
+    deadlock, no self-healing.
+    """
+    retry_timer = timedelta(milliseconds=100)
+    entrypoint = "stale_at_limit"
+    execution_params = {
+        entrypoint: queries.EntrypointExecutionParameter(concurrency_limit=1),
+    }
+
+    q = queries.Queries(apgdriver)
+    qm_a = QueueManager(q)
+    qm_b = QueueManager(q)
+
+    (job_id,) = await q.enqueue([entrypoint], [None], [0])
+
+    first_claim = await q.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=qm_a.queue_manager_id,
+        global_concurrency_limit=None,
+        heartbeat_timeout=retry_timer,
+    )
+    assert [j.id for j in first_claim] == [job_id]
+
+    # Worker A "dies" — never updates heartbeat, never logs a terminal status.
+    await asyncio.sleep(retry_timer.total_seconds() * 3)
+
+    # Sanity: the row still occupies the only slot.
+    leaked = await inspect_queued_jobs([job_id], apgdriver)
+    assert leaked[0].status == "picked"
+    assert leaked[0].queue_manager_id == qm_a.queue_manager_id
+
+    # Worker B should reclaim it — it's the same single slot, just transferring ownership.
+    second_claim = await q.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=qm_b.queue_manager_id,
+        global_concurrency_limit=None,
+        heartbeat_timeout=retry_timer,
+    )
+    assert [j.id for j in second_claim] == [job_id], (
+        "stale row not recovered — concurrency gate deadlocked the recovery branch"
     )
