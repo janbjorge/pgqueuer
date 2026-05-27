@@ -586,7 +586,7 @@ class QueueManager:
                 )
                 await self.queries.retry_job(job, retry_exc.delay, tbr)
             except asyncio.CancelledError:
-                logconfig.logger.info(
+                logconfig.logger.debug(
                     "Job canceled mid-flight for entrypoint/id: %s/%s",
                     job.entrypoint,
                     job.id,
