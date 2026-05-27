@@ -1,10 +1,4 @@
-"""
-Regression tests for GitHub issue #630.
-
-When a dispatched job is interrupted by ``asyncio.CancelledError`` (e.g. SIGTERM
-during a pod rollout), the row must transition out of ``'picked'`` with a
-``'canceled'`` log entry so it does not block the queue's concurrency slot.
-"""
+"""Regression tests for GH #630: CancelledError must mark a job 'canceled'."""
 
 from __future__ import annotations
 
@@ -26,13 +20,8 @@ EP_UNLIMITED = EntrypointExecutionParameter(0)
 EP_SERIAL = EntrypointExecutionParameter(1)
 
 
-# ---------------------------------------------------------------------------
-# Layer 1: contract — log_jobs('canceled') releases a picked row
-# ---------------------------------------------------------------------------
-
-
 async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> None:
-    """Logging a picked job with status='canceled' frees the slot."""
+    """log_jobs('canceled') removes the row and frees the slot."""
     await queries.enqueue("ep", b"x", priority=1)
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
@@ -49,7 +38,6 @@ async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> Non
 
     log = await queries.queue_log()
     assert [e.status for e in log if e.job_id == job.id and e.status == "canceled"] == ["canceled"]
-    # The row is no longer pickable.
     again = await queries.dequeue(
         10,
         {"ep": EP_UNLIMITED},
@@ -60,22 +48,17 @@ async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> Non
     assert again == []
 
 
-# ---------------------------------------------------------------------------
-# Layer 2: regression — dispatcher CancelledError writes a 'canceled' log
-# ---------------------------------------------------------------------------
-
-
 async def test_dispatch_cancellation_error_logs_canceled(
     queries: InMemoryQueries,
 ) -> None:
-    """Cancelling an in-flight dispatch must mark the row 'canceled', not leave it 'picked'."""
+    """Cancelling an in-flight dispatch writes a 'canceled' log entry."""
     qm = QueueManager(queries=queries)
     started = asyncio.Event()
 
     @qm.entrypoint("hang")
     async def handler(job: models.Job) -> None:
         started.set()
-        await asyncio.sleep(3600)  # blocked until cancelled — simulates SIGTERM
+        await asyncio.sleep(3600)
 
     await queries.enqueue("hang", b"payload", priority=1)
     jobs = await queries.dequeue(
@@ -104,7 +87,6 @@ async def test_dispatch_cancellation_error_logs_canceled(
         with contextlib.suppress(asyncio.CancelledError):
             await dispatch
 
-    # Bug condition: row stays at 'picked' forever.
     statuses = await queries.job_status([job.id])
     assert statuses == [] or all(st != "picked" for _, st in statuses), (
         f"Job stuck in 'picked' state after cancellation: {statuses}"
@@ -117,13 +99,8 @@ async def test_dispatch_cancellation_error_logs_canceled(
     )
 
 
-# ---------------------------------------------------------------------------
-# Layer 3: deadlock — concurrency slot is freed after cancel
-# ---------------------------------------------------------------------------
-
-
 async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
-    """With concurrency_limit=1, a cancelled job must not block the next one."""
+    """Cancelled job releases its concurrency slot."""
     qm = QueueManager(queries=queries)
     started = asyncio.Event()
 
@@ -157,7 +134,6 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
         with contextlib.suppress(asyncio.CancelledError):
             await dispatch
 
-    # Concurrency slot must now be free.
     await queries.enqueue("serial", b"second", priority=1)
     next_jobs = await queries.dequeue(
         10,
@@ -171,33 +147,16 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Layer 4: stale recovery must bypass the concurrency gate (GH #630, problem 2)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.xfail(
-    reason="GH #630 problem 2: stale recovery deadlocked by concurrency gate. "
-    "Fix lands in follow-up PR.",
+    reason="GH #630 problem 2: stale recovery blocked by concurrency gate.",
     strict=True,
 )
 async def test_stale_recovery_bypasses_concurrency_limit(
     queries: InMemoryQueries,
 ) -> None:
-    """A new worker must recover stale 'picked' rows even when the slot is full.
-
-    Reproduces the recovery deadlock from GH #630: with concurrency_limit=1,
-    a leaked 'picked' row from a dead worker occupies the slot. The recovery
-    path (stale-heartbeat re-pick) currently applies the same concurrency gate
-    as new dequeues, so it sees ``picked >= limit`` and returns nothing —
-    permanent deadlock with no self-healing.
-
-    Re-picking just transfers ownership; live execution is unchanged.
-    The gate should be dropped from the stale branch.
-    """
+    """Stale rows are recoverable even when picked count == concurrency_limit."""
     heartbeat_timeout = timedelta(milliseconds=20)
 
-    # Worker A picks the job, then "dies" without logging — row stays 'picked'.
     qm_a = uuid.uuid4()
     await queries.enqueue("ep", b"x", priority=1)
     jobs_a = await queries.dequeue(
@@ -210,11 +169,8 @@ async def test_stale_recovery_bypasses_concurrency_limit(
     assert len(jobs_a) == 1
     leaked = jobs_a[0]
 
-    # Wait for the heartbeat to go stale.
     await asyncio.sleep(heartbeat_timeout.total_seconds() * 3)
 
-    # Worker B arrives. The slot looks full (concurrency_limit=1, one row
-    # at status='picked'), but the row is stale and must be recoverable.
     qm_b = uuid.uuid4()
     jobs_b = await queries.dequeue(
         10,

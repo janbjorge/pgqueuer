@@ -591,9 +591,7 @@ class QueueManager:
                     job.entrypoint,
                     job.id,
                 )
-                # Shield the log write: the same CancelledError that landed us
-                # here would otherwise abort jbuff.add, leaving the row stuck
-                # at 'picked' (see GH #630).
+                # shield: same cancel would otherwise abort the log write.
                 await asyncio.shield(jbuff.add((job, "canceled", None)))
                 raise
             except Exception as e:

@@ -164,14 +164,7 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
 
 
 async def test_cancellation_marks_canceled_no_retry(apgdriver: db.Driver) -> None:
-    """CancelledError from a handler is terminal — job marked 'canceled', not retried.
-
-    Regression test for GH #630. Prior to the fix, ``CancelledError``
-    (BaseException) bypassed the dispatcher's ``except Exception`` clause and
-    left the row at ``'picked'``. Heartbeat staleness then re-picked it,
-    producing accidental retries. The dispatcher now catches it explicitly,
-    writes ``'canceled'``, and re-raises.
-    """
+    """CancelledError in a handler marks the job 'canceled' and is not retried (GH #630)."""
     retry_timer = timedelta(seconds=0.100)
     qm = QueueManager(queries.Queries(apgdriver))
     calls = Counter[JobId]()
