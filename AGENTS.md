@@ -184,7 +184,35 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 ### Docstrings
 
-Google-style when present: `Args:`, `Returns:`, `Raises:` sections. Not every method needs one -- omit for trivial/private methods.
+Follow [PEP 257](https://peps.python.org/pep-0257/) for format. Keep them tight.
+
+- **One-liner**: triple-quoted on the same line, period at the end. `"""Return the picked job."""`
+- **Multi-line**: summary line, blank line, body. Closing `"""` on its own line.
+- **Don't restate the signature.** Type annotations already say what the args and return type are. Only mention a parameter when something non-obvious matters (units, constraints, ownership, side effects).
+- **Skip docstrings on trivial or private helpers.** A descriptive name beats a docstring that repeats it.
+- **Test docstrings**: one line describing the behavior under test. Skip when the test name is self-evident.
+- **Module docstrings**: optional. When present, one sentence. No "This module defines..." preambles.
+
+### Comments
+
+Default to no comments. Code with descriptive names is more durable than comments that rot.
+
+Only add a comment when the **why** is non-obvious:
+
+- A hidden invariant or constraint that the code relies on
+- A workaround for a specific bug, library quirk, or platform behavior
+- A subtle ordering or concurrency requirement
+- Something that would surprise a reader who understood the code
+
+**Do not write:**
+
+- Comments that restate what the code does (`# increment counter`)
+- Caller references (`# used by X`, `# called from Y`) — they go stale and `git grep` is faster
+- Task or issue refs in inline comments — link them in the PR description instead. Exception: regression tests may reference the issue ID in their docstring or `xfail` reason, because the issue is the test's reason to exist.
+- Banner section headers (`# ----- Layer 2 -----`) — let function names and module structure do the work
+- TODOs without an owner and a tracking link
+
+When a comment explains a non-obvious workaround, keep it short and put it adjacent to the line it explains. Prefer one line.
 
 ### Guiding Principles
 
