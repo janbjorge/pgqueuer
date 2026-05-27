@@ -48,9 +48,7 @@ async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> Non
     await queries.log_jobs([(job, "canceled", None)])
 
     log = await queries.queue_log()
-    assert [e.status for e in log if e.job_id == job.id and e.status == "canceled"] == [
-        "canceled"
-    ]
+    assert [e.status for e in log if e.job_id == job.id and e.status == "canceled"] == ["canceled"]
     # The row is no longer pickable.
     again = await queries.dequeue(
         10,
@@ -99,9 +97,7 @@ async def test_dispatch_cancellation_error_logs_canceled(
             repository=queries,
         ) as hbuff,
     ):
-        dispatch = asyncio.create_task(
-            qm._dispatch(job, jbuff, hbuff, timedelta(seconds=30))
-        )
+        dispatch = asyncio.create_task(qm._dispatch(job, jbuff, hbuff, timedelta(seconds=30)))
         await asyncio.wait_for(started.wait(), timeout=2)
 
         dispatch.cancel()
@@ -155,9 +151,7 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
             repository=queries,
         ) as hbuff,
     ):
-        dispatch = asyncio.create_task(
-            qm._dispatch(job, jbuff, hbuff, timedelta(seconds=30))
-        )
+        dispatch = asyncio.create_task(qm._dispatch(job, jbuff, hbuff, timedelta(seconds=30)))
         await asyncio.wait_for(started.wait(), timeout=2)
         dispatch.cancel()
         with contextlib.suppress(asyncio.CancelledError):
@@ -174,6 +168,63 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
     )
     assert [j.payload for j in next_jobs] == [b"second"], (
         f"Concurrency slot deadlocked — could not pick next job: {next_jobs}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Layer 4: stale recovery must bypass the concurrency gate (GH #630, problem 2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.xfail(
+    reason="GH #630 problem 2: stale recovery deadlocked by concurrency gate. "
+    "Fix lands in follow-up PR.",
+    strict=True,
+)
+async def test_stale_recovery_bypasses_concurrency_limit(
+    queries: InMemoryQueries,
+) -> None:
+    """A new worker must recover stale 'picked' rows even when the slot is full.
+
+    Reproduces the recovery deadlock from GH #630: with concurrency_limit=1,
+    a leaked 'picked' row from a dead worker occupies the slot. The recovery
+    path (stale-heartbeat re-pick) currently applies the same concurrency gate
+    as new dequeues, so it sees ``picked >= limit`` and returns nothing —
+    permanent deadlock with no self-healing.
+
+    Re-picking just transfers ownership; live execution is unchanged.
+    The gate should be dropped from the stale branch.
+    """
+    heartbeat_timeout = timedelta(milliseconds=20)
+
+    # Worker A picks the job, then "dies" without logging — row stays 'picked'.
+    qm_a = uuid.uuid4()
+    await queries.enqueue("ep", b"x", priority=1)
+    jobs_a = await queries.dequeue(
+        10,
+        {"ep": EP_SERIAL},
+        qm_a,
+        None,
+        heartbeat_timeout=heartbeat_timeout,
+    )
+    assert len(jobs_a) == 1
+    leaked = jobs_a[0]
+
+    # Wait for the heartbeat to go stale.
+    await asyncio.sleep(heartbeat_timeout.total_seconds() * 3)
+
+    # Worker B arrives. The slot looks full (concurrency_limit=1, one row
+    # at status='picked'), but the row is stale and must be recoverable.
+    qm_b = uuid.uuid4()
+    jobs_b = await queries.dequeue(
+        10,
+        {"ep": EP_SERIAL},
+        qm_b,
+        None,
+        heartbeat_timeout=heartbeat_timeout,
+    )
+    assert [j.id for j in jobs_b] == [leaked.id], (
+        f"Stale row not recovered — recovery path blocked by concurrency gate. Got: {jobs_b}"
     )
 
 

@@ -163,8 +163,15 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
     assert all(v == 1 for v in calls.values())
 
 
-async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
-    N = 4
+async def test_cancellation_marks_canceled_no_retry(apgdriver: db.Driver) -> None:
+    """CancelledError from a handler is terminal — job marked 'canceled', not retried.
+
+    Regression test for GH #630. Prior to the fix, ``CancelledError``
+    (BaseException) bypassed the dispatcher's ``except Exception`` clause and
+    left the row at ``'picked'``. Heartbeat staleness then re-picked it,
+    producing accidental retries. The dispatcher now catches it explicitly,
+    writes ``'canceled'``, and re-raises.
+    """
     retry_timer = timedelta(seconds=0.100)
     qm = QueueManager(queries.Queries(apgdriver))
     calls = Counter[JobId]()
@@ -172,18 +179,18 @@ async def test_retry_with_cancellation(apgdriver: db.Driver) -> None:
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:
         calls[context.id] += 1
-        if calls[context.id] < N:
-            raise asyncio.CancelledError("Simulated cancellation")
-        # Nth attempt succeeds — signal shutdown from inside the handler
-        # so no additional retry can sneak in before shutdown takes effect.
         qm.shutdown.set()
+        raise asyncio.CancelledError("Simulated cancellation")
 
     await qm.queries.enqueue(["fetch"], [None], [0])
 
     await qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=retry_timer)
 
-    assert len(calls) == 1
-    assert sum(v for v in calls.values()) == N
+    assert sum(calls.values()) == 1, f"Expected one call, got {dict(calls)}"
+
+    log = await qm.queries.queue_log()
+    canceled = [e for e in log if e.status == "canceled"]
+    assert len(canceled) == 1, f"Expected one 'canceled' log entry, got {log}"
 
 
 async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
