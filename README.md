@@ -41,7 +41,7 @@ PGQueuer is designed for teams who value simplicity and want to leverage Postgre
 
 **When PGQueuer shines**: Single database stack, microservices that share a database, applications where job data needs transactional consistency with business data, teams who prefer fewer moving parts over distributed systems complexity.
 
-For a detailed comparison with Celery and other approaches, see [docs/celery-comparison.md](docs/celery-comparison.md).
+For a detailed comparison with Celery and other approaches, see [docs/comparisons/celery-comparison.md](docs/comparisons/celery-comparison.md).
 
 ## Installation
 
