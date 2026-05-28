@@ -3,8 +3,6 @@ import asyncio.selector_events
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
-import pytest
-
 from pgqueuer import db, queries
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
@@ -254,43 +252,6 @@ async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> 
     assert calls[jid] == 1
 
 
-async def test_retry_concurrency_limit_for_retries(apgdriver: db.Driver) -> None:
-    """
-    Ensure that retry honors the concurrency_limit at the SQL level: a retry won't fire
-    if the number of in-flight executions meets the limit, even when in-memory limiter is disabled.
-    """
-
-    retry_timer = timedelta(seconds=0.100)
-    concurrency_limit = 1
-    qm = QueueManager(queries.Queries(apgdriver))
-    calls = Counter[JobId]()
-
-    @qm.entrypoint("fetch", concurrency_limit=concurrency_limit)
-    async def fetch(context: Job) -> None:
-        calls[context.id] += 1
-        # block the first run to occupy the retry window
-        if calls[context.id] == 1:
-            await asyncio.sleep(retry_timer.total_seconds() * 2)
-        # after delay, allow exit
-        await asyncio.sleep(0)
-
-    jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
-
-    async def stopper() -> None:
-        # wait longer than retry window
-        await asyncio.sleep(retry_timer.total_seconds() * 5)
-        # with SQL concurrency_limit=1, no retry should have been fetched
-        assert calls[jid] == 1
-        qm.shutdown.set()
-
-    await asyncio.gather(
-        qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=retry_timer),
-        stopper(),
-    )
-    # ensure only one invocation occurred
-    assert calls[jid] == 1
-
-
 async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
     """Job should not be retried while still running (issue #430)."""
     retry_timer = timedelta(seconds=0.1)
@@ -385,23 +346,8 @@ async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver)
     )
 
 
-@pytest.mark.xfail(
-    reason="GH #630 problem 2: when picked == concurrency_limit, the stale "
-    "branch of build_dequeue_query reuses the same concurrency gate as "
-    "next_queued, so pk.total >= limit blocks recovery. Fix is to drop "
-    "the gate from next_stale.",
-    strict=True,
-)
 async def test_stale_recovery_at_concurrency_limit(apgdriver: db.Driver) -> None:
-    """When stale-picked rows fill the concurrency limit, recovery must still re-pick them.
-
-    Reproduces problem 2 of GH #630. Setup: ``concurrency_limit=1``, one row
-    picked by worker A. A "dies" — row stays at ``status='picked'``. Heartbeat
-    goes stale. Worker B attempts dequeue — currently gets nothing because the
-    dequeue SQL applies the per-entrypoint concurrency gate to the stale branch
-    as well, and ``picked.total (1) >= concurrency_limit (1)``. Permanent
-    deadlock, no self-healing.
-    """
+    """Stale rows are recoverable when picked count == concurrency_limit (GH #630)."""
     retry_timer = timedelta(milliseconds=100)
     entrypoint = "stale_at_limit"
     execution_params = {

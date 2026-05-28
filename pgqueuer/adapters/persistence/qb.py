@@ -447,19 +447,19 @@ next_queued AS (
     LIMIT $1
 ),
 
--- Stale picked jobs whose heartbeat timed out (uses partial index WHERE status = 'picked').
+-- Stale picked jobs whose heartbeat timed out. The concurrency gate from
+-- next_queued is intentionally omitted: re-picking only transfers ownership
+-- of a row already counted in `picked`, so net live execution is unchanged.
+-- Applying the gate would deadlock recovery once leaked rows fill the slot.
 next_stale AS (
     SELECT q.id
     FROM {t} q
-    JOIN      params p  ON p.entrypoint  = q.entrypoint
-    LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
+    JOIN params p ON p.entrypoint = q.entrypoint
     WHERE q.status = 'picked'
       AND q.heartbeat < NOW() - $6::interval
       AND q.execute_after < NOW()
       AND ($5::BIGINT IS NULL
            OR (SELECT total FROM worker_load) < $5)
-      AND (p.concurrency_limit <= 0
-           OR COALESCE(pk.total, 0) < p.concurrency_limit)
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED
     LIMIT $1
