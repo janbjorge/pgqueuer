@@ -252,43 +252,6 @@ async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> 
     assert calls[jid] == 1
 
 
-async def test_retry_concurrency_limit_for_retries(apgdriver: db.Driver) -> None:
-    """
-    Ensure that retry honors the concurrency_limit at the SQL level: a retry won't fire
-    if the number of in-flight executions meets the limit, even when in-memory limiter is disabled.
-    """
-
-    retry_timer = timedelta(seconds=0.100)
-    concurrency_limit = 1
-    qm = QueueManager(queries.Queries(apgdriver))
-    calls = Counter[JobId]()
-
-    @qm.entrypoint("fetch", concurrency_limit=concurrency_limit)
-    async def fetch(context: Job) -> None:
-        calls[context.id] += 1
-        # block the first run to occupy the retry window
-        if calls[context.id] == 1:
-            await asyncio.sleep(retry_timer.total_seconds() * 2)
-        # after delay, allow exit
-        await asyncio.sleep(0)
-
-    jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
-
-    async def stopper() -> None:
-        # wait longer than retry window
-        await asyncio.sleep(retry_timer.total_seconds() * 5)
-        # with SQL concurrency_limit=1, no retry should have been fetched
-        assert calls[jid] == 1
-        qm.shutdown.set()
-
-    await asyncio.gather(
-        qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=retry_timer),
-        stopper(),
-    )
-    # ensure only one invocation occurred
-    assert calls[jid] == 1
-
-
 async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
     """Job should not be retried while still running (issue #430)."""
     retry_timer = timedelta(seconds=0.1)
@@ -380,4 +343,48 @@ async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver)
     )
     assert second_claim, (
         "expected new worker to reclaim stale picked job after heartbeat_timeout elapsed"
+    )
+
+
+async def test_stale_recovery_at_concurrency_limit(apgdriver: db.Driver) -> None:
+    """Stale rows are recoverable when picked count == concurrency_limit (GH #630)."""
+    retry_timer = timedelta(milliseconds=100)
+    entrypoint = "stale_at_limit"
+    execution_params = {
+        entrypoint: queries.EntrypointExecutionParameter(concurrency_limit=1),
+    }
+
+    q = queries.Queries(apgdriver)
+    qm_a = QueueManager(q)
+    qm_b = QueueManager(q)
+
+    (job_id,) = await q.enqueue([entrypoint], [None], [0])
+
+    first_claim = await q.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=qm_a.queue_manager_id,
+        global_concurrency_limit=None,
+        heartbeat_timeout=retry_timer,
+    )
+    assert [j.id for j in first_claim] == [job_id]
+
+    # Worker A "dies" — never updates heartbeat, never logs a terminal status.
+    await asyncio.sleep(retry_timer.total_seconds() * 3)
+
+    # Sanity: the row still occupies the only slot.
+    leaked = await inspect_queued_jobs([job_id], apgdriver)
+    assert leaked[0].status == "picked"
+    assert leaked[0].queue_manager_id == qm_a.queue_manager_id
+
+    # Worker B should reclaim it — it's the same single slot, just transferring ownership.
+    second_claim = await q.dequeue(
+        batch_size=1,
+        entrypoints=execution_params,
+        queue_manager_id=qm_b.queue_manager_id,
+        global_concurrency_limit=None,
+        heartbeat_timeout=retry_timer,
+    )
+    assert [j.id for j in second_claim] == [job_id], (
+        "stale row not recovered — concurrency gate deadlocked the recovery branch"
     )

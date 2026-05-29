@@ -147,10 +147,6 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
     )
 
 
-@pytest.mark.xfail(
-    reason="GH #630 problem 2: stale recovery blocked by concurrency gate.",
-    strict=True,
-)
 async def test_stale_recovery_bypasses_concurrency_limit(
     queries: InMemoryQueries,
 ) -> None:

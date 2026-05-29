@@ -326,10 +326,13 @@ class InMemoryQueries:
 
         selected = self._select_jobs(
             remaining,
-            [*queued_candidates, *retry_candidates],
+            queued_candidates,
             entrypoints,
             picked_per_ep,
         )
+        # Stale recovery transfers ownership of a row already in picked_per_ep,
+        # so the concurrency gate does not apply (mirrors next_stale in qb.py).
+        selected.extend(retry_candidates[: remaining - len(selected)])
 
         # Update matched jobs
         for j in selected:
