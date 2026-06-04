@@ -96,3 +96,4 @@ class SentryTracing(TracingProtocol):
                 transaction.set_status("ok")
             except Exception:
                 transaction.set_status("internal_error")
+                raise
