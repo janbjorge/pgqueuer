@@ -96,14 +96,14 @@ seconds"; use `* * * * * */3` instead.
 
 ## Accessing Shared Resources
 
-Scheduled tasks can access shared resources (HTTP clients, database pools, etc.)
-by setting `accepts_context=True`. The handler then receives a second argument,
-`ScheduleContext`, whose `.resources` mapping mirrors the one passed to `PgQueuer`:
+Scheduled tasks can access shared resources (HTTP clients, database pools, etc.) by annotating a
+parameter as `ScheduleContext`. PgQueuer auto-detects it and injects the context, whose
+`.resources` mapping mirrors the one passed to `PgQueuer`:
 
 ```python
 from pgqueuer.models import Schedule, ScheduleContext
 
-@pgq.schedule("sync_data", "0 * * * *", accepts_context=True)
+@pgq.schedule("sync_data", "0 * * * *")
 async def sync_data(schedule: Schedule, ctx: ScheduleContext) -> None:
     db = ctx.resources["db_pool"]
     await db.execute("SELECT 1")

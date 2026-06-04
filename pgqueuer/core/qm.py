@@ -186,7 +186,7 @@ class QueueManager:
         name: str,
         *,
         concurrency_limit: int = 0,
-        accepts_context: bool = False,
+        accepts_context: bool | None = None,
         on_failure: types.OnFailure = "delete",
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
@@ -204,7 +204,10 @@ class QueueManager:
             concurrency_limit (int): Max number of concurrent jobs allowed for this
                 entrypoint across all workers. Enforced at the database level.
                 0 means unlimited. Use 1 for serialized (one-at-a-time) dispatch.
-            accepts_context (bool): When True, invoke the entrypoint with both job and context.
+            accepts_context (bool | None): Whether to invoke the entrypoint with both job and
+                context. When None (default), it is auto-detected from the signature: a handler
+                that annotates a parameter as ``Context`` (``async def f(job, ctx: Context)``)
+                receives it. Pass True/False to override the detection.
             on_failure (OnFailure): What to do when a job fails terminally. ``"delete"``
                 removes the job (default); ``"hold"`` parks it with status ``'failed'``
                 so it can be inspected and manually re-queued.
@@ -226,8 +229,8 @@ class QueueManager:
         if concurrency_limit < 0:
             raise ValueError("Concurrency limit must be greater or eq. to zero.")
 
-        if not isinstance(accepts_context, bool):
-            raise ValueError("accepts_context must be boolean")
+        if accepts_context is not None and not isinstance(accepts_context, bool):
+            raise ValueError("accepts_context must be boolean or None")
 
         if on_failure not in get_args(types.OnFailure):
             raise ValueError(f"on_failure must be one of {get_args(types.OnFailure)}.")
@@ -235,13 +238,18 @@ class QueueManager:
         executor_factory = executor_factory or executors.EntrypointExecutor
 
         def register(func: executors.EntrypointTypeVar) -> executors.EntrypointTypeVar:
+            resolved_context = (
+                executors.wants_context(func, models.Context)
+                if accepts_context is None
+                else accepts_context
+            )
             self.register_executor(
                 name,
                 executor_factory(
                     executors.EntrypointExecutorParameters(
                         func=func,
                         concurrency_limit=concurrency_limit,
-                        accepts_context=accepts_context,
+                        accepts_context=resolved_context,
                         on_failure=on_failure,
                     )
                 ),

@@ -55,7 +55,7 @@ class SchedulerManager:
         ]
         | None = None,
         clean_old: bool = False,
-        accepts_context: bool = False,
+        accepts_context: bool | None = None,
     ) -> Callable[[executors.ScheduleCrontab], executors.ScheduleCrontab]:
         """
         Register a new job with a cron schedule.
@@ -94,13 +94,18 @@ class SchedulerManager:
         executor_factory = executor_factory or executors.ScheduleExecutor
 
         def register(func: executors.ScheduleCrontab) -> executors.ScheduleCrontab:
+            resolved_context = (
+                executors.wants_context(func, models.ScheduleContext)
+                if accepts_context is None
+                else accepts_context
+            )
             self.registry[key] = executor_factory(
                 executors.ScheduleExecutorFactoryParameters(
                     entrypoint=entrypoint,
                     expression=expression,
                     func=func,
                     clean_old=clean_old,
-                    accepts_context=accepts_context,
+                    accepts_context=resolved_context,
                 )
             )
             return func

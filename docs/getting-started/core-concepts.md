@@ -59,7 +59,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 |-----------|------|---------|--------|
 | `name` | `str` | (required) | Entrypoint name -- must match what producers enqueue |
 | `concurrency_limit` | `int` | `0` (unlimited) | Max simultaneous jobs for this entrypoint (database-enforced globally). Use `1` for serialized processing |
-| `accepts_context` | `bool` | `False` | Pass a `Context` object as the second argument |
+| `accepts_context` | `bool \| None` | `None` (auto-detect) | Whether to pass a `Context` to the handler. When `None`, auto-detected from the signature (a parameter annotated `Context` receives it); set `True`/`False` to override |
 | `on_failure` | `"delete" \| "hold"` | `"delete"` | Hold failed jobs for manual re-queue instead of deleting |
 | `executor_factory` | callable | `None` | Custom executor class for retry logic, etc. |
 

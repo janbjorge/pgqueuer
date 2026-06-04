@@ -59,6 +59,35 @@ async def test_scheduler_register(scheduler: SchedulerManager) -> None:
     assert scheduler.registry[key].parameters.expression == "2 * * * *"
 
 
+def test_scheduler_auto_detects_context() -> None:
+    scheduler = SchedulerManager(Mock())
+
+    async def with_context(schedule: Schedule, ctx: ScheduleContext) -> None:
+        pass
+
+    async def without_context(schedule: Schedule) -> None:
+        pass
+
+    scheduler.schedule("with_context", "1 * * * *")(with_context)
+    scheduler.schedule("without_context", "2 * * * *")(without_context)
+
+    by_entrypoint = {str(key.entrypoint): ex for key, ex in scheduler.registry.items()}
+    assert by_entrypoint["with_context"].parameters.accepts_context
+    assert not by_entrypoint["without_context"].parameters.accepts_context
+
+
+def test_scheduler_explicit_flag_overrides_detection() -> None:
+    scheduler = SchedulerManager(Mock())
+
+    async def with_context(schedule: Schedule, ctx: ScheduleContext) -> None:
+        pass
+
+    scheduler.schedule("forced_off", "1 * * * *", accepts_context=False)(with_context)
+
+    key = next(iter(scheduler.registry.keys()))
+    assert not scheduler.registry[key].parameters.accepts_context
+
+
 async def test_scheduler_register_raises_invalid_expression(scheduler: SchedulerManager) -> None:
     async def sample_task(schedule: Schedule) -> None:
         pass

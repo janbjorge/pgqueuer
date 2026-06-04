@@ -21,7 +21,7 @@ import asyncpg
 from contextlib import asynccontextmanager
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Job
+from pgqueuer.models import Context, Job
 
 @asynccontextmanager
 async def build_pgqueuer():
@@ -36,9 +36,9 @@ async def build_pgqueuer():
 
     pgq = PgQueuer(driver, resources=resources)
 
+    # Annotating a parameter as Context is enough — PgQueuer injects it.
     @pgq.entrypoint("process_user")
-    async def process_user(job: Job) -> None:
-        ctx = pgq.qm.get_context(job.id)
+    async def process_user(job: Job, ctx: Context) -> None:
         http = ctx.resources["http_client"]
         flags = ctx.resources["feature_flags"]
         # Use shared objects without recreating them
@@ -81,16 +81,19 @@ a custom registry class; the public contract is simply "object with mapping sema
 
 ## Enabling Context Injection
 
-Entry points only receive the runtime `Context` when registered with `accepts_context=True`.
+Context injection is **auto-detected from the handler signature**. Annotate a parameter as
+`Context` and PgQueuer passes the runtime `Context`:
 
 ```python
-@pgq.entrypoint("process_with_context", accepts_context=True)
+@pgq.entrypoint("process_with_context")
 async def process_with_context(job: Job, ctx: Context) -> None:
     logger = ctx.resources.get("logger")
     ...
 ```
 
-Entry points registered without the flag are invoked with the job only:
+Detection is annotation-driven, so a handler with an unrelated extra parameter
+(`async def f(job: Job, config: dict | None = None)`) is left untouched—no `Context` is injected
+into it. Entry points that declare only the job are invoked with the job alone:
 
 ```python
 @pgq.entrypoint("process_without_context")
@@ -98,21 +101,30 @@ async def process_without_context(job: Job) -> None:
     ...
 ```
 
+If you need to override the detection (for example, a wrapped callable whose signature does not
+reflect how it is invoked), pass `accepts_context=True` or `accepts_context=False` explicitly:
+
+```python
+@pgq.entrypoint("forced", accepts_context=True)
+async def forced(job: Job, ctx: Context) -> None:
+    ...
+```
+
 ## Scheduled Tasks
 
-Scheduled tasks can receive a `ScheduleContext` with shared resources by setting
-`accepts_context=True`:
+Scheduled tasks follow the same rule: annotate a parameter as `ScheduleContext` and it is
+injected automatically.
 
 ```python
 from pgqueuer.models import Schedule, ScheduleContext
 
-@pgq.schedule("refresh_cache", "*/5 * * * *", accepts_context=True)
+@pgq.schedule("refresh_cache", "*/5 * * * *")
 async def refresh_cache(schedule: Schedule, ctx: ScheduleContext) -> None:
     http = ctx.resources["http"]
     await http.get("https://api.example.com/ping")
 ```
 
-Tasks registered without `accepts_context` continue to work with just the schedule argument:
+Tasks that declare only the schedule argument continue to work unchanged:
 
 ```python
 @pgq.schedule("simple_task", "*/5 * * * *")
@@ -128,8 +140,8 @@ from pgqueuer.queries import Queries
 qm = QueueManager(Queries(driver), resources={"flag": "test"})
 
 @qm.entrypoint("demo")
-async def demo(job: Job) -> None:
-    assert qm.get_context(job.id).resources["flag"] == "test"
+async def demo(job: Job, ctx: Context) -> None:
+    assert ctx.resources["flag"] == "test"
 ```
 
 ## Summary
@@ -139,5 +151,6 @@ async def demo(job: Job) -> None:
 | Initialization | Passed at construction: `PgQueuer(..., resources=...)` |
 | Scope | Shared across all jobs in the same process |
 | Mutation | Visible to subsequent jobs |
-| Scheduled jobs | `accepts_context=True` for `ScheduleContext` |
+| Context injection | Auto-detected from a `Context`-annotated parameter; override with `accepts_context` |
+| Scheduled jobs | Annotate a `ScheduleContext` parameter to receive resources |
 | Custom executors | Receive via `context.resources` |

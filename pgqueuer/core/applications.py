@@ -231,7 +231,7 @@ class PgQueuer:
         name: str,
         *,
         concurrency_limit: int = 0,
-        accepts_context: bool = False,
+        accepts_context: bool | None = None,
         on_failure: OnFailure = "delete",
         executor_factory: Callable[
             [EntrypointExecutorParameters],
@@ -257,7 +257,7 @@ class PgQueuer:
         ]
         | None = None,
         clean_old: bool = False,
-        accepts_context: bool = False,
+        accepts_context: bool | None = None,
     ) -> Callable[[ScheduleCrontab], ScheduleCrontab]:
         return self.sm.schedule(
             entrypoint=entrypoint,

@@ -9,7 +9,7 @@ import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.core.logconfig import logger
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Job, Schedule
+from pgqueuer.models import Context, Job, Schedule
 
 
 async def create_pgqueuer() -> PgQueuer:
@@ -25,11 +25,10 @@ async def create_pgqueuer() -> PgQueuer:
 
     pgq = PgQueuer(driver, resources=resources)
 
-    # Setup the 'fetch' entrypoint
+    # Setup the 'fetch' entrypoint. Declaring a Context parameter makes PgQueuer
+    # inject the job's Context (auto-detected from the signature).
     @pgq.entrypoint("fetch")
-    async def process_message(job: Job) -> None:
-        # Access the shared resources via the Context
-        ctx = pgq.qm.get_context(job.id)
+    async def process_message(job: Job, ctx: Context) -> None:
         processed = ctx.resources.setdefault("processed_jobs", 0) + 1
         ctx.resources["processed_jobs"] = processed
         print(
