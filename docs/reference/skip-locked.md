@@ -9,7 +9,7 @@ PostgreSQL manual:
 
 > With `SKIP LOCKED`, any selected rows that cannot be immediately locked are
 > skipped. [...] this is not suitable for general purpose work, but can be used
-> to avoid lock contention with multiple consumers accessing a queue-like table.
+> to avoid lock contention with multiple consumers accessing a queue-like table.[^locking]
 >
 > — [PostgreSQL: SELECT — The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html)
 
@@ -46,7 +46,7 @@ rows, and we need a claim to be visible to the other workers immediately.
 PostgreSQL uses **Multi-Version Concurrency Control (MVCC)**. Each statement sees
 a snapshot of the database as of a point in time. The headline property is:
 
-> reading never blocks writing and writing never blocks reading.
+> reading never blocks writing and writing never blocks reading.[^mvcc]
 >
 > — [PostgreSQL: Introduction to MVCC](https://www.postgresql.org/docs/current/mvcc-intro.html)
 
@@ -77,8 +77,8 @@ PostgreSQL defines four lock *strengths*. From strongest to weakest:
 | `FOR SHARE` | `SELECT FOR SHARE` | `UPDATE`/`DELETE`/`FOR UPDATE`/`FOR NO KEY UPDATE` |
 | `FOR KEY SHARE` | foreign-key checks | only `FOR UPDATE` and key changes |
 
-The exact conflict matrix from the manual (`X` = the two conflict and cannot be
-held simultaneously by different transactions):
+The exact conflict matrix from the manual[^explicit] (`X` = the two conflict and
+cannot be held simultaneously by different transactions):
 
 ```
                      held lock
@@ -95,11 +95,11 @@ job is a write intent: the very next thing the query does is `UPDATE` the row to
 `status='picked'`. Two important facts about these locks:
 
 - **They are held until the end of the transaction.** "Row-level locks are
-  released at transaction end or during savepoint rollback." A claim is only
-  durable once committed.
+  released at transaction end or during savepoint rollback."[^explicit] A claim
+  is only durable once committed.
 - **They do not block plain readers.** "Row-level locks do not affect data
-  querying; they block only *writers and lockers* to the same row." A dashboard
-  running `SELECT count(*)` is never blocked by an in-flight dequeue.
+  querying; they block only *writers and lockers* to the same row."[^explicit] A
+  dashboard running `SELECT count(*)` is never blocked by an in-flight dequeue.
 
 ---
 
@@ -121,8 +121,9 @@ locked, you choose the behavior with the trailing option:
 ```
 
 - **Default — wait.** "A transaction seeking [...] a row-level lock will wait
-  indefinitely for conflicting locks to be released." Good for correctness in
-  general OLTP, fatal for a queue: workers would line up behind each other.
+  indefinitely for conflicting locks to be released."[^explicit] Good for
+  correctness in general OLTP, fatal for a queue: workers would line up behind
+  each other.
 - **`NOWAIT` — fail fast.** Raises an error rather than waiting. Useful when you
   want to detect contention, but it forces the application to catch and retry.
 - **`SKIP LOCKED` — step over.** Locked rows are treated *as if they did not
@@ -138,7 +139,7 @@ locked, you choose the behavior with the trailing option:
 issuing the same query at the same instant therefore walk past each other's
 in-flight rows and each come away with a different set.
 
-Adapting Michael Paquier's two-session demonstration to a queue table:
+Adapting Michael Paquier's two-session demonstration to a queue table:[^paquier]
 
 ```
  time   worker A                              worker B
@@ -163,7 +164,7 @@ scales with the number of workers instead of collapsing to one-at-a-time.
 
 !!! note "`SKIP LOCKED` returns an *inconsistent* view on purpose"
     The manual is explicit: "Skipping locked rows provides an inconsistent view
-    of the data." Worker B above genuinely cannot see jobs 1 and 2, even though
+    of the data."[^locking] Worker B above genuinely cannot see jobs 1 and 2, even though
     they exist and are `queued`. For a queue that is precisely the desired
     behavior — those jobs belong to someone else right now — but it is the reason
     the manual warns against using `SKIP LOCKED` for general-purpose queries.
@@ -200,7 +201,7 @@ that won the row. They form a convoy:
 The queue degrades to single-file processing no matter how many workers you add,
 and latency spikes under load. This is the failure mode Craig Ringer summarized
 in the title of his canonical write-up: *"What is `SKIP LOCKED` for in
-PostgreSQL? Most work-queue implementations are wrong."* Swapping in
+PostgreSQL? Most work-queue implementations are wrong."*[^ringer] Swapping in
 `SKIP LOCKED` is what makes the workers fan out instead of queue up.
 
 ---
@@ -234,7 +235,7 @@ There is one sharp edge the manual calls out. Under `READ COMMITTED`:
 > It is possible for a `SELECT` command running at the `READ COMMITTED`
 > transaction isolation level and using `ORDER BY` and a locking clause to return
 > rows out of order. This is because `ORDER BY` is applied first. The command
-> sorts the result, but might then block trying to obtain a lock [...]
+> sorts the result, but might then block trying to obtain a lock [...][^locking]
 
 `SKIP LOCKED` sidesteps the *blocking* half of that hazard (it never waits), but
 the ordering-then-locking sequence is still why the subquery form is preferred:
@@ -242,10 +243,11 @@ the inner `SELECT` picks and locks the candidate ids, and the outer `UPDATE`
 operates on exactly those ids. Two more documented details worth knowing:
 
 - **`LIMIT` stops locking early.** "If a `LIMIT` is used, locking stops once
-  enough rows have been returned to satisfy the limit" — so `LIMIT $batch_size`
-  bounds how many rows you lock, not just how many you return.
+  enough rows have been returned to satisfy the limit"[^locking] — so
+  `LIMIT $batch_size` bounds how many rows you lock, not just how many you return.
 - **`OFFSET` still locks skipped rows.** "Rows skipped over by `OFFSET` will get
-  locked." Avoid `OFFSET` in a dequeue path; it locks rows you never process.
+  locked."[^locking] Avoid `OFFSET` in a dequeue path; it locks rows you never
+  process.
 
 ---
 
@@ -341,8 +343,16 @@ application-side locking code.
 
 ## Sources
 
+The numbered citations above resolve to the footnotes below. In short:
+
 - [PostgreSQL Manual — SELECT, The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html) (`SKIP LOCKED`, `NOWAIT`, `LIMIT`/`OFFSET` and `ORDER BY` cautions)
 - [PostgreSQL Manual — 13.3. Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html) (row-lock modes, conflict matrix, lock duration, readers vs. writers)
 - [PostgreSQL Manual — 13.1. Introduction to MVCC](https://www.postgresql.org/docs/current/mvcc-intro.html)
-- Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong* (2ndQuadrant / EnterpriseDB) — [discussion on Lobsters](https://lobste.rs/s/fyakws/what_is_skip_locked_for_postgresql_most)
-- Michael Paquier, [*Postgres 9.5 feature highlight — SKIP LOCKED for row-level locking*](https://paquier.xyz/postgresql-2/postgres-9-5-feature-highlight-skip-locked-row-level/)
+- Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong* (2ndQuadrant / EnterpriseDB)
+- Michael Paquier, *Postgres 9.5 feature highlight — SKIP LOCKED for row-level locking*
+
+[^locking]: PostgreSQL Documentation, [SELECT — The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html). Source for the `SKIP LOCKED`/`NOWAIT` semantics, the "inconsistent view of the data" warning, the `ORDER BY` + locking out-of-order caution under `READ COMMITTED`, and the `LIMIT`/`OFFSET` locking behavior.
+[^mvcc]: PostgreSQL Documentation, [13.1. Introduction (MVCC)](https://www.postgresql.org/docs/current/mvcc-intro.html). Source for "reading never blocks writing and writing never blocks reading."
+[^explicit]: PostgreSQL Documentation, [13.3. Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html). Source for the four row-level lock modes, Table 13.3 (the conflict matrix), "row-level locks are released at transaction end," "row-level locks do not affect data querying; they block only writers and lockers," and the default "wait indefinitely" behavior.
+[^ringer]: Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong*, 2ndQuadrant (now EnterpriseDB). Original post since relocated; see the [Lobsters discussion](https://lobste.rs/s/fyakws/what_is_skip_locked_for_postgresql_most) for the canonical reference and archived copies.
+[^paquier]: Michael Paquier, [*Postgres 9.5 feature highlight — SKIP LOCKED for row-level locking*](https://paquier.xyz/postgresql-2/postgres-9-5-feature-highlight-skip-locked-row-level/). Source for the two-session worked example.
