@@ -4,7 +4,7 @@ This page covers the knobs available for tuning PgQueuer throughput and latency 
 
 ## Batch Size
 
-`batch_size` controls how many jobs are fetched from the database in a single `FOR UPDATE SKIP LOCKED` query.
+`batch_size` controls how many jobs are fetched from the database in a single `FOR UPDATE SKIP LOCKED` query. Per the PostgreSQL manual, the `LIMIT` this maps to also bounds how many rows the statement locks per round-trip — see [Row Locking & SKIP LOCKED](../reference/skip-locked.md) for the mechanics.
 
 ```python
 await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))

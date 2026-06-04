@@ -204,6 +204,7 @@ See [Database Setup](../reference/database-setup.md) for full schema details and
 
 Now that you understand the building blocks:
 
+- **[Row Locking & SKIP LOCKED](../reference/skip-locked.md)** -- how workers claim jobs without colliding
 - **[Scheduling](../guides/scheduling.md)** -- set up cron-style recurring tasks
 - **[Concurrency Control](../guides/concurrency-control.md)** -- limit parallel job execution
 - **[Reliability](../guides/reliability.md)** -- retries, idempotency, and audit trails
