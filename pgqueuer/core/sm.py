@@ -17,16 +17,7 @@ from pgqueuer.ports import RepositoryPort
 
 @dataclasses.dataclass
 class SchedulerManager:
-    """
-    Scheduler class responsible for managing and scheduling jobs using cron expressions.
-
-    Attributes:
-        queries (RepositoryPort): Repository for schedule operations. The underlying
-            database driver is accessed via ``queries.driver``.
-        resources (MutableMapping): Shared resources propagated to scheduled task contexts.
-        registry (dict[models.CronExpressionEntrypoint, executors.AbstractScheduleExecutor]):
-            Registered job executors mapped to cron entrypoints and expressions.
-    """
+    """Cron-driven scheduler. ``resources`` is propagated into each ScheduleContext."""
 
     queries: RepositoryPort
     resources: MutableMapping = dataclasses.field(default_factory=dict)
@@ -57,23 +48,9 @@ class SchedulerManager:
         clean_old: bool = False,
         accepts_context: bool | None = None,
     ) -> Callable[[executors.ScheduleCrontab], executors.ScheduleCrontab]:
-        """
-        Register a new job with a cron schedule.
+        """Decorator: register a cron-scheduled job.
 
-        Args:
-            entrypoint (str): The entrypoint identifier for the job to be scheduled.
-            expression (str): The cron expression defining the schedule.
-            executor_factory (Callable[[ScheduleExecutorFactoryParameters],
-                executors.AbstractScheduleExecutor]): A factory function to
-                create the executor for the job.
-
-        Returns:
-            Callable[[executors.AsyncCrontab], executors.AsyncCrontab]:
-                A decorator function that registers the provided function as a job.
-
-        Raises:
-            ValueError: If the provided cron expression is invalid.
-            RuntimeError: If the entrypoint and expression are already registered.
+        Raises ValueError on invalid cron, RuntimeError on duplicate (entrypoint, expression).
         """
 
         if not croniter.croniter.is_valid(expression):
@@ -113,12 +90,7 @@ class SchedulerManager:
         return register
 
     async def run(self) -> None:
-        """
-        Run the Scheduler, executing registered jobs based on their cron schedules.
-
-        Continuously polls for jobs that need to be executed and dispatches them accordingly.
-        Also waits for shutdown events and manages the scheduling loop.
-        """
+        """Poll for due schedules and dispatch them until shutdown."""
         if not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
             raise RuntimeError(
                 f"The {self.queries.qbe.settings.schedules_table} table is missing "
@@ -131,7 +103,6 @@ class SchedulerManager:
                 "please run 'pgq upgrade'"
             )
 
-        # Identify entrypoints that need to be removed based on the 'clean_old' parameter
         if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
             await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)
 
@@ -179,15 +150,7 @@ class SchedulerManager:
         executor: executors.AbstractScheduleExecutor,
         schedule: models.Schedule,
     ) -> None:
-        """
-        Dispatch a scheduled job for execution.
-
-        Args:
-            executor (executors.AbstractScheduleExecutor): The executor instance
-                responsible for running the job.
-            schedule (models.Schedule): The schedule object containing details
-                of the job to be executed.
-        """
+        """Run *executor* against *schedule*; always release the schedule back to queued."""
         logconfig.logger.debug(
             "Dispatching entrypoint/expression: %s/%s",
             schedule.entrypoint,

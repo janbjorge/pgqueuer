@@ -23,38 +23,17 @@ class TracingProtocol(Protocol):
     """
 
     def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
-        """
-        Publishes tracing headers for queue producer operations.
-
-        Args:
-            entrypoints (list[str]): A list of entrypoints representing queue destinations.
-
-        Yields:
-            dict: A dictionary containing tracing headers for each entrypoint.
-        """
+        """Yield one tracing-header dict per entrypoint, in input order."""
         ...
 
     def trace_process(self, job: Job) -> AsyncContextManager[None]:
-        """
-        Async context manager for tracing queue consumer job processing.
-
-        Args:
-            job (Job): The job being processed, containing headers and metadata.
-
-        Yields:
-            None: This context manager does not return a value but manages the tracing lifecycle.
-        """
+        """Wrap consumer processing of *job* in a tracing span."""
         ...
 
 
 @dataclass
 class TracingConfig:
-    """
-    Configuration object for tracing setup.
-
-    Attributes:
-        tracer: The active tracing implementation, or ``None`` when tracing is disabled.
-    """
+    """Holds the active tracer, or ``None`` when tracing is disabled."""
 
     tracer: TracingProtocol | None = None
 
@@ -63,11 +42,5 @@ TRACER: Final[TracingConfig] = TracingConfig()
 
 
 def set_tracing_class(tracer: TracingProtocol) -> None:
-    """
-    Sets the tracing instance for the PGQueuer system.
-
-    Args:
-        tracer (TracingProtocol): An instance implementing the TracingProtocol.
-    """
-
+    """Install *tracer* as the global tracing implementation."""
     TRACER.tracer = tracer

@@ -9,19 +9,7 @@ from typing import Any, Callable
 
 
 def load_factory(factory: str | Callable[..., Any]) -> Callable[..., Any]:
-    """
-    Load factory function.
-
-    Args:
-        factory (str | Callable): Factory function specification. It may be one of the
-        following:
-          - Module path to the factory function
-          - Factory-style path
-          - Callable factory function
-
-
-    Returns: A callable
-    """
+    """Resolve a factory: a ``module:attr`` import path, or pass-through if already callable."""
     sys.path.insert(0, os.getcwd())
 
     if callable(factory):

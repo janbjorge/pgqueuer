@@ -42,10 +42,7 @@ class MaxLevelFilter(logging.Filter):
 
 
 def setup_fancy_logger(level: LogLevel) -> None:
-    """
-    Update the 'pgqueuer' logger's level dynamically.
-    """
-
+    """Configure the ``pgqueuer`` logger at *level* with stdout+stderr handlers."""
     logging.config.dictConfig(
         {
             "version": 1,
@@ -87,6 +84,5 @@ def setup_fancy_logger(level: LogLevel) -> None:
     )
 
 
-# Create the 'pgqueuer' logger and attach a NullHandler by default.
 logger: Final = logging.getLogger("pgqueuer")
 logger.addHandler(logging.NullHandler())

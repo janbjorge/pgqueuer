@@ -11,7 +11,7 @@ from pgqueuer.sm import SchedulerManager
 try:
     from pgqueuer._version import version as __version__
 except ImportError:
-    __version__ = "0.0.0"  # Fallback version if _version.py is missing
+    __version__ = "0.0.0"
 
 __all__ = [
     "AsyncpgDriver",

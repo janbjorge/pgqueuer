@@ -25,27 +25,12 @@ __all__ = [
 
 @dataclasses.dataclass
 class QueryBuilderEnvironment:
-    """
-    Setup/teardown environment for executing queries.
-
-    Handles the configuration required for executing SQL queries, ensuring
-    consistent settings are applied during setup and teardown operations.
-    """
+    """DDL/utility query builder bound to a :class:`DBSettings`."""
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     def build_install_query(self) -> str:
-        """
-        Generate SQL statements to install the job queue schema.
-
-        Constructs the SQL commands needed to set up the database schema required
-        by the job queue system. This includes creating custom ENUM types for statuses,
-        creating the queue and statistics tables, defining indexes to optimize queries,
-        and setting up triggers and functions for notifications.
-
-        Returns:
-            str: A string containing the SQL commands to install the schema.
-        """
+        """DDL: types, tables, indexes, trigger, and notify function."""
         durability_policy = self.settings.durability.config
 
         return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted', 'failed');

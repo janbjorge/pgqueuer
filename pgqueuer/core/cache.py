@@ -11,22 +11,7 @@ UNSET = object()
 
 @dataclasses.dataclass
 class TTLCache(Generic[T]):
-    """
-    A Time-To-Live (TTL) cache that retains a value for a specified duration and
-    updates it asynchronously upon expiration.
-
-    This cache ensures that only one update occurs at a time. If the
-    cached value is expired or has never been set, all callers will await the
-    asynchronous update. If the update fails, the exception will propagate to every caller.
-
-    Attributes:
-        ttl: The duration that the cached value remains valid.
-        on_expired: An asynchronous callable to refresh the value when it expires.
-        expires_at: The datetime when the current cached value expires.
-        value: The current cached value or a sentinel (UNSET) if not yet set.
-        lock: An asyncio.Lock to prevent concurrent updates.
-        update_task: A reference to the currently running update task, if any.
-    """
+    """Single-flight TTL cache: concurrent callers share one in-flight refresh."""
 
     ttl: timedelta
     on_expired: Callable[[], Awaitable[T]]
@@ -36,16 +21,7 @@ class TTLCache(Generic[T]):
     update_task: asyncio.Task | None = dataclasses.field(init=False, default=None)
 
     async def __call__(self) -> T:
-        """
-        Retrieve the cached value. If the cached value is present and not
-        expired, it is returned immediately.
-
-        Otherwise, an asynchronous update is triggered and all callers await
-        the update. If the update fails,its exception propagates to all callers.
-
-        Returns:
-            The cached value of type T.
-        """
+        """Return the cached value, refreshing once if expired/unset."""
         now = datetime.now()
         if self.value is not UNSET and now <= self.expires_at:
             return cast(T, self.value)
@@ -55,28 +31,10 @@ class TTLCache(Generic[T]):
         return cast(T, self.value)
 
     async def _update_value(self) -> None:
-        """
-        Refresh the cached value asynchronously.
-
-        This internal method is protected by an asyncio lock to ensure that only one
-        update occurs at a time. It calls the on_expired callback to retrieve a new
-        value, updates the cached value, and resets the expiration time.
-        Exceptions from on_expired will propagate to the caller.
-        """
         async with self.lock:
             self.value = await self.on_expired()
             self.expires_at = datetime.now() + self.ttl
 
     @classmethod
     def create(cls, ttl: timedelta, on_expired: Callable[[], Awaitable[T]]) -> TTLCache[T]:
-        """
-        Create a new TTLCache instance with the specified time-to-live and asynchronous callback.
-
-        Args:
-            ttl: A timedelta representing how long the cached value remains valid.
-            on_expired: An asynchronous function that provides a new value when the cache expires.
-
-        Returns:
-            A TTLCache instance configured with the provided ttl and on_expired callback.
-        """
         return cls(ttl=ttl, on_expired=on_expired)

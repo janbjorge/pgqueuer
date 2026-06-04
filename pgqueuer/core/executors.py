@@ -26,9 +26,7 @@ ScheduleCrontab: TypeAlias = AsyncCrontab | AsyncContextCrontab
 
 
 def is_async_callable(obj: Callable[..., object] | object) -> bool:
-    """
-    Determines whether an object is an asynchronous callable.
-    """
+    """Return True if *obj* is an async function or async-callable instance."""
     while isinstance(obj, functools.partial):
         obj = obj.func
 
@@ -67,32 +65,17 @@ class EntrypointExecutorParameters:
 
 @dataclasses.dataclass
 class AbstractEntrypointExecutor(ABC):
-    """
-    Abstract base class for job executors.
-
-    Users can subclass this to create custom job executors.
-    """
+    """Subclass to customise per-job execution."""
 
     parameters: EntrypointExecutorParameters
 
     @abstractmethod
-    async def execute(self, job: models.Job, context: models.Context) -> None:
-        """
-        Execute the given job.
-
-        Args:
-            job (models.Job): The job to execute.
-            context (models.Context): The context for the job.
-        """
+    async def execute(self, job: models.Job, context: models.Context) -> None: ...
 
 
 @dataclasses.dataclass
 class EntrypointExecutor(AbstractEntrypointExecutor):
-    """
-    Job executor that wraps an async entrypoint function.
-
-    Executes the provided function when processing a job.
-    """
+    """Default executor: invokes the registered async entrypoint."""
 
     def __post_init__(self) -> None:
         if not is_async_callable(cast(Callable[..., object], self.parameters.func)):
@@ -104,13 +87,6 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
             )
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
-        """
-        Execute the job using the wrapped function.
-
-        Args:
-            job (models.Job): The job to execute.
-            context (models.Context): The context for the job.
-        """
         if self.parameters.accepts_context:
             await cast(AsyncContextEntrypoint, self.parameters.func)(job, context)
         else:
@@ -157,65 +133,30 @@ class ScheduleExecutorFactoryParameters:
 
 @dataclasses.dataclass
 class AbstractScheduleExecutor(ABC):
-    """
-    Abstract base class for job executors.
-
-    This class provides a blueprint for creating job executors that run according to a schedule.
-    Users should subclass this to create custom job executors, defining specific execution logic.
-    """
+    """Subclass to customise per-schedule execution."""
 
     parameters: ScheduleExecutorFactoryParameters
 
     @abstractmethod
-    async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
-        """
-        Execute the given crontab.
-
-        This method must be implemented by subclasses to define the specific behavior of job
-        execution.
-
-        Args:
-            schedule (models.Schedule): The schedule being executed.
-            context (models.ScheduleContext): The context for the scheduled task.
-        """
+    async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None: ...
 
     def get_next(self) -> datetime:
-        """
-        Calculate the next scheduled run time based on the cron expression.
-
-        Returns:
-            datetime: The next scheduled datetime in UTC.
-        """
+        """Next scheduled fire time in UTC."""
         return datetime.fromtimestamp(
             croniter(self.parameters.expression, start_time=utc_now()).get_next(),
             timezone.utc,
         )
 
     def next_in(self) -> timedelta:
-        """
-        Calculate the time remaining until the next scheduled run.
-
-        Returns:
-            timedelta: The time difference between now and the next scheduled run.
-        """
+        """Time remaining until ``get_next()``."""
         return self.get_next() - utc_now()
 
 
 @dataclasses.dataclass
 class ScheduleExecutor(AbstractScheduleExecutor):
-    """
-    Job executor that wraps an entrypoint function.
-
-    This executor runs the provided function according to the defined schedule.
-    It is a concrete implementation of AbstractScheduleExecutor.
-    """
+    """Default schedule executor: invokes the registered async crontab function."""
 
     async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
-        """
-        Execute the job using the wrapped function.
-
-        This method calls the provided asynchronous function when the job is triggered.
-        """
         if self.parameters.accepts_context:
             await cast(AsyncContextCrontab, self.parameters.func)(schedule, context)
         else:

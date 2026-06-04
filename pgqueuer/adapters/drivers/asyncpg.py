@@ -30,7 +30,6 @@ class AsyncpgDriver(Driver):
         self,
         connection: asyncpg.Connection,
     ) -> None:
-        """Initialize the driver with an AsyncPG connection."""
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._lock = asyncio.Lock()
@@ -95,9 +94,6 @@ class AsyncpgPoolDriver(Driver):
         self,
         pool: asyncpg.Pool,
     ) -> None:
-        """
-        Initialize the AsyncpgPoolDriver with a connection pool.
-        """
         self._shutdown = asyncio.Event()
         self._pool = pool
         self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
@@ -129,7 +125,6 @@ class AsyncpgPoolDriver(Driver):
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        """Add a database listener with locking to manage concurrency."""
         async with self._lock:
             if self._listener_connection is None:
                 self._listener_connection = await self._pool.acquire()

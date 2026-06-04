@@ -60,16 +60,12 @@ app = typer.Typer(
 
 
 class VerifyMode(Enum):
-    """Enumeration for expected object state in verification."""
-
     PRESENT = "present"
     ABSENT = "absent"
 
 
 @dataclass
 class AppConfig:
-    """Application configuration for PGQueuer CLI."""
-
     prefix: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
@@ -103,7 +99,6 @@ def main(
         help="A reference to a function that returns an instance of Queries",
     ),
 ) -> None:
-    """Main Typer callback to set up shared configuration."""
     config = AppConfig(
         prefix=prefix,
         pg_dsn=pg_dsn,
@@ -117,10 +112,7 @@ def create_default_queries_factory(
     config: AppConfig,
     settings: qb.DBSettings,
 ) -> Callable[..., contextlib.AbstractAsyncContextManager[queries.Queries]]:
-    """
-    This is the default implementation of a factory that returns an instance of Queries.
-    It attempts asyncpg first, then psycopg.
-    """
+    """Default Queries factory: try asyncpg, fall back to psycopg."""
 
     @contextlib.asynccontextmanager
     async def factory() -> AsyncGenerator[queries.Queries, None]:
@@ -160,10 +152,7 @@ async def yield_queries(
     ctx: Context,
     settings: qb.DBSettings,
 ) -> AsyncGenerator[queries.Queries, None]:
-    """
-    Async context manager that yields a Queries instance from either a user-supplied
-    factory function or the default factory.
-    """
+    """Yield Queries from the user-supplied factory or the built-in default."""
     config: AppConfig = ctx.obj
     if config.factory_fn_ref:
         factory_fn = factories.load_factory(config.factory_fn_ref)
@@ -591,14 +580,7 @@ def durability(
         help="Print SQL commands without executing them.",
     ),
 ) -> None:
-    """
-    Command to alter the durability level of the tables in PGQueuer without data loss.
-
-    Args:
-        ctx: Context object with configuration information.
-        durability: The desired durability level ('volatile', 'balanced', or 'durable').
-        dry_run: Whether to print SQL commands without executing them.
-    """
+    """Switch durability level of PGQueuer tables without data loss."""
     print(
         "\n".join(
             qb.QueryBuilderEnvironment(
