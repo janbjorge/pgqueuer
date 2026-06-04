@@ -335,7 +335,7 @@ async def create_pgqueuer(args: list[str]):
   after failures, creating fresh connections and state.
 - **Async context manager is required**: Use `@asynccontextmanager` with `yield`.
 - **Extra args via `--`**: Arguments after `--` are passed as `list[str]` to the factory.
-  Factories that don't need args simply omit the parameter.
+  Factories that don't need args omit the parameter.
 - **Shutdown is graceful**: In-flight jobs complete before teardown runs.
 
 See `examples/consumer.py` in the repository for a working example.
