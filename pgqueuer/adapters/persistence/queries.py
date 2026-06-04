@@ -222,10 +222,10 @@ class Queries:
 
     async def table_has_index(self, table: str, index: str) -> bool:
         """
-        Check if the column exists in table.
+        Check if the index exists on table.
 
         Returns:
-            bool: True if the column exists, False otherwise.
+            bool: True if the index exists, False otherwise.
         """
         rows = await self.driver.fetch(
             self.qbe.build_table_has_index_query(),
@@ -600,8 +600,8 @@ class Queries:
         This can be used for monitoring and ensuring the system is functioning as expected.
 
         Args:
-            event (models.HealthCheckEvent): The health check event containing
-                details about the system's health status.
+            health_check_event_id (uuid.UUID): Unique identifier for matching the
+                response to the originating probe.
         """
         await self.driver.notify(
             self.qbq.settings.channel,

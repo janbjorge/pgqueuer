@@ -137,8 +137,8 @@ class QueueManager:
         Periodically perform a health check by calling `listener_healthy`.
 
         Args:
-            interval (timedelta): Time interval between health checks.
-            shutdown_on_failure (bool): Whether to set the shutdown event if a health check fails.
+            interval (timedelta): Time interval between health checks; also used
+                as the per-probe timeout.
         """
 
         while not self.shutdown.is_set():
