@@ -1,6 +1,6 @@
 # Distributed Tracing
 
-PGQueuer supports distributed tracing through optional integrations with
+PgQueuer supports distributed tracing through optional integrations with
 [Logfire](https://logfire.pydantic.dev/), [Sentry](https://docs.sentry.io/),
 and [OpenTelemetry](https://opentelemetry.io/).
 These tools allow you to visualize job execution and measure performance across

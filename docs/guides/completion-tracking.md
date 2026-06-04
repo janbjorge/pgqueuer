@@ -1,7 +1,7 @@
 # Completion Tracking
 
-`CompletionWatcher` lets you **await** the final status of any job, live-streamed via
-PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
+`CompletionWatcher` lets you **await** the final status of a job using PostgreSQL
+`LISTEN/NOTIFY` instead of polling.
 
 ## Parameters
 
@@ -137,7 +137,7 @@ async def wait_for_first(
 
 ## Notification Reliability
 
-To maximise reliability without heavy polling:
+To improve reliability without heavy polling:
 
 1. **Listener health check** — Run with the `pgq run --shutdown-on-listener-failure` flag
    (or pass `shutdown_on_listener_failure=True` to `QueueManager.run()`) so the manager stops

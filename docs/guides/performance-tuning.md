@@ -111,7 +111,7 @@ pgq autovac --rollback
 
 ## NOTIFY Channel and Polling Fallback
 
-PgQueuer uses `LISTEN/NOTIFY` for near-instant job pickup. A trigger fires on every insert
+PgQueuer uses `LISTEN/NOTIFY` for low-latency job pickup. A trigger fires on every insert
 into `pgqueuer` and sends a notification on the `ch_pgqueuer` channel.
 
 **What can go wrong:** pgBouncer in transaction-pooling mode drops `LISTEN` subscriptions

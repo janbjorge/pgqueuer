@@ -10,8 +10,8 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     pip install pgqueuer[asyncpg]
     ```
 
-    [asyncpg](https://github.com/MagicStack/asyncpg) is a high-performance async driver
-    written in Cython. It provides the best throughput for PgQueuer workloads.
+    [asyncpg](https://github.com/MagicStack/asyncpg) is an async PostgreSQL driver
+    written in Cython.
 
 === "psycopg"
 

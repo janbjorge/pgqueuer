@@ -1,7 +1,6 @@
 # Core Concepts
 
-This page explains the key abstractions in PgQueuer. Understanding these will help you
-make the most of every feature.
+This page explains the key abstractions in PgQueuer.
 
 ---
 
