@@ -1,13 +1,13 @@
 # Completion Tracking
 
-`CompletionWatcher` lets you **await** the final status of any job, live-streamed via
-PostgreSQL `LISTEN/NOTIFY`, with zero manual polling.
+`CompletionWatcher` lets you **await** the final status of a job using PostgreSQL
+`LISTEN/NOTIFY` instead of polling.
 
 ## Parameters
 
 | Parameter | Type | Default | Purpose |
 |-----------|------|---------|---------|
-| `refresh_interval` | `timedelta` | **5 s** | Safety-net poll in case a `NOTIFY` was lost |
+| `refresh_interval` | `timedelta \| None` | **5 s** | Safety-net poll in case a `NOTIFY` was lost. Pass `None` to disable polling and rely solely on notifications |
 | `debounce` | `timedelta` | **50 ms** | Coalesces bursts of `NOTIFY`s to reduce query load |
 
 ## Basic Usage
@@ -49,6 +49,11 @@ The watcher monitors a job's progression until it reaches a **terminal state**:
         │ exception │ │ failed │
         └───────────┘ └────────┘
 ```
+
+!!! note "`failed` is not a terminal state for the watcher"
+    A held job (`on_failure="hold"`) lands in `failed`, but `wait_for` resolves
+    only on `successful`, `exception`, `canceled`, or `deleted`. A held job stays
+    unresolved until it is re-queued and reaches one of those states.
 
 ## Tracking Many Jobs at Once
 
@@ -132,10 +137,11 @@ async def wait_for_first(
 
 ## Notification Reliability
 
-To maximise reliability without heavy polling:
+To improve reliability without heavy polling:
 
-1. **Listener health check** — Enable `--shutdown-on-listener-failure` on the `QueueManager`
-   so it stops (and can be restarted by a supervisor) if the LISTEN channel becomes unhealthy.
+1. **Listener health check** — Run with the `pgq run --shutdown-on-listener-failure` flag
+   (or pass `shutdown_on_listener_failure=True` to `QueueManager.run()`) so the manager stops
+   (and can be restarted by a supervisor) if the LISTEN channel becomes unhealthy.
 
 2. **Minimize the refresh poll** — Set a long `refresh_interval` to rely primarily on
    notifications when your channel is stable:
