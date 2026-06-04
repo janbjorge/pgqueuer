@@ -1,5 +1,3 @@
-# executors.py
-
 from __future__ import annotations
 
 import dataclasses
@@ -146,9 +144,6 @@ class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
                 self.max_delay,
             )
             raise errors.RetryRequested(delay=delay, reason=str(e)) from e
-
-
-######## Schedulers ########
 
 
 @dataclasses.dataclass

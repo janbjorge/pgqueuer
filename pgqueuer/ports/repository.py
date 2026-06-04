@@ -37,11 +37,6 @@ class EntrypointExecutionParameter:
     concurrency_limit: int
 
 
-# ---------------------------------------------------------------------------
-# Queue persistence
-# ---------------------------------------------------------------------------
-
-
 class QueueRepositoryPort(Protocol):
     """Persistence operations for the job queue."""
 
@@ -147,11 +142,6 @@ class QueueRepositoryPort(Protocol):
         ...
 
 
-# ---------------------------------------------------------------------------
-# Schedule persistence
-# ---------------------------------------------------------------------------
-
-
 class ScheduleRepositoryPort(Protocol):
     """Persistence operations for cron schedules."""
 
@@ -180,22 +170,12 @@ class ScheduleRepositoryPort(Protocol):
     async def clear_schedule(self) -> None: ...
 
 
-# ---------------------------------------------------------------------------
-# Notifications
-# ---------------------------------------------------------------------------
-
-
 class NotificationPort(Protocol):
     """Abstraction over PostgreSQL NOTIFY for inter-process signalling."""
 
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None: ...
 
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None: ...
-
-
-# ---------------------------------------------------------------------------
-# Schema management (DDL)
-# ---------------------------------------------------------------------------
 
 
 class SchemaManagementPort(Protocol):

@@ -42,8 +42,6 @@ class InMemoryQueries:
 
     tracer: TracingProtocol | None = None
 
-    # -- internal state --------------------------------------------------------
-
     _jobs: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
     _log: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
     _statistics: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
@@ -53,8 +51,6 @@ class InMemoryQueries:
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
     _next_stats_id: int = dataclasses.field(default=1, init=False)
-
-    # -- SchemaManagementPort --------------------------------------------------
 
     async def install(self) -> None:
         pass
@@ -86,8 +82,6 @@ class InMemoryQueries:
 
     async def has_trigger(self, trigger: str) -> bool:
         return True
-
-    # -- enqueue ---------------------------------------------------------------
 
     @overload
     async def enqueue(
@@ -187,8 +181,6 @@ class InMemoryQueries:
 
         await self.emit_table_changed("insert")
         return ids
-
-    # -- dequeue ---------------------------------------------------------------
 
     def _count_picked_jobs(
         self,
@@ -354,8 +346,6 @@ class InMemoryQueries:
 
         return [models.Job.model_validate(j) for j in selected]
 
-    # -- log_jobs --------------------------------------------------------------
-
     async def log_jobs(
         self,
         job_status: list[
@@ -393,8 +383,6 @@ class InMemoryQueries:
             )
             self._next_log_id += 1
 
-    # -- retry_job -------------------------------------------------------------
-
     async def retry_job(
         self,
         job: models.Job,
@@ -425,8 +413,6 @@ class InMemoryQueries:
             self._next_log_id += 1
             await self.emit_table_changed("update")
 
-    # -- requeue_jobs ----------------------------------------------------------
-
     async def requeue_jobs(self, ids: list[JobId]) -> None:
         now = utc_now()
         for jid in ids:
@@ -452,8 +438,6 @@ class InMemoryQueries:
                 self._next_log_id += 1
                 await self.emit_table_changed("update")
 
-    # -- list_failed_jobs ------------------------------------------------------
-
     async def list_failed_jobs(
         self,
         limit: int = 100,
@@ -462,8 +446,6 @@ class InMemoryQueries:
         failed = [j for j in self._jobs.values() if j["status"] == "failed"]
         failed.sort(key=lambda j: j["created"], reverse=(order != "ASC"))
         return [models.Job.model_validate(j) for j in failed[:limit]]
-
-    # -- mark_job_as_cancelled -------------------------------------------------
 
     async def mark_job_as_cancelled(self, ids: list[JobId]) -> None:
         now = utc_now()
@@ -486,8 +468,6 @@ class InMemoryQueries:
                 self._next_log_id += 1
 
         await self.notify_job_cancellation(ids)
-
-    # -- clear_queue -----------------------------------------------------------
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
@@ -515,8 +495,6 @@ class InMemoryQueries:
             self._jobs.clear()
             self._dedupe_index.clear()
 
-    # -- queue_size ------------------------------------------------------------
-
     async def queue_size(self) -> list[models.QueueStatistics]:
         counts: dict[tuple[str, int, str], int] = {}
         for j in self._jobs.values():
@@ -532,20 +510,14 @@ class InMemoryQueries:
             for (ep, pri, st), count in sorted(counts.items())
         ]
 
-    # -- queued_work -----------------------------------------------------------
-
     async def queued_work(self, entrypoints: list[str]) -> int:
         ep_set = set(entrypoints)
         return sum(
             1 for j in self._jobs.values() if j["status"] == "queued" and j["entrypoint"] in ep_set
         )
 
-    # -- queue_log -------------------------------------------------------------
-
     async def queue_log(self) -> list[models.Log]:
         return [models.Log.model_validate(entry) for entry in self._log]
-
-    # -- update_heartbeat ------------------------------------------------------
 
     async def update_heartbeat(self, job_ids: list[JobId]) -> None:
         now = utc_now()
@@ -553,8 +525,6 @@ class InMemoryQueries:
         for jid in unique_ids:
             if jid in self._jobs:
                 self._jobs[jid]["heartbeat"] = now
-
-    # -- job_status ------------------------------------------------------------
 
     async def job_status(
         self,
@@ -568,8 +538,6 @@ class InMemoryQueries:
             if jid in id_set and jid not in latest:
                 latest[jid] = entry["status"]
         return [(JobId(jid), st) for jid, st in latest.items()]
-
-    # -- log_statistics --------------------------------------------------------
 
     async def log_statistics(
         self,
@@ -619,8 +587,6 @@ class InMemoryQueries:
 
         return [models.LogStatistics.model_validate(r) for r in result]
 
-    # -- Notification methods --------------------------------------------------
-
     async def notify_job_cancellation(self, ids: list[JobId]) -> None:
         event = models.CancellationEvent(
             channel=self.qbq.settings.channel,
@@ -638,8 +604,6 @@ class InMemoryQueries:
             id=health_check_event_id,
         )
         await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
-
-    # -- Schedule methods ------------------------------------------------------
 
     async def insert_schedule(
         self,
@@ -735,8 +699,6 @@ class InMemoryQueries:
     async def clear_schedule(self) -> None:
         self._schedules.clear()
 
-    # -- Extra utility methods -------------------------------------------------
-
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
         if entrypoint:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
@@ -753,8 +715,6 @@ class InMemoryQueries:
         else:
             self._log.clear()
 
-    # -- next_deferred_eta -----------------------------------------------------
-
     async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
         now = utc_now()
@@ -767,8 +727,6 @@ class InMemoryQueries:
         if candidates:
             return min(candidates) - now
         return None
-
-    # -- Private helpers -------------------------------------------------------
 
     def _remove_dedupe_for_job(self, job_id: int) -> None:
         """Remove dedupe_index entry pointing to *job_id*."""

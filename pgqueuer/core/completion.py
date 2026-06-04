@@ -119,8 +119,6 @@ class CompletionWatcher:
         repr=False,
     )
 
-    # ----------------------------- life-cycle --------------------------------
-
     async def __aenter__(self) -> "CompletionWatcher":
         """
         Enter async context:
@@ -148,7 +146,6 @@ class CompletionWatcher:
         await self.task_manager.gather_tasks()
         return False
 
-    # ----------------------------- public API --------------------------------
     def wait_for(self, jid: models.JobId) -> asyncio.Future[models.JOB_STATUS]:
         """
         Return a Future that resolves when *jid* reaches a terminal state.
@@ -164,7 +161,6 @@ class CompletionWatcher:
         self._schedule_refresh_waiters()
         return fut
 
-    # -------------------- debounce / scheduling helpers --------------------
     def _schedule_refresh_waiters(self) -> None:
         """
         (Re)arm the debounce timer so that `_on_change` is executed at most once
@@ -187,7 +183,6 @@ class CompletionWatcher:
             self.debounce_task = None
         await self._refresh_waiters()
 
-    # -------------------- event handlers & polling -------------------------
     def _is_relevant_event(self, payload: str | bytes | bytearray) -> None:
         """LISTEN/NOTIFY callback -- schedules a debounced change check."""
         try:
@@ -225,7 +220,6 @@ class CompletionWatcher:
                         if not waiter.done():
                             waiter.set_result(status)
 
-    # ----------------------------- helper methods ---------------------------
     def _is_terminal(self, status: models.JOB_STATUS) -> bool:
         """Return ``True`` if *status* is terminal."""
         return status in ("canceled", "deleted", "exception", "successful")
