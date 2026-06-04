@@ -23,20 +23,23 @@ Continuously enqueues and dequeues jobs for a fixed duration:
 python3 tools/benchmark.py --dequeue 5 --dequeue-batch-size 10
 ```
 
-Example output:
+Example output — the tool prints a settings table, a live `tqdm` progress bar, then a
+results table (exact numbers depend on your environment):
 
 ```
-Settings:
-Timer:                  15.0 seconds
-Dequeue:                5
-Dequeue Batch Size:     10
-Enqueue:                1
-Enqueue Batch Size:     10
-
-Queue size: 0
-Queue size: 114
-...
-Jobs per Second: 18.35k
++--------------------+------------+
+| Field              | Value      |
++--------------------+------------+
+| Driver             | apg        |
+| Strategy           | throughput |
+| Timer (s)          | 30.0       |
+| Dequeue Tasks      | 5          |
+| Dequeue Batch Size | 10         |
+| Enqueue Tasks      | 1          |
+| Enqueue Batch Size | 10         |
+| Output JSON        | None       |
++--------------------+------------+
+550k job [00:30, 18.3k job/s]
 ```
 
 ### Drain Strategy
@@ -51,8 +54,10 @@ Use this when evaluating batch processing performance rather than sustained thro
 
 ## asyncpg vs psycopg
 
-Both tests use identical settings: 10-second timer, 5 dequeue workers (batch size 10),
-1 enqueue worker (batch size 10).
+The figures below come from a single reference run on one machine and are illustrative
+only — run the tool in your own environment for numbers that mean anything. Both tests use
+identical settings: 10-second timer, 5 dequeue workers (batch size 10), 1 enqueue worker
+(batch size 10).
 
 ### asyncpg
 

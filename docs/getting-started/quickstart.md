@@ -202,7 +202,7 @@ You now have a working PgQueuer setup. Here's where to go from here:
 | Goal | Page |
 |------|------|
 | Understand the mental model | [Core Concepts](core-concepts.md) |
-| Add concurrency caps | [Concurrency Control](../guides/rate-limiting.md) |
+| Add concurrency caps | [Concurrency Control](../guides/concurrency-control.md) |
 | Set up cron-style recurring tasks | [Scheduling](../guides/scheduling.md) |
 | Handle transient failures with retries | [Database-Level Retry](../guides/retry.md) |
 | Park failed jobs for human review | [Holding Failed Jobs](../guides/hold-failed-jobs.md) |
