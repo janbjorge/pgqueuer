@@ -1,6 +1,6 @@
 # Distributed Tracing
 
-PGQueuer supports distributed tracing through optional integrations with
+PgQueuer supports distributed tracing through optional integrations with
 [Logfire](https://logfire.pydantic.dev/), [Sentry](https://docs.sentry.io/),
 and [OpenTelemetry](https://opentelemetry.io/).
 These tools allow you to visualize job execution and measure performance across
@@ -21,7 +21,7 @@ You can install multiple extras simultaneously if you need to switch between the
 ## Using Logfire
 
 Configure Logfire before running your producers and consumers, then register the tracer
-with PGQueuer:
+with PgQueuer:
 
 ```python
 import logfire
@@ -63,7 +63,7 @@ for advanced configuration options.
 
 ## Using OpenTelemetry
 
-Configure your `TracerProvider`, then register the tracer with PGQueuer:
+Configure your `TracerProvider`, then register the tracer with PgQueuer:
 
 ```python
 from opentelemetry import trace
@@ -84,5 +84,5 @@ Jaeger, Datadog, and any OTel-compatible backend.
 ## Switching Tracers
 
 Only one tracer can be active at a time. Call `set_tracing_class()` from
-`pgqueuer.adapters.tracing` with the desired tracer implementation before starting
+`pgqueuer.ports.tracing` with the desired tracer implementation before starting
 producers or consumers.
