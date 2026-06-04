@@ -126,7 +126,7 @@ All are cleared when `uninstall()` is called or when the process exits.
 `InMemoryDriver` emulates PostgreSQL LISTEN/NOTIFY via in-process callbacks:
 
 ```python
-driver.deliver(channel, payload)
+await driver.notify(channel, payload)
 ```
 
-Callbacks are invoked synchronously and immediately.
+Registered callbacks are invoked synchronously and immediately.

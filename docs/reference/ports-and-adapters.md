@@ -105,8 +105,8 @@ inheritance or registration required.
 
 - **`Driver`** (`pgqueuer.ports.driver`) — database execution abstraction.
   Methods: `fetch`, `execute`, `add_listener`, `notify`. Adapters:
-  `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `PsycopgPoolDriver`,
-  `SyncPsycopgDriver`, and the in-memory driver.
+  `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`,
+  and the in-memory driver.
 - **`TracingProtocol`** (`pgqueuer.ports.tracing`) — distributed tracing.
   Adapters: `LogfireTracing`, `SentryTracing`, `OpenTelemetryTracing`.
 
