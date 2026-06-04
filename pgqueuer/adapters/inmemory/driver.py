@@ -1,8 +1,4 @@
-"""In-memory driver satisfying the Driver protocol.
-
-Stores listener callbacks and provides ``notify()`` to push
-notifications without PostgreSQL.
-"""
+"""In-memory driver satisfying the Driver protocol."""
 
 from __future__ import annotations
 
@@ -26,8 +22,6 @@ class InMemoryDriver:
         self._shutdown = asyncio.Event()
         self._tm = TaskManager()
         self._listeners: dict[str, list[Callable[[str], None]]] = defaultdict(list)
-
-    # -- Driver protocol -------------------------------------------------------
 
     async def fetch(self, query: str, *args: Any) -> list[dict]:
         raise NotImplementedError("InMemoryDriver does not support SQL fetch")
@@ -55,8 +49,6 @@ class InMemoryDriver:
 
     async def __aexit__(self, *_: object) -> None:
         pass
-
-    # -- In-memory notification ------------------------------------------------
 
     async def notify(self, channel: str, payload: str) -> None:
         """Push *payload* to all registered listeners on *channel*."""
