@@ -36,11 +36,8 @@ class PgQueuerDatabase:
 
 Ctx = Context[ServerSession, PgQueuerDatabase, object]
 
-# ---------------------------------------------------------------------------
 # Annotated parameter types — descriptions surface in the MCP tool schema.
-# These are the ONLY knobs an agent can turn; keep them simple and bounded.
-# ---------------------------------------------------------------------------
-
+# Keep simple and bounded; these are the only knobs an agent can turn.
 Tail = Annotated[
     int,
     "Maximum number of rows to return. Must be a positive integer. "
@@ -89,10 +86,6 @@ def _db(ctx: Ctx) -> PgQueuerDatabase:
 
 def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
     """Register all read-only insight tools onto the given FastMCP instance."""
-
-    # ===================================================================
-    # QUEUE OVERVIEW
-    # ===================================================================
 
     @mcp.tool()
     async def queue_size(ctx: Ctx) -> list[dict[str, object]]:
@@ -156,10 +149,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         """
         d = _db(ctx)
         return await d.fetch(d.qbq.build_queue_table_browse_query(), limit, offset)
-
-    # ===================================================================
-    # STATISTICS & THROUGHPUT
-    # ===================================================================
 
     @mcp.tool()
     async def queue_stats(
@@ -229,10 +218,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         interval = _parse_interval(period)
         return await d.fetch(d.qbq.build_throughput_summary_query(), interval)
 
-    # ===================================================================
-    # FAILURE INVESTIGATION
-    # ===================================================================
-
     @mcp.tool()
     async def failed_jobs(
         ctx: Ctx,
@@ -270,10 +255,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         d = _db(ctx)
         return await d.fetch(d.qbq.build_failed_jobs_query(), limit)
 
-    # ===================================================================
-    # EVENT LOG
-    # ===================================================================
-
     @mcp.tool()
     async def queue_log(
         ctx: Ctx,
@@ -307,10 +288,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         d = _db(ctx)
         return await d.fetch(d.qbq.build_queue_log_query(), limit)
 
-    # ===================================================================
-    # SCHEDULES (CRON)
-    # ===================================================================
-
     @mcp.tool()
     async def schedules(ctx: Ctx) -> list[dict[str, object]]:
         """All cron-based recurring task definitions and their current state.
@@ -340,10 +317,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         """
         d = _db(ctx)
         return await d.fetch(d.qbs.build_peek_schedule_query())
-
-    # ===================================================================
-    # WORKER HEALTH
-    # ===================================================================
 
     @mcp.tool()
     async def stale_jobs(
@@ -446,10 +419,6 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         """
         d = _db(ctx)
         return await d.fetch(d.qbq.build_queue_age_query())
-
-    # ===================================================================
-    # SCHEMA & SETUP
-    # ===================================================================
 
     @mcp.tool()
     async def schema_info(ctx: Ctx) -> list[dict[str, object]]:

@@ -36,9 +36,6 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-###### Events ######
-
-
 class Event(BaseModel):
     """
     A class representing an event in a PostgreSQL channel.
@@ -117,9 +114,6 @@ class AnyEvent(
 ): ...
 
 
-###### Jobs ######
-
-
 class Job(BaseModel):
     """
     Represents a job with attributes such as ID, priority,
@@ -161,9 +155,6 @@ class Job(BaseModel):
         return None if self.headers is None else self.headers.get("otel")
 
 
-###### Log ######
-
-
 class Log(BaseModel):
     """Represents a job status log entry recording a state transition."""
 
@@ -179,7 +170,6 @@ class Log(BaseModel):
     aggregated: bool
 
 
-###### Statistics ######
 class QueueStatistics(BaseModel):
     """
     Represents the number of jobs per entrypoint and priority in the queue.
@@ -233,9 +223,6 @@ class ScheduleContext:
     resources: MutableMapping = dataclasses.field(default_factory=dict)
 
 
-###### Schedules ######
-
-
 class CronExpressionEntrypoint(NamedTuple):
     entrypoint: CronEntrypoint
     expression: CronExpression
@@ -251,9 +238,6 @@ class Schedule(BaseModel):
     last_run: AwareDatetime | None = None
     status: JOB_STATUS
     entrypoint: CronEntrypoint
-
-
-###### Tracebacks ######
 
 
 class TracebackRecord(BaseModel):

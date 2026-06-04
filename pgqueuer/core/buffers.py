@@ -126,11 +126,6 @@ class TimedOverflowBuffer(Generic[T]):
                 )
 
 
-# ---------------------------------------------------------------------------
-# Narrow sink protocols (ISP)
-# ---------------------------------------------------------------------------
-
-
 class JobLogSink(Protocol):
     """Narrow port: accepts batched job status log entries."""
 
@@ -150,11 +145,6 @@ class HeartbeatSink(Protocol):
     """Narrow port: accepts batched heartbeat updates."""
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None: ...
-
-
-# ---------------------------------------------------------------------------
-# Concrete buffers
-# ---------------------------------------------------------------------------
 
 
 @dataclasses.dataclass
