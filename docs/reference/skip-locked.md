@@ -133,7 +133,8 @@ on commit. Three documented details:[^locking]
 ## In PgQueuer
 
 [`build_dequeue_query`](https://github.com/janbjorge/pgqueuer/blob/main/pgqueuer/adapters/persistence/qb.py)
-is the correct pattern, twice:
+is the correct pattern, twice (simplified below — the real query adds
+concurrency-limit gating and a pick-logging CTE):
 
 ```sql
 WITH
