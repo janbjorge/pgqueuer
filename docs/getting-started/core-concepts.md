@@ -1,7 +1,6 @@
 # Core Concepts
 
-This page explains the key abstractions in PgQueuer. Understanding these will help you
-make the most of every feature.
+This page explains the key abstractions in PgQueuer.
 
 ---
 
@@ -206,6 +205,6 @@ See [Database Setup](../reference/database-setup.md) for full schema details and
 Now that you understand the building blocks:
 
 - **[Scheduling](../guides/scheduling.md)** -- set up cron-style recurring tasks
-- **[Concurrency Control](../guides/rate-limiting.md)** -- limit parallel job execution
+- **[Concurrency Control](../guides/concurrency-control.md)** -- limit parallel job execution
 - **[Reliability](../guides/reliability.md)** -- retries, idempotency, and audit trails
 - **[Deployment](../guides/deployment.md)** -- run workers in production
