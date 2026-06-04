@@ -15,7 +15,10 @@ from pgqueuer.ports.tracing import TracingProtocol
 class SentryTracing(TracingProtocol):
     def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
         if sentry_sdk is None:
-            yield {}
+            # One header per entrypoint: merge_tracing_headers zips against
+            # the entrypoint list with strict=True.
+            for _ in entrypoints:
+                yield {}
             return
 
         with sentry_sdk.start_transaction(
