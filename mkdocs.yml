@@ -82,7 +82,7 @@ nav:
       - Upgrading from 0.x: getting-started/upgrading.md
   - Guides:
       - Job Processing:
-          - Concurrency Control: guides/rate-limiting.md
+          - Concurrency Control: guides/concurrency-control.md
           - Custom Executors: guides/custom-executors.md
           - Job Cancellation: guides/job-cancellation.md
           - Completion Tracking: guides/completion-tracking.md

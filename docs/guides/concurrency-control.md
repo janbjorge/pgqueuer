@@ -1,7 +1,7 @@
 # Concurrency Control
 
-PgQueuer provides fine-grained control over job execution concurrency at the
-entrypoint level. Concurrency limits are enforced **globally** at the database
+PgQueuer controls job execution concurrency at the entrypoint level.
+Concurrency limits are enforced **globally** at the database
 level via the dequeue SQL query, not per-worker. If you set `concurrency_limit=5`,
 at most 5 jobs run across your entire fleet.
 

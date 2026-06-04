@@ -123,14 +123,14 @@ Display a live dashboard showing job statistics.
 
 **Options:**
 
-- `--interval <seconds>`: Refresh interval. If not set, updates once and exits.
-- `--tail <number>`: Number of most recent log entries to display.
+- `-i`, `--interval <seconds>`: Refresh interval. If not set, updates once and exits.
+- `-n`, `--limit <number>`: Number of most recent log entries to display (default: `25`).
 
-The table format can be controlled via the `PGQUEUER_TABLEFMT` environment variable
-(default: `pretty`).
+The table format can be controlled via the `TABLEFMT` environment variable
+(prefixed by `PGQUEUER_PREFIX` if set; default: `pretty`).
 
 ```bash
-pgq dashboard --interval 10 --tail 25
+pgq dashboard --interval 10 --limit 25
 ```
 
 ---
@@ -335,7 +335,7 @@ async def create_pgqueuer(args: list[str]):
   after failures, creating fresh connections and state.
 - **Async context manager is required**: Use `@asynccontextmanager` with `yield`.
 - **Extra args via `--`**: Arguments after `--` are passed as `list[str]` to the factory.
-  Factories that don't need args simply omit the parameter.
+  Factories that don't need args omit the parameter.
 - **Shutdown is graceful**: In-flight jobs complete before teardown runs.
 
 See `examples/consumer.py` in the repository for a working example.
