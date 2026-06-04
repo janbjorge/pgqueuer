@@ -36,7 +36,7 @@ during test setup.
 make check
 ```
 
-Runs lint, type, dependency, and test steps in sequence.
+Runs `sync`, `lint`, `import-lint`, `typecheck`, and `pytest` in sequence.
 
 ## Test Structure & Tips
 

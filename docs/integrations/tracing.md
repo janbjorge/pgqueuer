@@ -84,5 +84,5 @@ Jaeger, Datadog, and any OTel-compatible backend.
 ## Switching Tracers
 
 Only one tracer can be active at a time. Call `set_tracing_class()` from
-`pgqueuer.adapters.tracing` with the desired tracer implementation before starting
+`pgqueuer.ports.tracing` with the desired tracer implementation before starting
 producers or consumers.

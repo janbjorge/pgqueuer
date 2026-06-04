@@ -1,6 +1,6 @@
 """In-memory driver satisfying the Driver protocol.
 
-Stores listener callbacks and provides ``deliver()`` to push
+Stores listener callbacks and provides ``notify()`` to push
 notifications without PostgreSQL.
 """
 

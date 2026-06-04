@@ -126,6 +126,10 @@ With `initial_delay=1s`, `backoff_multiplier=2.0`, `max_delay=60s`:
 | 5 | 32s |
 | 6+ | 60s (capped) |
 
+The table shows the delay *formula* independent of `max_attempts`. With the default
+`max_attempts=5`, only attempts 0–4 are retried (delays 1s–16s); the 5th failure is terminal,
+so the 32s/60s rows never apply unless you raise `max_attempts`.
+
 ## Retry vs. Heartbeat Recovery
 
 PgQueuer has two complementary retry mechanisms:
@@ -149,6 +153,7 @@ Every retry writes a log entry to `pgqueuer_log` with:
 ```json
 {
     "entrypoint": "call_api",
+    "queue_manager_id": "1f4d0c9e-...",
     "attempt": 0,
     "retry_delay": "0:00:30",
     "reason": "rate limited"

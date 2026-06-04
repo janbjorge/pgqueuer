@@ -28,9 +28,8 @@ For any driver:
 ## Driver Protocol
 
 Every driver implements `pgqueuer.ports.driver.Driver`. Built-ins:
-`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `PsycopgPoolDriver`,
-`SyncPsycopgDriver`, and the in-memory driver. Custom drivers work anywhere a
-`Driver` is expected.
+`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and
+the in-memory driver. Custom drivers work anywhere a `Driver` is expected.
 
 Key methods:
 
