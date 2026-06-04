@@ -29,15 +29,7 @@ def utc_now() -> datetime:
 
 
 class Event(BaseModel):
-    """
-    A class representing an event in a PostgreSQL channel.
-
-    Attributes:
-        channel: The PostgreSQL channel the event belongs to.
-        sent_at: The timestamp when the event was sent.
-        type: The event type discriminator.
-        received_at: The timestamp when the event was received.
-    """
+    """Base NOTIFY event. ``received_at`` is stamped on validation."""
 
     channel: Channel
     sent_at: AwareDatetime
@@ -51,20 +43,12 @@ class Event(BaseModel):
 
     @property
     def latency(self) -> timedelta:
-        """
-        Calculate the latency between when the event was sent and received.
-        """
+        """``received_at - sent_at``."""
         return self.received_at - self.sent_at
 
 
 class TableChangedEvent(Event):
-    """
-    A class representing an event in a PostgreSQL channel.
-
-    Attributes:
-        operation: The type of operation performed (insert, update or delete).
-        table: The table the event is associated with.
-    """
+    """Row-level change on the queue table."""
 
     type: Literal["table_changed_event"]
     operation: OPERATIONS
@@ -72,25 +56,14 @@ class TableChangedEvent(Event):
 
 
 class CancellationEvent(Event):
-    """
-    A class representing an cancellation event in a PostgreSQL channel.
-
-    Attributes:
-        ids: The job-ids to mark for cancellation
-    """
+    """Request cancellation of *ids*."""
 
     type: Literal["cancellation_event"]
     ids: list[JobId]
 
 
 class HealthCheckEvent(Event):
-    """
-    A class representing a health check event in a PostgreSQL channel.
-
-    Attributes:
-        id: A unique identifier for the health check event, used to ensure
-            correct event matching in scenarios with multiple senders.
-    """
+    """Echo response for a health-check probe; ``id`` matches the originating probe."""
 
     id: uuid.UUID
     type: Literal["health_check_event"]
@@ -107,10 +80,7 @@ class AnyEvent(
 
 
 class Job(BaseModel):
-    """
-    Represents a job with attributes such as ID, priority,
-    creation time, status, entrypoint, and optional payload.
-    """
+    """A queued or in-flight job row."""
 
     id: JobId
     priority: int
@@ -129,21 +99,15 @@ class Job(BaseModel):
     ]
 
     def logfire_headers(self) -> dict[str, Any] | None:
-        """
-        Extracts logfire headers from the job headers if available.
-        """
+        """Return the ``logfire`` sub-dict from job headers, or None."""
         return None if self.headers is None else self.headers.get("logfire")
 
     def sentry_headers(self) -> dict[str, Any] | None:
-        """
-        Extracts sentry headers from the job headers if available.
-        """
+        """Return the ``sentry`` sub-dict from job headers, or None."""
         return None if self.headers is None else self.headers.get("sentry")
 
     def otel_headers(self) -> dict[str, Any] | None:
-        """
-        Extracts OpenTelemetry W3C propagation headers from the job headers if available.
-        """
+        """Return the ``otel`` W3C propagation sub-dict from job headers, or None."""
         return None if self.headers is None else self.headers.get("otel")
 
 
@@ -163,9 +127,7 @@ class Log(BaseModel):
 
 
 class QueueStatistics(BaseModel):
-    """
-    Represents the number of jobs per entrypoint and priority in the queue.
-    """
+    """Per-(entrypoint, priority, status) job count snapshot."""
 
     count: int
     entrypoint: str
@@ -174,9 +136,7 @@ class QueueStatistics(BaseModel):
 
 
 class LogStatistics(BaseModel):
-    """
-    Represents log statistics for jobs based on status, entrypoint, and priority.
-    """
+    """Per-(entrypoint, priority, status) processing counts bucketed by second."""
 
     count: int
     created: AwareDatetime

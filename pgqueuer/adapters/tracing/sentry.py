@@ -41,18 +41,7 @@ class SentryTracing(TracingProtocol):
 
     @asynccontextmanager
     async def trace_process(self, job: Job) -> AsyncIterator[None]:
-        """
-        Async context manager for tracing queue consumer job processing,
-        capturing performance metrics.
-
-        Args:
-            job (Job): The job being processed, containing headers, metadata, and payload.
-
-        Yields:
-            None: This context manager does not return a value but captures tracing
-                metrics for the job lifecycle.
-        """
-
+        """Wrap consumer processing of *job* in a Sentry transaction + span."""
         if sentry_sdk is None or job.headers is None:
             yield
             return

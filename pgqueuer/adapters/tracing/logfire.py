@@ -29,16 +29,7 @@ class LogfireTracing(TracingProtocol):
 
     @asynccontextmanager
     async def trace_process(self, job: Job) -> AsyncIterator[None]:
-        """
-        Synchronous context manager for tracing queue consumer job processing.
-
-        Args:
-            job (Job): The job being processed, containing headers and metadata.
-
-        Yields:
-            None: This context manager does not return a value but manages the tracing lifecycle.
-        """
-
+        """Wrap consumer processing of *job* in a Logfire span when SDK + headers present."""
         if logfire is None or job.headers is None:
             yield
             return

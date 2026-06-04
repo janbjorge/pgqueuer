@@ -15,20 +15,7 @@ ManagerFactory: TypeAlias = Callable[[], AbstractAsyncContextManager[Manager]]
 
 
 def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manager:
-    """
-    Wire shutdown into the manager instance.
-
-    Args:
-        manager (Manager): The instance to configure.
-        shutdown (asyncio.Event): The event used to signal shutdown.
-
-    Returns:
-        qm.QueueManager | sm.SchedulerManager | applications.PgQueuer:
-            The configured instance.
-
-    Raises:
-        NotImplementedError: If the manager type is unsupported.
-    """
+    """Wire *shutdown* into *manager* so cancellation propagates to inner managers."""
 
     if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
         manager.shutdown = shutdown
@@ -45,20 +32,12 @@ def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manage
 
 
 def setup_signal_handlers(shutdown: asyncio.Event) -> None:
-    """
-    Setup signal handlers for clean shutdown on SIGINT or SIGTERM.
-
-    Args:
-        shutdown: Event to signal shutdown.
-    """
+    """Set *shutdown* on SIGINT/SIGTERM; silently skip on platforms without async signal support."""
 
     def set_shutdown(signum: int) -> None:
         logconfig.logger.info("Signal %d received, shutting down.", signum)
         shutdown.set()
 
-    # Adding signal handlers ensures the application can gracefully
-    # handle shutdown signals (SIGINT, SIGTERM).The try/except block is
-    # necessary because some platforms, like Windows, do not support adding async signal handlers.
     loop = asyncio.get_event_loop()
     try:
         loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
@@ -81,22 +60,9 @@ async def runit(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
 ) -> None:
-    """
-    Supervise and manage the lifecycle of a queue management instance.
+    """Supervise a manager lifecycle; optionally restart after *restart_delay* on failure.
 
-    Args:
-        factory (ManagerFactory): Factory function or path to create an instance.
-        dequeue_timeout (timedelta): Timeout duration for dequeuing jobs.
-        batch_size (int): Number of jobs to process in each batch.
-        restart_delay (timedelta): Delay before restarting on failure.
-        restart_on_failure (bool): Whether to restart after a failure.
-        shutdown (asyncio.Event): The event to signal shutdown.
-        mode (types.QueueExecutionMode): What mode to start the execution on
-        max_concurrent_tasks (int | None): How many concurrent tasks to allow.
-        shutdown_on_listener_failure (bool): Automatically shutdown if a listener fails
-
-    Raises:
-        ValueError: If restart_delay is negative.
+    Raises ValueError when ``restart_delay`` is negative.
     """
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
@@ -135,20 +101,9 @@ async def run_manager(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
 ) -> None:
-    """
-    Run a queue management instance.
+    """Dispatch ``run()`` on the concrete manager type.
 
-    Args:
-        manager: The instance to run (QueueManager, SchedulerManager, or PgQueuer).
-        dequeue_timeout: Timeout duration for dequeuing jobs.
-        batch_size: Number of jobs to process per batch.
-        mode: Queue execution mode (continuous or drain).
-        max_concurrent_tasks: Optional global cap on concurrent dispatch tasks.
-        shutdown_on_listener_failure: If True, set shutdown when a listener
-            health-check fails (QueueManager / PgQueuer only).
-
-    Raises:
-        NotImplementedError: If the instance type is unsupported.
+    Raises NotImplementedError if *manager* is not a recognised manager class.
     """
     logconfig.logger.debug("Running: %s", type(manager).__name__)
     if isinstance(manager, qm.QueueManager):
@@ -177,14 +132,7 @@ async def await_shutdown_or_timeout(
     shutdown: asyncio.Event,
     restart_delay: timedelta,
 ) -> None:
-    """
-    Wait for shutdown or until ``restart_delay`` elapses.
-
-    Args:
-        shutdown: Event indicating shutdown.
-        restart_delay: Delay duration before restarting.
-    """
-
+    """Wait for *shutdown* or up to *restart_delay*, whichever comes first."""
     logconfig.logger.info("Waiting %r before restarting.", restart_delay)
 
     with suppress(TimeoutError, asyncio.TimeoutError):

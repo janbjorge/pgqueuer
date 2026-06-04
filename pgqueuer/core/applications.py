@@ -86,17 +86,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> "PgQueuer":
-        """
-        Create a PgQueuer instance from an asyncpg connection.
-
-        Args:
-            connection: An asyncpg connection object.
-            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
-            resources: Optional mutable mapping for shared resources.
-
-        Returns:
-            PgQueuer: A configured PgQueuer instance.
-        """
+        """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
             channel=channel,
@@ -110,17 +100,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> "PgQueuer":
-        """
-        Create a PgQueuer instance from an asyncpg connection pool.
-
-        Args:
-            pool: An asyncpg connection pool object.
-            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
-            resources: Optional mutable mapping for shared resources.
-
-        Returns:
-            PgQueuer: A configured PgQueuer instance.
-        """
+        """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
             driver=AsyncpgPoolDriver(pool),
             channel=channel,
@@ -134,17 +114,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> "PgQueuer":
-        """
-        Create a PgQueuer instance from a psycopg async connection.
-
-        Args:
-            connection: A psycopg async connection object. Must have autocommit enabled.
-            channel: Optional Channel configuration. Defaults to Channel(DBSettings().channel).
-            resources: Optional mutable mapping for shared resources.
-
-        Returns:
-            PgQueuer: A configured PgQueuer instance.
-        """
+        """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
             channel=channel,
@@ -192,12 +162,7 @@ class PgQueuer:
         shutdown_on_listener_failure: bool = False,
         heartbeat_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
-        """
-        Run both QueueManager and SchedulerManager concurrently.
-
-        This method starts both the `QueueManager` and `SchedulerManager` concurrently to
-        handle job processing and scheduling.
-        """
+        """Run QueueManager and SchedulerManager concurrently."""
         tasks = [
             asyncio.create_task(
                 self.qm.run(

@@ -29,28 +29,11 @@ from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 @dataclasses.dataclass
 class QueueManager:
-    """
-    Manages job queues and dispatches jobs to registered entrypoints.
+    """Dequeue jobs and dispatch them to registered entrypoint executors.
 
-    The `QueueManager` handles the lifecycle of jobs, including dequeueing,
-    dispatching to entrypoint functions, handling concurrency limits, and
-    managing cancellations.
-
-    Attributes:
-        queries (RepositoryPort): Repository for job queue operations. The underlying
-            database driver is accessed via ``queries.driver``.
-        channel (Channel): The PostgreSQL channel for notifications.
-        shutdown (asyncio.Event): Event to signal when the QueueManager is shutting down.
-        entrypoint_registry (dict[str, JobExecutor]): Registered job executors.
-        queue_manager_id (uuid.UUID): Unique identifier for each QueueManager instance.
-        job_context (dict[models.JobId, models.Context]): Contexts for jobs,
-            including cancellation scopes.
-        resources (MutableMapping[str, Any]): User-provided shared resources mapping
-            injected into each job Context. Pass at construction time to share
-            initialized pools/clients/models across jobs.
-        shutdown_on_listener_failure
-            If *True*, raise `FailingListenerError` and set the shutdown event when
-            the periodic listener health-check times out.
+    ``resources`` is a user-provided mapping (DB pools, HTTP clients, ML models,
+    etc.) propagated into every job Context. Pass at construction time to share
+    initialised objects across jobs.
     """
 
     queries: RepositoryPort
@@ -105,12 +88,7 @@ class QueueManager:
         self,
         timeout: timedelta = timedelta(seconds=10),
     ) -> models.HealthCheckEvent:
-        """
-        Perform a health check by sending a notification and waiting for a response.
-
-        Raises:
-            FailingListenerError: If the health check times out.
-        """
+        """Round-trip a NOTIFY/LISTEN probe. Raises ``FailingListenerError`` on timeout."""
         health_check_event_id = uuid.uuid4()
         fut = asyncio.Future[models.HealthCheckEvent]()
         self.pending_health_check[health_check_event_id] = fut
@@ -126,14 +104,7 @@ class QueueManager:
         self,
         interval: timedelta = timedelta(seconds=10),
     ) -> None:
-        """
-        Periodically perform a health check by calling `listener_healthy`.
-
-        Args:
-            interval (timedelta): Time interval between health checks; also used
-                as the per-probe timeout.
-        """
-
+        """Probe listener health every *interval*; raise on timeout via ``listener_healthy``."""
         while not self.shutdown.is_set():
             await self.listener_healthy(timeout=interval)
             with suppress(TimeoutError, asyncio.TimeoutError):
@@ -143,15 +114,6 @@ class QueueManager:
                 )
 
     def get_context(self, job_id: models.JobId) -> models.Context:
-        """
-        Retrieve the context associated with a specific job ID.
-
-        Args:
-            job_id (models.JobId): The unique identifier of the job.
-
-        Returns:
-            models.Context: The context object associated with the job.
-        """
         return self.job_context[job_id]
 
     def register_executor(
@@ -159,16 +121,7 @@ class QueueManager:
         name: str,
         executor: executors.AbstractEntrypointExecutor,
     ) -> None:
-        """
-        Register a job executor with a specific name.
-
-        Args:
-            name (str): The name of the entrypoint as referenced in the job queue.
-            executor (JobExecutor): The job executor instance.
-
-        Raises:
-            RuntimeError: If the entrypoint name is already registered.
-        """
+        """Bind *name* to *executor*. Raises RuntimeError on duplicate name."""
         if name in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
@@ -187,30 +140,16 @@ class QueueManager:
         ]
         | None = None,
     ) -> Callable[[executors.EntrypointTypeVar], executors.EntrypointTypeVar]:
-        """
-        Decorator to register an entrypoint for job processing.
+        """Decorator: register an entrypoint for job processing.
 
-        Users can specify a custom executor or use the default EntrypointExecutor.
+        ``concurrency_limit=0`` means unlimited; ``1`` serialises dispatch.
+        Limits are enforced at the database level across all workers.
 
-        Args:
-            name (str): The name of the entrypoint as referenced in the job queue.
-            concurrency_limit (int): Max number of concurrent jobs allowed for this
-                entrypoint across all workers. Enforced at the database level.
-                0 means unlimited. Use 1 for serialized (one-at-a-time) dispatch.
-            accepts_context (bool | None): Whether to invoke the entrypoint with both job and
-                context. When None (default), it is auto-detected from the signature: a handler
-                that annotates a parameter as ``Context`` (``async def f(job, ctx: Context)``)
-                receives it. Pass True/False to override the detection.
-            on_failure (OnFailure): What to do when a job fails terminally. ``"delete"``
-                removes the job (default); ``"hold"`` parks it with status ``'failed'``
-                so it can be inspected and manually re-queued.
+        ``accepts_context=None`` auto-detects from the handler signature (a
+        parameter annotated ``Context`` receives one); pass True/False to override.
 
-        Returns:
-            Callable[[T], T]: A decorator that registers the function as an entrypoint.
-
-        Raises:
-            RuntimeError: If the entrypoint name is already registered.
-            ValueError: If `concurrency_limit` is negative.
+        ``on_failure='delete'`` (default) removes a terminally-failed job;
+        ``'hold'`` parks it with status ``'failed'`` for manual re-queue.
         """
 
         if name in self.entrypoint_registry:
@@ -252,12 +191,7 @@ class QueueManager:
         return register
 
     def entrypoints_below_capacity_limits(self) -> set[str]:
-        """
-        Return all registered entrypoint names.
-
-        Concurrency limits are enforced at the database level, so all
-        entrypoints are always eligible for dequeue attempts.
-        """
+        """All registered entrypoints; per-entrypoint limits are enforced in SQL."""
         return set(self.entrypoint_registry)
 
     async def fetch_jobs(
@@ -266,13 +200,7 @@ class QueueManager:
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> AsyncGenerator[models.Job, None]:
-        """
-        Fetch jobs from the queue that are ready for processing, yielding them one at a time.
-
-        This method retrieves a batch of jobs that match the current capacity constraints
-        of each entrypoint. It ensures that jobs are fetched only when the QueueManager
-        is operational and that concurrency controls are respected.
-        """
+        """Yield ready jobs one at a time, respecting per-entrypoint and global limits."""
 
         while not self.shutdown.is_set():
             entrypoints = {
@@ -305,11 +233,7 @@ class QueueManager:
                 yield job
 
     async def verify_structure(self) -> None:
-        """
-        Verify the required database structure.
-
-        Checks necessary columns and user-defined types. Raises RuntimeError if missing.
-        """
+        """Assert that required tables, columns, indexes, enums, and triggers exist."""
 
         for table in (
             self.queries.qbe.settings.queue_table,
@@ -421,26 +345,12 @@ class QueueManager:
         shutdown_on_listener_failure: bool = False,
         heartbeat_timeout: timedelta = timedelta(seconds=30),
     ) -> None:
+        """Process jobs until shutdown.
+
+        ``mode=drain`` exits once the queue is empty and in-flight tasks finish.
+        ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
+        heartbeats are emitted at half this interval.
         """
-        Run the main loop to process jobs from the queue.
-
-        Continuously listens for events and dispatches jobs, managing connections
-        and tasks, logging timeouts, and resetting connections upon termination.
-
-        Args:
-            dequeue_timeout (timedelta): Timeout duration for waiting to dequeue jobs.
-            batch_size (int): Number of jobs to retrieve in each batch.
-            mode (QueueExecutionMode): Whether to run in `continuous` or `drain` until
-                queue is empty then shutdown.
-            max_concurrent_tasks (int|None, default=None): Limit the total number of tasks that
-                can run at the same time. If unspecified or None, there is no limit.
-            heartbeat_timeout (timedelta): Duration after which a picked job with a stale
-                heartbeat becomes eligible for re-pickup by another worker. Heartbeats
-                are sent automatically at half this interval. Defaults to 30 seconds.
-        Raises:
-            RuntimeError: If required database columns or types are missing.
-        """
-
         await self.verify_structure()
 
         max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
@@ -532,17 +442,7 @@ class QueueManager:
         hbuff: buffers.HeartbeatBuffer,
         heartbeat_timeout: timedelta,
     ) -> None:
-        """
-        Dispatch a job to its associated entrypoint executor.
-
-        Handles asynchronous job execution, logs exceptions, updates job status,
-        and manages job context including cancellation.
-
-        Args:
-            job (models.Job): The job to dispatch.
-            jbuff (buffers.JobStatusLogBuffer): Buffer to log job completion status.
-            hbuff (buffers.HeartbeatBuffer): Buffer to manage heartbeats.
-        """
+        """Run *job*'s executor, route retries/cancels/failures, log final status."""
 
         logconfig.logger.debug(
             "Dispatching entrypoint/id: %s/%s",
