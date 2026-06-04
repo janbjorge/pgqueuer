@@ -151,7 +151,8 @@ LISTEN connection causes a clean restart rather than silent degradation:
 `pgq run` handles `SIGTERM` and `SIGINT`. On receiving a signal:
 
 1. Stop accepting new jobs from the queue.
-2. Wait for in-flight jobs to complete (up to a configurable drain period).
+2. Wait for in-flight jobs to finish. PgQueuer has no built-in drain timeout — it awaits
+   running jobs to completion, so bound the wait via your orchestrator (see below).
 3. Exit cleanly.
 
 Container orchestrators (Kubernetes, Fly.io, ECS) send `SIGTERM` before `SIGKILL`, so
@@ -185,7 +186,7 @@ PgQueuer reads standard PostgreSQL environment variables:
 | `PGUSER` | Database user |
 | `PGPASSWORD` | Database password |
 | `PGDATABASE` | Database name |
-| `PGQUEUER_PREFIX` | Prefix for table/channel names (default `pgqueuer`) |
+| `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty — names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 
