@@ -1,84 +1,34 @@
 # Row Locking & `FOR UPDATE SKIP LOCKED`
 
-PgQueuer turns a regular PostgreSQL table into a job queue. The single mechanism
-that makes that safe under many concurrent workers is the locking clause
-`FOR UPDATE SKIP LOCKED`. This page is a deep dive into *why* that clause exists,
-*what* PostgreSQL actually does when it runs, and *how* PgQueuer's dequeue query
-uses it. If you only remember one sentence, make it this one, straight from the
-PostgreSQL manual:
+PgQueuer treats an ordinary PostgreSQL table as a job queue. `FOR UPDATE SKIP
+LOCKED` is the clause that lets many workers share that table without running the
+same job twice and without blocking each other.
 
 > With `SKIP LOCKED`, any selected rows that cannot be immediately locked are
 > skipped. [...] this is not suitable for general purpose work, but can be used
-> to avoid lock contention with multiple consumers accessing a queue-like table.[^locking]
->
-> — [PostgreSQL: SELECT — The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html)
-
-A queue-like table is exactly our use case.
+> to avoid lock contention with multiple consumers accessing a queue-like
+> table.[^locking]
 
 ---
 
-## The problem: many workers, one table
+## Why plain reads don't work
 
-Picture `N` worker processes, each polling the same `pgqueuer` table for the next
-`queued` job. They must agree on a rule that never lets two workers run the *same*
-job, while still letting all `N` of them make progress in parallel. Without help
-from the database, every naive approach fails:
-
-```
-                    pgqueuer table
-                  ┌──────────────────┐
-   worker A ─────▶│ id=1  queued     │◀───── worker B
-   worker B ─────▶│ id=2  queued     │◀───── worker C
-   worker C ─────▶│ id=3  queued     │◀───── worker A
-                  │ ...              │
-                  └──────────────────┘
-        Who gets id=1? How do the others NOT also get id=1?
-```
-
-`SELECT ... LIMIT 1` on its own is useless here: every worker reads the same
-top row because plain reads do not coordinate. We need the workers to *claim*
-rows, and we need a claim to be visible to the other workers immediately.
+PostgreSQL's MVCC means a plain `SELECT` never blocks and never locks a row —
+"reading never blocks writing and writing never blocks reading."[^mvcc] So two
+workers running the same `SELECT ... LIMIT 1` both read `id=1`. MVCC gives each a
+consistent snapshot; it does **not** hand them *different* rows. Coordinating
+workers requires an explicit **row-level lock**.
 
 ---
 
-## Background: MVCC, and why plain reads don't help
-
-PostgreSQL uses **Multi-Version Concurrency Control (MVCC)**. Each statement sees
-a snapshot of the database as of a point in time. The headline property is:
-
-> reading never blocks writing and writing never blocks reading.[^mvcc]
->
-> — [PostgreSQL: Introduction to MVCC](https://www.postgresql.org/docs/current/mvcc-intro.html)
-
-That property is wonderful for OLTP and terrible for queue coordination. Because
-a plain `SELECT` never blocks and never takes a row lock, two workers running
-`SELECT id FROM pgqueuer WHERE status='queued' ORDER BY id LIMIT 1` at the same
-time both read `id=1`. MVCC isolation guarantees they each see a consistent
-snapshot — it does **not** guarantee they see *different* rows. To make workers
-coordinate we have to step outside pure MVCC and ask for **explicit row-level
-locks**.
-
----
-
-## Row-level lock modes
-
-The locking clause is appended to a `SELECT` and has the form:
+## Lock modes
 
 ```
-FOR { UPDATE | NO KEY UPDATE | SHARE | KEY SHARE } [ OF table ... ] [ NOWAIT | SKIP LOCKED ]
+FOR { UPDATE | NO KEY UPDATE | SHARE | KEY SHARE } [ NOWAIT | SKIP LOCKED ]
 ```
 
-PostgreSQL defines four lock *strengths*. From strongest to weakest:
-
-| Mode | Acquired by | Blocks |
-|------|-------------|--------|
-| `FOR UPDATE` | `SELECT FOR UPDATE`, `DELETE`, key-changing `UPDATE` | every other row lock, incl. `FOR KEY SHARE` |
-| `FOR NO KEY UPDATE` | ordinary `UPDATE` | everything except `FOR KEY SHARE` |
-| `FOR SHARE` | `SELECT FOR SHARE` | `UPDATE`/`DELETE`/`FOR UPDATE`/`FOR NO KEY UPDATE` |
-| `FOR KEY SHARE` | foreign-key checks | only `FOR UPDATE` and key changes |
-
-The exact conflict matrix from the manual[^explicit] (`X` = the two conflict and
-cannot be held simultaneously by different transactions):
+Four strengths, with this conflict matrix (`X` = cannot be held together by
+different transactions):[^explicit]
 
 ```
                      held lock
@@ -90,133 +40,78 @@ cannot be held simultaneously by different transactions):
  FOR UPDATE           X        X          X          X
 ```
 
-PgQueuer always uses **`FOR UPDATE`** — the strongest mode — because claiming a
-job is a write intent: the very next thing the query does is `UPDATE` the row to
-`status='picked'`. Two important facts about these locks:
+PgQueuer uses `FOR UPDATE` (strongest) because a claim is a write intent — the
+next step is `UPDATE ... status='picked'`. Two facts about these locks:[^explicit]
 
-- **They are held until the end of the transaction.** "Row-level locks are
-  released at transaction end or during savepoint rollback."[^explicit] A claim
-  is only durable once committed.
-- **They do not block plain readers.** "Row-level locks do not affect data
-  querying; they block only *writers and lockers* to the same row."[^explicit] A
-  dashboard running `SELECT count(*)` is never blocked by an in-flight dequeue.
+- Held until the transaction ends; a claim is durable only after commit.
+- They block writers/lockers, never plain readers — a dashboard `SELECT count(*)`
+  is never blocked by a dequeue.
 
 ---
 
-## Three ways to react to a locked row
-
-When your `SELECT ... FOR UPDATE` reaches a row another transaction has already
-locked, you choose the behavior with the trailing option:
+## Reacting to a locked row
 
 ```
-   ┌─────────────────────────── row is already locked ──────────────────────────┐
-   │                                                                             │
-   ▼                              ▼                                ▼
-(default)                      NOWAIT                         SKIP LOCKED
-   │                              │                                │
-   ▼                              ▼                                ▼
- WAIT for the lock           ERROR immediately               IGNORE the row,
- to be released              (SQLSTATE 55P03)                 move to the next
- (block indefinitely)        "could not obtain lock"         one as if invisible
+              row already locked
+        ┌────────────┼────────────┐
+        ▼            ▼             ▼
+    (default)      NOWAIT      SKIP LOCKED
+     WAIT          ERROR        skip it,
+   forever       immediately   keep scanning
 ```
 
-- **Default — wait.** "A transaction seeking [...] a row-level lock will wait
-  indefinitely for conflicting locks to be released."[^explicit] Good for
-  correctness in general OLTP, fatal for a queue: workers would line up behind
-  each other.
-- **`NOWAIT` — fail fast.** Raises an error rather than waiting. Useful when you
-  want to detect contention, but it forces the application to catch and retry.
-- **`SKIP LOCKED` — step over.** Locked rows are treated *as if they did not
-  exist* for this query. No waiting, no error, no retry loop. This is what a
-  queue wants.
+- **default** — waits indefinitely.[^explicit] Fatal for a queue: workers convoy.
+- **`NOWAIT`** — errors instead of waiting; forces app-side retry.
+- **`SKIP LOCKED`** — locked rows are treated as nonexistent. No wait, no error.
 
 ---
 
 ## How `SKIP LOCKED` distributes work
 
-`SKIP LOCKED` tries to lock each candidate row; if the lock can't be taken
-*immediately*, it drops that row from the result and keeps scanning. Two workers
-issuing the same query at the same instant therefore walk past each other's
-in-flight rows and each come away with a different set.
-
-Adapting Michael Paquier's two-session demonstration to a queue table:[^paquier]
+Each candidate row is locked if possible; rows it can't lock immediately are
+dropped. Two workers issuing the same query fan out onto different rows:[^paquier]
 
 ```
- time   worker A                              worker B
- ────────────────────────────────────────────────────────────────────────────
-  t0     BEGIN                                BEGIN
-  t1     SELECT id FROM q                     SELECT id FROM q
-         WHERE status='queued'               WHERE status='queued'
-         ORDER BY id                         ORDER BY id
-         FOR UPDATE SKIP LOCKED LIMIT 2      FOR UPDATE SKIP LOCKED LIMIT 2
-  t2     locks id=1  ✓                        id=1 locked by A → skip
-         locks id=2  ✓                        id=2 locked by A → skip
-         ── returns {1,2} ──                  locks id=3  ✓
-                                              locks id=4  ✓
-                                              ── returns {3,4} ──
-  t3     UPDATE ... SET status='picked'       UPDATE ... SET status='picked'
-         WHERE id IN (1,2)                    WHERE id IN (3,4)
-  t4     COMMIT  (locks on 1,2 released)      COMMIT  (locks on 3,4 released)
+ worker A                          worker B
+ ─────────────────────────────────────────────────────────
+ FOR UPDATE SKIP LOCKED LIMIT 2    FOR UPDATE SKIP LOCKED LIMIT 2
+ locks 1,2  → returns {1,2}        1,2 locked by A → skip
+                                   locks 3,4  → returns {3,4}
+ UPDATE ... WHERE id IN (1,2)      UPDATE ... WHERE id IN (3,4)
+ COMMIT (release 1,2)              COMMIT (release 3,4)
 ```
 
-No worker ever blocks on another, and no job is handed out twice. Throughput
-scales with the number of workers instead of collapsing to one-at-a-time.
+No worker blocks another; no job is handed out twice.
 
-!!! note "`SKIP LOCKED` returns an *inconsistent* view on purpose"
-    The manual is explicit: "Skipping locked rows provides an inconsistent view
-    of the data."[^locking] Worker B above genuinely cannot see jobs 1 and 2, even though
-    they exist and are `queued`. For a queue that is precisely the desired
-    behavior — those jobs belong to someone else right now — but it is the reason
-    the manual warns against using `SKIP LOCKED` for general-purpose queries.
+!!! note "Inconsistent by design"
+    `SKIP LOCKED` "provides an inconsistent view of the data."[^locking] Worker B
+    genuinely can't see jobs 1 and 2 — exactly what a queue wants, and why the
+    manual warns against it for general-purpose queries.
 
 ---
 
-## Why the *naive* queue pattern is wrong
-
-A very common first attempt looks like this:
+## The naive pattern is wrong
 
 ```sql
--- DON'T: plain FOR UPDATE, no SKIP LOCKED
-SELECT id FROM pgqueuer
-WHERE status = 'queued'
-ORDER BY id
-LIMIT 1
-FOR UPDATE;
+-- DON'T: plain FOR UPDATE
+SELECT id FROM pgqueuer WHERE status='queued' ORDER BY id LIMIT 1 FOR UPDATE;
 ```
 
-With plain `FOR UPDATE` (the default *wait* behavior), all `N` workers sort the
-same way, all target the same top row, and `N-1` of them **block** on the one
-that won the row. They form a convoy:
-
-```
- worker A ─lock id=1─▶ [runs job]
- worker B ──────────── waits on id=1 ──────────┐
- worker C ──────────── waits on id=1 ──────────┤  all serialized
- worker D ──────────── waits on id=1 ──────────┘  behind worker A
-                         │
-            A commits ───┘  now ONE of B/C/D wakes, re-evaluates,
-                            and the convoy reforms on the next row
-```
-
-The queue degrades to single-file processing no matter how many workers you add,
-and latency spikes under load. This is the failure mode Craig Ringer summarized
-in the title of his canonical write-up: *"What is `SKIP LOCKED` for in
-PostgreSQL? Most work-queue implementations are wrong."*[^ringer] Swapping in
-`SKIP LOCKED` is what makes the workers fan out instead of queue up.
+All workers target the same top row; `N-1` block on the winner and process
+single-file no matter how many you add — the failure mode behind Craig Ringer's
+"most work-queue implementations are wrong."[^ringer] `SKIP LOCKED` fixes it.
 
 ---
 
-## The correct pattern: lock in a subquery, then `UPDATE`
+## The correct pattern
 
-The robust dequeue idiom claims rows inside a subquery and updates them in the
-same statement:
+Lock candidates in a subquery, claim them in the same statement:
 
 ```sql
-UPDATE pgqueuer
-SET status = 'picked'
+UPDATE pgqueuer SET status='picked'
 WHERE id IN (
     SELECT id FROM pgqueuer
-    WHERE status = 'queued'
+    WHERE status='queued'
     ORDER BY priority DESC, id ASC
     FOR UPDATE SKIP LOCKED
     LIMIT $batch_size
@@ -224,135 +119,67 @@ WHERE id IN (
 RETURNING *;
 ```
 
-Doing it in one statement means the claim (`status='picked'`) and the lock live
-in the same transaction, so the window where a row is "locked but not yet
-claimed" is as small as possible and disappears entirely on commit.
+Lock and claim share one transaction, so the "locked but unclaimed" window closes
+on commit. Three documented details:[^locking]
 
-### Mind the `ORDER BY` + `LIMIT` + locking caution
-
-There is one sharp edge the manual calls out. Under `READ COMMITTED`:
-
-> It is possible for a `SELECT` command running at the `READ COMMITTED`
-> transaction isolation level and using `ORDER BY` and a locking clause to return
-> rows out of order. This is because `ORDER BY` is applied first. The command
-> sorts the result, but might then block trying to obtain a lock [...][^locking]
-
-`SKIP LOCKED` sidesteps the *blocking* half of that hazard (it never waits), but
-the ordering-then-locking sequence is still why the subquery form is preferred:
-the inner `SELECT` picks and locks the candidate ids, and the outer `UPDATE`
-operates on exactly those ids. Two more documented details worth knowing:
-
-- **`LIMIT` stops locking early.** "If a `LIMIT` is used, locking stops once
-  enough rows have been returned to satisfy the limit"[^locking] — so
-  `LIMIT $batch_size` bounds how many rows you lock, not just how many you return.
-- **`OFFSET` still locks skipped rows.** "Rows skipped over by `OFFSET` will get
-  locked."[^locking] Avoid `OFFSET` in a dequeue path; it locks rows you never
-  process.
+- `ORDER BY` is applied *before* locking, so `ORDER BY` + a locking clause can
+  return rows out of order under `READ COMMITTED`. The subquery form contains it.
+- `LIMIT` stops locking once satisfied, so `LIMIT $batch_size` also bounds rows
+  locked.
+- `OFFSET` still locks skipped rows — avoid it in a dequeue path.
 
 ---
 
-## How PgQueuer applies all of this
+## In PgQueuer
 
-PgQueuer's real dequeue query (built in
-[`build_dequeue_query`](https://github.com/janbjorge/pgqueuer/blob/main/pgqueuer/adapters/persistence/qb.py))
-is a single statement assembled from several CTEs. Stripped to its locking
-skeleton it is exactly the correct pattern above:
+[`build_dequeue_query`](https://github.com/janbjorge/pgqueuer/blob/main/pgqueuer/adapters/persistence/qb.py)
+is the correct pattern, twice:
 
 ```sql
 WITH
-next_queued AS (
-    SELECT q.id
-    FROM pgqueuer q
-    WHERE q.status = 'queued'
-      AND q.execute_after < NOW()
-      -- ... concurrency-limit gates ...
+next_queued AS (        -- fresh work
+    SELECT q.id FROM pgqueuer q
+    WHERE q.status='queued' AND q.execute_after < NOW()
     ORDER BY q.priority DESC, q.id ASC
-    FOR UPDATE SKIP LOCKED          -- ← fan-out happens here
-    LIMIT $1
+    FOR UPDATE SKIP LOCKED LIMIT $1
 ),
-next_stale AS (
-    SELECT q.id
-    FROM pgqueuer q
-    WHERE q.status = 'picked'
-      AND q.heartbeat < NOW() - $6::interval   -- crashed worker's jobs
+next_stale AS (         -- jobs from a crashed worker
+    SELECT q.id FROM pgqueuer q
+    WHERE q.status='picked' AND q.heartbeat < NOW() - $6::interval
     ORDER BY q.priority DESC, q.id ASC
-    FOR UPDATE SKIP LOCKED          -- ← also skip-locked
-    LIMIT $1
+    FOR UPDATE SKIP LOCKED LIMIT $1
 ),
-eligible AS (        -- merge fresh + recovered, capped to batch size
+eligible AS (           -- merge, cap to batch size
     SELECT id FROM (
         SELECT id, 0 AS src FROM next_queued
-        UNION ALL
-        SELECT id, 1 AS src FROM next_stale
-    ) combined
-    ORDER BY src, id
-    LIMIT $1
+        UNION ALL SELECT id, 1 AS src FROM next_stale
+    ) c ORDER BY src, id LIMIT $1
 ),
-claimed AS (         -- atomic claim, same transaction as the lock
-    UPDATE pgqueuer
-    SET status = 'picked', updated = NOW(), heartbeat = NOW(),
-        queue_manager_id = $4
-    WHERE id IN (SELECT id FROM eligible)
-    RETURNING *
+claimed AS (            -- atomic claim
+    UPDATE pgqueuer SET status='picked', updated=NOW(), heartbeat=NOW(),
+        queue_manager_id=$4
+    WHERE id IN (SELECT id FROM eligible) RETURNING *
 )
 SELECT * FROM claimed ORDER BY priority DESC, id ASC;
 ```
 
-Things to notice, tying back to the concepts above:
-
-1. **Two `FOR UPDATE SKIP LOCKED` scans.** One for fresh `queued` work, one for
-   `picked` jobs whose `heartbeat` has gone stale (a worker that crashed
-   mid-job). Both use `SKIP LOCKED` so a recovery scan never blocks on jobs that
-   are still being actively processed by a live worker.
-2. **`ORDER BY priority DESC, id ASC` inside the locked subqueries.** Higher
-   priority first, FIFO within a priority. Because the lock and claim happen in
-   one statement, the `ORDER BY`-then-lock caution is contained.
-3. **`LIMIT $1` is `batch_size`.** Per the manual, this also bounds how many
-   rows the statement locks — see
-   [Performance Tuning](../guides/performance-tuning.md) for choosing it.
-4. **The `UPDATE ... RETURNING` is the claim.** Locking and flipping
-   `status='picked'` in the same statement means that once the transaction
-   commits, the rows are unambiguously owned; the row locks are released at that
-   commit, and the `status='picked'` (plus `queue_manager_id` and `heartbeat`)
-   is what keeps any *other* worker from re-selecting them.
-5. **Stale recovery instead of stuck jobs.** Because a row lock is dropped if the
-   owning transaction/connection dies, and the claim is recorded as durable
-   `status='picked'` state, a crashed worker leaves a `picked` row behind. The
-   `heartbeat` timeout — not the lock — is what lets `next_stale` reclaim it.
-   See [Heartbeat Monitoring](../guides/heartbeat.md).
-
----
-
-## Summary
-
-| Concern | Mechanism |
-|---------|-----------|
-| Two workers must not run the same job | row-level `FOR UPDATE` lock = exclusive claim intent |
-| Workers must not block each other | `SKIP LOCKED` steps over in-flight rows |
-| Don't wait, don't error on contention | `SKIP LOCKED` (vs. default wait / `NOWAIT` error) |
-| Claim must survive other workers | `UPDATE ... status='picked'` in the same transaction |
-| Bounded work per round trip | `LIMIT $batch_size` also bounds rows locked |
-| Recover a crashed worker's jobs | `heartbeat` timeout + second `SKIP LOCKED` scan |
-| Plain `SELECT`/dashboards unaffected | row locks block writers/lockers only, never readers |
-
-`FOR UPDATE SKIP LOCKED` is the small clause that lets PgQueuer treat an ordinary
-table as a high-throughput, multi-consumer queue without a single line of
-application-side locking code.
+- **Two scans, both `SKIP LOCKED`** — fresh `queued` work plus `picked` jobs with
+  a stale `heartbeat`. Recovery never blocks on jobs a live worker still holds.
+- **The `UPDATE ... RETURNING` is the claim.** After commit, `status='picked'` +
+  `queue_manager_id` keep other workers off the rows; the locks themselves are
+  already released.
+- **Stale recovery, not stuck jobs.** A crashed worker drops its locks but leaves
+  a `picked` row; the `heartbeat` timeout — not the lock — lets `next_stale`
+  reclaim it. See [Heartbeat Monitoring](../guides/heartbeat.md).
+- **`LIMIT $1` is `batch_size`** — also the bound on rows locked. See
+  [Performance Tuning](../guides/performance-tuning.md).
 
 ---
 
 ## Sources
 
-The numbered citations above resolve to the footnotes below. In short:
-
-- [PostgreSQL Manual — SELECT, The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html) (`SKIP LOCKED`, `NOWAIT`, `LIMIT`/`OFFSET` and `ORDER BY` cautions)
-- [PostgreSQL Manual — 13.3. Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html) (row-lock modes, conflict matrix, lock duration, readers vs. writers)
-- [PostgreSQL Manual — 13.1. Introduction to MVCC](https://www.postgresql.org/docs/current/mvcc-intro.html)
-- Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong* (2ndQuadrant / EnterpriseDB)
-- Michael Paquier, *Postgres 9.5 feature highlight — SKIP LOCKED for row-level locking*
-
-[^locking]: PostgreSQL Documentation, [SELECT — The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html). Source for the `SKIP LOCKED`/`NOWAIT` semantics, the "inconsistent view of the data" warning, the `ORDER BY` + locking out-of-order caution under `READ COMMITTED`, and the `LIMIT`/`OFFSET` locking behavior.
-[^mvcc]: PostgreSQL Documentation, [13.1. Introduction (MVCC)](https://www.postgresql.org/docs/current/mvcc-intro.html). Source for "reading never blocks writing and writing never blocks reading."
-[^explicit]: PostgreSQL Documentation, [13.3. Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html). Source for the four row-level lock modes, Table 13.3 (the conflict matrix), "row-level locks are released at transaction end," "row-level locks do not affect data querying; they block only writers and lockers," and the default "wait indefinitely" behavior.
-[^ringer]: Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong*, 2ndQuadrant (now EnterpriseDB). Original post since relocated; see the [Lobsters discussion](https://lobste.rs/s/fyakws/what_is_skip_locked_for_postgresql_most) for the canonical reference and archived copies.
-[^paquier]: Michael Paquier, [*Postgres 9.5 feature highlight — SKIP LOCKED for row-level locking*](https://paquier.xyz/postgresql-2/postgres-9-5-feature-highlight-skip-locked-row-level/). Source for the two-session worked example.
+[^locking]: PostgreSQL, [SELECT — The Locking Clause](https://www.postgresql.org/docs/current/sql-select.html): `SKIP LOCKED`/`NOWAIT` semantics, the "inconsistent view" warning, the `ORDER BY` + locking caution under `READ COMMITTED`, and `LIMIT`/`OFFSET` locking behavior.
+[^mvcc]: PostgreSQL, [13.1. Introduction (MVCC)](https://www.postgresql.org/docs/current/mvcc-intro.html): "reading never blocks writing and writing never blocks reading."
+[^explicit]: PostgreSQL, [13.3. Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html): lock modes, the conflict matrix (Table 13.3), lock duration, readers vs. writers, and default wait behavior.
+[^ringer]: Craig Ringer, *What is SKIP LOCKED for in PostgreSQL? Most work-queue implementations are wrong* (2ndQuadrant / EnterpriseDB); see the [Lobsters thread](https://lobste.rs/s/fyakws/what_is_skip_locked_for_postgresql_most).
+[^paquier]: Michael Paquier, [*Postgres 9.5 feature highlight — SKIP LOCKED*](https://paquier.xyz/postgresql-2/postgres-9-5-feature-highlight-skip-locked-row-level/).
