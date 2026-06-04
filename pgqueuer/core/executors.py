@@ -39,6 +39,26 @@ def is_async_callable(obj: Callable[..., object] | object) -> bool:
     )
 
 
+def wants_context(func: Callable[..., object], context_type: type) -> bool:
+    """Return True if func declares a positionally-bindable parameter annotated context_type."""
+    # eval_str resolves string/forward-ref annotations (PEP 563) to real types.
+    try:
+        signature = inspect.signature(func, eval_str=True)
+    except (TypeError, ValueError, NameError):
+        return False
+
+    positional_kinds = (
+        inspect.Parameter.POSITIONAL_ONLY,
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+    )
+    for parameter in signature.parameters.values():
+        if parameter.kind not in positional_kinds:
+            continue
+        if parameter.annotation is context_type:
+            return True
+    return False
+
+
 @dataclasses.dataclass
 class EntrypointExecutorParameters:
     concurrency_limit: int

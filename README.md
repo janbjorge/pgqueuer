@@ -236,7 +236,7 @@ Initialize heavyweight objects once and inject them into all jobs:
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Job
+from pgqueuer.models import Context, Job
 
 async def create_pgqueuer() -> PgQueuer:
     conn = await asyncpg.connect()
@@ -251,10 +251,9 @@ async def create_pgqueuer() -> PgQueuer:
 
     pgq = PgQueuer(driver, resources=resources)
 
+    # Annotate a parameter as Context and PGQueuer injects the job's Context.
     @pgq.entrypoint("process_user")
-    async def process_user(job: Job) -> None:
-        ctx = pgq.qm.get_context(job.id)
-
+    async def process_user(job: Job, ctx: Context) -> None:
         # Access shared resources
         pool = ctx.resources["db_pool"]
         http = ctx.resources["http_client"]
@@ -266,6 +265,11 @@ async def create_pgqueuer() -> PgQueuer:
 
     return pgq
 ```
+
+PGQueuer auto-detects the `Context` from the handler signature: a parameter
+annotated `Context` receives it, while `async def process_user(job: Job)` does
+not. Pass `accepts_context=True`/`False` to the decorator to override the
+detection.
 
 ## Web Framework Integration
 

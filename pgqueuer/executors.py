@@ -16,6 +16,7 @@ from pgqueuer.core.executors import (
     ScheduleExecutor,
     ScheduleExecutorFactoryParameters,
     is_async_callable,
+    wants_context,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "ScheduleExecutor",
     "ScheduleExecutorFactoryParameters",
     "is_async_callable",
+    "wants_context",
 ]

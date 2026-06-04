@@ -34,10 +34,14 @@ unaffected.
 
 Use the job's cancellation scope to stop processing when a cancel request arrives:
 
+Declare a `Context` parameter and PgQueuer injects the job's cancellation scope:
+
 ```python
+from pgqueuer.models import Context, Job
+
 @pgq.entrypoint("task_entrypoint")
-async def process_job(job: Job) -> None:
-    with pgq.qm.get_context(job.id).cancellation:
+async def process_job(job: Job, ctx: Context) -> None:
+    with ctx.cancellation:
         await perform_task(job.payload)
 ```
 
