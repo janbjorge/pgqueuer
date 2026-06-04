@@ -35,8 +35,10 @@ async def resize_image(job: Job) -> None:
     ...
 ```
 
-Use per-entrypoint limits when specific tasks share a scarce external resource (e.g., an API
-with rate limits). Use `max_concurrent_tasks` as a safety ceiling on total asyncio tasks.
+`concurrency_limit` is enforced **globally at the database level** across every worker — set
+`concurrency_limit=4` and at most 4 such jobs run across your entire fleet. Use it when tasks
+share a scarce external resource (e.g., an API with rate limits). `max_concurrent_tasks`, by
+contrast, is a per-process safety ceiling on total asyncio tasks.
 
 ## Connection Pooling
 
@@ -98,8 +100,8 @@ What this sets on `pgqueuer` and `pgqueuer_schedules` (high-churn tables):
 | `autovacuum_vacuum_cost_delay` | `0` | No throttling |
 | `fillfactor` | `70` | Leave 30% free for HOT updates |
 
-`pgqueuer_log` uses conservative settings (vacuum at 95% dead-tuple ratio) since it is
-append-only.
+`pgqueuer_log` and `pgqueuer_statistics` use conservative settings (vacuum at 95% dead-tuple
+ratio) since they are append-only.
 
 Revert to system defaults:
 
@@ -109,7 +111,7 @@ pgq autovac --rollback
 
 ## NOTIFY Channel and Polling Fallback
 
-PgQueuer uses `LISTEN/NOTIFY` for near-instant job pickup. A trigger fires on every insert
+PgQueuer uses `LISTEN/NOTIFY` for low-latency job pickup. A trigger fires on every insert
 into `pgqueuer` and sends a notification on the `ch_pgqueuer` channel.
 
 **What can go wrong:** pgBouncer in transaction-pooling mode drops `LISTEN` subscriptions
@@ -137,12 +139,14 @@ PgQueuer installs all required indexes automatically. The most important for thr
 CREATE INDEX ON pgqueuer (priority ASC, id DESC)
 INCLUDE (id) WHERE status = 'queued';
 
--- Used for heartbeat-based retry detection
-CREATE INDEX ON pgqueuer (heartbeat ASC, id DESC)
+-- Used to find stale 'picked' jobs for crash/retry recovery
+CREATE INDEX ON pgqueuer (updated ASC, id DESC)
 INCLUDE (id) WHERE status = 'picked';
 ```
 
 These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not drop them.
+(`pgq upgrade` additionally adds a `heartbeat`-based picked index on databases created by
+older versions.)
 
 ## Quick-Reference Checklist
 
