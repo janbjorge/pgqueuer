@@ -1,11 +1,3 @@
-"""
-Task Manager for handling asynchronous tasks.
-
-This module provides the `TaskManager` class, which manages a collection of `asyncio.Task`
-objects. It ensures proper tracking and cleanup of tasks, handles exceptions,
-and supports context management for ease of use.
-"""
-
 from __future__ import annotations
 
 import asyncio

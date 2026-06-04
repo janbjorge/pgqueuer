@@ -1,10 +1,3 @@
-"""
-This module defines the `PgQueuer` class, which orchestrates job scheduling and queue management
-using PostgreSQL as a backend. The `PgQueuer` class is designed to combine the functionalities
-of `QueueManager` and `SchedulerManager` to provide a unified interface for managing job queues
-and scheduling periodic tasks efficiently.
-"""
-
 from __future__ import annotations
 
 import asyncio

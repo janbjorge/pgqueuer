@@ -1,10 +1,3 @@
-"""
-Queue Manager module for handling job queues and dispatching jobs.
-
-This module defines the `QueueManager` class, which manages job queues, dispatches
-jobs to registered entrypoints, and handles database connections and events.
-"""
-
 from __future__ import annotations
 
 import asyncio

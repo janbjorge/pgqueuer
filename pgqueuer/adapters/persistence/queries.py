@@ -1,13 +1,3 @@
-"""
-Database query builder and executor for job queue operations.
-
-This module provides classes and functions to construct and execute SQL queries
-related to job queuing, such as installing the necessary database schema,
-enqueueing and dequeueing jobs, logging job statuses, and managing job statistics.
-It abstracts the SQL details and offers a high-level interface for interacting
-with the database in the context of the pgqueuer application.
-"""
-
 from __future__ import annotations
 
 import asyncio
