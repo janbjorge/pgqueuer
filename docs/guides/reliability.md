@@ -12,8 +12,8 @@ When a job raises an unhandled exception, PgQueuer:
 3. Moves the record from the active queue (`pgqueuer`) to the log table (`pgqueuer_log`).
 
 The job is **not** automatically retried at this point — it is considered definitively failed
-for this execution attempt. The traceback is persisted for inspection via `pgq dashboard`
-or a direct query:
+for this execution attempt. The traceback is persisted in `pgqueuer_log` for inspection
+via a direct query:
 
 ```sql
 SELECT job_id, entrypoint,
@@ -119,8 +119,9 @@ WHERE status IN ('queued', 'picked') AND dedupe_key IS NOT NULL
 ```
 
 If a job with the same `dedupe_key` already exists in `queued` or `picked` state, a
-`DuplicateJobError` is raised. Once the job reaches a terminal state (`successful`,
-`exception`, `canceled`, `deleted`), the key is released and the same key can be used again.
+`DuplicateJobError` is raised. The constraint only covers `queued` and `picked`, so once the
+job leaves those states — `successful`, `exception`, `canceled`, `deleted`, or `failed`
+(held) — the key is released and the same key can be used again.
 
 **Choosing a dedupe key:** Use a stable, business-meaningful identifier — for example,
 `f"invoice-{order_id}"` or `f"report-{date}-{user_id}"`. This turns enqueue into an
@@ -133,8 +134,8 @@ heartbeat. PgQueuer does not include a built-in dead-letter queue, but you can d
 handle poison jobs with a query:
 
 ```sql
--- Jobs that have been re-picked more than 3 times (indicative of repeated failure)
--- Adjust threshold based on your heartbeat_timeout and expected job runtime
+-- Jobs stuck in 'picked' with a long-stale heartbeat (indicative of repeated crashes/hangs)
+-- Adjust the interval based on your heartbeat_timeout and expected job runtime
 SELECT id, entrypoint, status, heartbeat, updated
 FROM pgqueuer
 WHERE status = 'picked'
@@ -152,7 +153,8 @@ Every job that leaves the active queue is written to `pgqueuer_log`:
 | Event | Status in log |
 |-------|--------------|
 | Job completes without error | `successful` |
-| Job raises an exception | `exception` (with traceback) |
+| Job raises an exception (`on_failure="delete"`, the default) | `exception` (with traceback) |
+| Job raises an exception (`on_failure="hold"`) | `failed` (with traceback) |
 | Job is canceled | `canceled` |
 | Job is deleted without running | `deleted` |
 

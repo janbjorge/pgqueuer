@@ -9,7 +9,7 @@ right tool for your situation.
 | Feature | Celery | PgQueuer |
 |---------|--------|---------|
 | Message broker | Redis, RabbitMQ, SQS, etc. | PostgreSQL |
-| Recurring tasks | Separate `celery-beat` process | Built-in `@schedule` decorator |
+| Recurring tasks | Separate `celery-beat` process | Built-in `@pgq.schedule` decorator |
 | Architecture | App + broker + optional beat | App + PostgreSQL |
 | Job delivery | Broker-dependent | Real-time via `LISTEN/NOTIFY` |
 | Transactional enqueue | Separate from app data | Same PostgreSQL transaction |
@@ -39,6 +39,7 @@ celery -A celery_app worker -l info
 
 ```python
 # pgqueuer_app.py
+import json
 import asyncpg
 from contextlib import asynccontextmanager
 from pgqueuer import PgQueuer
@@ -53,8 +54,8 @@ async def create_pgq():
 
     @pgq.entrypoint("add")
     async def add(job: Job):
-        x, y = job.payload
-        return x + y
+        data = json.loads(job.payload)
+        return data["x"] + data["y"]
 
     yield pgq
 ```
