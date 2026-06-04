@@ -1,6 +1,6 @@
 # Contributing
 
-PGQueuer's integration tests use [Testcontainers](https://testcontainers.com/) to launch
+PgQueuer's integration tests use [Testcontainers](https://testcontainers.com/) to launch
 an ephemeral PostgreSQL instance automatically. You no longer need to run or manage a local
 database manually — just have a container runtime available (Docker Desktop, Colima,
 Rancher Desktop, etc.).
@@ -36,7 +36,7 @@ during test setup.
 make check
 ```
 
-Runs lint, type, dependency, and test steps in sequence.
+Runs `sync`, `lint`, `import-lint`, `typecheck`, and `pytest` in sequence.
 
 ## Test Structure & Tips
 
