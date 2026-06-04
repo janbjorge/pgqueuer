@@ -100,6 +100,7 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - Architecture: reference/architecture.md
+      - Row Locking & SKIP LOCKED: reference/skip-locked.md
       - Drivers: reference/drivers.md
       - Database Setup: reference/database-setup.md
       - Database Permissions: reference/database-permissions.md
