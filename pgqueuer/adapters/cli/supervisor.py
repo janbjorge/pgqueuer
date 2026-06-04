@@ -24,10 +24,10 @@ ManagerFactory: TypeAlias = Callable[[], AbstractAsyncContextManager[Manager]]
 
 def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manager:
     """
-    Create and configure a queue management instance.
+    Wire shutdown into the manager instance.
 
     Args:
-        factory_fn (FactoryType): The factory function to create the instance.
+        manager (Manager): The instance to configure.
         shutdown (asyncio.Event): The event used to signal shutdown.
 
     Returns:
@@ -35,7 +35,7 @@ def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manage
             The configured instance.
 
     Raises:
-        Exception: If an error occurs during instance creation or configuration.
+        NotImplementedError: If the manager type is unsupported.
     """
 
     if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
@@ -150,6 +150,10 @@ async def run_manager(
         manager: The instance to run (QueueManager, SchedulerManager, or PgQueuer).
         dequeue_timeout: Timeout duration for dequeuing jobs.
         batch_size: Number of jobs to process per batch.
+        mode: Queue execution mode (continuous or drain).
+        max_concurrent_tasks: Optional global cap on concurrent dispatch tasks.
+        shutdown_on_listener_failure: If True, set shutdown when a listener
+            health-check fails (QueueManager / PgQueuer only).
 
     Raises:
         NotImplementedError: If the instance type is unsupported.
