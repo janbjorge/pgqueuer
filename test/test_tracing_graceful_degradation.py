@@ -35,18 +35,18 @@ def _make_job(headers: dict) -> Job:
 
 
 def test_sentry_publish_yields_one_header_per_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sentry_mod, "sentry_sdk", None)
+    monkeypatch.setattr(sentry_mod, "HAS_SENTRY", False)
     assert list(SentryTracing().trace_publish(["a", "b"])) == [{}, {}]
 
 
 def test_logfire_publish_yields_one_header_per_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logfire_mod, "logfire", None)
+    monkeypatch.setattr(logfire_mod, "HAS_LOGFIRE", False)
     assert list(LogfireTracing().trace_publish(["a", "b"])) == [{}, {}]
 
 
 async def test_sentry_batch_enqueue_does_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without this, merge_tracing_headers' strict zip raises on batch enqueue."""
-    monkeypatch.setattr(sentry_mod, "sentry_sdk", None)
+    monkeypatch.setattr(sentry_mod, "HAS_SENTRY", False)
     queries = InMemoryQueries(driver=InMemoryDriver(), tracer=SentryTracing())
     ids = await queries.enqueue(["a", "b", "c"], [None, None, None], [0, 0, 0])
     assert len(ids) == 3
@@ -54,14 +54,14 @@ async def test_sentry_batch_enqueue_does_not_crash(monkeypatch: pytest.MonkeyPat
 
 async def test_logfire_batch_enqueue_does_not_crash(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without this, merge_tracing_headers' strict zip raises on batch enqueue."""
-    monkeypatch.setattr(logfire_mod, "logfire", None)
+    monkeypatch.setattr(logfire_mod, "HAS_LOGFIRE", False)
     queries = InMemoryQueries(driver=InMemoryDriver(), tracer=LogfireTracing())
     ids = await queries.enqueue(["a", "b", "c"], [None, None, None], [0, 0, 0])
     assert len(ids) == 3
 
 
 async def test_sentry_process_yields_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sentry_mod, "sentry_sdk", None)
+    monkeypatch.setattr(sentry_mod, "HAS_SENTRY", False)
     ran = False
     async with SentryTracing().trace_process(_make_job({"sentry": {"sentry-trace": "x"}})):
         ran = True
@@ -69,7 +69,7 @@ async def test_sentry_process_yields_without_sdk(monkeypatch: pytest.MonkeyPatch
 
 
 async def test_logfire_process_yields_without_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(logfire_mod, "logfire", None)
+    monkeypatch.setattr(logfire_mod, "HAS_LOGFIRE", False)
     ran = False
     async with LogfireTracing().trace_process(_make_job({"logfire": {"traceparent": "x"}})):
         ran = True
