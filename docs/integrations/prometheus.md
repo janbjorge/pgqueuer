@@ -1,6 +1,6 @@
 # Prometheus Metrics
 
-PGQueuer includes a Prometheus integration for real-time metrics on queue performance
+PgQueuer includes a Prometheus integration for real-time metrics on queue performance
 and job behavior.
 
 ## Usage

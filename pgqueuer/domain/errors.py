@@ -4,11 +4,11 @@ from datetime import timedelta
 
 
 class PgqException(Exception):
-    """Base class for all exceptions raised by PGQueuer."""
+    """Base class for all exceptions raised by PgQueuer."""
 
 
 class RetryException(PgqException):
-    """Exception raised for retry-related errors in PGQueuer."""
+    """Exception raised for retry-related errors in PgQueuer."""
 
 
 class RetryRequested(RetryException):

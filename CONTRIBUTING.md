@@ -1,10 +1,10 @@
-# Contributing to PGQueuer
+# Contributing to PgQueuer
 
-First off, thank you for considering contributing to PGQueuer.
+First off, thank you for considering contributing to PgQueuer.
 
 ## How to Contribute
 
-There are many ways you can contribute to PGQueuer, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests, or writing code which can be incorporated into PGQueuer itself.
+There are many ways you can contribute to PgQueuer, from writing tutorials or blog posts, improving the documentation, submitting bug reports and feature requests, or writing code which can be incorporated into PgQueuer itself.
 
 Below you will find a set of guidelines to follow when contributing. These are mostly guidelines, not rules, so use your best judgement and feel free to propose changes to this document.
 
@@ -61,5 +61,5 @@ runs `ruff`, `mypy`, `uv sync --all-extras --frozen`, and `pytest`.
 
 ## Community
 
-Discussions about PGQueuer take place on this repository's [Issues](https://github.com/janbjorge/pgqueuer/issues) and [Pull Requests](https://github.com/janbjorge/pgqueuer/pulls) sections. Anybody is welcome to join these conversations.
+Discussions about PgQueuer take place on this repository's [Issues](https://github.com/janbjorge/pgqueuer/issues) and [Pull Requests](https://github.com/janbjorge/pgqueuer/pulls) sections. Anybody is welcome to join these conversations.
 All participants are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).

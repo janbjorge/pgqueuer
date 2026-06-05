@@ -1,11 +1,11 @@
 # Database Setup
 
-PGQueuer requires initial setup in your PostgreSQL database: tables, triggers, and functions
+PgQueuer requires initial setup in your PostgreSQL database: tables, triggers, and functions
 for job queuing and processing.
 
 ## Table Structure
 
-PGQueuer uses four primary tables:
+PgQueuer uses four primary tables:
 
 - **`pgqueuer`** — the active job queue
 - **`pgqueuer_log`** — job execution history and audit trail

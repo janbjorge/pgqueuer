@@ -36,7 +36,7 @@ def queries(driver: InMemoryDriver) -> InMemoryQueries:
     return InMemoryQueries(driver=driver)
 
 
-class PGQueuerPostgresContainer(DockerContainer):
+class PgQueuerPostgresContainer(DockerContainer):
     """Postgres container with modern wait strategy support
     (libpq env defaults: PGUSER, PGPASSWORD, PGDATABASE, PGPORT)."""
 
@@ -117,7 +117,7 @@ async def postgres_container() -> AsyncGenerator[str, None]:
     ] + (["-c", "vacuum_buffer_usage_limit=8MB"] if int(postgres_version) >= 16 else [])
 
     container = (
-        PGQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
+        PgQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
         .with_command(commands)
         .with_kwargs(tmpfs={"/var/lib/pg/data": "rw"})
         .with_envs(PGDATA="/var/lib/pg/data")

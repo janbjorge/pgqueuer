@@ -44,7 +44,7 @@ class PsycopgDriver(Driver):
         if not self._connection.autocommit:
             raise RuntimeError(
                 f"Database connection({self._connection}) must have autocommit enabled. This is "
-                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
+                "required for proper operation of PgQueuer. Ensure that your psycopg connection is "
                 "configured with autocommit=True."
             )
 
@@ -139,7 +139,7 @@ class SyncPsycopgDriver(SyncDriver):
         if not self._connection.autocommit:
             raise RuntimeError(
                 f"Database connection({self._connection}) must have autocommit enabled. This is "
-                "required for proper operation of PGQueuer. Ensure that your psycopg connection is "
+                "required for proper operation of PgQueuer. Ensure that your psycopg connection is "
                 "configured with autocommit=True."
             )
 

@@ -1,6 +1,6 @@
 # Driver Troubleshooting
 
-Use this checklist when PGQueuer starts misbehaving before diving into the codebase. It
+Use this checklist when PgQueuer starts misbehaving before diving into the codebase. It
 highlights the most common rough edges in PostgreSQL drivers (`asyncpg`, `psycopg`) and
 the questions that quickly separate configuration issues from bugs.
 
@@ -44,7 +44,7 @@ the questions that quickly separate configuration issues from bugs.
   3.12+). The `pgq` CLI does this for you; embedded use must opt in. See
   [drivers reference](../reference/drivers.md#psycopgdriver) for full snippets.
 
-## 4. PGQueuer Expectations
+## 4. PgQueuer Expectations
 
 - Health checks may raise exceptions from `pgqueuer.errors` (e.g. `FailingListenerError`);
   capture them during service startup.
@@ -60,7 +60,7 @@ the questions that quickly separate configuration issues from bugs.
 4. Are LISTEN/NOTIFY messages flowing end-to-end?
 5. Did timeouts or pool recycling settings change recently?
 6. Are payloads serialized consistently across services?
-7. Did a driver upgrade land without matching PGQueuer expectations?
+7. Did a driver upgrade land without matching PgQueuer expectations?
 
 Capture answers with relevant logs before escalating; the pattern usually reveals itself
 within this checklist.

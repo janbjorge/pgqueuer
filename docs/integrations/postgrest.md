@@ -1,6 +1,6 @@
 # PostgREST Integration
 
-This page describes how to expose PGQueuer job enqueuing through
+This page describes how to expose PgQueuer job enqueuing through
 [PostgREST](https://postgrest.org) so any HTTP client can enqueue jobs by calling a
 PostgreSQL function.
 
@@ -16,7 +16,7 @@ PostgreSQL function.
     - Applying appropriate network and authentication controls.
 
     These examples are minimal and need hardening. Table names (`pgqueuer`,
-    `pgqueuer_log`) may differ if you installed PGQueuer with custom settings — adjust
+    `pgqueuer_log`) may differ if you installed PgQueuer with custom settings — adjust
     everywhere accordingly.
 
 ## Overview
@@ -24,7 +24,7 @@ PostgreSQL function.
 The integration provides a single, minimal PostgreSQL function:
 
 - **Name**: `fn_pgqueuer_enqueue`
-- **Purpose**: Insert one job into the PGQueuer tables and log its initial state.
+- **Purpose**: Insert one job into the PgQueuer tables and log its initial state.
 - **Returns**: The `BIGINT` job id.
 - **Scope**: Single-job only (batching intentionally excluded to avoid array length mismatch
   risks and to keep semantics explicit).
@@ -34,7 +34,7 @@ For high throughput, send concurrent calls or implement a vetted bulk API separa
 
 ## Installation
 
-1. Install the core PGQueuer schema (if not already):
+1. Install the core PgQueuer schema (if not already):
    ```bash
    pgq install
    ```

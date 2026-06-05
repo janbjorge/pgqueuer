@@ -114,7 +114,7 @@ async def collect_metrics(
     last: timedelta = timedelta(minutes=5),
 ) -> str:
     """
-    Collect and format all PGQueuer metrics for Prometheus.
+    Collect and format all PgQueuer metrics for Prometheus.
 
     This is the main entry point for metrics collection. It queries the
     database for current queue sizes and recent job processing statistics,
