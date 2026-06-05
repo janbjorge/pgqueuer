@@ -1,4 +1,4 @@
-# 🚀 PGQueuer – PostgreSQL‑powered job queues for Python
+# 🚀 PGQueuer: PostgreSQL-powered job queues for Python
 
 [![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![stars](https://img.shields.io/github/stars/janbjorge/pgqueuer?style=flat)](https://github.com/janbjorge/pgqueuer/stargazers) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
@@ -6,21 +6,21 @@
 
 **Your PostgreSQL database is already a job queue.**
 
-PGQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data — one stack, full ACID guarantees, and no separate message broker to deploy, scale, or keep in sync.
+PGQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data. One stack, full ACID guarantees, and no separate message broker to run.
 
 ## Features
 
-- 💡 **Minimal footprint** – one `pip install`; bring your existing PostgreSQL connection and start enqueueing
-- 🔁 **Transactional enqueue** – commit a job in the same transaction as your data; no dual-write drift
-- ⚛️ **Safe concurrency** – workers claim jobs with `FOR UPDATE SKIP LOCKED` (never double-processed), with per-entrypoint limits and serialized dispatch when you need them
-- 🚀 **Instant dispatch** – `LISTEN/NOTIFY` wakes workers the moment a job lands (with a polling fallback)
-- ⏰ **Scheduling & deferral** – cron-style recurring tasks and `execute_after`, no separate scheduler process
-- 📊 **Observability** – completion tracking, Prometheus metrics, tracing (Logfire/Sentry), and a live dashboard
-- 🧪 **In-memory mode** – run the whole queue without Postgres for tests and prototyping
+- 💡 **Minimal footprint**: one `pip install`; bring your existing PostgreSQL connection and start enqueueing
+- 🔁 **Transactional enqueue**: commit a job in the same transaction as your data; no dual-write drift
+- ⚛️ **Safe concurrency**: workers claim jobs with `FOR UPDATE SKIP LOCKED` (never double-processed), with per-entrypoint limits and serialized dispatch when you need them
+- 🚀 **Instant dispatch**: `LISTEN/NOTIFY` wakes workers the moment a job lands (with a polling fallback)
+- ⏰ **Scheduling & deferral**: cron-style recurring tasks and `execute_after`, no separate scheduler process
+- 📊 **Observability**: completion tracking, Prometheus metrics, tracing (Logfire/Sentry), and a live dashboard
+- 🧪 **In-memory mode**: run the whole queue without Postgres for tests and prototyping
 
 ## Why PostgreSQL?
 
-If you already run PostgreSQL, it can do double duty as your job queue — one fewer service to operate, and your queue and your data stay consistent because they share the same database and the same transactions.
+If you already run PostgreSQL, it can do double duty as your job queue. That means one fewer service to operate, and your queue and data stay consistent because they share the same database and transactions.
 
 ```text
 ┌──────────┐  enqueue   ┌────────────┐  NOTIFY   ┌──────────┐
@@ -101,12 +101,12 @@ async with connection.transaction():
         "INSERT INTO orders (id, status) VALUES ($1, 'paid')", order_id
     )
     await queries.enqueue("send_receipt", str(order_id).encode())
-    # If the transaction rolls back, the job is never enqueued — no orphaned work.
+    # If the transaction rolls back, the job is never enqueued.
 ```
 
 ## Run without a database
 
-`PgQueuer.in_memory()` is a drop-in replacement that implements the same ports as the real backend, so your handlers stay identical — ideal for unit tests and prototyping.
+`PgQueuer.in_memory()` is a drop-in replacement that implements the same ports as the real backend, so your handlers stay identical. Good for unit tests and prototyping.
 
 ```python
 import asyncio
@@ -127,7 +127,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-The in-memory adapter has no durability or multi-process coordination — use the PostgreSQL backend for production. See the [in-memory reference](https://janbjorge.github.io/pgqueuer/reference/in-memory/).
+The in-memory adapter has no durability or multi-process coordination, so use the PostgreSQL backend for production. See the [in-memory reference](https://janbjorge.github.io/pgqueuer/reference/in-memory/).
 
 ## Documentation
 
@@ -139,7 +139,7 @@ The in-memory adapter has no durability or multi-process coordination — use th
 | [Completion tracking](docs/guides/completion-tracking.md) | Wait for jobs to finish with `CompletionWatcher` |
 | [Shared resources](docs/guides/shared-resources.md) | Inject DB pools, HTTP clients, and models into handlers |
 | [Custom executors](docs/guides/custom-executors.md) | Retry strategies and exponential backoff |
-| [Drivers](docs/reference/drivers.md) | asyncpg, psycopg async/sync — choosing and configuring |
+| [Drivers](docs/reference/drivers.md) | asyncpg, psycopg async/sync: choosing and configuring |
 | [Architecture](docs/reference/architecture.md) | Ports & adapters, `SKIP LOCKED`, design decisions |
 | [Observability](docs/integrations/prometheus.md) | Prometheus metrics, [tracing](docs/integrations/tracing.md), and the dashboard |
 | [Framework integration](examples/) | FastAPI ([example](examples/fastapi_usage.py)) and Flask ([example](examples/flask_sync_usage.py)) |
@@ -164,7 +164,7 @@ pgq dashboard --interval 10 --tail 25
 
 ## Development
 
-PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite — just have Docker running.
+PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite. Just have Docker running.
 
 ```bash
 uv sync --all-extras      # install dependencies
