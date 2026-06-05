@@ -2,7 +2,7 @@
 .PHONY: help pytest benchmark lint import-lint typecheck sync check
 
 help:
-	@echo "PGQueuer Makefile"
+	@echo "PgQueuer Makefile"
 	@echo "Available commands:"
 	@echo "  pytest       Run pytest"
 	@echo "  benchmark    Run benchmark"

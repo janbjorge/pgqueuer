@@ -251,7 +251,7 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
-@app.command(help="Install the necessary database schema for PGQueuer.")
+@app.command(help="Install the necessary database schema for PgQueuer.")
 def install(
     ctx: Context,
     dry_run: bool = typer.Option(
@@ -275,7 +275,7 @@ def install(
         asyncio_run(run())
 
 
-@app.command(help="Verify PGQueuer database objects.")
+@app.command(help="Verify PgQueuer database objects.")
 def verify(
     ctx: Context,
     expect: VerifyMode = typer.Option(
@@ -315,16 +315,16 @@ def verify(
                 print("\n".join(divergence))
             else:
                 if expect == VerifyMode.PRESENT:
-                    print("All required PGQueuer database objects are present.")
+                    print("All required PgQueuer database objects are present.")
                 else:
-                    print("No PGQueuer database objects found")
+                    print("No PgQueuer database objects found")
 
             exit(1 if divergence else 0)
 
     asyncio_run(run())
 
 
-@app.command(help="Remove the PGQueuer schema from the database.")
+@app.command(help="Remove the PgQueuer schema from the database.")
 def uninstall(
     ctx: Context,
     dry_run: bool = typer.Option(
@@ -342,7 +342,7 @@ def uninstall(
         asyncio_run(run())
 
 
-@app.command(help="Apply upgrades to the existing PGQueuer database schema.")
+@app.command(help="Apply upgrades to the existing PgQueuer database schema.")
 def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(
@@ -404,7 +404,7 @@ def listen(
     asyncio_run(run())
 
 
-@app.command(help="Start a PGQueuer.")
+@app.command(help="Start a PgQueuer.")
 def run(
     factory_fn: str = typer.Argument(
         ...,
@@ -482,7 +482,7 @@ def run(
     )
 
 
-@app.command(help="Manage schedules in the PGQueuer system.")
+@app.command(help="Manage schedules in the PgQueuer system.")
 def schedules(
     ctx: Context,
     remove: list[str] = typer.Option(
@@ -503,7 +503,7 @@ def schedules(
     asyncio_run(run_async())
 
 
-@app.command(help="Manually enqueue a job into the PGQueuer system.")
+@app.command(help="Manually enqueue a job into the PgQueuer system.")
 def queue(
     ctx: Context,
     entrypoint: str = typer.Argument(
@@ -573,7 +573,7 @@ def requeue(
     asyncio_run(run())
 
 
-@app.command(help="Alter the logging durability for PGQueuer tables.")
+@app.command(help="Alter the logging durability for PgQueuer tables.")
 def durability(
     ctx: Context,
     durability: qb.Durability = typer.Argument(
@@ -588,7 +588,7 @@ def durability(
         help="Print SQL commands without executing them.",
     ),
 ) -> None:
-    """Switch durability level of PGQueuer tables without data loss."""
+    """Switch durability level of PgQueuer tables without data loss."""
     print(
         "\n".join(
             qb.QueryBuilderEnvironment(
@@ -605,7 +605,7 @@ def durability(
         asyncio_run(run())
 
 
-@app.command(name="autovac", help="Optimize autovacuum settings for PGQueuer tables.")
+@app.command(name="autovac", help="Optimize autovacuum settings for PgQueuer tables.")
 def optimize_autovacuum(
     ctx: Context,
     dry_run: bool = typer.Option(False, help="Print SQL commands only."),

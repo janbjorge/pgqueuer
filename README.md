@@ -1,4 +1,4 @@
-# 🚀 PGQueuer: PostgreSQL-powered job queues for Python
+# 🚀 PgQueuer: PostgreSQL-powered job queues for Python
 
 [![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![stars](https://img.shields.io/github/stars/janbjorge/pgqueuer?style=flat)](https://github.com/janbjorge/pgqueuer/stargazers) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
@@ -6,7 +6,7 @@
 
 **Your PostgreSQL database is already a job queue.**
 
-PGQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data. One stack, full ACID guarantees, and no separate message broker to run.
+PgQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data. One stack, full ACID guarantees, and no separate message broker to run.
 
 ## Features
 
@@ -38,7 +38,7 @@ If you already run PostgreSQL, it can do double duty as your job queue. That mea
 
 ## Installation
 
-PGQueuer targets Python 3.11+ and PostgreSQL 12+:
+PgQueuer targets Python 3.11+ and PostgreSQL 12+:
 
 ```bash
 pip install pgqueuer
@@ -49,7 +49,7 @@ The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and related environment variables
 
 ## Quick Start
 
-PGQueuer pairs **consumers** (workers that process jobs) with **producers** (code that enqueues jobs).
+PgQueuer pairs **consumers** (workers that process jobs) with **producers** (code that enqueues jobs).
 
 ### 1. Define a consumer
 
@@ -164,7 +164,7 @@ pgq dashboard --interval 10 --tail 25
 
 ## Development
 
-PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite. Just have Docker running.
+PgQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite. Just have Docker running.
 
 ```bash
 uv sync --all-extras      # install dependencies
@@ -173,4 +173,4 @@ make check                # lint, type-check, and run the test suite
 
 ## License
 
-PGQueuer is MIT licensed. See [LICENSE](LICENSE) for details.
+PgQueuer is MIT licensed. See [LICENSE](LICENSE) for details.

@@ -105,7 +105,7 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     """
     Exercise the full install -> verify present -> upgrade -> uninstall -> verify absent flow.
 
-    The test DB provided by the 'dsn' fixture starts with PGQueuer objects
+    The test DB provided by the 'dsn' fixture starts with PgQueuer objects
     already installed (template cloning). To mirror the exact CI sequence
     (which starts clean), we first perform an uninstall + verify absent, then
     proceed with the normal cycle.

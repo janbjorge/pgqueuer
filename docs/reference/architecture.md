@@ -1,6 +1,6 @@
 # Architecture
 
-This overview explains how data flows from a producer to a consumer in PGQueuer.
+This overview explains how data flows from a producer to a consumer in PgQueuer.
 It highlights how entrypoints route jobs and how PostgreSQL notifications keep
 consumers up to date.
 
@@ -55,7 +55,7 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
 
 ## Job Status Lifecycle
 
-PGQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
+PgQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
 `pgqueuer_status` by default:
 
 ```sql
