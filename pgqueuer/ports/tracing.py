@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import AsyncContextManager, Final, Generator, Protocol
 
-from pgqueuer.models import Job
+from pgqueuer.domain.models import Job
 
 
 class TracingProtocol(Protocol):
