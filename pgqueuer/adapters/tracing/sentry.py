@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator, Generator
+from typing import TYPE_CHECKING, AsyncIterator, Generator
+
+if TYPE_CHECKING:
+    import sentry_sdk
 
 try:
-    import sentry_sdk
+    import sentry_sdk  # noqa: F811
+
+    HAS_SENTRY = True
 except ImportError:
-    sentry_sdk = None
+    HAS_SENTRY = False
 
 from pgqueuer.domain.models import Job
 from pgqueuer.ports.tracing import TracingProtocol
@@ -14,7 +19,7 @@ from pgqueuer.ports.tracing import TracingProtocol
 
 class SentryTracing(TracingProtocol):
     def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
-        if sentry_sdk is None:
+        if not HAS_SENTRY:
             # One header per entrypoint: merge_tracing_headers zips against
             # the entrypoint list with strict=True.
             for _ in entrypoints:
@@ -42,7 +47,7 @@ class SentryTracing(TracingProtocol):
     @asynccontextmanager
     async def trace_process(self, job: Job) -> AsyncIterator[None]:
         """Wrap consumer processing of *job* in a Sentry transaction + span."""
-        if sentry_sdk is None or job.headers is None:
+        if not HAS_SENTRY or job.headers is None:
             yield
             return
 
