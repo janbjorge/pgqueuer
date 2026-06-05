@@ -12,21 +12,15 @@ PGQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs l
 
 - 💡 **Minimal footprint** – one `pip install`; bring your existing PostgreSQL connection and start enqueueing
 - 🔁 **Transactional enqueue** – commit a job in the same transaction as your data; no dual-write drift
-- ⚛️ **True concurrency** – workers claim jobs with `FOR UPDATE SKIP LOCKED`, never double-processing
+- ⚛️ **Safe concurrency** – workers claim jobs with `FOR UPDATE SKIP LOCKED` (never double-processed), with per-entrypoint limits and serialized dispatch when you need them
 - 🚀 **Instant dispatch** – `LISTEN/NOTIFY` wakes workers the moment a job lands (with a polling fallback)
 - ⏰ **Scheduling & deferral** – cron-style recurring tasks and `execute_after`, no separate scheduler process
-- 🔒 **Concurrency control** – per-entrypoint limits and serialized dispatch for shared resources
 - 📊 **Observability** – completion tracking, Prometheus metrics, tracing (Logfire/Sentry), and a live dashboard
 - 🧪 **In-memory mode** – run the whole queue without Postgres for tests and prototyping
 
 ## Why PostgreSQL?
 
-If you already run PostgreSQL, it can do double duty as your job queue:
-
-- **One fewer service** to provision, monitor, and keep available
-- **Transactional enqueuing** – commit a job in the same transaction as your application data
-- **Consistent state** – your queue and your data always agree because they share one database
-- **Lower latency** – jobs stay local, no round-trip to an external broker
+If you already run PostgreSQL, it can do double duty as your job queue — one fewer service to operate, and your queue and your data stay consistent because they share the same database and the same transactions.
 
 ```text
 ┌──────────┐  enqueue   ┌────────────┐  NOTIFY   ┌──────────┐
@@ -100,6 +94,8 @@ The job arrives instantly via `LISTEN/NOTIFY`, and your consumer's `process` han
 This is what a database-backed queue buys you: the job and your business data commit together, or not at all.
 
 ```python
+order_id = 42
+
 async with connection.transaction():
     await connection.execute(
         "INSERT INTO orders (id, status) VALUES ($1, 'paid')", order_id
@@ -147,7 +143,6 @@ The in-memory adapter has no durability or multi-process coordination — use th
 | [Architecture](docs/reference/architecture.md) | Ports & adapters, `SKIP LOCKED`, design decisions |
 | [Observability](docs/integrations/prometheus.md) | Prometheus metrics, [tracing](docs/integrations/tracing.md), and the dashboard |
 | [Framework integration](examples/) | FastAPI ([example](examples/fastapi_usage.py)) and Flask ([example](examples/flask_sync_usage.py)) |
-| [Celery comparison](docs/comparisons/celery-comparison.md) | How PGQueuer differs from broker-based queues |
 
 ## Monitor your queues
 
