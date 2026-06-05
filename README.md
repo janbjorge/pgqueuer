@@ -1,100 +1,80 @@
-# 🚀 PGQueuer – PostgreSQL‑powered job queues for Python
+# 🚀 PGQueuer: PostgreSQL-powered job queues for Python
 
-[![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
+[![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![stars](https://img.shields.io/github/stars/janbjorge/pgqueuer?style=flat)](https://github.com/janbjorge/pgqueuer/stargazers) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
-[💻 Source](https://github.com/janbjorge/pgqueuer/) · [💬 Discord](https://discord.gg/C7YMBzcRMQ)
+[📚 Docs](https://janbjorge.github.io/pgqueuer/) · [💻 Source](https://github.com/janbjorge/pgqueuer/) · [💬 Discord](https://discord.gg/C7YMBzcRMQ)
 
-## Overview
+**Your PostgreSQL database is already a job queue.**
 
-PGQueuer turns your PostgreSQL database into a fast, reliable background job processor. Jobs live in the same database as your application data, so you scale without adding new infrastructure. No separate message broker required.
+PGQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data. One stack, full ACID guarantees, and no separate message broker to run.
 
-Built on PostgreSQL's advanced concurrency features, PGQueuer uses `LISTEN/NOTIFY` for instant job notifications and `FOR UPDATE SKIP LOCKED` for efficient worker coordination. Its clean architecture supports everything from simple background tasks to complex workflows with concurrency control, deferred execution, and job tracking-all backed by your existing database.
+## Features
 
-## Key Features
+- 💡 **Minimal footprint**: one `pip install`; bring your existing PostgreSQL connection and start enqueueing
+- 🔁 **Transactional enqueue**: commit a job in the same transaction as your data; no dual-write drift
+- ⚛️ **Safe concurrency**: workers claim jobs with `FOR UPDATE SKIP LOCKED` (never double-processed), with per-entrypoint limits and serialized dispatch when you need them
+- 🚀 **Instant dispatch**: `LISTEN/NOTIFY` wakes workers the moment a job lands (with a polling fallback)
+- ⏰ **Scheduling & deferral**: cron-style recurring tasks and `execute_after`, no separate scheduler process
+- 📊 **Observability**: completion tracking, Prometheus metrics, tracing (Logfire/Sentry), and a live dashboard
+- 🧪 **In-memory mode**: run the whole queue without Postgres for tests and prototyping
 
-### Core Capabilities
-- 💡 **Minimal integration**: Single Python package-bring your existing PostgreSQL connection and start enqueueing jobs
-- ⚛️ **PostgreSQL-powered concurrency**: Workers coordinate using `FOR UPDATE SKIP LOCKED` without stepping on each other
-- 🚧 **Instant notifications**: `LISTEN/NOTIFY` wakes idle workers as soon as jobs arrive (with polling backup for robustness)
-- 📦 **Clean architecture**: Built on ports and adapters pattern with support for multiple drivers (asyncpg, psycopg sync/async)
+## Why PostgreSQL?
 
-### Performance & Control
-- 👨‍🎓 **Batch operations**: Enqueue or acknowledge thousands of jobs per round trip for maximum throughput
-- 🔒 **Concurrency control**: Limit parallel execution and enable serialized dispatch for shared resources
-- ⏰ **Deferred execution**: Schedule jobs to run at specific times with `execute_after`
+If you already run PostgreSQL, it can do double duty as your job queue. That means one fewer service to operate, and your queue and data stay consistent because they share the same database and transactions.
 
-### Production Ready
-- ⏳ **Built-in scheduling**: Cron-like recurring tasks with no separate scheduler process
-- 🛡️ **Graceful shutdown**: Clean worker termination with job completion guarantees
-- 📊 **Real-time tracking**: Wait for job completion using `CompletionWatcher` with live status updates
-- 🔧 **Observability**: Prometheus metrics, distributed tracing (Logfire, Sentry), and interactive dashboard
-
-## Why PGQueuer?
-
-PGQueuer is designed for teams who value simplicity and want to leverage PostgreSQL as their job queue infrastructure. If you're already running PostgreSQL, PGQueuer lets you add background job processing without introducing new services to deploy, monitor, or coordinate.
-
-**Zero additional infrastructure**: Your jobs live in the same database as your application data, backed by ACID guarantees and familiar PostgreSQL tooling. No separate message broker to provision, scale, or keep in sync with your database.
-
-**Real-time with PostgreSQL primitives**: `LISTEN/NOTIFY` delivers sub-second job latency without polling loops. Workers wake instantly when jobs arrive, and `FOR UPDATE SKIP LOCKED` coordinates parallel workers without contention.
-
-**Built for modern Python**: First-class async/await support with clean shutdown semantics. Concurrency control and scheduling are built in-not bolted on. Write entrypoints as regular async functions and let PGQueuer handle the orchestration.
-
-**When PGQueuer shines**: Single database stack, microservices that share a database, applications where job data needs transactional consistency with business data, teams who prefer fewer moving parts over distributed systems complexity.
-
-For a detailed comparison with Celery and other approaches, see [docs/comparisons/celery-comparison.md](docs/comparisons/celery-comparison.md).
+```text
+┌──────────┐  enqueue   ┌────────────┐  NOTIFY   ┌──────────┐
+│ Your App │───────────▶│            │──────────▶│ Worker 1 │──┐
+└──────────┘            │            │           └──────────┘  │
+                        │ PostgreSQL │  NOTIFY   ┌──────────┐  │
+                        │            │──────────▶│ Worker 2 │──┤
+                        │            │           └──────────┘  │
+                        │            │  NOTIFY   ┌──────────┐  │
+                        │            │──────────▶│ Worker N │──┤
+                        └────────────┘           └──────────┘  │
+                              ▲  FOR UPDATE SKIP LOCKED         │
+                              └─────────────────────────────────┘
+```
 
 ## Installation
 
-PGQueuer targets Python 3.11+ and PostgreSQL 12+. Install the package and initialize the database schema:
+PGQueuer targets Python 3.11+ and PostgreSQL 12+:
 
 ```bash
 pip install pgqueuer
 pgq install        # create tables and functions in your database
 ```
 
-The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and related environment variables. Use `pgq install --dry-run` to preview SQL, or `--prefix myapp_` to namespace tables. Run `pgq uninstall` to remove the schema when done.
+The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and related environment variables. Use `pgq install --dry-run` to preview SQL, `--prefix myapp_` to namespace tables, or `pgq uninstall` to remove the schema.
 
 ## Quick Start
 
-PGQueuer uses **consumers** (workers that process jobs) and **producers** (code that enqueues jobs). Here's how both sides work together.
+PGQueuer pairs **consumers** (workers that process jobs) with **producers** (code that enqueues jobs).
 
-### 1. Create a consumer
+### 1. Define a consumer
 
-The consumer declares entrypoints (job handlers) and scheduled tasks. Each entrypoint corresponds to a job type that can be enqueued:
+Each entrypoint is a job handler. Run it with the CLI: `pgq run examples.consumer:main`.
 
 ```python
-from datetime import datetime
-
 import asyncpg
 from pgqueuer import PgQueuer
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Job, Schedule
+from pgqueuer.models import Job
 
 async def main() -> PgQueuer:
-    conn = await asyncpg.connect()
-    driver = AsyncpgDriver(conn)
-    pgq = PgQueuer(driver)
+    connection = await asyncpg.connect()
+    pgq = PgQueuer(AsyncpgDriver(connection))
 
     @pgq.entrypoint("fetch")
     async def process(job: Job) -> None:
         print(f"Processed: {job!r}")
 
-    @pgq.schedule("every_minute", "* * * * *")
-    async def every_minute(schedule: Schedule) -> None:
-        print(f"Ran at {datetime.now():%H:%M:%S}")
-
     return pgq
-```
-
-Run the consumer with the CLI-it will start listening for work:
-
-```bash
-pgq run examples.consumer:main
 ```
 
 ### 2. Enqueue jobs
 
-In a separate process (your web app, script, etc.), create a `Queries` object and enqueue jobs by entrypoint name:
+From your web app, script, or anywhere else with a database connection:
 
 ```python
 import asyncpg
@@ -102,341 +82,75 @@ from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
 async def main() -> None:
-    conn = await asyncpg.connect()
-    driver = AsyncpgDriver(conn)
-    queries = Queries(driver)
-
-    # Enqueue a job for the "fetch" entrypoint
+    connection = await asyncpg.connect()
+    queries = Queries(AsyncpgDriver(connection))
     await queries.enqueue("fetch", b"hello world")
 ```
 
-The job arrives instantly via `LISTEN/NOTIFY`, and your consumer's `process` function handles it.
+The job arrives instantly via `LISTEN/NOTIFY`, and your consumer's `process` handler picks it up.
 
-## In-Memory Adapter
+### Enqueue inside a transaction
 
-PGQueuer can run entirely without PostgreSQL. The in-memory adapter is a drop-in replacement that implements the same port protocols as the real backend, so your job handlers and business logic stay identical.
+This is what a database-backed queue buys you: the job and your business data commit together, or not at all.
+
+```python
+order_id = 42
+
+async with connection.transaction():
+    await connection.execute(
+        "INSERT INTO orders (id, status) VALUES ($1, 'paid')", order_id
+    )
+    await queries.enqueue("send_receipt", str(order_id).encode())
+    # If the transaction rolls back, the job is never enqueued.
+```
+
+## Run without a database
+
+`PgQueuer.in_memory()` is a drop-in replacement that implements the same ports as the real backend, so your handlers stay identical. Good for unit tests and prototyping.
 
 ```python
 import asyncio
 from pgqueuer import PgQueuer
-from pgqueuer.domain.models import Job
+from pgqueuer.models import Job
 from pgqueuer.domain.types import QueueExecutionMode
 
-async def main():
+async def main() -> None:
     pq = PgQueuer.in_memory()
 
     @pq.entrypoint("send_email")
     async def send_email(job: Job) -> None:
-        print(f"Sending: {job.payload}")
+        print(f"Sending: {job.payload!r}")
 
-    await pq.qm.queries.enqueue(
-        ["send_email"] * 3,
-        [b"alice", b"bob", b"charlie"],
-        [0] * 3,
-    )
+    await pq.qm.queries.enqueue(["send_email"], [b"alice"], [0])
     await pq.qm.run(mode=QueueExecutionMode.drain)
 
 asyncio.run(main())
 ```
 
-No database, no Docker, no environment variables. This is useful for:
-
-- **Unit and integration tests** -- fast, deterministic, no CI infrastructure
-- **Local prototyping** -- try out queue logic before setting up Postgres
-- **Short-lived batch jobs** -- process a fixed set of jobs and exit
-
-The in-memory adapter does not provide durability, multi-process coordination, or ACID transactions. For production workloads, use the PostgreSQL backend. See the [full in-memory reference](https://janbjorge.github.io/pgqueuer/reference/in-memory/) for details and limitations.
-
-## Common Patterns
-
-### Batch Operations
-
-Enqueue thousands of jobs in a single database round trip:
-
-```python
-from pgqueuer.queries import Queries
-
-# Enqueue 1000 jobs at once
-await queries.enqueue(
-    ["fetch"] * 1000,
-    [f"payload_{i}".encode() for i in range(1000)],
-    [0] * 1000,  # priorities
-)
-```
-
-### Concurrency Control
-
-Control parallelism per entrypoint:
-
-```python
-# Limit to 5 concurrent executions
-@pgq.entrypoint("db_writes", concurrency_limit=5)
-async def write_to_db(job: Job) -> None:
-    await db.execute("INSERT INTO data VALUES (%s)", job.payload)
-
-# Process jobs one at a time (serialized)
-@pgq.entrypoint("ordered_processing", serialized_dispatch=True)
-async def process_in_order(job: Job) -> None:
-    await process_sequentially(job.payload)
-```
-
-### Deferred Execution
-
-Schedule jobs to run at a specific time:
-
-```python
-from datetime import timedelta
-
-# Execute 1 hour from now
-await queries.enqueue(
-    "send_reminder",
-    payload=b"Meeting in 1 hour",
-    execute_after=timedelta(hours=1),
-)
-
-# Execute at a specific timestamp
-from datetime import datetime, timezone
-execute_time = datetime(2024, 12, 25, 9, 0, tzinfo=timezone.utc)
-await queries.enqueue(
-    "send_greeting",
-    payload=b"Merry Christmas!",
-    execute_after=execute_time,
-)
-```
-
-### Job Completion Tracking
-
-Wait for jobs to finish and get their final status:
-
-```python
-from pgqueuer.core.completion import CompletionWatcher
-
-# Enqueue a job
-job_ids = await queries.enqueue("process_video", video_data)
-
-# Wait for completion
-async with CompletionWatcher(driver) as watcher:
-    status = await watcher.wait_for(job_ids[0])
-    print(f"Job finished with status: {status}")  # "successful", "exception", etc.
-
-# Track multiple jobs concurrently
-from asyncio import gather
-
-image_ids = await queries.enqueue(["render_img"] * 20, [b"..."] * 20, [0] * 20)
-
-async with CompletionWatcher(driver) as watcher:
-    statuses = await gather(*[watcher.wait_for(jid) for jid in image_ids])
-```
-
-### Shared Resources
-
-Initialize heavyweight objects once and inject them into all jobs:
-
-```python
-import asyncpg
-from pgqueuer import PgQueuer
-from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import Context, Job
-
-async def create_pgqueuer() -> PgQueuer:
-    conn = await asyncpg.connect()
-    driver = AsyncpgDriver(conn)
-
-    # Initialize shared resources (DB pools, HTTP clients, ML models, etc.)
-    resources = {
-        "db_pool": await asyncpg.create_pool(),
-        "http_client": httpx.AsyncClient(),
-        "feature_flags": {"beta_mode": True},
-    }
-
-    pgq = PgQueuer(driver, resources=resources)
-
-    # Annotate a parameter as Context and PGQueuer injects the job's Context.
-    @pgq.entrypoint("process_user")
-    async def process_user(job: Job, ctx: Context) -> None:
-        # Access shared resources
-        pool = ctx.resources["db_pool"]
-        http = ctx.resources["http_client"]
-        flags = ctx.resources["feature_flags"]
-
-        # Use them without recreating
-        user_data = await http.get(f"https://api.example.com/users/{job.payload}")
-        await pool.execute("INSERT INTO users VALUES ($1)", user_data)
-
-    return pgq
-```
-
-PGQueuer auto-detects the `Context` from the handler signature: a parameter
-annotated `Context` receives it, while `async def process_user(job: Job)` does
-not. Pass `accepts_context=True`/`False` to the decorator to override the
-detection.
-
-## Web Framework Integration
-
-### FastAPI
-
-Integrate PGQueuer with FastAPI's lifespan context:
-
-```python
-from contextlib import asynccontextmanager
-import asyncpg
-from fastapi import Depends, FastAPI, Request
-from pgqueuer.db import AsyncpgPoolDriver
-from pgqueuer.queries import Queries
-
-def get_queries(request: Request) -> Queries:
-    return request.app.extra["queries"]
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with asyncpg.create_pool() as pool:
-        app.extra["queries"] = Queries(AsyncpgPoolDriver(pool))
-        yield
-
-app = FastAPI(lifespan=lifespan)
-
-@app.post("/enqueue")
-async def enqueue_job(
-    payload: str,
-    queries: Queries = Depends(get_queries),
-):
-    job_ids = await queries.enqueue("process_task", payload.encode())
-    return {"job_ids": job_ids}
-```
-
-Full example: [examples/fastapi_usage.py](examples/fastapi_usage.py)
-
-### Flask (Synchronous)
-
-Use the synchronous driver for traditional WSGI apps:
-
-```python
-from flask import Flask, g, jsonify, request
-import psycopg
-from pgqueuer.db import SyncPsycopgDriver
-from pgqueuer.queries import SyncQueries
-
-app = Flask(__name__)
-
-def get_driver():
-    if "driver" not in g:
-        conn = psycopg.connect(autocommit=True)
-        g.driver = SyncPsycopgDriver(conn)
-    return g.driver
-
-@app.teardown_appcontext
-def teardown_db(exception):
-    driver = g.pop("driver", None)
-    if driver:
-        driver._connection.close()
-
-@app.route("/enqueue", methods=["POST"])
-def enqueue():
-    queries = SyncQueries(get_driver())
-    data = request.get_json()
-
-    job_ids = queries.enqueue(
-        data["entrypoint"],
-        data["payload"].encode(),
-        data.get("priority", 0),
-    )
-    return jsonify({"job_ids": job_ids})
-```
-
-Full example: [examples/flask_sync_usage.py](examples/flask_sync_usage.py)
-
-## Scheduling
-
-Define recurring tasks with cron-style expressions:
-
-```python
-from pgqueuer.models import Schedule
-
-# Run daily at midnight
-@pgq.schedule("cleanup", "0 0 * * *")
-async def cleanup(schedule: Schedule) -> None:
-    await perform_cleanup()
-    print(f"Cleanup completed at {schedule.last_execution}")
-
-# Run every 5 minutes
-@pgq.schedule("sync_data", "*/5 * * * *")
-async def sync_data(schedule: Schedule) -> None:
-    await sync_with_external_service()
-
-# Run every weekday at 9 AM
-@pgq.schedule("morning_report", "0 9 * * 1-5")
-async def morning_report(schedule: Schedule) -> None:
-    await generate_and_send_report()
-```
-
-Schedules are stored in PostgreSQL and survive restarts. For schedule-only workers (no job processing), use `SchedulerManager` directly-see [examples/scheduler.py](examples/scheduler.py).
-
-## Advanced Features
-
-PGQueuer includes many advanced capabilities for production use:
-
-- **Custom Executors**: Implement retry strategies with exponential backoff → [docs/pgqueuer.md#custom-executors](docs/pgqueuer.md#custom-job-executors)
-- **Distributed Tracing**: Integrate with Logfire, Sentry for request tracing → [docs/tracing.md](docs/tracing.md)
-- **Prometheus Metrics**: Export queue depth, latency, throughput metrics → [docs/prometheus-metrics-service.md](docs/prometheus-metrics-service.md)
-- **Job Cancellation**: Mark jobs for cancellation with PostgreSQL NOTIFY → [docs/pgqueuer.md#job-cancellation](docs/pgqueuer.md#job-cancellation)
-- **Heartbeat Monitoring**: Keep long-running jobs alive with periodic updates → [docs/pgqueuer.md#automatic-heartbeat](docs/pgqueuer.md#automatic-heartbeat)
-
-## Drivers
-
-PGQueuer works with multiple PostgreSQL drivers:
-
-**Async drivers** (for workers and enqueueing):
-- **AsyncpgDriver** – single `asyncpg` connection
-- **AsyncpgPoolDriver** – `asyncpg` connection pool (recommended for high throughput)
-- **PsycopgDriver** – psycopg 3 async interface
-
-**Sync driver** (enqueue-only):
-- **SyncPsycopgDriver** – blocking psycopg connection for traditional web apps
-
-Example with connection pool:
-
-```python
-import asyncpg
-from pgqueuer import PgQueuer
-from pgqueuer.db import AsyncpgPoolDriver
-
-pool = await asyncpg.create_pool()
-driver = AsyncpgPoolDriver(pool)
-pgq = PgQueuer(driver)
-```
-
-See [docs/driver.md](docs/driver.md) for detailed driver documentation.
-
-## CLI Tools
-
-PGQueuer includes a command-line interface for common operations:
-
-```bash
-# Setup and migration
-pgq install                         # Install schema
-pgq install --prefix myapp_         # Install with table prefix
-pgq install --dry-run               # Preview SQL without executing
-pgq upgrade                         # Migrate schema to latest version
-pgq uninstall                       # Remove schema
-
-# Running workers
-pgq run examples.consumer:main      # Start worker from Python callable
-
-# Monitoring
-pgq dashboard                       # Interactive terminal dashboard
-pgq dashboard --interval 10         # Refresh every 10 seconds
-pgq dashboard --tail 25             # Show 25 most recent jobs
-```
-
-## Monitor Your Queues
+The in-memory adapter has no durability or multi-process coordination, so use the PostgreSQL backend for production. See the [in-memory reference](https://janbjorge.github.io/pgqueuer/reference/in-memory/).
+
+## Documentation
+
+| Topic | What's inside |
+|-------|---------------|
+| [Core concepts](docs/getting-started/core-concepts.md) | Consumers, producers, entrypoints, the job lifecycle |
+| [Scheduling](docs/guides/scheduling.md) | Cron-style recurring tasks and deferred execution |
+| [Concurrency control](docs/guides/concurrency-control.md) | Per-entrypoint limits and serialized dispatch |
+| [Completion tracking](docs/guides/completion-tracking.md) | Wait for jobs to finish with `CompletionWatcher` |
+| [Shared resources](docs/guides/shared-resources.md) | Inject DB pools, HTTP clients, and models into handlers |
+| [Custom executors](docs/guides/custom-executors.md) | Retry strategies and exponential backoff |
+| [Drivers](docs/reference/drivers.md) | asyncpg, psycopg async/sync: choosing and configuring |
+| [Architecture](docs/reference/architecture.md) | Ports & adapters, `SKIP LOCKED`, design decisions |
+| [Observability](docs/integrations/prometheus.md) | Prometheus metrics, [tracing](docs/integrations/tracing.md), and the dashboard |
+| [Framework integration](examples/) | FastAPI ([example](examples/fastapi_usage.py)) and Flask ([example](examples/flask_sync_usage.py)) |
+
+## Monitor your queues
 
 Launch the interactive dashboard to watch queue activity in real time:
 
 ```bash
-pgq dashboard --interval 10 --tail 25 --table-format grid
+pgq dashboard --interval 10 --tail 25
 ```
-
-Example output:
 
 ```text
 +---------------------------+-------+------------+--------------------------+------------+----------+
@@ -448,36 +162,15 @@ Example output:
 +---------------------------+-------+------------+--------------------------+------------+----------+
 ```
 
-The dashboard shows queue depth, processing times, job statuses, and priorities. See [docs/dashboard.md](docs/dashboard.md) for more options.
+## Development
 
-## Documentation
+PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite. Just have Docker running.
 
-| Topic | Description |
-|-------|-------------|
-| [Architecture & Design](docs/architecture.md) | Clean architecture, ports and adapters, design decisions |
-| [Core Features Guide](docs/pgqueuer.md) | Shared resources, executors, cancellation, scheduling, tracking |
-| [Driver Selection](docs/driver.md) | Choosing and configuring asyncpg, psycopg, sync drivers |
-| [Celery Comparison](docs/celery-comparison.md) | Comparison with other job queue approaches |
-| [Distributed Tracing](docs/tracing.md) | Logfire and Sentry integration |
-| [Prometheus Metrics](docs/prometheus-metrics-service.md) | Exposing queue metrics for monitoring |
-| [Dashboard](docs/dashboard.md) | CLI dashboard options and usage |
-
-## Development and Testing
-
-PGQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to launch an ephemeral PostgreSQL instance automatically for the integration test suite-no manual Docker Compose setup or pre‑provisioned database required. Just ensure Docker (or another supported container runtime) is running locally.
-
-Typical development workflow:
-
-1. Install dependencies (including extras): `uv sync --all-extras`
-2. Run lint & type checks: `uv run ruff check .` and `uv run mypy .`
-3. Run the test suite (will start/stop a disposable PostgreSQL container automatically): `uv run pytest`
-4. (Optional) Aggregate target (if you prefer the Makefile): `make check`
-
-The containerized database lifecycle is fully automatic; tests handle creation, migrations, and teardown. This keeps your local environment clean and ensures consistent, isolated runs.
+```bash
+uv sync --all-extras      # install dependencies
+make check                # lint, type-check, and run the test suite
+```
 
 ## License
 
 PGQueuer is MIT licensed. See [LICENSE](LICENSE) for details.
-
----
-Ready to supercharge your workflows? Install PGQueuer today and start processing jobs with the database you already trust.
