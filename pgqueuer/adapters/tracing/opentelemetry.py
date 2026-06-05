@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import Any, Generator
+from typing import TYPE_CHECKING, Any, Generator
 
-try:
+if TYPE_CHECKING:
     import opentelemetry
     import opentelemetry.context
     import opentelemetry.propagate
     import opentelemetry.semconv.trace
     import opentelemetry.trace
+
+try:
+    import opentelemetry  # noqa: F811
+    import opentelemetry.context  # noqa: F811
+    import opentelemetry.propagate  # noqa: F811
+    import opentelemetry.semconv.trace  # noqa: F811
+    import opentelemetry.trace  # noqa: F811
+
+    HAS_OTEL = True
 except ImportError:
-    opentelemetry = None  # type: ignore[assignment]
+    HAS_OTEL = False
 
 from pgqueuer.domain.models import Job
 from pgqueuer.ports.tracing import TracingProtocol
@@ -65,7 +74,7 @@ class OpenTelemetryTracing(TracingProtocol):
         self._instrumentation_name = instrumentation_name
 
     def _get_tracer(self) -> Any:
-        if opentelemetry is None:
+        if not HAS_OTEL:
             return None
         if self._tracer_arg is not None:
             return self._tracer_arg
