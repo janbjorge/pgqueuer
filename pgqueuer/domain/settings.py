@@ -1,8 +1,4 @@
-"""Domain configuration types for PgQueuer.
-
-These are pure configuration / value objects with no adapter-specific
-dependencies, so they belong in the domain layer.
-"""
+"""Domain configuration types for PgQueuer."""
 
 from __future__ import annotations
 

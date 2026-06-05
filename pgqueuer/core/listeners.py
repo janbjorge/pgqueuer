@@ -1,38 +1,4 @@
-"""PostgreSQL NOTIFY event-handling helpers
-================================================
-
-This module replaces the legacy *if/elif* `handle_event_type` chain with a
-small, type-safe dispatch system based on :class:`EventRouter`.  Public
-components
------------------
-
-``EventRouter``
-    Lightweight dispatcher that maps a single ``event.type`` string to a
-    handler.  Handlers receive the concrete ``models.*Event`` subclass
-    selected by *Pydantic*'s ``discriminator`` and **must** return
-    ``None``.
-
-``build_default_router``
-    Convenience factory that wires handlers for the canonical
-    back-end events (*table-changed*, *cancellation*, *health-check*).
-    It injects application state via closures, avoiding a bulky context
-    object.
-
-``PGNoticeEventListener``
-    A thin ``asyncio.Queue`` subclass used by the default
-    *table-changed* handler to deliver row-level notifications to
-    consumers.
-
-``initialize_notice_event_listener``
-    Glue that attaches any ``Callable[[models.AnyEvent], None]``
-    (typically the router) to a live database connection through
-    ``connection.add_listener``.
-
-Typical usage::
-
-    router = build_default_router(...state injections...)
-    await initialize_notice_event_listener(conn, "mychannel", router)
-"""
+"""PostgreSQL NOTIFY event-routing helpers."""
 
 from __future__ import annotations
 

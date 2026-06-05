@@ -1,9 +1,4 @@
-"""
-Batched async buffers for heartbeats and job status logs.
-
-Items accumulate until a size or time threshold triggers a flush
-via the :meth:`~TimedOverflowBuffer.flush_items` template method.
-"""
+"""Batched async buffers for heartbeats and job status logs."""
 
 from __future__ import annotations
 

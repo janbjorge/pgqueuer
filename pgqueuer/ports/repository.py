@@ -1,10 +1,4 @@
-"""Port protocols for PgQueuer's hexagonal architecture.
-
-These Protocol classes define the contracts that the core domain
-(QueueManager, SchedulerManager) depends on. The existing ``Queries``
-class satisfies all four ports via structural subtyping -- no
-inheritance or registration is required.
-"""
+"""Repository port protocols satisfied by Queries via structural subtyping."""
 
 from __future__ import annotations
 

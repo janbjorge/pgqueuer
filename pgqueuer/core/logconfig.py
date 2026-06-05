@@ -1,6 +1,4 @@
-"""
-Logging configuration for the pgqueuer application.
-"""
+"""Logging configuration for pgqueuer."""
 
 from __future__ import annotations
 

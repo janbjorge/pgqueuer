@@ -1,7 +1,4 @@
-"""Port protocols for database drivers.
-
-These Protocol classes define the contracts for database access.
-"""
+"""Port protocols for database drivers."""
 
 from __future__ import annotations
 
