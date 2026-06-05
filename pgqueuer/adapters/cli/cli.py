@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import Callable, Coroutine
+from typing import TYPE_CHECKING, Callable, Coroutine
 
 import typer
 from tabulate import tabulate
@@ -21,30 +21,38 @@ from pgqueuer.core import listeners, logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
 
+if TYPE_CHECKING:
+    import uvloop
+
 try:
-    from uvloop import run as _asyncio_run
+    import uvloop  # noqa: F811
+
+    HAS_UVLOOP = True
 except ImportError:
-    from asyncio import run as _asyncio_run  # type: ignore[assignment]
+    HAS_UVLOOP = False
 
 
 def asyncio_run(coro: Coroutine[object, object, object]) -> None:
+    """Run *coro* on the best event loop for this platform."""
     if sys.platform != "win32":
-        _asyncio_run(coro)
+        if HAS_UVLOOP:
+            uvloop.run(coro)
+        else:
+            asyncio.run(coro)
         return
 
-    # psycopg async rejects ProactorEventLoop (Windows default).
+    # psycopg async rejects ProactorEventLoop (Windows default); force the
+    # selector loop on every supported Windows + Python combination.
     if sys.version_info >= (3, 12):
         asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
         return
-
     if sys.version_info >= (3, 11):
         with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
             runner.run(coro)
         return
-
     # Python 3.10: no Runner, no loop_factory; mutate policy.
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    _asyncio_run(coro)
+    asyncio.run(coro)
 
 
 app = typer.Typer(
