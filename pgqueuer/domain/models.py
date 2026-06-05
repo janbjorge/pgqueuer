@@ -5,7 +5,7 @@ import traceback
 import uuid
 from collections.abc import MutableMapping
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Literal, NamedTuple
+from typing import Annotated, Any, Generic, Literal, NamedTuple, TypeVar
 
 import anyio
 from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel
@@ -145,6 +145,43 @@ class LogStatistics(BaseModel):
     status: JOB_STATUS
 
 
+T = TypeVar("T")
+
+
+@dataclasses.dataclass(frozen=True)
+class ResourceKey(Generic[T]):
+    """Typed handle for a shared resource stored in ``resources``.
+
+    Define a key once and reuse it for type-checked lookups instead of bare
+    string keys: ``name`` is the mapping key, ``type`` the expected runtime type.
+    ``type`` must be a class usable with ``isinstance``.
+
+    Usage example::
+
+        DB = ResourceKey("db", asyncpg.Pool)
+        pgq = PgQueuer(driver, resources={DB.name: pool})
+
+        @pgq.entrypoint("work")
+        async def work(job: Job, ctx: Context) -> None:
+            pool = ctx.resource(DB)  # typed as asyncpg.Pool
+    """
+
+    name: str
+    type: type[T]
+
+    def resolve(self, resources: MutableMapping) -> T:
+        """Look this key up in *resources*, checking presence and type."""
+        try:
+            value = resources[self.name]
+        except KeyError:
+            raise KeyError(f"resource {self.name!r} not registered in resources") from None
+        if not isinstance(value, self.type):
+            raise TypeError(
+                f"resource {self.name!r} is {type(value).__name__}, expected {self.type.__name__}"
+            )
+        return value
+
+
 @dataclasses.dataclass
 class Context:
     """
@@ -160,6 +197,10 @@ class Context:
     cancellation: anyio.CancelScope
     resources: MutableMapping = dataclasses.field(default_factory=dict)
 
+    def resource(self, key: ResourceKey[T]) -> T:
+        """Return the resource for *key*, typed as ``key.type``."""
+        return key.resolve(self.resources)
+
 
 @dataclasses.dataclass
 class ScheduleContext:
@@ -173,6 +214,10 @@ class ScheduleContext:
     """
 
     resources: MutableMapping = dataclasses.field(default_factory=dict)
+
+    def resource(self, key: ResourceKey[T]) -> T:
+        """Return the resource for *key*, typed as ``key.type``."""
+        return key.resolve(self.resources)
 
 
 class CronExpressionEntrypoint(NamedTuple):

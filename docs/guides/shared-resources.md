@@ -50,6 +50,37 @@ async def build_pgqueuer():
 Internally this mapping is passed into each `Context` as `context.resources`. All jobs receive
 the **same object** (it is not copied), so mutations are visible across jobs.
 
+## Typed Access with `ResourceKey`
+
+Reading `ctx.resources["db"]` works, but the key is a bare string and the value is untyped — a
+typo surfaces only at runtime and your type checker can't tell you what came back. `ResourceKey`
+is an optional, additive way to get type-checked access without changing how resources are stored:
+
+```python
+import asyncpg
+from pgqueuer.models import Context, Job, ResourceKey
+
+# Define keys once, near your resource setup.
+DB = ResourceKey("db", asyncpg.Pool)
+
+pgq = PgQueuer(driver, resources={DB.name: pool})
+
+@pgq.entrypoint("process_user")
+async def process_user(job: Job, ctx: Context) -> None:
+    pool = ctx.resource(DB)   # statically typed as asyncpg.Pool
+    async with pool.acquire() as conn:
+        ...
+```
+
+`ctx.resource(key)` returns the value typed as `key.type`, and validates at runtime:
+
+- a missing key raises `KeyError` naming the resource,
+- a value of the wrong type raises `TypeError` naming both the actual and expected type.
+
+`ScheduleContext` exposes the same `resource()` method, and `key.resolve(mapping)` is available if
+you hold a resources mapping directly. The token is purely opt-in: existing
+`ctx.resources["db"]` access continues to work unchanged.
+
 ## Access Inside Custom Executors
 
 If you implement a custom executor (`AbstractEntrypointExecutor`), the `execute(self, job, context)`
@@ -151,6 +182,7 @@ async def demo(job: Job, ctx: Context) -> None:
 | Initialization | Passed at construction: `PgQueuer(..., resources=...)` |
 | Scope | Shared across all jobs in the same process |
 | Mutation | Visible to subsequent jobs |
+| Typed access | `ctx.resource(ResourceKey("db", Pool))` — type-checked, runtime-validated |
 | Context injection | Auto-detected from a `Context`-annotated parameter; override with `accepts_context` |
 | Scheduled jobs | Annotate a `ScheduleContext` parameter to receive resources |
 | Custom executors | Receive via `context.resources` |
