@@ -1,5 +1,7 @@
 """Backward-compatibility shim. Canonical: pgqueuer.domain.models"""
 
+from __future__ import annotations
+
 from pgqueuer.domain.models import (
     AnyEvent,
     CancellationEvent,
