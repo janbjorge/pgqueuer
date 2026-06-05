@@ -193,6 +193,7 @@ Follow [PEP 257](https://peps.python.org/pep-0257/) for format. Keep them tight.
 - **Test docstrings**: one line describing the behavior under test. Skip when the test name is self-evident.
 - **Module docstrings**: optional. When present, one sentence. No "This module defines..." preambles.
 - **External-schema docstrings exempt.** Where a docstring is the canonical, externally-published description of a function -- specifically `@mcp.tool()` and `@mcp.prompt()` handlers in `pgqueuer/adapters/mcp/`, whose docstrings are surfaced verbatim to MCP clients as the tool's schema -- the verbosity rules above do not apply. Document return columns, parameter semantics, and usage patterns at whatever length the consumer needs.
+- **Usage examples recommended on public APIs.** Public classes and functions exported from `pgqueuer/__init__.py` (or otherwise documented for end users) should include a short `Usage example::` block in the docstring -- one realistic call, placed after the summary/body. Skip the example when the API is trivial and the call site is self-evident from the signature (e.g. simple getters, one-arg helpers, obvious one-liners). Judgement call: if a new user would not need to look at the example, don't write one.
 
 ### Comments
 
