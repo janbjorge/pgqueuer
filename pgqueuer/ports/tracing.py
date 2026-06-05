@@ -14,13 +14,7 @@ from pgqueuer.models import Job
 
 
 class TracingProtocol(Protocol):
-    """
-    Protocol defining the interface for tracing operations in the PGQueuer system.
-
-    This protocol ensures that any tracing implementation provides methods for:
-    - Publishing tracing headers for queue producer operations.
-    - Managing tracing for queue consumer job processing.
-    """
+    """Tracing operations for queue producer and consumer paths."""
 
     def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
         """Yield one tracing-header dict per entrypoint, in input order."""
