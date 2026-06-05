@@ -4,13 +4,11 @@ from enum import Enum
 from typing import Literal, NewType
 
 
-###### Queue ######
 class QueueExecutionMode(Enum):
     continuous = "continuous"  # Normal queue processing with a continuous worker loop
     drain = "drain"  # Process all jobs until empty, then shut down
 
 
-###### Events ######
 Channel = NewType("Channel", str)
 OPERATIONS = Literal["insert", "update", "delete", "truncate"]
 EVENT_TYPES = Literal[
@@ -20,7 +18,6 @@ EVENT_TYPES = Literal[
 ]
 
 
-###### Jobs ######
 JobId = NewType("JobId", int)
 JOB_STATUS = Literal[
     "queued",
@@ -36,7 +33,6 @@ OnFailure = Literal["delete", "hold"]
 SortOrder = Literal["ASC", "DESC"]
 
 
-###### Schedules ######
 CronEntrypoint = NewType("CronEntrypoint", str)
 CronExpression = NewType("CronExpression", str)
 ScheduleId = NewType("ScheduleId", int)
