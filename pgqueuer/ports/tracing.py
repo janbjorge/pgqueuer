@@ -1,9 +1,4 @@
-"""Port protocol for tracing operations.
-
-This module defines the tracing contract that core code depends on.
-The existing ``LogfireTracing`` and ``SentryTracing`` classes satisfy
-this protocol via structural subtyping.
-"""
+"""Port protocol for tracing operations."""
 
 from __future__ import annotations
 
