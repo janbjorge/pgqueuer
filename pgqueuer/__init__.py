@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver

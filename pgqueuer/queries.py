@@ -1,5 +1,7 @@
 """Backward-compatibility shim. Canonical: pgqueuer.adapters.persistence.queries"""
 
+from __future__ import annotations
+
 from pgqueuer.adapters.persistence.queries import (
     Queries,
     SyncQueries,
