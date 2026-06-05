@@ -7,7 +7,7 @@ try:
     import logfire
     import logfire.propagate
 except ImportError:
-    logfire = None  # type: ignore[assignment]
+    logfire = None
 
 from pgqueuer.domain.models import Job
 from pgqueuer.ports.tracing import TracingProtocol

@@ -350,7 +350,7 @@ async def test_trace_process_missing_otel_key_is_noop(
 def test_trace_publish_graceful_without_otel(monkeypatch: pytest.MonkeyPatch) -> None:
     import pgqueuer.adapters.tracing.opentelemetry as otel_mod
 
-    monkeypatch.setattr(otel_mod, "opentelemetry", None)
+    monkeypatch.setattr(otel_mod, "HAS_OTEL", False)
     t = OpenTelemetryTracing()
     headers = list(t.trace_publish(["ep_a", "ep_b"]))
     assert headers == [{}, {}]
@@ -359,7 +359,7 @@ def test_trace_publish_graceful_without_otel(monkeypatch: pytest.MonkeyPatch) ->
 async def test_trace_process_graceful_without_otel(monkeypatch: pytest.MonkeyPatch) -> None:
     import pgqueuer.adapters.tracing.opentelemetry as otel_mod
 
-    monkeypatch.setattr(otel_mod, "opentelemetry", None)
+    monkeypatch.setattr(otel_mod, "HAS_OTEL", False)
     t = OpenTelemetryTracing()
     job = _make_job(headers={"otel": {"traceparent": "00-abc-def-01"}})
 

@@ -6,7 +6,7 @@ from typing import AsyncIterator, Generator
 try:
     import sentry_sdk
 except ImportError:
-    sentry_sdk = None  # type: ignore[assignment]
+    sentry_sdk = None
 
 from pgqueuer.domain.models import Job
 from pgqueuer.ports.tracing import TracingProtocol
