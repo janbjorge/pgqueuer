@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Email Job Status</title></head>
+<body>
+<h1>Email Jobs</h1>
+<table border="1" cellpadding="8">
+  <tr><th>ID</th><th>Recipient</th><th>Subject</th><th>Status</th><th>PGQueuer ID</th><th>Created</th></tr>
+  {% for job in jobs %}
+  <tr>
+    <td>{{ job.id }}</td>
+    <td>{{ job.recipient }}</td>
+    <td>{{ job.subject }}</td>
+    <td>{{ job.get_status_display }}</td>
+    <td>{{ job.pgqueuer_job_id|default:"-" }}</td>
+    <td>{{ job.created_at }}</td>
+  </tr>
+  {% empty %}
+  <tr><td colspan="6">No jobs yet.</td></tr>
+  {% endfor %}
+</table>
+<p><a href="/">Back</a></p>
+</body>
+</html>

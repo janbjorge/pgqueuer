@@ -1,0 +1,4 @@
+django>=4.2,<6
+psycopg2-binary
+asyncpg
+pgqueuer

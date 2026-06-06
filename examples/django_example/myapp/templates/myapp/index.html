@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head><title>PGQueuer Django Demo</title></head>
+<body>
+<h1>PGQueuer + Django Demo</h1>
+<ul>
+  <li><a href="{% url 'enqueue_email' %}">Enqueue Email (POST)</a></li>
+  <li><a href="{% url 'job_status' %}">Job Status</a></li>
+  <li><a href="{% url 'queue_stats' %}">Queue Stats (JSON)</a></li>
+  <li><a href="{% url 'admin:index' %}">Django Admin</a></li>
+</ul>
+</body>
+</html>
