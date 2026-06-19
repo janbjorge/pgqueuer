@@ -72,7 +72,7 @@ class QueryBuilderEnvironment:
         traceback JSONB DEFAULT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
-    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
+    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;
     CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
     CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
     CREATE INDEX {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);
@@ -236,7 +236,7 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );"""
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"  # noqa
         yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
