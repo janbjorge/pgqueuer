@@ -411,13 +411,18 @@ worker_load AS (
       AND entrypoint = ANY($2)
 ),
 
--- Entrypoints with free capacity (concurrency gate applied here instead of row-scan).
+-- Entrypoints with free capacity + remaining slots per entrypoint.
 available AS (
-    SELECT p.entrypoint
+    SELECT
+        p.entrypoint,
+        CASE WHEN p.concurrency_limit <= 0
+             THEN $1::int
+             ELSE p.concurrency_limit - COALESCE(pk.total, 0)
+        END::int AS slots
     FROM params p
     LEFT JOIN picked pk ON pk.entrypoint = p.entrypoint
     WHERE p.concurrency_limit <= 0
-       OR COALESCE(pk.total, 0) < p.concurrency_limit
+       OR p.concurrency_limit - COALESCE(pk.total, 0) > 0
 ),
 
 -- New queued jobs: per-entrypoint LATERAL lookup hits (entrypoint, priority, id) partial index.
@@ -431,7 +436,7 @@ next_queued_src AS (
           AND q2.status = 'queued'
           AND q2.execute_after < NOW()
         ORDER BY q2.priority DESC, q2.id ASC
-        LIMIT 1
+        LIMIT a.slots
         FOR UPDATE SKIP LOCKED
     ) q
     WHERE ($5::BIGINT IS NULL
