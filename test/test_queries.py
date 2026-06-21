@@ -204,6 +204,56 @@ async def test_queue_priority(
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
 
 
+@pytest.mark.parametrize("batch_size", (1, 3, 10))
+async def test_queue_priority_across_entrypoints(
+    apgdriver: db.Driver,
+    batch_size: int,
+) -> None:
+    """Draining several entrypoints at once must yield a single global
+    ``priority DESC, id ASC`` order, not a per-entrypoint order.
+
+    Exercises the per-entrypoint ``CROSS JOIN LATERAL`` lookup plus the
+    cross-entrypoint merge in build_dequeue_query: each entrypoint is probed
+    independently, then the picks are merged. Priorities are interleaved and
+    tied across entrypoints so the ``id ASC`` tiebreak is exercised between
+    different entrypoints, not just within one.
+    """
+    q = queries.Queries(apgdriver)
+
+    entrypoints = ["alpha", "beta", "gamma"]
+    # Interleave entrypoints with repeating priorities so equal priorities
+    # land on different entrypoints (forces a cross-entrypoint id tiebreak).
+    enqueue_ep = [entrypoints[n % len(entrypoints)] for n in range(60)]
+    enqueue_prio = [n % 5 for n in range(60)]
+
+    await q.enqueue(
+        enqueue_ep,
+        [f"{n}".encode() for n in range(60)],
+        enqueue_prio,
+    )
+
+    drained = list[models.Job]()
+    while next_jobs := await q.dequeue(
+        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        batch_size=batch_size,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    ):
+        # Each individual batch is globally ordered.
+        assert next_jobs == sorted(next_jobs, key=lambda j: (-j.priority, j.id))
+        for job in next_jobs:
+            drained.append(job)
+            await q.log_jobs([(job, "successful", None)])
+
+    # Every job drained exactly once.
+    assert len(drained) == 60
+    assert len({job.id for job in drained}) == 60
+    # Full drain order is the global priority DESC, id ASC order, spanning
+    # all entrypoints (not segmented by entrypoint).
+    assert drained == sorted(drained, key=lambda j: (-j.priority, j.id))
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
     apgdriver: db.Driver,
