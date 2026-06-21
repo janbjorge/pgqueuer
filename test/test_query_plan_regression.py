@@ -1,17 +1,4 @@
-"""Plan-shape regression guards for the dequeue path (commit e58ff3c, #668).
-
-Functional tests prove the queries return the right rows; they are blind to
-the planner silently reverting to a Seq Scan over the whole queue (issue #667).
-These tests seed a backlog, ANALYZE, then assert via EXPLAIN that the hot
-queries still hit the entrypoint-leading indexes / keep their O(1) shape.
-
-EXPLAIN (without ANALYZE) only plans — it neither executes nor claims rows —
-so the seeded jobs stay queued and the plans are stable.
-
-Note: a Seq Scan on the queue table is NOT asserted-against globally — the
-``claimed`` UPDATE step legitimately seq-scans a tiny id-list at small N. The
-assertions target the specific hot-path nodes that carried the #668 win.
-"""
+"""EXPLAIN guards that the dequeue path still hits the entrypoint-leading indexes (#668)."""
 
 from __future__ import annotations
 
@@ -27,11 +14,11 @@ EP_PRIO_ID_IDX = f"{QUEUE_TABLE}_ep_prio_id_idx"
 EP_EA_IDX = f"{QUEUE_TABLE}_ep_ea_idx"
 
 ENTRYPOINTS = ["a", "b", "c", "d"]
-SEED = 3000  # large enough that the planner prefers the index over a Seq Scan
+# Large enough that the planner prefers the index over a Seq Scan.
+SEED = 3000
 
 
 def _flatten(node: dict) -> list[dict]:
-    """Depth-first list of every plan node."""
     out = [node]
     children = node.get("Plans")
     if isinstance(children, list):
@@ -56,8 +43,7 @@ async def _seed(driver: db.Driver) -> queries.Queries:
 
 
 async def test_dequeue_uses_entrypoint_priority_index(apgdriver: db.Driver) -> None:
-    """The per-entrypoint LATERAL must read the (entrypoint, priority, id)
-    partial index, not Seq-Scan + Sort the whole queue (issue #667)."""
+    """Dequeue's LATERAL reads the (entrypoint, priority, id) index, not a Seq Scan (#667)."""
     q = await _seed(apgdriver)
     nodes = await _plan_nodes(
         apgdriver,
@@ -69,22 +55,20 @@ async def test_dequeue_uses_entrypoint_priority_index(apgdriver: db.Driver) -> N
         1000,
         timedelta(seconds=30),
     )
-    index_scans = [
+    used = [
         n
         for n in nodes
         if "Index" in (n.get("Node Type") or "") and n.get("Index Name") == EP_PRIO_ID_IDX
     ]
-    assert index_scans, (
+    assert used, (
         f"dequeue plan no longer uses {EP_PRIO_ID_IDX}; "
         f"nodes={[(n.get('Node Type'), n.get('Index Name')) for n in nodes]}"
     )
 
 
 async def test_next_deferred_eta_uses_execute_after_index(apgdriver: db.Driver) -> None:
-    """next_deferred_eta must read the (entrypoint, execute_after) index with a
-    LIMIT, not aggregate (MIN) over a full scan."""
+    """next_deferred_eta reads the (entrypoint, execute_after) index with a LIMIT (#668)."""
     q = await _seed(apgdriver)
-    # Defer some jobs so there is an eligible deferred row to plan against.
     await q.enqueue(
         ENTRYPOINTS,
         [None] * len(ENTRYPOINTS),
@@ -97,13 +81,11 @@ async def test_next_deferred_eta_uses_execute_after_index(apgdriver: db.Driver) 
         f"eta plan no longer uses {EP_EA_IDX}; "
         f"nodes={[(n.get('Node Type'), n.get('Index Name')) for n in nodes]}"
     )
-    # The MIN->ORDER BY LIMIT 1 rewrite must keep a Limit node.
     assert any(n.get("Node Type") == "Limit" for n in nodes), "eta lost its LIMIT shape"
 
 
 async def test_has_queued_work_is_existence_probe(apgdriver: db.Driver) -> None:
-    """has_queued_work must keep the LIMIT 1 existence shape, not revert to a
-    full COUNT(*) aggregate over every queued row."""
+    """has_queued_work keeps its LIMIT 1 existence shape, not a full COUNT(*) (#668)."""
     q = await _seed(apgdriver)
     nodes = await _plan_nodes(apgdriver, q.qbq.build_has_queued_work(), ENTRYPOINTS)
     assert any(n.get("Node Type") == "Limit" for n in nodes), (

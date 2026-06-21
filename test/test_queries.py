@@ -209,20 +209,11 @@ async def test_queue_priority_across_entrypoints(
     apgdriver: db.Driver,
     batch_size: int,
 ) -> None:
-    """Draining several entrypoints at once must yield a single global
-    ``priority DESC, id ASC`` order, not a per-entrypoint order.
-
-    Exercises the per-entrypoint ``CROSS JOIN LATERAL`` lookup plus the
-    cross-entrypoint merge in build_dequeue_query: each entrypoint is probed
-    independently, then the picks are merged. Priorities are interleaved and
-    tied across entrypoints so the ``id ASC`` tiebreak is exercised between
-    different entrypoints, not just within one.
-    """
+    """Draining several entrypoints yields one global priority DESC, id ASC order (#668)."""
     q = queries.Queries(apgdriver)
 
     entrypoints = ["alpha", "beta", "gamma"]
-    # Interleave entrypoints with repeating priorities so equal priorities
-    # land on different entrypoints (forces a cross-entrypoint id tiebreak).
+    # Tie priorities across entrypoints so the id tiebreak spans entrypoints.
     enqueue_ep = [entrypoints[n % len(entrypoints)] for n in range(60)]
     enqueue_prio = [n % 5 for n in range(60)]
 
@@ -240,17 +231,13 @@ async def test_queue_priority_across_entrypoints(
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
-        # Each individual batch is globally ordered.
         assert next_jobs == sorted(next_jobs, key=lambda j: (-j.priority, j.id))
         for job in next_jobs:
             drained.append(job)
             await q.log_jobs([(job, "successful", None)])
 
-    # Every job drained exactly once.
     assert len(drained) == 60
     assert len({job.id for job in drained}) == 60
-    # Full drain order is the global priority DESC, id ASC order, spanning
-    # all entrypoints (not segmented by entrypoint).
     assert drained == sorted(drained, key=lambda j: (-j.priority, j.id))
 
 
@@ -259,14 +246,7 @@ async def test_dequeue_caps_at_batch_size_across_entrypoints(
     apgdriver: db.Driver,
     batch_size: int,
 ) -> None:
-    """A single dequeue must return at most ``batch_size`` jobs total, even
-    when many entrypoints each have eligible work.
-
-    build_dequeue_query fans out one ``LIMIT $1`` lookup per entrypoint via
-    CROSS JOIN LATERAL; only the outer cap stops a single call from claiming
-    ``batch_size * n_entrypoints`` rows. Regression guard for that cap (the
-    per-entrypoint-slots churn in #668).
-    """
+    """A single dequeue returns at most batch_size jobs total across all entrypoints (#668)."""
     q = queries.Queries(apgdriver)
 
     entrypoints = ["a", "b", "c", "d"]
@@ -284,29 +264,20 @@ async def test_dequeue_caps_at_batch_size_across_entrypoints(
         heartbeat_timeout=timedelta(seconds=30),
     )
 
-    # Exactly batch_size while work remains; never batch_size * n_entrypoints.
     assert len(picked) == min(batch_size, total)
 
 
 async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
-    """has_queued_work is an existence probe (COUNT over a LIMIT 1 subquery).
-
-    It must report positive when queued work exists for the requested
-    entrypoints, zero when empty, ignore other entrypoints, and not count
-    already-picked rows (status != 'queued').
-    """
+    """queued_work reports positive when work exists, zero otherwise, ignoring picked rows."""
     q = queries.Queries(apgdriver)
 
-    # Empty queue.
     assert await q.queued_work(["foo"]) == 0
 
     await q.enqueue(["foo"] * 3, [None] * 3, [0] * 3)
 
-    # Queued work present for foo, but not for an unrelated entrypoint.
     assert await q.queued_work(["foo"]) > 0
     assert await q.queued_work(["bar"]) == 0
 
-    # Pick everything; picked rows are not 'queued', so the probe drops to 0.
     picked = await q.dequeue(
         batch_size=10,
         entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
