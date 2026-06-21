@@ -85,7 +85,7 @@ class QueryBuilderEnvironment:
         traceback JSONB DEFAULT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
-    CREATE INDEX {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;
+    CREATE INDEX {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;
     CREATE INDEX {s.queue_table_log}_created ON {qn.queue_table_log} (created);
     CREATE INDEX {s.queue_table_log}_status ON {qn.queue_table_log} (status);
     CREATE INDEX {s.queue_table_log}_job_id_status ON {qn.queue_table_log} (job_id, created DESC);
@@ -253,7 +253,7 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );"""
-        yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_created ON {qn.queue_table_log} (created);"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_status ON {qn.queue_table_log} (status);"  # noqa
         yield f"ALTER TABLE {qn.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
@@ -265,6 +265,14 @@ class QueryBuilderEnvironment:
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'failed';"
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_ep_prio_id_idx ON {qn.queue_table} (entrypoint, priority DESC, id ASC) WHERE status = 'queued';"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_ep_ea_idx ON {qn.queue_table} (entrypoint, execute_after) WHERE status = 'queued';"  # noqa
+        # #668 fattened this partial index to a 4-column composite, but the
+        # aggregation GROUP BY is on date_trunc('sec', created) (an expression),
+        # so the index ordering is never used -- the planner HashAggregates
+        # regardless, while every log insert pays to maintain the wider key.
+        # Revert to the constant-key worklist index. DROP first: CREATE INDEX
+        # IF NOT EXISTS cannot redefine an index that already exists by name.
+        yield f"DROP INDEX IF EXISTS {s.qualify(f'{s.queue_table_log}_not_aggregated')};"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
         # Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
         # int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail.
         # ALTER TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table, so it
