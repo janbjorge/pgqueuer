@@ -254,6 +254,70 @@ async def test_queue_priority_across_entrypoints(
     assert drained == sorted(drained, key=lambda j: (-j.priority, j.id))
 
 
+@pytest.mark.parametrize("batch_size", (1, 5, 7))
+async def test_dequeue_caps_at_batch_size_across_entrypoints(
+    apgdriver: db.Driver,
+    batch_size: int,
+) -> None:
+    """A single dequeue must return at most ``batch_size`` jobs total, even
+    when many entrypoints each have eligible work.
+
+    build_dequeue_query fans out one ``LIMIT $1`` lookup per entrypoint via
+    CROSS JOIN LATERAL; only the outer cap stops a single call from claiming
+    ``batch_size * n_entrypoints`` rows. Regression guard for that cap (the
+    per-entrypoint-slots churn in #668).
+    """
+    q = queries.Queries(apgdriver)
+
+    entrypoints = ["a", "b", "c", "d"]
+    per_ep = 5
+    enqueue_ep = [ep for ep in entrypoints for _ in range(per_ep)]
+    total = len(enqueue_ep)
+
+    await q.enqueue(enqueue_ep, [None] * total, [0] * total)
+
+    picked = await q.dequeue(
+        batch_size=batch_size,
+        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+
+    # Exactly batch_size while work remains; never batch_size * n_entrypoints.
+    assert len(picked) == min(batch_size, total)
+
+
+async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
+    """has_queued_work is an existence probe (COUNT over a LIMIT 1 subquery).
+
+    It must report positive when queued work exists for the requested
+    entrypoints, zero when empty, ignore other entrypoints, and not count
+    already-picked rows (status != 'queued').
+    """
+    q = queries.Queries(apgdriver)
+
+    # Empty queue.
+    assert await q.queued_work(["foo"]) == 0
+
+    await q.enqueue(["foo"] * 3, [None] * 3, [0] * 3)
+
+    # Queued work present for foo, but not for an unrelated entrypoint.
+    assert await q.queued_work(["foo"]) > 0
+    assert await q.queued_work(["bar"]) == 0
+
+    # Pick everything; picked rows are not 'queued', so the probe drops to 0.
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert len(picked) == 3
+    assert await q.queued_work(["foo"]) == 0
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
     apgdriver: db.Driver,
