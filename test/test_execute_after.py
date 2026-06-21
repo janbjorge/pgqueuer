@@ -135,6 +135,20 @@ async def test_next_deferred_eta_returns_timedelta(apgdriver: Driver) -> None:
     assert eta.total_seconds() > 5
 
 
+async def test_next_deferred_eta_returns_soonest_of_many(apgdriver: Driver) -> None:
+    """next_deferred_eta returns the soonest of several deferred jobs (MIN equivalence) (#668)."""
+    q = Queries(apgdriver)
+    await q.enqueue(
+        ["foo", "foo", "foo"],
+        [None, None, None],
+        [0, 0, 0],
+        [timedelta(seconds=300), timedelta(seconds=30), timedelta(seconds=120)],
+    )
+    eta = await q.next_deferred_eta(["foo"])
+    assert eta is not None
+    assert 20 < eta.total_seconds() <= 30
+
+
 async def test_next_deferred_eta_inmemory(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, 0, timedelta(seconds=10))
     eta = await queries.next_deferred_eta(["ep"])

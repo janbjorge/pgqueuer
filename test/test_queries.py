@@ -204,6 +204,91 @@ async def test_queue_priority(
     assert jobs == sorted(jobs, key=lambda x: x.priority, reverse=True)
 
 
+@pytest.mark.parametrize("batch_size", (1, 3, 10))
+async def test_queue_priority_across_entrypoints(
+    apgdriver: db.Driver,
+    batch_size: int,
+) -> None:
+    """Draining several entrypoints yields one global priority DESC, id ASC order (#668)."""
+    q = queries.Queries(apgdriver)
+
+    entrypoints = ["alpha", "beta", "gamma"]
+    # Tie priorities across entrypoints so the id tiebreak spans entrypoints.
+    enqueue_ep = [entrypoints[n % len(entrypoints)] for n in range(60)]
+    enqueue_prio = [n % 5 for n in range(60)]
+
+    await q.enqueue(
+        enqueue_ep,
+        [f"{n}".encode() for n in range(60)],
+        enqueue_prio,
+    )
+
+    drained = list[models.Job]()
+    while next_jobs := await q.dequeue(
+        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        batch_size=batch_size,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    ):
+        assert next_jobs == sorted(next_jobs, key=lambda j: (-j.priority, j.id))
+        for job in next_jobs:
+            drained.append(job)
+            await q.log_jobs([(job, "successful", None)])
+
+    assert len(drained) == 60
+    assert len({job.id for job in drained}) == 60
+    assert drained == sorted(drained, key=lambda j: (-j.priority, j.id))
+
+
+@pytest.mark.parametrize("batch_size", (1, 5, 7))
+async def test_dequeue_caps_at_batch_size_across_entrypoints(
+    apgdriver: db.Driver,
+    batch_size: int,
+) -> None:
+    """A single dequeue returns at most batch_size jobs total across all entrypoints (#668)."""
+    q = queries.Queries(apgdriver)
+
+    entrypoints = ["a", "b", "c", "d"]
+    per_ep = 5
+    enqueue_ep = [ep for ep in entrypoints for _ in range(per_ep)]
+    total = len(enqueue_ep)
+
+    await q.enqueue(enqueue_ep, [None] * total, [0] * total)
+
+    picked = await q.dequeue(
+        batch_size=batch_size,
+        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+
+    assert len(picked) == min(batch_size, total)
+
+
+async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
+    """queued_work reports positive when work exists, zero otherwise, ignoring picked rows."""
+    q = queries.Queries(apgdriver)
+
+    assert await q.queued_work(["foo"]) == 0
+
+    await q.enqueue(["foo"] * 3, [None] * 3, [0] * 3)
+
+    assert await q.queued_work(["foo"]) > 0
+    assert await q.queued_work(["bar"]) == 0
+
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert len(picked) == 3
+    assert await q.queued_work(["foo"]) == 0
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
     apgdriver: db.Driver,
