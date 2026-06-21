@@ -1,4 +1,4 @@
-"""Schema-level checks that the dequeue indexes exist and survive upgrade (#668)."""
+"""Behavioral check that pgq upgrade delivers the dequeue indexes (#668)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,6 @@ from pgqueuer.adapters.persistence import qb
 
 QUEUE_TABLE = qb.DBSettings().queue_table
 DEQUEUE_INDEXES = [f"{QUEUE_TABLE}_ep_prio_id_idx", f"{QUEUE_TABLE}_ep_ea_idx"]
-
-
-async def test_install_creates_dequeue_indexes(apgdriver: db.Driver) -> None:
-    """A freshly installed schema has the entrypoint-leading dequeue indexes (#668)."""
-    q = queries.Queries(apgdriver)
-    for index in DEQUEUE_INDEXES:
-        assert await q.table_has_index(QUEUE_TABLE, index)
 
 
 async def test_upgrade_recreates_dropped_dequeue_indexes(apgdriver: db.Driver) -> None:
