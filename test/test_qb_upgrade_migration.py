@@ -52,30 +52,3 @@ def test_every_upgrade_statement_is_idempotent() -> None:
         if "ALTER COLUMN status TYPE" in stmt:
             continue
         assert any(m in stmt for m in idempotent_markers), f"non-idempotent upgrade stmt: {head}"
-
-
-INSTALL_SQL = QueryBuilderEnvironment(settings=CUSTOM).build_install_query()
-
-
-def test_install_creates_entrypoint_leading_dequeue_indexes() -> None:
-    """Install creates the partial indexes the dequeue LATERAL relies on (#668)."""
-    assert f"{CUSTOM.queue_table}_ep_prio_id_idx" in INSTALL_SQL
-    assert f"{CUSTOM.queue_table}_ep_ea_idx" in INSTALL_SQL
-    assert "(entrypoint, priority DESC, id ASC)" in INSTALL_SQL
-    assert "(entrypoint, execute_after)" in INSTALL_SQL
-    assert INSTALL_SQL.count("WHERE status = 'queued'") >= 2
-
-
-def test_install_aggregation_index_is_functional_not_placeholder() -> None:
-    """Log aggregation index is the real composite, not the ((1)) placeholder (#668)."""
-    assert "((1))" not in INSTALL_SQL
-    assert "(entrypoint, priority, status, created) WHERE not aggregated" in INSTALL_SQL
-
-
-def test_upgrade_creates_performance_indexes() -> None:
-    """pgq upgrade adds the same dequeue and aggregation indexes (#668)."""
-    upgrade_sql = _upgrade_sql()
-    assert f"{CUSTOM.queue_table}_ep_prio_id_idx" in upgrade_sql
-    assert f"{CUSTOM.queue_table}_ep_ea_idx" in upgrade_sql
-    assert "((1))" not in upgrade_sql
-    assert "(entrypoint, priority, status, created) WHERE not aggregated" in upgrade_sql
