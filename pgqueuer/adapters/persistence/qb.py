@@ -55,6 +55,10 @@ class QueryBuilderEnvironment:
         INCLUDE (id) WHERE status = 'picked';
     CREATE INDEX {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id)
         WHERE queue_manager_id IS NOT NULL;
+    CREATE INDEX {self.settings.queue_table}_ep_prio_id_idx ON {self.settings.queue_table} (entrypoint, priority DESC, id ASC)
+        WHERE status = 'queued';
+    CREATE INDEX {self.settings.queue_table}_ep_ea_idx ON {self.settings.queue_table} (entrypoint, execute_after)
+        WHERE status = 'queued';
     CREATE UNIQUE INDEX IF NOT EXISTS {self.settings.queue_table}_unique_dedupe_key ON
         {self.settings.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));
 
@@ -68,7 +72,7 @@ class QueryBuilderEnvironment:
         traceback JSONB DEFAULT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );
-    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;
+    CREATE INDEX {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;
     CREATE INDEX {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);
     CREATE INDEX {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);
     CREATE INDEX {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);
@@ -232,7 +236,7 @@ class QueryBuilderEnvironment:
         entrypoint TEXT NOT NULL,
         aggregated BOOLEAN DEFAULT FALSE
     );"""
-        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_not_aggregated ON {self.settings.queue_table_log} (entrypoint, priority, status, created) WHERE not aggregated;"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_created ON {self.settings.queue_table_log} (created);"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table_log}_status ON {self.settings.queue_table_log} (status);"  # noqa
         yield f"ALTER TABLE {self.settings.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
@@ -242,6 +246,8 @@ class QueryBuilderEnvironment:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"  # noqa: E501
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;"  # noqa: E501
         yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'failed';"  # noqa: E501
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_ep_prio_id_idx ON {self.settings.queue_table} (entrypoint, priority DESC, id ASC) WHERE status = 'queued';"  # noqa
+        yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_ep_ea_idx ON {self.settings.queue_table} (entrypoint, execute_after) WHERE status = 'queued';"  # noqa
 
     def build_table_has_column_query(self) -> str:
         return """SELECT EXISTS (
@@ -405,21 +411,37 @@ worker_load AS (
       AND entrypoint = ANY($2)
 ),
 
--- New queued jobs (uses partial index WHERE status = 'queued').
-next_queued AS (
-    SELECT q.id
-    FROM {t} q
-    JOIN      params p  ON p.entrypoint  = q.entrypoint
-    LEFT JOIN picked pk ON pk.entrypoint = q.entrypoint
-    WHERE q.status = 'queued'
-      AND q.execute_after < NOW()
-      AND ($5::BIGINT IS NULL
+-- Entrypoints with free capacity (concurrency gate applied here instead of row-scan).
+available AS (
+    SELECT p.entrypoint
+    FROM params p
+    LEFT JOIN picked pk ON pk.entrypoint = p.entrypoint
+    WHERE p.concurrency_limit <= 0
+       OR COALESCE(pk.total, 0) < p.concurrency_limit
+),
+
+-- New queued jobs: per-entrypoint LATERAL lookup hits (entrypoint, priority, id) partial index.
+next_queued_src AS (
+    SELECT q.id, q.priority
+    FROM available a
+    CROSS JOIN LATERAL (
+        SELECT q2.id, q2.priority
+        FROM {t} q2
+        WHERE q2.entrypoint = a.entrypoint
+          AND q2.status = 'queued'
+          AND q2.execute_after < NOW()
+        ORDER BY q2.priority DESC, q2.id ASC
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED
+    ) q
+    WHERE ($5::BIGINT IS NULL
            OR (SELECT total FROM worker_load) < $5)
-      AND (p.concurrency_limit <= 0
-           OR COALESCE(pk.total, 0) < p.concurrency_limit)
     ORDER BY q.priority DESC, q.id ASC
-    FOR UPDATE SKIP LOCKED
     LIMIT $1
+),
+
+next_queued AS (
+    SELECT id FROM next_queued_src
 ),
 
 -- Stale picked jobs whose heartbeat timed out. The concurrency gate from
@@ -470,13 +492,14 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
 
     def build_has_queued_work(self) -> str:
         return f"""
-        SELECT
-            COUNT(*) AS queued_work
-        FROM
-            {self.settings.queue_table}
-        WHERE
-                entrypoint = ANY($1)
-            AND status = 'queued'
+        SELECT COUNT(*) AS queued_work
+        FROM (
+            SELECT 1
+            FROM {self.settings.queue_table}
+            WHERE entrypoint = ANY($1)
+              AND status = 'queued'
+            LIMIT 1
+        ) sub
         """
 
     def build_enqueue_query(self) -> str:
@@ -767,11 +790,13 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         """
 
     def build_next_deferred_eta_query(self) -> str:
-        return f"""SELECT MIN(execute_after) - NOW() AS eta
+        return f"""SELECT execute_after - NOW() AS eta
         FROM {self.settings.queue_table}
         WHERE status = 'queued'
           AND execute_after > NOW()
           AND entrypoint = ANY($1)
+        ORDER BY execute_after
+        LIMIT 1
         """
 
 
