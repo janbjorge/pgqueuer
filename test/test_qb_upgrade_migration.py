@@ -51,4 +51,7 @@ def test_every_upgrade_statement_is_idempotent() -> None:
         # ALTER COLUMN ... TYPE is idempotent on its own and has no IF-EXISTS form.
         if "ALTER COLUMN status TYPE" in stmt:
             continue
+        # DO-guarded id widen is idempotent via its data_type check (issue #671).
+        if "ALTER COLUMN id TYPE BIGINT" in stmt:
+            continue
         assert any(m in stmt for m in idempotent_markers), f"non-idempotent upgrade stmt: {head}"
