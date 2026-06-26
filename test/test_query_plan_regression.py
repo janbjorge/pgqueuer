@@ -79,7 +79,20 @@ def _queue_scans(nodes: list[dict]) -> list[dict]:
 
 
 def _rows_scanned(nodes: list[dict]) -> int:
-    return sum(int(n.get("Actual Rows") or 0) for n in _queue_scans(nodes))
+    # Under a Nested Loop / LATERAL, EXPLAIN reports `Actual Rows` as a per-loop
+    # average, not the total. Multiply by `Actual Loops` so the bound counts the
+    # real rows the scan touched across all entrypoints.
+    return sum(
+        round((n.get("Actual Rows") or 0) * (n.get("Actual Loops") or 1))
+        for n in _queue_scans(nodes)
+    )
+
+
+def _scan_summary(nodes: list[dict]) -> list[tuple]:
+    return [
+        (n.get("Node Type"), n.get("Actual Rows"), n.get("Actual Loops"))
+        for n in _queue_scans(nodes)
+    ]
 
 
 async def test_dequeue_uses_entrypoint_priority_index(apgdriver: db.Driver) -> None:
@@ -150,10 +163,10 @@ async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) ->
         timedelta(seconds=30),
     )
 
-    seq = [n for n in _queue_scans(nodes) if "Seq Scan" in (n.get("Node Type") or "")]
+    # Matches "Seq Scan" and "Parallel Seq Scan" — any full-table walk.
+    seq = [n for n in _queue_scans(nodes) if (n.get("Node Type") or "").endswith("Seq Scan")]
     assert not seq, (
-        f"dequeue fell back to a Seq Scan on {QUEUE_TABLE}; "
-        f"nodes={[(n.get('Node Type'), n.get('Actual Rows')) for n in _queue_scans(nodes)]}"
+        f"dequeue fell back to a Seq Scan on {QUEUE_TABLE}; nodes={_scan_summary(nodes)}"
     )
 
     scanned = _rows_scanned(nodes)
@@ -161,7 +174,7 @@ async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) ->
     assert scanned <= row_bound, (
         f"dequeue scanned {scanned} rows (bound {row_bound}); a proportional plan reads "
         f"~entrypoints*batch, a regressed global scan reads ~{BULK_ROWS}. "
-        f"nodes={[(n.get('Node Type'), n.get('Actual Rows')) for n in _queue_scans(nodes)]}"
+        f"nodes={_scan_summary(nodes)}"
     )
 
 
@@ -201,5 +214,5 @@ async def test_dequeue_gate_skips_saturated_entrypoints(apgdriver: db.Driver) ->
     assert scanned <= bound, (
         f"saturated-gate dequeue scanned {scanned} queue rows (bound {bound}); "
         f"the concurrency gate should exclude every entrypoint before the LATERAL fires. "
-        f"nodes={[(n.get('Node Type'), n.get('Actual Rows')) for n in _queue_scans(nodes)]}"
+        f"nodes={_scan_summary(nodes)}"
     )
