@@ -205,6 +205,7 @@ Start a `QueueManager` to process jobs.
 |------|------|---------|-------------|
 | `--dequeue-timeout` | float | 30.0 | Max seconds to wait for new jobs per batch |
 | `--batch-size` | int | 10 | Jobs to dequeue per batch |
+| `--heartbeat-timeout` | float | 30.0 | Seconds without a heartbeat before a job is re-picked by another worker |
 | `--restart-delay` | float | 5.0 | Seconds between restarts when `--restart-on-failure` is set |
 | `--restart-on-failure` | bool | False | Restart the manager automatically after failures |
 | `--log-level` | str | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |

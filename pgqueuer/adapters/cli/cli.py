@@ -424,6 +424,11 @@ def run(
         "--batch-size",
         help="Number of jobs to pull from the queue at once.",
     ),
+    heartbeat_timeout: float = typer.Option(
+        30.0,
+        "--heartbeat-timeout",
+        help="Seconds without a heartbeat before a job is re-picked by another worker.",
+    ),
     restart_delay: float = typer.Option(
         5.0,
         "--restart-delay",
@@ -478,6 +483,7 @@ def run(
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
+            heartbeat_timeout=timedelta(seconds=heartbeat_timeout),
         )
     )
 

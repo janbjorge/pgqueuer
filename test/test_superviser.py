@@ -287,6 +287,50 @@ async def test_run_max_concurrent_tasks_twice_batch_size(
         )
 
 
+async def test_run_manager_forwards_heartbeat_timeout_queue_manager(
+    queue_manager: QueueManager,
+) -> None:
+    """run_manager passes heartbeat_timeout through to QueueManager.run (#674)."""
+    captured: dict[str, object] = {}
+
+    async def capture_run(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    queue_manager.run = capture_run  # type: ignore[assignment]
+    await supervisor.run_manager(
+        queue_manager,
+        dequeue_timeout=timedelta(seconds=1),
+        batch_size=10,
+        mode=QueueExecutionMode.continuous,
+        max_concurrent_tasks=None,
+        shutdown_on_listener_failure=False,
+        heartbeat_timeout=timedelta(seconds=7),
+    )
+    assert captured["heartbeat_timeout"] == timedelta(seconds=7)
+
+
+async def test_run_manager_forwards_heartbeat_timeout_pg_queuer(
+    pg_queuer: PgQueuer,
+) -> None:
+    """run_manager passes heartbeat_timeout through to PgQueuer.run (#674)."""
+    captured: dict[str, object] = {}
+
+    async def capture_run(**kwargs: object) -> None:
+        captured.update(kwargs)
+
+    pg_queuer.run = capture_run  # type: ignore[assignment]
+    await supervisor.run_manager(
+        pg_queuer,
+        dequeue_timeout=timedelta(seconds=1),
+        batch_size=10,
+        mode=QueueExecutionMode.continuous,
+        max_concurrent_tasks=None,
+        shutdown_on_listener_failure=False,
+        heartbeat_timeout=timedelta(seconds=7),
+    )
+    assert captured["heartbeat_timeout"] == timedelta(seconds=7)
+
+
 async def test_shutdown_on_listener_failure(queue_manager: QueueManager) -> None:
     with pytest.raises(FailingListenerError):
         await queue_manager.listener_healthy(timedelta(seconds=0))

@@ -44,6 +44,13 @@ await pgq.run(
 With `heartbeat_timeout` set, a job that stops updating its heartbeat for the
 specified duration will be retried by the next available worker.
 
+Workers started from the command line configure the same setting with
+`--heartbeat-timeout` (in seconds):
+
+```bash
+pgq run my_module:my_factory --heartbeat-timeout 300
+```
+
 !!! note
     The default `heartbeat_timeout` is 30 seconds. Set it to match your expected
     maximum job runtime plus a safety margin to avoid prematurely re-queuing
