@@ -5,11 +5,13 @@ import signal
 import subprocess
 import sys
 import time
+from datetime import timedelta
 from urllib.parse import urlparse
 
 import pytest
 from typer.testing import CliRunner
 
+from pgqueuer.adapters.cli import supervisor
 from pgqueuer.adapters.cli.cli import app
 
 
@@ -167,3 +169,27 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
 
     # 7. verify absent again
     invoke_ok(["verify", "--expect", "absent"], base_env)
+
+
+@pytest.mark.parametrize(
+    ("extra_args", "expected"),
+    [
+        ([], timedelta(seconds=30)),
+        (["--heartbeat-timeout", "7"], timedelta(seconds=7)),
+    ],
+)
+def test_cli_run_forwards_heartbeat_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_args: list[str],
+    expected: timedelta,
+) -> None:
+    """`pgq run` forwards --heartbeat-timeout (default 30s) to supervisor.runit (#674)."""
+    captured: dict[str, object] = {}
+
+    async def fake_runit(factory: object, **kwargs: object) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(supervisor, "runit", fake_runit)
+    result = CliRunner().invoke(app, ["run", "examples.consumer:main", *extra_args])
+    assert result.exit_code == 0, result.output
+    assert captured["heartbeat_timeout"] == expected
