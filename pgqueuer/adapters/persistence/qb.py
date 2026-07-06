@@ -162,7 +162,7 @@ class QueryBuilderEnvironment:
     DROP TYPE       IF EXISTS   {add_prefix("pgqueuer_statistics_status")};
     """  # noqa
 
-    def build_upgrade_queries(self) -> Generator[str, None, None]:
+    def build_upgrade_queries(self, widen_id: bool = True) -> Generator[str, None, None]:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_updated_id_id1_idx ON {self.settings.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
         yield f"""CREATE OR REPLACE FUNCTION {self.settings.function}() RETURNS TRIGGER AS $$
@@ -251,14 +251,15 @@ class QueryBuilderEnvironment:
         # Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
         # int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail.
         # ALTER TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table,
-        # so it blocks briefly.
-        for table in (
-            self.settings.queue_table,
-            self.settings.statistics_table,
-            self.settings.schedules_table,
-        ):
-            yield self.build_widen_id_column_query(table)
-            yield self.build_widen_id_sequence_query(table)
+        # so it blocks briefly; widen_id=False lets operators do it out-of-band.
+        if widen_id:
+            for table in (
+                self.settings.queue_table,
+                self.settings.statistics_table,
+                self.settings.schedules_table,
+            ):
+                yield self.build_widen_id_column_query(table)
+                yield self.build_widen_id_sequence_query(table)
 
     def build_widen_id_column_query(self, table: str) -> str:
         """DO-guard on data_type keeps re-runs a no-op."""

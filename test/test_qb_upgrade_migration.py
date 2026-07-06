@@ -59,3 +59,17 @@ def test_every_upgrade_statement_is_idempotent() -> None:
         if "ALTER COLUMN" in stmt and " TYPE " in stmt:
             continue
         assert any(m in stmt for m in idempotent_markers), f"non-idempotent upgrade stmt: {head}"
+
+
+def test_widen_id_flag_gates_id_widen_statements() -> None:
+    """--no-widen-id must skip the blocking id widen so operators can run it out-of-band."""
+    qbe = QueryBuilderEnvironment(settings=CUSTOM)
+    with_widen = "\n".join(qbe.build_upgrade_queries(widen_id=True))
+    without_widen = "\n".join(qbe.build_upgrade_queries(widen_id=False))
+
+    for table in (CUSTOM.queue_table, CUSTOM.statistics_table, CUSTOM.schedules_table):
+        assert f"ALTER TABLE {table} ALTER COLUMN id TYPE BIGINT" in with_widen
+        assert f"pg_get_serial_sequence('{table}', 'id')" in with_widen
+
+    assert "ALTER COLUMN id TYPE BIGINT" not in without_widen
+    assert "pg_get_serial_sequence" not in without_widen
