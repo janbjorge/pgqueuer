@@ -51,6 +51,14 @@ ALTER TABLE pgqueuer_statistics ALTER COLUMN id TYPE BIGINT;
 ALTER TABLE pgqueuer_schedules  ALTER COLUMN id TYPE BIGINT;
 ```
 
+Widening the column alone is not enough: the legacy `SERIAL` sequence was
+created `AS INTEGER` and still caps out at 2,147,483,647. `pgq upgrade` also
+widens each backing sequence:
+
+```sql
+ALTER SEQUENCE pgqueuer_id_seq AS BIGINT;  -- and the statistics/schedules sequences
+```
+
 !!! warning "This migration takes an `ACCESS EXCLUSIVE` lock"
     Widening `int4` → `BIGINT` rewrites the entire table and rebuilds its
     indexes. Postgres holds an `ACCESS EXCLUSIVE` lock for the whole rewrite,
@@ -61,11 +69,12 @@ ALTER TABLE pgqueuer_schedules  ALTER COLUMN id TYPE BIGINT;
     single long-running transaction can freeze the queue for the full wait.
 
     **Run `pgq upgrade` during a maintenance window or low-traffic period.** The
-    migration is idempotent (it checks the column type first), so it is safe to
-    re-run. If you need zero downtime on a very large table, do the widen
-    manually with an online strategy — add a new `BIGINT` column, backfill it in
-    batches, then swap — instead of letting `pgq upgrade` rewrite the table in
-    one shot.
+    migration is idempotent (it checks the column and sequence types first), so
+    it is safe to re-run. If your deployment requires a different migration
+    approach, run `pgq upgrade --no-widen-id` to apply every other migration
+    while skipping the blocking widen, then perform it out-of-band — e.g. an
+    online strategy that adds a new `BIGINT` column, backfills it in batches,
+    and swaps. Remember to widen the backing sequences as well.
 
 ## 2. Async-only job handlers
 
