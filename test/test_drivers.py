@@ -150,6 +150,10 @@ async def test_valid_query_syntax(
 ) -> None:
     if name == "build_install_query":
         pytest.skip()
+    if any(
+        p.default is inspect.Parameter.empty for p in inspect.signature(query).parameters.values()
+    ):
+        pytest.skip("builder requires arguments; covered by dedicated tests")
 
     sql = query()
     sql = sql if isinstance(sql, str) else f"\n{'-' * 50}\n".join(x for x in sql)
