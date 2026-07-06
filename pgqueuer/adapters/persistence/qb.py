@@ -250,33 +250,39 @@ class QueryBuilderEnvironment:
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_ep_ea_idx ON {self.settings.queue_table} (entrypoint, execute_after) WHERE status = 'queued';"  # noqa
         # Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
         # int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail.
-        # DO-guard on data_type keeps re-runs a no-op; ALTER TYPE takes an
-        # ACCESS EXCLUSIVE lock and rewrites the table, so it blocks briefly.
-        yield f"""DO $$
+        # ALTER TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table,
+        # so it blocks briefly.
+        for table in (
+            self.settings.queue_table,
+            self.settings.statistics_table,
+            self.settings.schedules_table,
+        ):
+            yield self.build_widen_id_column_query(table)
+            yield self.build_widen_id_sequence_query(table)
+
+    def build_widen_id_column_query(self, table: str) -> str:
+        """DO-guard on data_type keeps re-runs a no-op."""
+        return f"""DO $$
     BEGIN
         IF (SELECT data_type FROM information_schema.columns
             WHERE table_schema = current_schema()
-              AND table_name = '{self.settings.queue_table}'
+              AND table_name = '{table}'
               AND column_name = 'id') = 'integer' THEN
-            ALTER TABLE {self.settings.queue_table} ALTER COLUMN id TYPE BIGINT;
+            ALTER TABLE {table} ALTER COLUMN id TYPE BIGINT;
         END IF;
     END $$;"""
-        yield f"""DO $$
+
+    def build_widen_id_sequence_query(self, table: str) -> str:
+        """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1."""
+        return f"""DO $$
+    DECLARE
+        seq TEXT := pg_get_serial_sequence('{table}', 'id');
     BEGIN
-        IF (SELECT data_type FROM information_schema.columns
-            WHERE table_schema = current_schema()
-              AND table_name = '{self.settings.statistics_table}'
-              AND column_name = 'id') = 'integer' THEN
-            ALTER TABLE {self.settings.statistics_table} ALTER COLUMN id TYPE BIGINT;
-        END IF;
-    END $$;"""
-        yield f"""DO $$
-    BEGIN
-        IF (SELECT data_type FROM information_schema.columns
-            WHERE table_schema = current_schema()
-              AND table_name = '{self.settings.schedules_table}'
-              AND column_name = 'id') = 'integer' THEN
-            ALTER TABLE {self.settings.schedules_table} ALTER COLUMN id TYPE BIGINT;
+        IF seq IS NOT NULL AND (
+            SELECT data_type::text FROM pg_sequences
+            WHERE format('%I.%I', schemaname, sequencename) = seq
+        ) = 'integer' THEN
+            EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
         END IF;
     END $$;"""
 

@@ -44,14 +44,18 @@ def test_upgrade_uses_only_configured_names() -> None:
 
 
 def test_every_upgrade_statement_is_idempotent() -> None:
-    """pgq upgrade may run repeatedly, so every statement must be a no-op when applied."""
+    """pgq upgrade may run repeatedly, so every statement must be a no-op when applied.
+
+    Two statement shapes are idempotent without a marker: DO-blocks, which must
+    guard their DDL with catalog checks, and ALTER COLUMN ... TYPE, where a
+    re-run re-casts to the same type. Their no-op behavior is proven by the
+    DB-backed tests that run upgrade() twice (test_schema_id_widen).
+    """
     idempotent_markers = ("IF NOT EXISTS", "OR REPLACE", "IF EXISTS", "ADD VALUE IF NOT EXISTS")
     for stmt in QueryBuilderEnvironment(settings=CUSTOM).build_upgrade_queries():
         head = stmt.strip().splitlines()[0]
-        # ALTER COLUMN ... TYPE is idempotent on its own and has no IF-EXISTS form.
-        if "ALTER COLUMN status TYPE" in stmt:
+        if stmt.strip().startswith("DO $$"):
             continue
-        # DO-guarded id widen is idempotent via its data_type check (issue #671).
-        if "ALTER COLUMN id TYPE BIGINT" in stmt:
+        if "ALTER COLUMN" in stmt and " TYPE " in stmt:
             continue
         assert any(m in stmt for m in idempotent_markers), f"non-idempotent upgrade stmt: {head}"
