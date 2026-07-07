@@ -684,9 +684,7 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   > during a maintenance window or low-traffic period**, or `pgq upgrade
   > --no-widen-id` to skip the blocking widen and apply it out-of-band. The
   > migration is idempotent (guarded on the column/sequence type), so it is a
-  > no-op once everything is `BIGINT` and safe to re-run. See
-  > [Widening id to BIGINT](docs/guides/bigint-id-migration.md) for the locking
-  > details and a zero-downtime procedure for large tables.
+  > no-op once everything is `BIGINT` and safe to re-run.
 
 ---
 
@@ -745,8 +743,7 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
    column and `'failed'` status enum value automatically. `pgq upgrade` also
    widens the `int4` `id` columns to `BIGINT` (#671) — this takes an `ACCESS
    EXCLUSIVE` lock and rewrites each table, so run it in a maintenance window on
-   large tables (or `pgq upgrade --no-widen-id` and widen out-of-band). See
-   [Widening id to BIGINT](docs/guides/bigint-id-migration.md).
+   large tables (or `pgq upgrade --no-widen-id` and widen out-of-band).
 2. **Sync handlers:** Convert all `def handler(job)` to `async def handler(job)`.
    Wrap blocking calls with `await asyncio.to_thread(...)`.
 3. **Factory functions:** Convert to `@asynccontextmanager` with `yield` instead
