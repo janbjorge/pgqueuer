@@ -6,8 +6,8 @@ from pgqueuer import db, queries
 from test.helpers import (
     WIDENED_ID_TABLES,
     id_data_type,
+    id_has_serial_sequence,
     id_is_identity,
-    id_serial_sequence_count,
     simulate_legacy_serial,
 )
 
@@ -28,7 +28,7 @@ async def test_upgrade_converts_legacy_int_id_to_bigint_identity(apgdriver: db.D
         assert await id_data_type(apgdriver, table) == "bigint"
         assert await id_is_identity(apgdriver, table)
         # The legacy SERIAL sequence is replaced by the identity's own; no leftover.
-        assert await id_serial_sequence_count(apgdriver, table) == 0
+        assert not await id_has_serial_sequence(apgdriver, table)
 
     # Idempotent: a second upgrade leaves the already-converted columns alone.
     await q.upgrade()
@@ -42,7 +42,7 @@ async def test_fresh_install_id_is_bigint_identity(apgdriver: db.Driver) -> None
     for table in WIDENED_ID_TABLES:
         assert await id_data_type(apgdriver, table) == "bigint"
         assert await id_is_identity(apgdriver, table)
-        assert await id_serial_sequence_count(apgdriver, table) == 0
+        assert not await id_has_serial_sequence(apgdriver, table)
 
 
 async def test_upgrade_preserves_id_number_line(apgdriver: db.Driver) -> None:
