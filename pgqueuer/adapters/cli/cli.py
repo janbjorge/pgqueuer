@@ -355,11 +355,22 @@ def upgrade(
         "-d",
         help="Durability level for tables.",
     ),
+    widen_id: bool = typer.Option(
+        True,
+        "--widen-id/--no-widen-id",
+        help=(
+            "Widen legacy int4 id columns and sequences to BIGINT. Takes an "
+            "ACCESS EXCLUSIVE lock and rewrites each table; use --no-widen-id "
+            "to skip and apply the widening out-of-band."
+        ),
+    ),
 ) -> None:
-    print(f"\n{'-' * 50}\n".join(qb.QueryBuilderEnvironment().build_upgrade_queries()))
+    settings = qb.DBSettings(durability=durability, widen_id=widen_id)
+    statements = qb.QueryBuilderEnvironment(settings=settings).build_upgrade_queries()
+    print(f"\n{'-' * 50}\n".join(statements))
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
+        async with yield_queries(ctx, settings) as q:
             await q.upgrade()
 
     if not dry_run:

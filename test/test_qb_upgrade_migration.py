@@ -1,14 +1,23 @@
-"""Database-free invariants for the ``pgq upgrade`` migration builder."""
+"""Effect-based checks for ``pgq upgrade``.
+
+These run the migration against a real database and assert on the resulting
+schema/behavior, never on the generated SQL text. Asserting on SQL strings
+only proves what we wrote, not what Postgres does with it.
+"""
 
 from __future__ import annotations
 
-from pgqueuer.adapters.persistence.qb import QueryBuilderEnvironment
+from pgqueuer import db, queries
+from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import Channel
+from test.helpers import id_data_type, simulate_legacy_serial
 
-# Object names sharing no substring with the defaults, so a hardcoded
-# default name in the migration is unambiguous.
+# Object names sharing no substring with the defaults: if any migration
+# statement hardcoded a default name, upgrading this schema would miss its
+# tables (the default schema is dropped first) and the test would fail.
 CUSTOM = DBSettings(
-    channel="acme_ch",
+    channel=Channel("acme_ch"),
     function="acme_fn_changed",
     statistics_table="acme_stats",
     queue_status_type="acme_status",
@@ -17,38 +26,62 @@ CUSTOM = DBSettings(
     trigger="acme_tg_changed",
     schedules_table="acme_schedules",
 )
-
-DEFAULT_NAMES = [
-    DBSettings().channel,
-    DBSettings().function,
-    DBSettings().statistics_table,
-    DBSettings().queue_status_type,
-    DBSettings().queue_table,
-    DBSettings().queue_table_log,
-    DBSettings().trigger,
-    DBSettings().schedules_table,
+CUSTOM_WIDENED_TABLES = [
+    CUSTOM.queue_table,
+    CUSTOM.statistics_table,
+    CUSTOM.schedules_table,
 ]
 
 
-def _upgrade_sql() -> str:
-    return "\n".join(QueryBuilderEnvironment(settings=CUSTOM).build_upgrade_queries())
+def _custom_queries(driver: db.Driver) -> queries.Queries:
+    return queries.Queries(
+        driver,
+        qbe=qb.QueryBuilderEnvironment(settings=CUSTOM),
+        qbq=qb.QueryQueueBuilder(settings=CUSTOM),
+        qbs=qb.QuerySchedulerBuilder(settings=CUSTOM),
+    )
 
 
-def test_upgrade_uses_only_configured_names() -> None:
-    """The statistics-status cast must target the configured type, not a hardcoded one."""
-    upgrade_sql = _upgrade_sql()
-    for default in DEFAULT_NAMES:
-        assert default not in upgrade_sql, f"default name {default!r} leaked into upgrade DDL"
-    assert "::pgqueuer_status" not in upgrade_sql
-    assert f"USING status::TEXT::{CUSTOM.queue_status_type}" in upgrade_sql
+async def test_upgrade_reruns_cleanly_on_current_schema(apgdriver: db.Driver) -> None:
+    """pgq upgrade is idempotent: re-running on an up-to-date schema is a no-op that still works."""
+    q = queries.Queries(apgdriver)
+
+    await q.upgrade()
+    await q.upgrade()
+
+    ids = await q.enqueue(["ep"], [b"x"], [0])
+    assert len(ids) == 1
 
 
-def test_every_upgrade_statement_is_idempotent() -> None:
-    """pgq upgrade may run repeatedly, so every statement must be a no-op when applied."""
-    idempotent_markers = ("IF NOT EXISTS", "OR REPLACE", "IF EXISTS", "ADD VALUE IF NOT EXISTS")
-    for stmt in QueryBuilderEnvironment(settings=CUSTOM).build_upgrade_queries():
-        head = stmt.strip().splitlines()[0]
-        # ALTER COLUMN ... TYPE is idempotent on its own and has no IF-EXISTS form.
-        if "ALTER COLUMN status TYPE" in stmt:
-            continue
-        assert any(m in stmt for m in idempotent_markers), f"non-idempotent upgrade stmt: {head}"
+async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
+    """The migration operates on the configured (prefixed) names, not hardcoded defaults."""
+    # Drop the default schema so a leaked default name would fail loudly rather
+    # than silently hit the template's default-named tables.
+    await queries.Queries(apgdriver).uninstall()
+
+    q = _custom_queries(apgdriver)
+    await q.install()
+    for table in CUSTOM_WIDENED_TABLES:
+        await simulate_legacy_serial(apgdriver, table)
+
+    await q.upgrade()
+
+    for table in CUSTOM_WIDENED_TABLES:
+        assert await id_data_type(apgdriver, table) == "bigint"
+    # The prefixed queue is fully usable after migrating.
+    ids = await q.enqueue(["ep"], [b"x"], [0])
+    assert len(ids) == 1
+
+
+async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None:
+    """settings.widen_id=False leaves the int4 column untouched; the default widens it."""
+    table = DBSettings().queue_table
+    await simulate_legacy_serial(apgdriver, table)
+
+    no_widen = DBSettings(widen_id=False)
+    q_no_widen = queries.Queries(apgdriver, qbe=qb.QueryBuilderEnvironment(settings=no_widen))
+    await q_no_widen.upgrade()
+    assert await id_data_type(apgdriver, table) == "integer"
+
+    await queries.Queries(apgdriver).upgrade()
+    assert await id_data_type(apgdriver, table) == "bigint"

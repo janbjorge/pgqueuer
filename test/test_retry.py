@@ -14,7 +14,7 @@ from pgqueuer.types import JobId
 
 
 async def inspect_queued_jobs(jids: list[JobId], driver: db.Driver) -> list[Job]:
-    sql = f"""SELECT * FROM {DBSettings().queue_table} WHERE id = ANY($1::integer[])"""
+    sql = f"""SELECT * FROM {DBSettings().queue_table} WHERE id = ANY($1::bigint[])"""
     return [Job.model_validate(x) for x in await driver.fetch(sql, jids)]
 
 
@@ -192,7 +192,7 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
     qm = QueueManager(queries.Queries(apgdriver))
 
     async def fetch_db_heartbeat(jobid: JobId) -> timedelta:
-        sql = f"""SELECT NOW() - heartbeat AS dt FROM {DBSettings().queue_table} WHERE id = ANY($1::integer[])"""  # noqa: E501
+        sql = f"""SELECT NOW() - heartbeat AS dt FROM {DBSettings().queue_table} WHERE id = ANY($1::bigint[])"""  # noqa: E501
         rows = await apgdriver.fetch(sql, [jobid])
         assert len(rows) == 1
         return rows[0]["dt"]

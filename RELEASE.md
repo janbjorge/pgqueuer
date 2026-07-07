@@ -663,6 +663,28 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   `Queries.peak_schedule()` and `ScheduleRepositoryPort.peak_schedule()` were
   renamed to `peek_schedule()` to fix the misspelling.
 
+- **`id` columns widened to `BIGINT` — no more ~2.1B lifetime-enqueue ceiling
+  ([#671](https://github.com/janbjorge/pgqueuer/issues/671)):** The `queue`,
+  `statistics`, and `schedules` primary keys were `int4 SERIAL`, capped at
+  2,147,483,647. Because the sequence only climbs and never reuses values, a
+  long-lived deployment would eventually exhaust it and every `enqueue` would
+  fail. Fresh installs now use `BIGSERIAL`; `pgq upgrade` widens existing `int4`
+  columns in place, along with their legacy `SERIAL` sequences (created
+  `AS INTEGER`, so they would otherwise still cap at 2^31-1).
+
+  > ⚠️ **Migration takes an `ACCESS EXCLUSIVE` lock.** Widening `int4` → `BIGINT`
+  > rewrites the whole table and rebuilds its indexes. For the duration of that
+  > rewrite Postgres holds an `ACCESS EXCLUSIVE` lock, which blocks **everything**
+  > on the table — enqueues, dequeues, even plain `SELECT`. The rewrite time
+  > scales with row count, so on a large or bloated `queue` table this can be a
+  > multi-second-to-minutes stall. Additionally, while the migration *waits* to
+  > acquire the lock, new queries queue up behind it, so a single long-running
+  > transaction can freeze the queue for the whole wait. **Run `pgq upgrade`
+  > during a maintenance window or low-traffic period**, or `pgq upgrade
+  > --no-widen-id` to skip the blocking widen and apply it out-of-band. The
+  > migration is idempotent (guarded on the column/sequence type), so it is a
+  > no-op once everything is `BIGINT` and safe to re-run.
+
 ---
 
 ## Other Changes
@@ -717,7 +739,10 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 ## Migration Checklist
 
 1. **Schema:** Run `pgq install` or `pgq upgrade`. Both add the `attempts`
-   column and `'failed'` status enum value automatically.
+   column and `'failed'` status enum value automatically. `pgq upgrade` also
+   widens the `int4` `id` columns to `BIGINT` (#671) — this takes an `ACCESS
+   EXCLUSIVE` lock and rewrites each table, so run it in a maintenance window on
+   large tables (or `pgq upgrade --no-widen-id` and widen out-of-band).
 2. **Sync handlers:** Convert all `def handler(job)` to `async def handler(job)`.
    Wrap blocking calls with `await asyncio.to_thread(...)`.
 3. **Factory functions:** Convert to `@asynccontextmanager` with `yield` instead

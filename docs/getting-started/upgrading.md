@@ -37,6 +37,29 @@ ALTER TYPE pgqueuer_status ADD VALUE IF NOT EXISTS 'failed';
 `pgq upgrade` and `pgq install` apply these automatically. If you own the
 schema, apply them before starting upgraded workers.
 
+### `id` columns widened to `BIGINT` (#671)
+
+The `queue`, `statistics`, and `schedules` primary keys were `int4 SERIAL`,
+capped at ~2.1 billion. Since the sequence never reuses values, a long-lived
+deployment could exhaust it and start failing every `enqueue`. Fresh installs
+now use `BIGSERIAL`; `pgq upgrade` widens the existing `int4` columns and their
+legacy sequences to `BIGINT` in place. The migration is idempotent (guarded on
+the column/sequence type) and safe to re-run.
+
+!!! warning "This migration takes an `ACCESS EXCLUSIVE` lock"
+    Widening `int4` → `BIGINT` rewrites the table and rebuilds its indexes.
+    Postgres holds an `ACCESS EXCLUSIVE` lock for the whole rewrite, blocking
+    enqueues, dequeues, and plain `SELECT`s. The rewrite time scales with row
+    count, so on a large or bloated `queue` table this can stall the queue for
+    seconds to minutes. **Run `pgq upgrade` during a maintenance window or
+    low-traffic period**, or run `pgq upgrade --no-widen-id` to apply every
+    other migration while skipping the widen, then widen the table out-of-band.
+
+    For a zero-downtime widen on a large table, see the
+    [discussion on #671](https://github.com/janbjorge/pgqueuer/issues/671#issuecomment-4809834464)
+    and the postgres.ai runbook
+    [How to redefine a PK without downtime](https://github.com/postgres-ai/postgres-howtos/blob/main/0033_how_to_redefine_a_PK_without_downtime.md#the-whole-recipe).
+
 ## 2. Async-only job handlers
 
 Synchronous job handlers are no longer accepted. Registering a plain `def`

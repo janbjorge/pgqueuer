@@ -35,7 +35,7 @@ class QueryBuilderEnvironment:
 
         return f"""CREATE TYPE {self.settings.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted', 'failed');
     CREATE {durability_policy.queue_table} TABLE {self.settings.queue_table} (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         priority INT NOT NULL,
         queue_manager_id UUID,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -78,7 +78,7 @@ class QueryBuilderEnvironment:
     CREATE INDEX {self.settings.queue_table_log}_job_id_status ON {self.settings.queue_table_log} (job_id, created DESC);
 
     CREATE {durability_policy.statistics_table} TABLE {self.settings.statistics_table} (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
         count BIGINT NOT NULL,
         priority INT NOT NULL,
@@ -93,7 +93,7 @@ class QueryBuilderEnvironment:
     );
 
     CREATE {durability_policy.schedules_table} TABLE {self.settings.schedules_table} (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
         entrypoint TEXT NOT NULL,
         heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -210,7 +210,7 @@ class QueryBuilderEnvironment:
         yield f"ALTER TABLE {self.settings.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_queue_manager_id_idx ON {self.settings.queue_table} (queue_manager_id) WHERE queue_manager_id IS NOT NULL;"  # noqa: E501
         yield f"""CREATE TABLE IF NOT EXISTS {self.settings.schedules_table} (
-        id SERIAL PRIMARY KEY,
+        id BIGSERIAL PRIMARY KEY,
         expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
         entrypoint TEXT NOT NULL,
         heartbeat TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -248,6 +248,47 @@ class QueryBuilderEnvironment:
         yield f"ALTER TYPE {self.settings.queue_status_type} ADD VALUE IF NOT EXISTS 'failed';"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_ep_prio_id_idx ON {self.settings.queue_table} (entrypoint, priority DESC, id ASC) WHERE status = 'queued';"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {self.settings.queue_table}_ep_ea_idx ON {self.settings.queue_table} (entrypoint, execute_after) WHERE status = 'queued';"  # noqa
+        # Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
+        # int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail.
+        # ALTER TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table, so it
+        # blocks briefly. Gated by settings.widen_id so operators can skip it and
+        # widen a large table out-of-band; the DO-guards keep it a no-op once id
+        # is already BIGINT.
+        if self.settings.widen_id:
+            for table in (
+                self.settings.queue_table,
+                self.settings.statistics_table,
+                self.settings.schedules_table,
+            ):
+                yield self.build_widen_id_column_query(table)
+                yield self.build_widen_id_sequence_query(table)
+
+    def build_widen_id_column_query(self, table: str) -> str:
+        """DO-guard on data_type keeps re-runs a no-op."""
+        return f"""DO $$
+    BEGIN
+        IF (SELECT data_type FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = '{table}'
+              AND column_name = 'id') = 'integer' THEN
+            ALTER TABLE {table} ALTER COLUMN id TYPE BIGINT;
+        END IF;
+    END $$;"""
+
+    def build_widen_id_sequence_query(self, table: str) -> str:
+        """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+
+        ALTER SEQUENCE ... AS BIGINT is a cheap, idempotent no-op when the
+        sequence is already BIGINT, so no data_type guard is needed.
+        """
+        return f"""DO $$
+    DECLARE
+        seq TEXT := pg_get_serial_sequence('{table}', 'id');
+    BEGIN
+        IF seq IS NOT NULL THEN
+            EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
+        END IF;
+    END $$;"""
 
     def build_table_has_column_query(self) -> str:
         return """SELECT EXISTS (
@@ -554,7 +595,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
     def build_log_job_query(self) -> str:
         return f"""WITH job_status AS (
             SELECT
-                UNNEST($1::integer[])                           AS id,
+                UNNEST($1::bigint[])                            AS id,
                 UNNEST($2::{self.settings.queue_status_type}[]) AS status,
                 UNNEST($3::JSONB[])                             AS traceback
         ), deleted AS (
@@ -611,7 +652,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
     """
 
     def build_update_heartbeat_query(self) -> str:
-        return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::integer[])"""  # noqa: E501
+        return f"""UPDATE {self.settings.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::bigint[])"""  # noqa: E501
 
     def build_truncate_log_query(self) -> str:
         return f"TRUNCATE {self.settings.queue_table_log}"
@@ -666,7 +707,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
                 attempts = attempts + 1,
                 updated = NOW(),
                 queue_manager_id = NULL
-            WHERE id = $1::integer
+            WHERE id = $1::bigint
             RETURNING id, entrypoint, priority
         )
         INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority, traceback)
@@ -678,7 +719,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
             UPDATE {self.settings.queue_table}
             SET status = 'queued', execute_after = NOW(), updated = NOW(),
                 attempts = 0, queue_manager_id = NULL
-            WHERE id = ANY($1::integer[]) AND status = 'failed'
+            WHERE id = ANY($1::bigint[]) AND status = 'failed'
             RETURNING id, entrypoint, priority
         )
         INSERT INTO {self.settings.queue_table_log} (job_id, status, entrypoint, priority)

@@ -108,3 +108,8 @@ class DBSettings(BaseSettings):
     trigger: str = Field(default=add_prefix("tg_pgqueuer_changed"))
     schedules_table: str = Field(default=add_prefix("pgqueuer_schedules"))
     durability: Durability = Field(default=Durability.durable)
+
+    # When True, `pgq upgrade` widens legacy int4 id columns/sequences to BIGINT
+    # (issue #671). The widen takes an ACCESS EXCLUSIVE lock and rewrites each
+    # table; set False to skip it and apply the widening out-of-band.
+    widen_id: bool = Field(default=True)
