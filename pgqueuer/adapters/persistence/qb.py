@@ -274,15 +274,16 @@ class QueryBuilderEnvironment:
     END $$;"""
 
     def build_widen_id_sequence_query(self, table: str) -> str:
-        """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1."""
+        """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+
+        ALTER SEQUENCE ... AS BIGINT is a cheap, idempotent no-op when the
+        sequence is already BIGINT, so no data_type guard is needed.
+        """
         return f"""DO $$
     DECLARE
         seq TEXT := pg_get_serial_sequence('{table}', 'id');
     BEGIN
-        IF seq IS NOT NULL AND (
-            SELECT data_type::text FROM pg_sequences
-            WHERE format('%I.%I', schemaname, sequencename) = seq
-        ) = 'integer' THEN
+        IF seq IS NOT NULL THEN
             EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
         END IF;
     END $$;"""

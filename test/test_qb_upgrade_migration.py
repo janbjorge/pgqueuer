@@ -11,13 +11,7 @@ from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel
-
-SETTINGS = DBSettings()
-WIDENED_TABLES = [
-    SETTINGS.queue_table,
-    SETTINGS.statistics_table,
-    SETTINGS.schedules_table,
-]
+from test.helpers import id_data_type, simulate_legacy_serial
 
 # Object names sharing no substring with the defaults: if any migration
 # statement hardcoded a default name, upgrading this schema would miss its
@@ -48,26 +42,6 @@ def _custom_queries(driver: db.Driver) -> queries.Queries:
     )
 
 
-async def _id_data_type(driver: db.Driver, table: str) -> str:
-    rows = await driver.fetch(
-        """SELECT data_type FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = $1
-          AND column_name = 'id';""",
-        table,
-    )
-    return rows[0]["data_type"]
-
-
-async def _simulate_legacy_serial(driver: db.Driver, table: str) -> None:
-    """Recreate the pre-#671 state: int4 column backed by an int4 SERIAL sequence."""
-    seq = f"{table}_id_seq"
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP IDENTITY IF EXISTS;")
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id TYPE INTEGER;")
-    await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {table}.id;")
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
-
-
 async def test_upgrade_reruns_cleanly_on_current_schema(apgdriver: db.Driver) -> None:
     """pgq upgrade is idempotent: re-running on an up-to-date schema is a no-op that still works."""
     q = queries.Queries(apgdriver)
@@ -88,12 +62,12 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
     q = _custom_queries(apgdriver)
     await q.install()
     for table in CUSTOM_WIDENED_TABLES:
-        await _simulate_legacy_serial(apgdriver, table)
+        await simulate_legacy_serial(apgdriver, table)
 
     await q.upgrade()
 
     for table in CUSTOM_WIDENED_TABLES:
-        assert await _id_data_type(apgdriver, table) == "bigint"
+        assert await id_data_type(apgdriver, table) == "bigint"
     # The prefixed queue is fully usable after migrating.
     ids = await q.enqueue(["ep"], [b"x"], [0])
     assert len(ids) == 1
@@ -102,11 +76,11 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
 async def test_widen_id_flag_controls_the_widen(apgdriver: db.Driver) -> None:
     """widen_id=False leaves the int4 column untouched; widen_id=True migrates it to bigint."""
     q = queries.Queries(apgdriver)
-    table = SETTINGS.queue_table
-    await _simulate_legacy_serial(apgdriver, table)
+    table = DBSettings().queue_table
+    await simulate_legacy_serial(apgdriver, table)
 
     await q.upgrade(widen_id=False)
-    assert await _id_data_type(apgdriver, table) == "integer"
+    assert await id_data_type(apgdriver, table) == "integer"
 
     await q.upgrade(widen_id=True)
-    assert await _id_data_type(apgdriver, table) == "bigint"
+    assert await id_data_type(apgdriver, table) == "bigint"

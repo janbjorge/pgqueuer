@@ -9,8 +9,38 @@ from typing import Protocol
 
 import async_timeout
 
+from pgqueuer import db
+from pgqueuer.adapters.persistence import qb
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
+
+# Tables whose id was int4 SERIAL before #671 and gets widened to BIGINT.
+WIDENED_ID_TABLES = [
+    qb.DBSettings().queue_table,
+    qb.DBSettings().statistics_table,
+    qb.DBSettings().schedules_table,
+]
+
+
+async def id_data_type(driver: db.Driver, table: str) -> str:
+    """SQL data_type of ``table.id`` in the current schema."""
+    rows = await driver.fetch(
+        """SELECT data_type FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = $1
+          AND column_name = 'id';""",
+        table,
+    )
+    return rows[0]["data_type"]
+
+
+async def simulate_legacy_serial(driver: db.Driver, table: str) -> None:
+    """Recreate the pre-#671 state: int4 column backed by an int4 SERIAL sequence."""
+    seq = f"{table}_id_seq"
+    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP IDENTITY IF EXISTS;")
+    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id TYPE INTEGER;")
+    await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {table}.id;")
+    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
 
 
 class ShutdownCapable(Protocol):
