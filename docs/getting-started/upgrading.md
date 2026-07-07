@@ -55,6 +55,11 @@ idempotent (guarded on the column/sequence type) and safe to re-run.
     low-traffic period**, or run `pgq upgrade --no-widen-id` to apply every
     other migration while skipping the widen, then widen the table out-of-band.
 
+    For a zero-downtime widen on a large table, see the
+    [discussion on #671](https://github.com/janbjorge/pgqueuer/issues/671#issuecomment-4809834464)
+    and the postgres.ai runbook
+    [How to redefine a PK without downtime](https://github.com/postgres-ai/postgres-howtos/blob/main/0033_how_to_redefine_a_PK_without_downtime.md#the-whole-recipe).
+
 ## 2. Async-only job handlers
 
 Synchronous job handlers are no longer accepted. Registering a plain `def`
