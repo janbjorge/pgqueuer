@@ -11,7 +11,7 @@ from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel
-from test.helpers import id_data_type, simulate_legacy_serial
+from test.helpers import id_data_type, id_is_identity, simulate_legacy_serial
 
 # Object names sharing no substring with the defaults: if any migration
 # statement hardcoded a default name, upgrading this schema would miss its
@@ -68,13 +68,17 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
 
     for table in CUSTOM_WIDENED_TABLES:
         assert await id_data_type(apgdriver, table) == "bigint"
+        assert await id_is_identity(apgdriver, table)
     # The prefixed queue is fully usable after migrating.
     ids = await q.enqueue(["ep"], [b"x"], [0])
     assert len(ids) == 1
 
 
-async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None:
-    """settings.widen_id=False leaves the int4 column untouched; the default widens it."""
+async def test_widen_id_setting_controls_the_conversion(apgdriver: db.Driver) -> None:
+    """settings.widen_id=False leaves the legacy int4 SERIAL column untouched.
+
+    The default both widens the column to bigint and converts it to IDENTITY.
+    """
     table = DBSettings().queue_table
     await simulate_legacy_serial(apgdriver, table)
 
@@ -82,6 +86,8 @@ async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None
     q_no_widen = queries.Queries(apgdriver, qbe=qb.QueryBuilderEnvironment(settings=no_widen))
     await q_no_widen.upgrade()
     assert await id_data_type(apgdriver, table) == "integer"
+    assert not await id_is_identity(apgdriver, table)
 
     await queries.Queries(apgdriver).upgrade()
     assert await id_data_type(apgdriver, table) == "bigint"
+    assert await id_is_identity(apgdriver, table)
