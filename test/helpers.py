@@ -35,9 +35,15 @@ async def id_data_type(driver: db.Driver, table: str) -> str:
 
 
 async def simulate_legacy_serial(driver: db.Driver, table: str) -> None:
-    """Recreate the pre-#671 state: int4 column backed by an int4 SERIAL sequence."""
+    """Recreate the pre-#671 state: int4 column backed by an int4 SERIAL sequence.
+
+    Resets from any current shape (BIGSERIAL or identity) so it is stable
+    regardless of what the install builder produces.
+    """
     seq = f"{table}_id_seq"
     await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP IDENTITY IF EXISTS;")
+    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP DEFAULT;")
+    await driver.execute(f"DROP SEQUENCE IF EXISTS {seq};")
     await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id TYPE INTEGER;")
     await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {table}.id;")
     await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
