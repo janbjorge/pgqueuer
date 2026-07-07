@@ -88,13 +88,9 @@ class Queries:
         """Drop every PgQueuer schema object. Destructive."""
         await self.driver.execute(self.qbe.build_uninstall_query())
 
-    async def upgrade(self, widen_id: bool = True) -> None:
-        """Apply pending schema migrations one statement at a time.
-
-        widen_id=False skips the blocking int4 -> BIGINT id widen (issue #671)
-        so operators can apply it out-of-band.
-        """
-        for query in self.qbe.build_upgrade_queries(widen_id=widen_id):
+    async def upgrade(self) -> None:
+        """Apply pending schema migrations one statement at a time."""
+        for query in self.qbe.build_upgrade_queries():
             await self.driver.execute(query)
 
     async def alter_durability(self) -> None:

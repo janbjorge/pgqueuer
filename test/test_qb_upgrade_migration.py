@@ -73,14 +73,15 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
     assert len(ids) == 1
 
 
-async def test_widen_id_flag_controls_the_widen(apgdriver: db.Driver) -> None:
-    """widen_id=False leaves the int4 column untouched; widen_id=True migrates it to bigint."""
-    q = queries.Queries(apgdriver)
+async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None:
+    """settings.widen_id=False leaves the int4 column untouched; the default widens it."""
     table = DBSettings().queue_table
     await simulate_legacy_serial(apgdriver, table)
 
-    await q.upgrade(widen_id=False)
+    no_widen = DBSettings(widen_id=False)
+    q_no_widen = queries.Queries(apgdriver, qbe=qb.QueryBuilderEnvironment(settings=no_widen))
+    await q_no_widen.upgrade()
     assert await id_data_type(apgdriver, table) == "integer"
 
-    await q.upgrade(widen_id=True)
+    await queries.Queries(apgdriver).upgrade()
     assert await id_data_type(apgdriver, table) == "bigint"

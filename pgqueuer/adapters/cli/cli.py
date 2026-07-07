@@ -365,12 +365,13 @@ def upgrade(
         ),
     ),
 ) -> None:
-    statements = qb.QueryBuilderEnvironment().build_upgrade_queries(widen_id=widen_id)
+    settings = qb.DBSettings(durability=durability, widen_id=widen_id)
+    statements = qb.QueryBuilderEnvironment(settings=settings).build_upgrade_queries()
     print(f"\n{'-' * 50}\n".join(statements))
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
-            await q.upgrade(widen_id=widen_id)
+        async with yield_queries(ctx, settings) as q:
+            await q.upgrade()
 
     if not dry_run:
         asyncio_run(run())

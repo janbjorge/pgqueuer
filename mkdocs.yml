@@ -97,6 +97,7 @@ nav:
       - Performance & Deployment:
           - Performance Tuning: guides/performance-tuning.md
           - Deployment Patterns: guides/deployment.md
+          - Widening id to BIGINT: guides/bigint-id-migration.md
   - Reference:
       - CLI: reference/cli.md
       - Architecture: reference/architecture.md

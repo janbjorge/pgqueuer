@@ -681,13 +681,12 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   > multi-second-to-minutes stall. Additionally, while the migration *waits* to
   > acquire the lock, new queries queue up behind it, so a single long-running
   > transaction can freeze the queue for the whole wait. **Run `pgq upgrade`
-  > during a maintenance window or low-traffic period.** If your deployment
-  > requires a different migration approach, `pgq upgrade --no-widen-id` skips
-  > the blocking widen so you can apply it out-of-band (e.g. new `BIGINT`
-  > column + batched backfill + swap; widen the backing sequences too).
-  >
-  > The migration is idempotent — it checks the current column and sequence
-  > types and is a no-op once everything is `BIGINT`, so it is safe to re-run.
+  > during a maintenance window or low-traffic period**, or `pgq upgrade
+  > --no-widen-id` to skip the blocking widen and apply it out-of-band. The
+  > migration is idempotent (guarded on the column/sequence type), so it is a
+  > no-op once everything is `BIGINT` and safe to re-run. See
+  > [Widening id to BIGINT](docs/guides/bigint-id-migration.md) for the locking
+  > details and a zero-downtime procedure for large tables.
 
 ---
 
@@ -743,7 +742,11 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 ## Migration Checklist
 
 1. **Schema:** Run `pgq install` or `pgq upgrade`. Both add the `attempts`
-   column and `'failed'` status enum value automatically.
+   column and `'failed'` status enum value automatically. `pgq upgrade` also
+   widens the `int4` `id` columns to `BIGINT` (#671) — this takes an `ACCESS
+   EXCLUSIVE` lock and rewrites each table, so run it in a maintenance window on
+   large tables (or `pgq upgrade --no-widen-id` and widen out-of-band). See
+   [Widening id to BIGINT](docs/guides/bigint-id-migration.md).
 2. **Sync handlers:** Convert all `def handler(job)` to `async def handler(job)`.
    Wrap blocking calls with `await asyncio.to_thread(...)`.
 3. **Factory functions:** Convert to `@asynccontextmanager` with `yield` instead
