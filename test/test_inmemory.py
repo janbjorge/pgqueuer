@@ -78,7 +78,6 @@ async def test_dedupe_key_freed_after_log(queries: InMemoryQueries) -> None:
     assert len(ids2) == 1
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_on_conflict_skip_single(queries: InMemoryQueries) -> None:
     (first,) = await queries.enqueue("ep", None, dedupe_key="k", on_conflict="skip")
     assert first is not None
@@ -88,7 +87,6 @@ async def test_dedupe_key_on_conflict_skip_single(queries: InMemoryQueries) -> N
     assert sum(x.count for x in stats) == 1
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_on_conflict_skip_batch_preserves_shape(
     queries: InMemoryQueries,
 ) -> None:
@@ -107,7 +105,6 @@ async def test_dedupe_key_on_conflict_skip_batch_preserves_shape(
     assert ids[2] is None
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_on_conflict_skip_within_batch_duplicate(
     queries: InMemoryQueries,
 ) -> None:
@@ -123,7 +120,6 @@ async def test_dedupe_key_on_conflict_skip_within_batch_duplicate(
     assert sum(x.count for x in await queries.queue_size()) == 1
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_within_batch_duplicate_raises(queries: InMemoryQueries) -> None:
     with pytest.raises(DuplicateJobError):
         await queries.enqueue(
@@ -135,7 +131,6 @@ async def test_dedupe_key_within_batch_duplicate_raises(queries: InMemoryQueries
     assert sum(x.count for x in await queries.queue_size()) == 0
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_on_conflict_skip_no_log_for_skipped(
     queries: InMemoryQueries,
 ) -> None:
@@ -146,7 +141,6 @@ async def test_dedupe_key_on_conflict_skip_no_log_for_skipped(
     assert len(logged) == 1
 
 
-@pytest.mark.asyncio
 async def test_dedupe_key_on_conflict_skip_freed_after_log(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, dedupe_key="dk1")
     qm_id = uuid.uuid4()
