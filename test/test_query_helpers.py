@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import random
 from datetime import timedelta
+from itertools import count
 
 from pgqueuer.adapters.persistence.query_helpers import (
     NormedEnqueueParam,
@@ -223,3 +225,58 @@ def test_align_interleaved_null_and_skipped_keys() -> None:
         rows((1, None), (2, None), (3, "new")),
         [None, "dup", None, "new"],
     ) == [1, None, 2, 3]
+
+
+def test_align_empty_batch() -> None:
+    assert align_ids_with_dedupe_keys([], []) == []
+
+
+def test_align_within_batch_triplicate() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, "a")), ["a", "a", "a"]) == [1, None, None]
+
+
+def test_align_repeated_key_conflicting_with_existing_job() -> None:
+    assert align_ids_with_dedupe_keys([], ["a", "a"]) == [None, None]
+
+
+def test_align_null_key_ids_follow_input_order() -> None:
+    assert align_ids_with_dedupe_keys(
+        rows((7, None), (9, None), (12, None)),
+        [None, None, None],
+    ) == [7, 9, 12]
+
+
+def simulate_enqueue(
+    dedupe_keys: list[str | None],
+    active: set[str],
+) -> tuple[list[dict], list[int | None]]:
+    """Reference model of the skip-mode INSERT.
+
+    Mirrors ON CONFLICT DO NOTHING against the *active* key set (null keys
+    never conflict, an inserted key becomes active for the rest of the batch)
+    with ids assigned in ascending input order.
+    """
+    inserted = list[dict]()
+    expected = list[int | None]()
+    remaining = set(active)
+    next_id = count(1)
+    for key in dedupe_keys:
+        if key is not None and key in remaining:
+            expected.append(None)
+            continue
+        job_id = next(next_id)
+        inserted.append({"id": job_id, "dedupe_key": key})
+        expected.append(job_id)
+        if key is not None:
+            remaining.add(key)
+    return inserted, expected
+
+
+def test_align_matches_simulated_insert_semantics() -> None:
+    rng = random.Random(678)
+    alphabet = ["a", "b", "c", None]
+    for _ in range(1000):
+        keys = [rng.choice(alphabet) for _ in range(rng.randint(0, 12))]
+        active = {key for key in "abc" if rng.random() < 0.4}
+        inserted, expected = simulate_enqueue(keys, active)
+        assert align_ids_with_dedupe_keys(inserted, keys) == expected
