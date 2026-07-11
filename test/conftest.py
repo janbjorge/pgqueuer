@@ -62,7 +62,12 @@ class PgQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        self.waiting_for(LogMessageWaitStrategy("database system is ready to accept connections"))
+        # times=2: the postgres image prints the ready line once from the initdb
+        # bootstrap server (unix socket only) before the real server listens on
+        # TCP; waiting for the first occurrence races connection resets.
+        self.waiting_for(
+            LogMessageWaitStrategy("database system is ready to accept connections", times=2)
+        )
 
     def get_connection_url(self, host: str | None = None) -> str:
         if self._container is None:
@@ -94,6 +99,10 @@ async def postgres_container() -> AsyncGenerator[str, None]:
 
     # https://postgresqlco.nf/doc/en/param/vacuum_buffer_usage_limit/
     # Assume worst case for backwards compatibility
+    #
+    # Memory is bounded per container (shared_buffers, max_wal_size, tmpfs size)
+    # because each xdist worker starts its own container and the data dir lives
+    # on tmpfs (RAM).
     commands = [
         "postgres",
         "-c",
@@ -107,11 +116,11 @@ async def postgres_container() -> AsyncGenerator[str, None]:
         "-c",
         "checkpoint_timeout=30min",
         "-c",
-        "max_wal_size=4GB",
+        "max_wal_size=512MB",
         "-c",
         "checkpoint_completion_target=0.9",
         "-c",
-        "shared_buffers=256MB",
+        "shared_buffers=128MB",
         "-c",
         "autovacuum_naptime=5s",
     ] + (["-c", "vacuum_buffer_usage_limit=8MB"] if int(postgres_version) >= 16 else [])
@@ -119,7 +128,7 @@ async def postgres_container() -> AsyncGenerator[str, None]:
     container = (
         PgQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
         .with_command(commands)
-        .with_kwargs(tmpfs={"/var/lib/pg/data": "rw"})
+        .with_kwargs(tmpfs={"/var/lib/pg/data": "rw,size=1g"})
         .with_envs(PGDATA="/var/lib/pg/data")
     )
 
