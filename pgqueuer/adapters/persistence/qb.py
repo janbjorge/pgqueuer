@@ -9,7 +9,7 @@ from pgqueuer.domain.settings import (
     DurabilityPolicy,
     add_prefix,
 )
-from pgqueuer.domain.types import SortOrder
+from pgqueuer.domain.types import OnConflict, SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -543,27 +543,46 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         ) sub
         """
 
-    def build_enqueue_query(self) -> str:
+    def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
+        # The arbiter predicate must textually match the partial unique index
+        # {queue_table}_unique_dedupe_key so PostgreSQL can infer it.
+        on_conflict_clause = (
+            """ON CONFLICT (dedupe_key)
+                WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL))
+                DO NOTHING"""
+            if on_conflict == "skip"
+            else ""
+        )
         return f"""
-        WITH inserted AS (
+        WITH input AS (
+            SELECT * FROM UNNEST(
+                $1::int[], $2::text[], $3::bytea[],
+                $4::interval[], $5::text[], $6::jsonb[]
+            ) WITH ORDINALITY AS
+                t(priority, entrypoint, payload, execute_after, dedupe_key, headers, ord)
+        ),
+        inserted AS (
             INSERT INTO {self.settings.queue_table}
             (priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
-            VALUES (
-                UNNEST($1::int[]),
-                UNNEST($2::text[]),
-                UNNEST($3::bytea[]),
-                UNNEST($4::interval[]) + NOW(),
-                UNNEST($5::text[]),
-                UNNEST($6::jsonb[]),
-                'queued'
-            )
-            RETURNING id, entrypoint, status, priority
+            SELECT priority, entrypoint, payload, execute_after + NOW(),
+                dedupe_key, headers, 'queued'
+            FROM input
+            ORDER BY ord
+            {on_conflict_clause}
+            RETURNING id, entrypoint, priority, dedupe_key
+        ),
+        logged AS (
+            INSERT INTO {self.settings.queue_table_log}
+            (job_id, status, entrypoint, priority)
+            SELECT id, 'queued', entrypoint, priority
+            FROM inserted
         )
-        INSERT INTO {self.settings.queue_table_log}
-        (job_id, status, entrypoint, priority)
-        SELECT id, 'queued', entrypoint, priority
+        -- Ids ascend with input position because the INSERT's SELECT is
+        -- ordered by ord and identity values are assigned per row, so ORDER BY
+        -- id yields rows in input order (skipped duplicates absent).
+        SELECT id, dedupe_key
         FROM inserted
-        RETURNING job_id AS id
+        ORDER BY id
         """
 
     def build_delete_from_queue_query(self) -> str:

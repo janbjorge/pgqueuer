@@ -179,7 +179,10 @@ From another process or script, push jobs into the queue:
     ```
 
 `Queries.enqueue()` accepts lists for batch enqueuing. Each list element corresponds to one
-job. The method returns the IDs of the newly created jobs.
+job. The method returns the IDs of the newly created jobs. When deduplicating with
+`dedupe_key` and `on_conflict="skip"`, the result keeps one entry per input — `None` marks
+positions skipped as duplicates. See
+[Reliability & Failure Handling](../guides/reliability.md#idempotency).
 
 ---
 

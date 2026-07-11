@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from pgqueuer.adapters.persistence.query_helpers import NormedEnqueueParam, normalize_enqueue_params
+from pgqueuer.adapters.persistence.query_helpers import (
+    NormedEnqueueParam,
+    align_ids_with_dedupe_keys,
+    normalize_enqueue_params,
+)
 
 
 def test_normalize_single_entrypoint() -> None:
@@ -184,3 +188,38 @@ def test_normalize_headers_dict() -> None:
         headers=[{"trace": "123"}],
     )
     assert result == expected
+
+
+def rows(*id_key_pairs: tuple[int, str | None]) -> list[dict]:
+    return [{"id": i, "dedupe_key": k} for i, k in id_key_pairs]
+
+
+def test_align_all_inserted() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, "a"), (2, "b")), ["a", "b"]) == [1, 2]
+
+
+def test_align_null_keys_always_insert() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, None), (2, None)), [None, None]) == [1, 2]
+
+
+def test_align_skipped_duplicate() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, "a"), (2, "c")), ["a", "b", "c"]) == [1, None, 2]
+
+
+def test_align_all_skipped() -> None:
+    assert align_ids_with_dedupe_keys([], ["a", "b"]) == [None, None]
+
+
+def test_align_within_batch_duplicate_first_occurrence_wins() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, "a")), ["a", "a"]) == [1, None]
+
+
+def test_align_skipped_key_then_null_key() -> None:
+    assert align_ids_with_dedupe_keys(rows((1, None)), ["a", None]) == [None, 1]
+
+
+def test_align_interleaved_null_and_skipped_keys() -> None:
+    assert align_ids_with_dedupe_keys(
+        rows((1, None), (2, None), (3, "new")),
+        [None, "dup", None, "new"],
+    ) == [1, None, 2, 3]

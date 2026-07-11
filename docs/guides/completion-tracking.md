@@ -73,6 +73,10 @@ async with CompletionWatcher(driver, queries=queries) as w:
     )
 ```
 
+!!! note "Batches enqueued with `on_conflict=\"skip\"`"
+    Skipped duplicates come back as `None` instead of a job id. Filter them out before
+    waiting: `[w.wait_for(j) for j in job_ids if j is not None]`.
+
 Terminal states: `canceled`, `deleted`, `exception`, `successful`.
 
 ## Helper Patterns

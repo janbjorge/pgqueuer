@@ -111,8 +111,16 @@ Manually enqueue a job.
 - `entrypoint` *(required)*: The entrypoint name.
 - `payload` *(optional)*: A serialized string or JSON payload.
 
+**Options:**
+
+- `--dedupe-key`: Deduplication key; an active (`queued`/`picked`) job with the same key
+  blocks the enqueue.
+- `--on-conflict`: What to do on a dedupe-key conflict — `raise` (default) exits with an
+  error, `skip` exits 0 without enqueuing.
+
 ```bash
 pgq queue my_module.my_function '{"key": "value"}'
+pgq queue my_module.my_function '{"key": "value"}' --dedupe-key invoice-42 --on-conflict skip
 ```
 
 ---

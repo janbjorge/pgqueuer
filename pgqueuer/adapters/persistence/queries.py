@@ -5,7 +5,7 @@ import dataclasses
 import uuid
 from contextlib import suppress
 from datetime import timedelta
-from typing import TYPE_CHECKING, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 if TYPE_CHECKING:
     import asyncpg
@@ -200,6 +200,34 @@ class Queries:
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
+    ) -> list[models.JobId]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: str,
+        payload: bytes | None,
+        priority: int = 0,
+        execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: list[str],
+        payload: list[bytes | None],
+        priority: list[int],
+        execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
     ) -> list[models.JobId]: ...
 
     @overload
@@ -211,7 +239,9 @@ class Queries:
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]: ...
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
 
     async def enqueue(
         self,
@@ -221,8 +251,14 @@ class Queries:
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]:
-        """Insert one or many jobs. Scalar args = single insert; lists = batch insert."""
+        *,
+        on_conflict: types.OnConflict = "raise",
+    ) -> list[models.JobId] | list[models.JobId | None]:
+        """Insert one or many jobs. Scalar args = single insert; lists = batch insert.
+
+        With ``on_conflict="skip"``, dedupe-key duplicates are skipped instead of
+        raising; the result keeps one entry per input, ``None`` at skipped positions.
+        """
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
@@ -236,22 +272,23 @@ class Queries:
             )
 
         try:
-            return [
-                models.JobId(row["id"])
-                for row in await self.driver.fetch(
-                    self.qbq.build_enqueue_query(),
-                    normed_params.priority,
-                    normed_params.entrypoint,
-                    normed_params.payload,
-                    normed_params.execute_after,
-                    normed_params.dedupe_key,
-                    [to_json(x).decode() for x in normed_params.headers],
-                )
-            ]
+            rows = await self.driver.fetch(
+                self.qbq.build_enqueue_query(on_conflict),
+                normed_params.priority,
+                normed_params.entrypoint,
+                normed_params.payload,
+                normed_params.execute_after,
+                normed_params.dedupe_key,
+                [to_json(x).decode() for x in normed_params.headers],
+            )
         except Exception as e:
             if is_unique_violation(e):
                 raise errors.DuplicateJobError(normed_params.dedupe_key) from e
             raise
+
+        if on_conflict == "skip":
+            return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
+        return [models.JobId(row["id"]) for row in rows]
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
@@ -522,6 +559,34 @@ class SyncQueries:
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
+    ) -> list[models.JobId]: ...
+
+    @overload
+    def enqueue(
+        self,
+        entrypoint: str,
+        payload: bytes | None,
+        priority: int = 0,
+        execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
+
+    @overload
+    def enqueue(
+        self,
+        entrypoint: list[str],
+        payload: list[bytes | None],
+        priority: list[int],
+        execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
     ) -> list[models.JobId]: ...
 
     @overload
@@ -533,7 +598,9 @@ class SyncQueries:
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]: ...
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
 
     def enqueue(
         self,
@@ -543,8 +610,14 @@ class SyncQueries:
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]:
-        """Insert one or many jobs. Scalar args = single insert; lists = batch insert."""
+        *,
+        on_conflict: types.OnConflict = "raise",
+    ) -> list[models.JobId] | list[models.JobId | None]:
+        """Insert one or many jobs. Scalar args = single insert; lists = batch insert.
+
+        With ``on_conflict="skip"``, dedupe-key duplicates are skipped instead of
+        raising; the result keeps one entry per input, ``None`` at skipped positions.
+        """
         normed_params = query_helpers.normalize_enqueue_params(
             entrypoint,
             payload,
@@ -564,22 +637,23 @@ class SyncQueries:
             )
 
         try:
-            return [
-                models.JobId(row["id"])
-                for row in self.driver.fetch(
-                    self.qbq.build_enqueue_query(),
-                    normed_params.priority,
-                    normed_params.entrypoint,
-                    normed_params.payload,
-                    normed_params.execute_after,
-                    normed_params.dedupe_key,
-                    [to_json(x).decode() for x in normed_params.headers],
-                )
-            ]
+            rows = self.driver.fetch(
+                self.qbq.build_enqueue_query(on_conflict),
+                normed_params.priority,
+                normed_params.entrypoint,
+                normed_params.payload,
+                normed_params.execute_after,
+                normed_params.dedupe_key,
+                [to_json(x).decode() for x in normed_params.headers],
+            )
         except Exception as e:
             if is_unique_violation(e):
                 raise errors.DuplicateJobError(normed_params.dedupe_key) from e
             raise
+
+        if on_conflict == "skip":
+            return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
+        return [models.JobId(row["id"]) for row in rows]
 
     def queue_size(self) -> list[models.QueueStatistics]:
         """Per-(entrypoint, priority, status) queue counts."""

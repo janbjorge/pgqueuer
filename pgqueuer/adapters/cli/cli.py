@@ -18,7 +18,7 @@ from typing_extensions import AsyncGenerator
 from pgqueuer.adapters.cli import factories, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
-from pgqueuer.domain import models, types
+from pgqueuer.domain import errors, models, types
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -70,6 +70,11 @@ app = typer.Typer(
 class VerifyMode(Enum):
     PRESENT = "present"
     ABSENT = "absent"
+
+
+class OnConflictChoice(Enum):
+    RAISE = "raise"
+    SKIP = "skip"
 
 
 @dataclass
@@ -531,15 +536,47 @@ def queue(
         None,
         help="Optional payload for the job, can be any serialized data.",
     ),
+    dedupe_key: str | None = typer.Option(
+        None,
+        "--dedupe-key",
+        help="Deduplication key; an active ('queued'/'picked') job with the same key blocks it.",
+    ),
+    on_conflict: OnConflictChoice = typer.Option(
+        OnConflictChoice.RAISE,
+        "--on-conflict",
+        help="On dedupe-key conflict: 'raise' exits with an error, 'skip' exits 0 silently.",
+    ),
 ) -> None:
     async def run_async() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await q.enqueue(
-                entrypoint,
-                None if payload is None else payload.encode(),
-                priority=0,
-                execute_after=timedelta(seconds=0),
-            )
+            encoded = None if payload is None else payload.encode()
+            if on_conflict is OnConflictChoice.SKIP:
+                (job_id,) = await q.enqueue(
+                    entrypoint,
+                    encoded,
+                    priority=0,
+                    execute_after=timedelta(seconds=0),
+                    dedupe_key=dedupe_key,
+                    on_conflict="skip",
+                )
+                print(
+                    f"Skipped: duplicate dedupe_key {dedupe_key!r}."
+                    if job_id is None
+                    else f"Enqueued job {job_id}."
+                )
+            else:
+                try:
+                    (new_job_id,) = await q.enqueue(
+                        entrypoint,
+                        encoded,
+                        priority=0,
+                        execute_after=timedelta(seconds=0),
+                        dedupe_key=dedupe_key,
+                    )
+                except errors.DuplicateJobError:
+                    print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
+                    exit(1)
+                print(f"Enqueued job {new_job_id}.")
 
     asyncio_run(run_async())
 
