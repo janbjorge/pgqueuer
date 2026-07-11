@@ -162,10 +162,11 @@ class InMemoryQueries:
         if on_conflict == "raise":
             seen = set[str]()
             for dk in normed.dedupe_key:
-                if dk is not None and (dk in self._dedupe_index or dk in seen):
+                if dk is None:
+                    continue
+                if dk in self._dedupe_index or dk in seen:
                     raise errors.DuplicateJobError(normed.dedupe_key)
-                if dk is not None:
-                    seen.add(dk)
+                seen.add(dk)
 
         now = utc_now()
         ids: list[JobId | None] = []

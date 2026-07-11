@@ -605,6 +605,11 @@ async def test_enqueue_on_conflict_skip_single(
     assert sum(x.count for x in sq.queue_size()) == 1
 
 
+async def fetch_jobs_by_id(driver: db.Driver, ids: list[models.JobId | None]) -> dict:
+    sql = f"SELECT id, entrypoint, payload FROM {DBSettings().queue_table} WHERE id = ANY($1)"
+    return {r["id"]: r for r in await driver.fetch(sql, [x for x in ids if x is not None])}
+
+
 async def test_enqueue_on_conflict_skip_batch_preserves_shape(apgdriver: db.Driver) -> None:
     """Skip mode returns one entry per input; ids land on the matching rows."""
     aq = queries.Queries(apgdriver)
@@ -612,23 +617,18 @@ async def test_enqueue_on_conflict_skip_batch_preserves_shape(apgdriver: db.Driv
     await aq.enqueue("existing", None, dedupe_key="b")
 
     ids = await aq.enqueue(
-        ["ep_a", "ep_b", "ep_c"],
-        [b"a", b"b", b"c"],
+        ["ep_0", "ep_1", "ep_2"],
+        [b"0", b"1", b"2"],
         [0, 0, 0],
         dedupe_key=["a", "b", "c"],
         on_conflict="skip",
     )
-    assert len(ids) == 3
-    assert ids[0] is not None
-    assert ids[1] is None
-    assert ids[2] is not None
+    assert [x is None for x in ids] == [False, True, False]
 
-    sql = f"SELECT id, entrypoint, payload FROM {DBSettings().queue_table} WHERE id = ANY($1)"
-    rows = {r["id"]: r for r in await apgdriver.fetch(sql, [ids[0], ids[2]])}
-    assert rows[ids[0]]["entrypoint"] == "ep_a"
-    assert rows[ids[0]]["payload"] == b"a"
-    assert rows[ids[2]]["entrypoint"] == "ep_c"
-    assert rows[ids[2]]["payload"] == b"c"
+    rows = await fetch_jobs_by_id(apgdriver, ids)
+    for position in (0, 2):
+        assert rows[ids[position]]["entrypoint"] == f"ep_{position}"
+        assert rows[ids[position]]["payload"] == f"{position}".encode()
 
 
 async def test_enqueue_on_conflict_skip_interleaved_null_keys(apgdriver: db.Driver) -> None:
@@ -643,18 +643,12 @@ async def test_enqueue_on_conflict_skip_interleaved_null_keys(apgdriver: db.Driv
         dedupe_key=[None, "dup", None, "new"],
         on_conflict="skip",
     )
-    assert len(ids) == 4
-    assert ids[1] is None
-    inserted = [x for x in ids if x is not None]
-    assert len(inserted) == 3
+    assert [x is None for x in ids] == [False, True, False, False]
 
-    sql = f"SELECT id, entrypoint, payload FROM {DBSettings().queue_table} WHERE id = ANY($1)"
-    rows = {r["id"]: r for r in await apgdriver.fetch(sql, inserted)}
+    rows = await fetch_jobs_by_id(apgdriver, ids)
     for position in (0, 2, 3):
-        job_id = ids[position]
-        assert job_id is not None
-        assert rows[job_id]["entrypoint"] == f"ep_{position}"
-        assert rows[job_id]["payload"] == f"{position}".encode()
+        assert rows[ids[position]]["entrypoint"] == f"ep_{position}"
+        assert rows[ids[position]]["payload"] == f"{position}".encode()
 
 
 async def test_enqueue_on_conflict_skip_within_batch_duplicate(apgdriver: db.Driver) -> None:

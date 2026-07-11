@@ -18,7 +18,7 @@ from typing_extensions import AsyncGenerator
 from pgqueuer.adapters.cli import factories, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
-from pgqueuer.domain import errors, models, types
+from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -548,35 +548,25 @@ def queue(
     ),
 ) -> None:
     async def run_async() -> None:
+        # For a single job, skip mode subsumes raise mode: a None result is
+        # exactly the duplicate case, so on_conflict only decides the exit.
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            encoded = None if payload is None else payload.encode()
-            if on_conflict is OnConflictChoice.SKIP:
-                (job_id,) = await q.enqueue(
-                    entrypoint,
-                    encoded,
-                    priority=0,
-                    execute_after=timedelta(seconds=0),
-                    dedupe_key=dedupe_key,
-                    on_conflict="skip",
-                )
-                print(
-                    f"Skipped: duplicate dedupe_key {dedupe_key!r}."
-                    if job_id is None
-                    else f"Enqueued job {job_id}."
-                )
-            else:
-                try:
-                    (new_job_id,) = await q.enqueue(
-                        entrypoint,
-                        encoded,
-                        priority=0,
-                        execute_after=timedelta(seconds=0),
-                        dedupe_key=dedupe_key,
-                    )
-                except errors.DuplicateJobError:
-                    print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
-                    exit(1)
-                print(f"Enqueued job {new_job_id}.")
+            (job_id,) = await q.enqueue(
+                entrypoint,
+                None if payload is None else payload.encode(),
+                priority=0,
+                execute_after=timedelta(seconds=0),
+                dedupe_key=dedupe_key,
+                on_conflict="skip",
+            )
+
+        if job_id is not None:
+            print(f"Enqueued job {job_id}.")
+        elif on_conflict is OnConflictChoice.SKIP:
+            print(f"Skipped: duplicate dedupe_key {dedupe_key!r}.")
+        else:
+            print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
+            exit(1)
 
     asyncio_run(run_async())
 

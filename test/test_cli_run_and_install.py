@@ -6,34 +6,13 @@ import subprocess
 import sys
 import time
 from datetime import timedelta
-from urllib.parse import urlparse
 
 import pytest
 from typer.testing import CliRunner
 
 from pgqueuer.adapters.cli import supervisor
 from pgqueuer.adapters.cli.cli import app
-
-
-def _env_from_dsn(dsn: str) -> dict[str, str]:
-    """
-    Build the PG* environment variables required by asyncpg.connect()
-    from a PostgreSQL DSN.
-    """
-    parsed = urlparse(dsn)
-    # Scheme can be postgres / postgresql; path starts with /dbname
-    dbname = parsed.path.lstrip("/") or ""
-    host = parsed.hostname or "localhost"
-    port = str(parsed.port or 5432)
-    user = parsed.username or ""
-    password = parsed.password or ""
-    return {
-        "PGHOST": host,
-        "PGPORT": port,
-        "PGUSER": user,
-        "PGPASSWORD": password,
-        "PGDATABASE": dbname,
-    }
+from test.helpers import env_from_dsn
 
 
 @pytest.mark.skipif(
@@ -48,7 +27,7 @@ def test_cli_run_handles_sigint_gracefully(dsn: str) -> None:
     flakiness across environments while still asserting proper signal handling.
     """
     env = os.environ.copy()
-    env.update(_env_from_dsn(dsn))
+    env.update(env_from_dsn(dsn))
     # Unbuffered so logs appear promptly (mirrors CI step)
     env["PYTHONUNBUFFERED"] = "1"
 
@@ -125,7 +104,7 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
 
     # Build base PG* env for each CLI invocation
     base_env = os.environ.copy()
-    base_env.update(_env_from_dsn(dsn))
+    base_env.update(env_from_dsn(dsn))
 
     # Helper to invoke and assert success
     def invoke_ok(args: list[str], env: dict[str, str]) -> None:
