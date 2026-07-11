@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from typing import Any, Literal, overload
 
 from pydantic_core import to_json
+from typing_extensions import assert_never
 
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
@@ -167,6 +168,10 @@ class InMemoryQueries:
                 if dk in self._dedupe_index or dk in seen:
                     raise errors.DuplicateJobError(normed.dedupe_key)
                 seen.add(dk)
+        elif on_conflict == "skip":
+            pass  # Duplicates resolve per row in the insert loop below.
+        else:
+            assert_never(on_conflict)
 
         now = utc_now()
         ids: list[JobId | None] = []

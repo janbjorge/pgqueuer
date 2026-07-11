@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Callable, Coroutine
 import typer
 from tabulate import tabulate
 from typer import Context
-from typing_extensions import AsyncGenerator
+from typing_extensions import AsyncGenerator, assert_never
 
 from pgqueuer.adapters.cli import factories, supervisor
 from pgqueuer.adapters.persistence import qb, queries
@@ -564,9 +564,11 @@ def queue(
             print(f"Enqueued job {job_id}.")
         elif on_conflict is OnConflictChoice.SKIP:
             print(f"Skipped: duplicate dedupe_key {dedupe_key!r}.")
-        else:
+        elif on_conflict is OnConflictChoice.RAISE:
             print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
             exit(1)
+        else:
+            assert_never(on_conflict)
 
     asyncio_run(run_async())
 

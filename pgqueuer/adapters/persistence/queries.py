@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import psycopg
 
 from pydantic_core import to_json
+from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
@@ -288,7 +289,9 @@ class Queries:
 
         if on_conflict == "skip":
             return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
-        return [models.JobId(row["id"]) for row in rows]
+        if on_conflict == "raise":
+            return [models.JobId(row["id"]) for row in rows]
+        assert_never(on_conflict)
 
     async def queued_work(self, entrypoints: list[str]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
@@ -653,7 +656,9 @@ class SyncQueries:
 
         if on_conflict == "skip":
             return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
-        return [models.JobId(row["id"]) for row in rows]
+        if on_conflict == "raise":
+            return [models.JobId(row["id"]) for row in rows]
+        assert_never(on_conflict)
 
     def queue_size(self) -> list[models.QueueStatistics]:
         """Per-(entrypoint, priority, status) queue counts."""

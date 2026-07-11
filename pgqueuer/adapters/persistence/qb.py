@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 from typing import Generator
 
+from typing_extensions import assert_never
+
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
@@ -544,15 +546,16 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         """
 
     def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
-        # The arbiter predicate must textually match the partial unique index
-        # {queue_table}_unique_dedupe_key so PostgreSQL can infer it.
-        on_conflict_clause = (
-            """ON CONFLICT (dedupe_key)
+        if on_conflict == "skip":
+            # The arbiter predicate must textually match the partial unique index
+            # {queue_table}_unique_dedupe_key so PostgreSQL can infer it.
+            on_conflict_clause = """ON CONFLICT (dedupe_key)
                 WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL))
                 DO NOTHING"""
-            if on_conflict == "skip"
-            else ""
-        )
+        elif on_conflict == "raise":
+            on_conflict_clause = ""
+        else:
+            assert_never(on_conflict)
         return f"""
         WITH input AS (
             SELECT * FROM UNNEST(

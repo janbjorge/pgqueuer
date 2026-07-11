@@ -62,21 +62,14 @@ def align_ids_with_dedupe_keys(
 ) -> list[JobId | None]:
     """Map inserted (id, dedupe_key) rows back onto input positions.
 
-    Rows arrive in input order (skipped duplicates absent). A skipped input's
-    key never appears in *rows* — the conflicting job predates the batch, and a
-    within-batch duplicate is consumed by its first occurrence — so a row
-    belongs to the current input position iff the keys match.
+    A non-null key appears at most once in *rows*, so it maps by lookup;
+    pop() hands the id to the first occurrence of a within-batch duplicate.
+    Null-key rows always insert and arrive in input order, so they pair
+    with the null-key positions one to one.
     """
-    ids = list[JobId | None]()
-    pending = iter(rows)
-    row = next(pending, None)
-    for key in dedupe_keys:
-        if row is not None and row["dedupe_key"] == key:
-            ids.append(JobId(row["id"]))
-            row = next(pending, None)
-        else:
-            ids.append(None)
-    return ids
+    keyed = {row["dedupe_key"]: JobId(row["id"]) for row in rows if row["dedupe_key"] is not None}
+    unkeyed = iter(JobId(row["id"]) for row in rows if row["dedupe_key"] is None)
+    return [next(unkeyed, None) if key is None else keyed.pop(key, None) for key in dedupe_keys]
 
 
 def merge_tracing_headers(
