@@ -36,8 +36,11 @@ uv run ruff format . --check  # Format check
 uv run lint-imports         # Hexagonal architecture boundary validation
 uv run mypy .               # Type checking (strict, targets Python 3.10)
 
-# Run all tests
+# Run all tests (parallel by default: 4 xdist workers, one Postgres container each)
 uv run pytest
+
+# Run tests serially (disable pytest-xdist)
+uv run pytest -n 0
 
 # Run a single test file
 uv run pytest test/test_queries.py
@@ -225,7 +228,9 @@ When a comment explains a non-obvious workaround, keep it short and put it adjac
 
 ## Testing Conventions
 
-- **pytest config**: `asyncio_mode = "auto"`, 20s timeout per test, `--durations=15`
+- **pytest config**: `asyncio_mode = "auto"`, 20s timeout per test, `--durations=15`, `-n 4` (pytest-xdist)
+- Tests run in parallel via **pytest-xdist**: session-scoped fixtures are per-worker, so each worker starts its own Postgres container and template database. Pass `-n 0` to run serially, or `-n <N>` to change worker count.
+- Keep tests xdist-safe: no fixed ports, no shared files, no cross-test state. Database isolation comes from the per-test `CREATE DATABASE ... TEMPLATE` fixture.
 - Declare async tests as `async def test_...` -- no `@pytest.mark.asyncio` decorator needed
 - Annotate all test function parameters: `async def test_foo(apgdriver: db.Driver, N: int) -> None:`
 - Use `@pytest.mark.parametrize` for multi-value testing
