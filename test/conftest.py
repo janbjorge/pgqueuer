@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import uuid
 from typing import Any, AsyncGenerator
 from urllib.parse import quote, urlparse, urlunparse
@@ -62,11 +63,19 @@ class PgQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        # times=2: the postgres image prints the ready line once from the initdb
-        # bootstrap server (unix socket only) before the real server listens on
-        # TCP; waiting for the first occurrence races connection resets.
+        # The postgres image prints the ready line once from the initdb
+        # bootstrap server (unix socket only) before the real server listens
+        # on TCP, and LogMessageWaitStrategy ignores its `times` argument
+        # (testcontainers 4.13), so anchor on the bootstrap shutdown line
+        # followed by the real server's ready line (both on stderr).
         self.waiting_for(
-            LogMessageWaitStrategy("database system is ready to accept connections", times=2)
+            LogMessageWaitStrategy(
+                re.compile(
+                    r"database system is shut down"
+                    r".*database system is ready to accept connections",
+                    re.DOTALL,
+                )
+            )
         )
 
     def get_connection_url(self, host: str | None = None) -> str:
@@ -136,13 +145,26 @@ async def postgres_container() -> AsyncGenerator[str, None]:
         yield running.get_connection_url()
 
 
+async def create_pool_with_retry(dsn: str, deadline_s: float = 60.0) -> asyncpg.Pool:
+    """The container port can accept and reset connections while postgres starts up."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + deadline_s
+    while True:
+        try:
+            return await asyncpg.create_pool(dsn=dsn)
+        except (OSError, asyncpg.CannotConnectNowError):
+            if loop.time() > deadline:
+                raise
+            await asyncio.sleep(0.5)
+
+
 @pytest.fixture(scope="session")
 async def migrated_db(postgres_container: str) -> AsyncGenerator[str, None]:
     """Ensure the database is migrated before running tests."""
 
     parent = f"parent_{uuid.uuid4().hex}"
 
-    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, "/postgres")) as pool:
+    async with await create_pool_with_retry(build_dsn_for(postgres_container, "/postgres")) as pool:
         await pool.execute(f"CREATE DATABASE {parent}")
 
     async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, f"/{parent}")) as pool:
