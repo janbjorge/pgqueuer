@@ -63,20 +63,14 @@ class PgQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        # The postgres image prints the ready line once from the initdb
-        # bootstrap server (unix socket only) before the real server listens
-        # on TCP, and LogMessageWaitStrategy ignores its `times` argument
-        # (testcontainers 4.13), so anchor on the bootstrap shutdown line
-        # followed by the real server's ready line (both on stderr).
-        self.waiting_for(
-            LogMessageWaitStrategy(
-                re.compile(
-                    r"database system is shut down"
-                    r".*database system is ready to accept connections",
-                    re.DOTALL,
-                )
-            )
-        )
+        # The image's initdb bootstrap server logs its own "ready to accept
+        # connections" (unix socket only) before the real server listens on
+        # TCP, and bootstrap output is split across stdout/stderr, so the
+        # ready line is ambiguous. The init-complete marker appears exactly
+        # once (stdout) after the bootstrap server is gone; the remaining
+        # ~100ms until the real server listens is bridged by
+        # create_pool_with_retry.
+        self.waiting_for(LogMessageWaitStrategy(re.compile(r"PostgreSQL init process complete")))
 
     def get_connection_url(self, host: str | None = None) -> str:
         if self._container is None:
