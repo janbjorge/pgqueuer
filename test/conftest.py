@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import re
 import uuid
 from typing import Any, AsyncGenerator
 from urllib.parse import quote, urlparse, urlunparse
@@ -22,7 +21,7 @@ except ModuleNotFoundError:
     uvloop = None  # type: ignore[assignment]
 
 from testcontainers.core.container import DockerContainer
-from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+from testcontainers.core.wait_strategies import HealthcheckWaitStrategy
 
 from pgqueuer.db import SyncPsycopgDriver
 
@@ -63,14 +62,21 @@ class PgQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        # The image's initdb bootstrap server logs its own "ready to accept
-        # connections" (unix socket only) before the real server listens on
-        # TCP, and bootstrap output is split across stdout/stderr, so the
-        # ready line is ambiguous. The init-complete marker appears exactly
-        # once (stdout) after the bootstrap server is gone; the remaining
-        # ~100ms until the real server listens is bridged by
-        # create_pool_with_retry.
-        self.waiting_for(LogMessageWaitStrategy(re.compile(r"PostgreSQL init process complete")))
+        # Readiness comes from docker's own healthcheck (as in ci.yml service
+        # containers), probing pg_isready over TCP: the image's initdb
+        # bootstrap server listens only on the unix socket and logs a
+        # misleading "ready to accept connections" line, so the container
+        # cannot report healthy before the real server accepts TCP.
+        self._kwargs.setdefault(
+            "healthcheck",
+            {
+                "test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", self.username],
+                "interval": 500_000_000,  # docker durations are nanoseconds
+                "timeout": 2_000_000_000,
+                "retries": 120,
+            },
+        )
+        self.waiting_for(HealthcheckWaitStrategy())
 
     def get_connection_url(self, host: str | None = None) -> str:
         if self._container is None:
@@ -129,27 +135,17 @@ async def postgres_container() -> AsyncGenerator[str, None]:
     ] + (["-c", "vacuum_buffer_usage_limit=8MB"] if int(postgres_version) >= 16 else [])
 
     container = (
-        PgQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
+        PgQueuerPostgresContainer(
+            f"postgres:{postgres_version}",
+            driver=None,
+            tmpfs={"/var/lib/pg/data": "rw,size=1g"},
+        )
         .with_command(commands)
-        .with_kwargs(tmpfs={"/var/lib/pg/data": "rw,size=1g"})
         .with_envs(PGDATA="/var/lib/pg/data")
     )
 
     with container as running:
         yield running.get_connection_url()
-
-
-async def create_pool_with_retry(dsn: str, deadline_s: float = 60.0) -> asyncpg.Pool:
-    """The container port can accept and reset connections while postgres starts up."""
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + deadline_s
-    while True:
-        try:
-            return await asyncpg.create_pool(dsn=dsn)
-        except (OSError, asyncpg.CannotConnectNowError):
-            if loop.time() > deadline:
-                raise
-            await asyncio.sleep(0.5)
 
 
 @pytest.fixture(scope="session")
@@ -158,7 +154,7 @@ async def migrated_db(postgres_container: str) -> AsyncGenerator[str, None]:
 
     parent = f"parent_{uuid.uuid4().hex}"
 
-    async with await create_pool_with_retry(build_dsn_for(postgres_container, "/postgres")) as pool:
+    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, "/postgres")) as pool:
         await pool.execute(f"CREATE DATABASE {parent}")
 
     async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, f"/{parent}")) as pool:
