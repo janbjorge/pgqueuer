@@ -42,6 +42,63 @@ def _custom_queries(driver: db.Driver) -> queries.Queries:
     )
 
 
+async def schema_snapshot(driver: db.Driver, settings: DBSettings) -> dict[str, object]:
+    tables = [
+        settings.queue_table,
+        settings.queue_table_log,
+        settings.statistics_table,
+        settings.schedules_table,
+    ]
+    columns = await driver.fetch(
+        """SELECT table_name, column_name, data_type, is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = current_schema() AND table_name = ANY($1)
+        ORDER BY table_name, column_name""",
+        tables,
+    )
+    # The upgrade path creates {queue_table}_heartbeat_id_id1_idx for legacy
+    # installs; fresh installs never had it. Pre-existing divergence, excluded.
+    indexes = await driver.fetch(
+        """SELECT indexname, indexdef FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND tablename = ANY($1)
+          AND indexname != $2
+        ORDER BY indexname""",
+        tables,
+        f"{settings.queue_table}_heartbeat_id_id1_idx",
+    )
+    function = await driver.fetch(
+        """SELECT pg_get_functiondef(p.oid) AS def
+        FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = current_schema() AND p.proname = $1""",
+        settings.function,
+    )
+    persistence = await driver.fetch(
+        """SELECT c.relname, c.relpersistence, c.reloptions
+        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = current_schema() AND c.relname = ANY($1) AND c.relkind = 'r'
+        ORDER BY c.relname""",
+        tables,
+    )
+    return {
+        "columns": columns,
+        "indexes": indexes,
+        "function": function,
+        "persistence": persistence,
+    }
+
+
+async def test_upgrade_on_fresh_install_is_schema_noop(apgdriver: db.Driver) -> None:
+    """Upgrade DDL converges to exactly what fresh install produces."""
+    settings = DBSettings()
+    before = await schema_snapshot(apgdriver, settings)
+
+    await queries.Queries(apgdriver).upgrade()
+
+    after = await schema_snapshot(apgdriver, settings)
+    assert before == after
+
+
 async def test_upgrade_reruns_cleanly_on_current_schema(apgdriver: db.Driver) -> None:
     """pgq upgrade is idempotent: re-running on an up-to-date schema is a no-op that still works."""
     q = queries.Queries(apgdriver)
