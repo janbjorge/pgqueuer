@@ -464,7 +464,7 @@ available AS (
 ),
 
 -- New queued jobs: per-entrypoint LATERAL lookup hits (entrypoint, priority, id) partial index.
-next_queued_src AS (
+next_queued AS (
     SELECT q.id, q.priority
     FROM available a
     CROSS JOIN LATERAL (
@@ -483,16 +483,12 @@ next_queued_src AS (
     LIMIT $1
 ),
 
-next_queued AS (
-    SELECT id FROM next_queued_src
-),
-
 -- Stale picked jobs whose heartbeat timed out. The concurrency gate from
 -- next_queued is intentionally omitted: re-picking only transfers ownership
 -- of a row already counted in `picked`, so net live execution is unchanged.
 -- Applying the gate would deadlock recovery once leaked rows fill the slot.
 next_stale AS (
-    SELECT q.id
+    SELECT q.id, q.priority
     FROM {t} q
     JOIN params p ON p.entrypoint = q.entrypoint
     WHERE q.status = 'picked'
@@ -505,14 +501,15 @@ next_stale AS (
     LIMIT $1
 ),
 
--- Merge both sets, keeping priority order, capped to batch size.
+-- Merge both sets into one global priority order so a recovered stale job
+-- competes on priority with fresh work instead of always losing to it.
 eligible AS (
     SELECT id FROM (
-        SELECT id, 0 AS src FROM next_queued
+        SELECT id, priority FROM next_queued
         UNION ALL
-        SELECT id, 1 AS src FROM next_stale
+        SELECT id, priority FROM next_stale
     ) combined
-    ORDER BY src, id
+    ORDER BY priority DESC, id ASC
     LIMIT $1
 ),
 

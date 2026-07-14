@@ -281,6 +281,28 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
     assert jobs2[0].id == jobs[0].id
 
 
+async def test_dequeue_stale_priority_beats_fresh_work(queries: InMemoryQueries) -> None:
+    """A stale high-priority job outranks fresh lower-priority work (#684)."""
+    await queries.enqueue("ep", b"stale-hi", priority=10)
+    qm_id = uuid.uuid4()
+    params = {"ep": EntrypointExecutionParameter(0)}
+
+    picked = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+    assert len(picked) == 1
+    stale_id = picked[0].id
+
+    from datetime import datetime, timezone
+
+    queries._jobs[int(stale_id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+    await queries.enqueue(["ep"] * 3, [b"fresh-lo"] * 3, [0] * 3)
+
+    recovered = await queries.dequeue(
+        1, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+    )
+    assert [j.id for j in recovered] == [stale_id]
+
+
 async def test_dequeue_empty_entrypoints(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
     jobs = await queries.dequeue(

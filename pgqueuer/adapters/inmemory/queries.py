@@ -273,19 +273,19 @@ class InMemoryQueries:
             if now - j["heartbeat"] < heartbeat_timeout:
                 continue
             candidates.append(j)
-        candidates.sort(key=lambda j: (j["heartbeat"], j["id"]))
+        candidates.sort(key=lambda j: (-j["priority"], j["id"]))
         return candidates
 
     def _select_jobs(
         self,
         batch_size: int,
-        candidates: list[dict[str, Any]],
+        candidates: list[tuple[dict[str, Any], bool]],
         entrypoints: dict[str, EntrypointExecutionParameter],
         picked_per_ep: dict[str, int],
     ) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
         seen: set[int] = set()
-        for j in candidates:
+        for j, stale in candidates:
             if len(selected) >= batch_size:
                 break
             if j["id"] in seen:
@@ -295,14 +295,19 @@ class InMemoryQueries:
             ep = j["entrypoint"]
             params = entrypoints[ep]
 
+            # Stale recovery transfers ownership of a row already counted in
+            # picked_per_ep, so the concurrency gate does not apply
+            # (mirrors next_stale in qb.py).
             if (
-                params.concurrency_limit > 0
+                not stale
+                and params.concurrency_limit > 0
                 and picked_per_ep.get(ep, 0) >= params.concurrency_limit
             ):
                 continue
 
             selected.append(j)
-            picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
+            if not stale:
+                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
 
         return selected
 
@@ -354,15 +359,18 @@ class InMemoryQueries:
         queued_candidates = self._collect_queued_candidates(now, entrypoints)
         retry_candidates = self._collect_retry_candidates(now, entrypoints, heartbeat_timeout)
 
+        # One global priority order so recovered stale jobs compete on priority
+        # with fresh work instead of always losing to it (mirrors eligible in qb.py).
+        candidates = sorted(
+            [(j, False) for j in queued_candidates] + [(j, True) for j in retry_candidates],
+            key=lambda c: (-c[0]["priority"], c[0]["id"]),
+        )
         selected = self._select_jobs(
             remaining,
-            queued_candidates,
+            candidates,
             entrypoints,
             picked_per_ep,
         )
-        # Stale recovery transfers ownership of a row already in picked_per_ep,
-        # so the concurrency gate does not apply (mirrors next_stale in qb.py).
-        selected.extend(retry_candidates[: remaining - len(selected)])
 
         for j in selected:
             j["status"] = "picked"

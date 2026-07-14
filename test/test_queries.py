@@ -242,6 +242,36 @@ async def test_queue_priority_across_entrypoints(
     assert drained == sorted(drained, key=lambda j: (-j.priority, j.id))
 
 
+async def test_stale_job_priority_beats_fresh_work(apgdriver: db.Driver) -> None:
+    """A stale high-priority job outranks fresh lower-priority work (#684)."""
+    q = queries.Queries(apgdriver)
+    entrypoints = {"placeholder": queries.EntrypointExecutionParameter(0)}
+    heartbeat_timeout = timedelta(seconds=0.01)
+
+    await q.enqueue("placeholder", b"stale-hi", priority=10)
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints=entrypoints,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert len(picked) == 1
+    stale_id = picked[0].id
+
+    await q.enqueue(["placeholder"] * 3, [b"fresh-lo"] * 3, [0] * 3)
+    await asyncio.sleep(heartbeat_timeout.total_seconds())
+
+    recovered = await q.dequeue(
+        batch_size=1,
+        entrypoints=entrypoints,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=heartbeat_timeout,
+    )
+    assert [j.id for j in recovered] == [stale_id]
+
+
 @pytest.mark.parametrize("batch_size", (1, 5, 7))
 async def test_dequeue_caps_at_batch_size_across_entrypoints(
     apgdriver: db.Driver,
