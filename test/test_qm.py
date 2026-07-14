@@ -193,10 +193,17 @@ async def test_max_concurrent_tasks(
     picked_jobs = list[Log]()
 
     async def log_sampler() -> None:
-        await asyncio.sleep(0.25)
-        logs = [log for log in await q.queue_log() if log.status == "picked"]
+        # Poll until the manager has ramped to its concurrency ceiling instead of
+        # sampling once at a fixed delay, which races the ramp-up under load. The
+        # global limit caps picks, so the count settles at exactly the ceiling.
+        async with async_timeout.timeout(5):
+            while True:
+                logs = [log for log in await q.queue_log() if log.status == "picked"]
+                if len(logs) >= max_concurrent_tasks:
+                    picked_jobs.extend(logs)
+                    break
+                await asyncio.sleep(0.05)
         qm.shutdown.set()
-        picked_jobs.extend(logs)
 
     @qm.entrypoint("fetch")
     async def fetch(job: Job) -> None:
