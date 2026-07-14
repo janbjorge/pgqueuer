@@ -89,6 +89,7 @@ dev = [
     "opentelemetry-semantic-conventions>=0.41b0",
     "pytest-mock>=3.14.0",
     "pytest-timeout>=2.3.1",
+    "pytest-xdist>=3.8.0",
     "ruff",
     "tqdm",
     "types-croniter",
@@ -154,7 +155,9 @@ explicit_package_bases = true
 asyncio_mode = "auto"
 timeout = "20"
 timeout_func_only = true
-addopts = "--durations=15"
+# -n 4: modest parallelism; each xdist worker gets its own session-scoped
+# Postgres container, so this scales the suite across a few extra servers.
+addopts = "--durations=15 -n 4"
 
 # ---------------------------------------------------------------------------
 # Import-linter: enforce hexagonal architecture boundaries

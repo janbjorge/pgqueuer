@@ -3,13 +3,15 @@ from __future__ import annotations
 import dataclasses
 from typing import Generator
 
+from typing_extensions import assert_never
+
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
     DurabilityPolicy,
     add_prefix,
 )
-from pgqueuer.domain.types import SortOrder
+from pgqueuer.domain.types import OnConflict, SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -543,27 +545,55 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         ) sub
         """
 
-    def build_enqueue_query(self) -> str:
+    def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
+        if on_conflict == "skip":
+            # The arbiter predicate must textually match the partial unique index
+            # {queue_table}_unique_dedupe_key so PostgreSQL can infer it.
+            on_conflict_clause = """ON CONFLICT (dedupe_key)
+                WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL))
+                DO NOTHING"""
+        elif on_conflict == "raise":
+            on_conflict_clause = ""
+        else:
+            assert_never(on_conflict)
         return f"""
-        WITH inserted AS (
+        WITH input AS MATERIALIZED (
+            -- MATERIALIZED: nextval is volatile and `input` is referenced twice,
+            -- so pin single evaluation -- each input row gets exactly one id.
+            -- The scalar sub-select resolves the sequence name once (InitPlan)
+            -- rather than a catalog lookup per row.
+            -- Skipped ON CONFLICT rows leave harmless id gaps; a pre-count CTE
+            -- could avoid them but isn't worth the extra pass.
+            SELECT
+                nextval((SELECT pg_get_serial_sequence('{self.settings.queue_table}', 'id'))) AS id,
+                priority, entrypoint, payload, execute_after, dedupe_key, headers, ord
+            FROM UNNEST(
+                $1::int[], $2::text[], $3::bytea[],
+                $4::interval[], $5::text[], $6::jsonb[]
+            ) WITH ORDINALITY AS
+                t(priority, entrypoint, payload, execute_after, dedupe_key, headers, ord)
+        ),
+        inserted AS (
             INSERT INTO {self.settings.queue_table}
-            (priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
-            VALUES (
-                UNNEST($1::int[]),
-                UNNEST($2::text[]),
-                UNNEST($3::bytea[]),
-                UNNEST($4::interval[]) + NOW(),
-                UNNEST($5::text[]),
-                UNNEST($6::jsonb[]),
-                'queued'
-            )
-            RETURNING id, entrypoint, status, priority
+            (id, priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
+            SELECT id, priority, entrypoint, payload, execute_after + NOW(),
+                dedupe_key, headers, 'queued'
+            FROM input
+            {on_conflict_clause}
+            RETURNING id, entrypoint, priority
+        ),
+        logged AS (
+            INSERT INTO {self.settings.queue_table_log}
+            (job_id, status, entrypoint, priority)
+            SELECT id, 'queued', entrypoint, priority
+            FROM inserted
         )
-        INSERT INTO {self.settings.queue_table_log}
-        (job_id, status, entrypoint, priority)
-        SELECT id, 'queued', entrypoint, priority
-        FROM inserted
-        RETURNING job_id AS id
+        -- Join maps each surviving id back to its input ordinal. Rows skipped by
+        -- ON CONFLICT are absent from `inserted`, so their positions never appear.
+        SELECT i.ord AS ord, ins.id AS id
+        FROM inserted ins
+        JOIN input i ON i.id = ins.id
+        ORDER BY i.ord
         """
 
     def build_delete_from_queue_query(self) -> str:

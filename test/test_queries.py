@@ -7,6 +7,7 @@ import psycopg
 import pytest
 
 from pgqueuer import db, errors, models, queries
+from pgqueuer.domain.settings import DBSettings
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -584,6 +585,142 @@ async def test_queue_log_queued_dedupe_key_raises_contains_dedupe_key(
     with pytest.raises(errors.DuplicateJobError) as raised:
         queries.SyncQueries(pgdriver).enqueue("...", None, dedupe_key=dedupe_key)
     assert dedupe_key in raised.value.dedupe_key
+
+
+async def test_enqueue_on_conflict_skip_single(
+    apgdriver: db.Driver,
+    pgdriver: db.SyncDriver,
+) -> None:
+    aq = queries.Queries(apgdriver)
+
+    (first,) = await aq.enqueue("ep", None, dedupe_key="k", on_conflict="skip")
+    assert first is not None
+    assert sum(x.count for x in await aq.queue_size()) == 1
+
+    assert await aq.enqueue("ep", None, dedupe_key="k", on_conflict="skip") == [None]
+    assert sum(x.count for x in await aq.queue_size()) == 1
+
+    sq = queries.SyncQueries(pgdriver)
+    assert sq.enqueue("ep", None, dedupe_key="k", on_conflict="skip") == [None]
+    assert sum(x.count for x in sq.queue_size()) == 1
+
+
+async def fetch_jobs_by_id(driver: db.Driver, ids: list[models.JobId | None]) -> dict:
+    sql = f"SELECT id, entrypoint, payload FROM {DBSettings().queue_table} WHERE id = ANY($1)"
+    return {r["id"]: r for r in await driver.fetch(sql, [x for x in ids if x is not None])}
+
+
+async def test_enqueue_on_conflict_skip_batch_preserves_shape(apgdriver: db.Driver) -> None:
+    """Skip mode returns one entry per input; ids land on the matching rows."""
+    aq = queries.Queries(apgdriver)
+
+    await aq.enqueue("existing", None, dedupe_key="b")
+
+    ids = await aq.enqueue(
+        ["ep_0", "ep_1", "ep_2"],
+        [b"0", b"1", b"2"],
+        [0, 0, 0],
+        dedupe_key=["a", "b", "c"],
+        on_conflict="skip",
+    )
+    assert [x is None for x in ids] == [False, True, False]
+
+    rows = await fetch_jobs_by_id(apgdriver, ids)
+    for position in (0, 2):
+        assert rows[ids[position]]["entrypoint"] == f"ep_{position}"
+        assert rows[ids[position]]["payload"] == f"{position}".encode()
+
+
+async def test_enqueue_on_conflict_skip_interleaved_null_keys(apgdriver: db.Driver) -> None:
+    aq = queries.Queries(apgdriver)
+
+    await aq.enqueue("existing", None, dedupe_key="dup")
+
+    ids = await aq.enqueue(
+        ["ep_0", "ep_1", "ep_2", "ep_3"],
+        [b"0", b"1", b"2", b"3"],
+        [0, 0, 0, 0],
+        dedupe_key=[None, "dup", None, "new"],
+        on_conflict="skip",
+    )
+    assert [x is None for x in ids] == [False, True, False, False]
+
+    rows = await fetch_jobs_by_id(apgdriver, ids)
+    for position in (0, 2, 3):
+        assert rows[ids[position]]["entrypoint"] == f"ep_{position}"
+        assert rows[ids[position]]["payload"] == f"{position}".encode()
+
+
+async def test_enqueue_on_conflict_skip_within_batch_duplicate(apgdriver: db.Driver) -> None:
+    aq = queries.Queries(apgdriver)
+
+    ids = await aq.enqueue(
+        ["ep", "ep"],
+        [None, None],
+        [0, 0],
+        dedupe_key=["k", "k"],
+        on_conflict="skip",
+    )
+    assert ids[0] is not None
+    assert ids[1] is None
+    assert sum(x.count for x in await aq.queue_size()) == 1
+
+
+async def test_enqueue_on_conflict_skip_no_log_for_skipped(apgdriver: db.Driver) -> None:
+    aq = queries.Queries(apgdriver)
+
+    (first,) = await aq.enqueue("ep", None, dedupe_key="k")
+    ids = await aq.enqueue(
+        ["ep", "ep"],
+        [None, None],
+        [0, 0],
+        dedupe_key=["k", "other"],
+        on_conflict="skip",
+    )
+    assert ids[0] is None
+    second = ids[1]
+    assert second is not None
+
+    logged_job_ids = [log.job_id for log in await aq.queue_log() if log.status == "queued"]
+    assert sorted(logged_job_ids) == sorted([first, second])
+
+
+async def test_enqueue_on_conflict_skip_all_new_keys(apgdriver: db.Driver) -> None:
+    aq = queries.Queries(apgdriver)
+
+    ids = await aq.enqueue(
+        ["ep_a", "ep_b"],
+        [None, None],
+        [0, 0],
+        dedupe_key=["a", "b"],
+        on_conflict="skip",
+    )
+    assert all(x is not None for x in ids)
+    assert sum(x.count for x in await aq.queue_size()) == 2
+
+
+@pytest.mark.parametrize("batch_size", (2, 10))
+async def test_enqueue_on_conflict_skip_concurrent(
+    dsn: str,
+    batch_size: int,
+    apgdriver: db.Driver,
+) -> None:
+    async with asyncpg.create_pool(dsn=dsn) as pool:
+        results = await asyncio.gather(
+            *[
+                queries.Queries(db.AsyncpgPoolDriver(pool)).enqueue(
+                    "ep",
+                    None,
+                    dedupe_key="test_enqueue_on_conflict_skip_concurrent",
+                    on_conflict="skip",
+                )
+                for _ in range(batch_size)
+            ],
+        )
+
+    inserted = [x for (x,) in results if x is not None]
+    assert len(inserted) == 1
+    assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
 
 
 @pytest.mark.parametrize("limit", (None, 10))

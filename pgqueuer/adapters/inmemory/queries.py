@@ -9,16 +9,17 @@ import asyncio
 import dataclasses
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, overload
+from typing import Any, Literal, overload
 
 from pydantic_core import to_json
+from typing_extensions import assert_never
 
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.models import utc_now
-from pgqueuer.domain.types import CronEntrypoint, JobId, ScheduleId, SortOrder
+from pgqueuer.domain.types import CronEntrypoint, JobId, OnConflict, ScheduleId, SortOrder
 from pgqueuer.ports import tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
@@ -92,6 +93,34 @@ class InMemoryQueries:
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
+    ) -> list[JobId]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: str,
+        payload: bytes | None,
+        priority: int = 0,
+        execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[JobId | None]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: list[str],
+        payload: list[bytes | None],
+        priority: list[int],
+        execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
     ) -> list[JobId]: ...
 
     @overload
@@ -103,7 +132,9 @@ class InMemoryQueries:
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
-    ) -> list[JobId]: ...
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[JobId | None]: ...
 
     async def enqueue(
         self,
@@ -113,7 +144,9 @@ class InMemoryQueries:
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
-    ) -> list[JobId]:
+        *,
+        on_conflict: OnConflict = "raise",
+    ) -> list[JobId] | list[JobId | None]:
         normed = query_helpers.normalize_enqueue_params(
             entrypoint, payload, priority, execute_after, dedupe_key, headers
         )
@@ -127,14 +160,28 @@ class InMemoryQueries:
                 )
             )
 
-        for dk in normed.dedupe_key:
-            if dk is not None and dk in self._dedupe_index:
-                raise errors.DuplicateJobError(normed.dedupe_key)
+        if on_conflict == "raise":
+            seen = set[str]()
+            for dk in normed.dedupe_key:
+                if dk is None:
+                    continue
+                if dk in self._dedupe_index or dk in seen:
+                    raise errors.DuplicateJobError(normed.dedupe_key)
+                seen.add(dk)
+        elif on_conflict == "skip":
+            pass  # Duplicates resolve per row in the insert loop below.
+        else:
+            assert_never(on_conflict)
 
         now = utc_now()
-        ids: list[JobId] = []
+        ids: list[JobId | None] = []
 
         for i in range(len(normed.entrypoint)):
+            dk = normed.dedupe_key[i]
+            if dk is not None and dk in self._dedupe_index:
+                ids.append(None)
+                continue
+
             job_id = self._next_job_id
             self._next_job_id += 1
 
@@ -156,7 +203,6 @@ class InMemoryQueries:
                 "headers": hdr,
             }
 
-            dk = normed.dedupe_key[i]
             if dk is not None:
                 self._dedupe_index[dk] = job_id
 

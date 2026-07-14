@@ -21,7 +21,7 @@ except ModuleNotFoundError:
     uvloop = None  # type: ignore[assignment]
 
 from testcontainers.core.container import DockerContainer
-from testcontainers.core.wait_strategies import LogMessageWaitStrategy
+from testcontainers.core.wait_strategies import HealthcheckWaitStrategy
 
 from pgqueuer.db import SyncPsycopgDriver
 
@@ -62,7 +62,21 @@ class PgQueuerPostgresContainer(DockerContainer):
         self.with_env("POSTGRES_USER", self.username)
         self.with_env("POSTGRES_PASSWORD", self.password)
         self.with_env("POSTGRES_DB", self.dbname)
-        self.waiting_for(LogMessageWaitStrategy("database system is ready to accept connections"))
+        # Readiness comes from docker's own healthcheck (as in ci.yml service
+        # containers), probing pg_isready over TCP: the image's initdb
+        # bootstrap server listens only on the unix socket and logs a
+        # misleading "ready to accept connections" line, so the container
+        # cannot report healthy before the real server accepts TCP.
+        self._kwargs.setdefault(
+            "healthcheck",
+            {
+                "test": ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", self.username],
+                "interval": 500_000_000,  # docker durations are nanoseconds
+                "timeout": 2_000_000_000,
+                "retries": 120,
+            },
+        )
+        self.waiting_for(HealthcheckWaitStrategy())
 
     def get_connection_url(self, host: str | None = None) -> str:
         if self._container is None:
@@ -94,6 +108,10 @@ async def postgres_container() -> AsyncGenerator[str, None]:
 
     # https://postgresqlco.nf/doc/en/param/vacuum_buffer_usage_limit/
     # Assume worst case for backwards compatibility
+    #
+    # Memory is bounded per container (shared_buffers, max_wal_size, tmpfs size)
+    # because each xdist worker starts its own container and the data dir lives
+    # on tmpfs (RAM).
     commands = [
         "postgres",
         "-c",
@@ -107,19 +125,22 @@ async def postgres_container() -> AsyncGenerator[str, None]:
         "-c",
         "checkpoint_timeout=30min",
         "-c",
-        "max_wal_size=4GB",
+        "max_wal_size=512MB",
         "-c",
         "checkpoint_completion_target=0.9",
         "-c",
-        "shared_buffers=256MB",
+        "shared_buffers=128MB",
         "-c",
         "autovacuum_naptime=5s",
     ] + (["-c", "vacuum_buffer_usage_limit=8MB"] if int(postgres_version) >= 16 else [])
 
     container = (
-        PgQueuerPostgresContainer(f"postgres:{postgres_version}", driver=None)
+        PgQueuerPostgresContainer(
+            f"postgres:{postgres_version}",
+            driver=None,
+            tmpfs={"/var/lib/pg/data": "rw,size=1g"},
+        )
         .with_command(commands)
-        .with_kwargs(tmpfs={"/var/lib/pg/data": "rw"})
         .with_envs(PGDATA="/var/lib/pg/data")
     )
 
