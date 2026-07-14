@@ -6,8 +6,6 @@ import time
 import uuid
 from datetime import timedelta
 
-import pytest
-
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.domain.models import Job
@@ -31,7 +29,6 @@ def test_in_memory_factory_creates_instance() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_qm_drain_processes_all_jobs() -> None:
     pq = PgQueuer.in_memory()
     processed: list[int] = []
@@ -61,7 +58,6 @@ async def test_qm_drain_processes_all_jobs() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_performance_enqueue_dequeue() -> None:
     """10k enqueue + dequeue cycle should complete quickly."""
     driver = InMemoryDriver()
