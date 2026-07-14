@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from itertools import count
 from typing import Protocol
+from urllib.parse import urlparse
 
 import async_timeout
 
@@ -47,6 +48,18 @@ async def simulate_legacy_serial(driver: db.Driver, table: str) -> None:
     await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id TYPE INTEGER;")
     await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {table}.id;")
     await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
+
+
+def env_from_dsn(dsn: str) -> dict[str, str]:
+    """Build the PG* environment variables asyncpg/psycopg expect from a DSN."""
+    parsed = urlparse(dsn)
+    return {
+        "PGHOST": parsed.hostname or "localhost",
+        "PGPORT": str(parsed.port or 5432),
+        "PGUSER": parsed.username or "",
+        "PGPASSWORD": parsed.password or "",
+        "PGDATABASE": parsed.path.lstrip("/") or "",
+    }
 
 
 class ShutdownCapable(Protocol):

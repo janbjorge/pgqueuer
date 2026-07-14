@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Callable, Coroutine
 import typer
 from tabulate import tabulate
 from typer import Context
-from typing_extensions import AsyncGenerator
+from typing_extensions import AsyncGenerator, assert_never
 
 from pgqueuer.adapters.cli import factories, supervisor
 from pgqueuer.adapters.persistence import qb, queries
@@ -70,6 +70,11 @@ app = typer.Typer(
 class VerifyMode(Enum):
     PRESENT = "present"
     ABSENT = "absent"
+
+
+class OnConflictChoice(Enum):
+    RAISE = "raise"
+    SKIP = "skip"
 
 
 @dataclass
@@ -319,7 +324,7 @@ def verify(
                 else:
                     print("No PgQueuer database objects found")
 
-            exit(1 if divergence else 0)
+            raise typer.Exit(code=1 if divergence else 0)
 
     asyncio_run(run())
 
@@ -531,15 +536,39 @@ def queue(
         None,
         help="Optional payload for the job, can be any serialized data.",
     ),
+    dedupe_key: str | None = typer.Option(
+        None,
+        "--dedupe-key",
+        help="Deduplication key; an active ('queued'/'picked') job with the same key blocks it.",
+    ),
+    on_conflict: OnConflictChoice = typer.Option(
+        OnConflictChoice.RAISE,
+        "--on-conflict",
+        help="On dedupe-key conflict: 'raise' exits with an error, 'skip' exits 0 silently.",
+    ),
 ) -> None:
     async def run_async() -> None:
+        # For a single job, skip mode subsumes raise mode: a None result is
+        # exactly the duplicate case, so on_conflict only decides the exit.
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await q.enqueue(
+            (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
                 priority=0,
                 execute_after=timedelta(seconds=0),
+                dedupe_key=dedupe_key,
+                on_conflict="skip",
             )
+
+        if job_id is not None:
+            print(f"Enqueued job {job_id}.")
+        elif on_conflict is OnConflictChoice.SKIP:
+            print(f"Skipped: duplicate dedupe_key {dedupe_key!r}.")
+        elif on_conflict is OnConflictChoice.RAISE:
+            print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
+            raise typer.Exit(code=1)
+        else:
+            assert_never(on_conflict)
 
     asyncio_run(run_async())
 

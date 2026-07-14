@@ -127,6 +127,34 @@ job leaves those states — `successful`, `exception`, `canceled`, `deleted`, or
 `f"invoice-{order_id}"` or `f"report-{date}-{user_id}"`. This turns enqueue into an
 idempotent operation: calling it twice with the same key and payload is safe.
 
+### Skipping duplicates instead of raising
+
+By default a duplicate fails the whole enqueue call — in a batch, nothing is inserted.
+Pass `on_conflict="skip"` to insert the non-duplicate jobs and skip the rest:
+
+```python
+job_ids = await queries.enqueue(
+    ["send_invoice", "send_invoice", "send_invoice"],
+    [b"1", b"2", b"3"],
+    [0, 0, 0],
+    dedupe_key=["invoice-1", "invoice-2", "invoice-3"],
+    on_conflict="skip",
+)
+# One entry per input: JobId for inserted jobs, None for skipped duplicates,
+# e.g. [JobId(11), None, JobId(12)] if "invoice-2" was already active.
+```
+
+The result keeps its 1:1 positional mapping with the inputs, so callers always know which
+jobs were inserted and which were skipped. Skipped jobs are not created at all: they get no
+job id and no `queued` entry in the log table. The same flag is available on the CLI via
+`pgq queue --dedupe-key ... --on-conflict skip`.
+
+**Duplicates within a single batch:** if the same `dedupe_key` appears more than once in one
+`enqueue` call — even with different payloads — the **first occurrence by input order** is
+enqueued and every later occurrence is treated as a conflict. Under `on_conflict="skip"` the
+later positions come back as `None`; under the default they fail the call. Order your inputs
+so the payload you want kept comes first.
+
 ## Poison Jobs
 
 A "poison job" is one that consistently causes worker crashes or hangs without updating its
@@ -173,5 +201,6 @@ or use `pgq dashboard` from the CLI.
 | Worker crash recovery | `heartbeat_timeout` |
 | Terminal failure parking | `on_failure="hold"` |
 | Duplicate enqueue prevention | `dedupe_key` unique constraint |
+| Graceful duplicate handling in batches | `enqueue(..., on_conflict="skip")` |
 | Failure inspection | `pgqueuer_log` with traceback |
 | Audit trail | `pgqueuer_log` for all terminal states |

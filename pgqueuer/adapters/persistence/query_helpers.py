@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Generator, Sequence
 
+from pgqueuer.domain.types import JobId
+
 
 @dataclass
 class NormedEnqueueParam:
@@ -52,6 +54,21 @@ def normalize_enqueue_params(
         dedupe_key=normed_dedupe_key,
         headers=normed_headers,
     )
+
+
+def scatter_ids_by_ordinal(
+    rows: list[dict],
+    count: int,
+) -> list[JobId | None]:
+    """Place each inserted row's id at its 1-based input ordinal.
+
+    `count` input rows produce `count` slots; positions whose row was skipped by
+    ON CONFLICT never appear in *rows* and stay ``None``.
+    """
+    ids: list[JobId | None] = [None] * count
+    for row in rows:
+        ids[row["ord"] - 1] = JobId(row["id"])
+    return ids
 
 
 def merge_tracing_headers(

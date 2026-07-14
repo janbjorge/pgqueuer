@@ -5,11 +5,11 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import Protocol, overload
+from typing import Literal, Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import CronEntrypoint, SortOrder
+from pgqueuer.domain.types import CronEntrypoint, OnConflict, SortOrder
 from pgqueuer.ports.driver import Driver
 
 
@@ -47,6 +47,34 @@ class QueueRepositoryPort(Protocol):
         execute_after: timedelta | None = None,
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
+    ) -> list[models.JobId]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: str,
+        payload: bytes | None,
+        priority: int = 0,
+        execute_after: timedelta | None = None,
+        dedupe_key: str | None = None,
+        headers: dict[str, str] | None = None,
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
+
+    @overload
+    async def enqueue(
+        self,
+        entrypoint: list[str],
+        payload: list[bytes | None],
+        priority: list[int],
+        execute_after: list[timedelta | None] | None = None,
+        dedupe_key: list[str | None] | None = None,
+        headers: list[dict[str, str] | None] | None = None,
+        *,
+        on_conflict: Literal["raise"] = "raise",
     ) -> list[models.JobId]: ...
 
     @overload
@@ -58,7 +86,9 @@ class QueueRepositoryPort(Protocol):
         execute_after: list[timedelta | None] | None = None,
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]: ...
+        *,
+        on_conflict: Literal["skip"],
+    ) -> list[models.JobId | None]: ...
 
     async def enqueue(
         self,
@@ -68,7 +98,9 @@ class QueueRepositoryPort(Protocol):
         execute_after: timedelta | None | list[timedelta | None] = None,
         dedupe_key: str | list[str | None] | None = None,
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
-    ) -> list[models.JobId]: ...
+        *,
+        on_conflict: OnConflict = "raise",
+    ) -> list[models.JobId] | list[models.JobId | None]: ...
 
     async def log_jobs(
         self,

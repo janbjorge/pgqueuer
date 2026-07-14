@@ -78,6 +78,85 @@ async def test_dedupe_key_freed_after_log(queries: InMemoryQueries) -> None:
     assert len(ids2) == 1
 
 
+async def test_dedupe_key_on_conflict_skip_single(queries: InMemoryQueries) -> None:
+    (first,) = await queries.enqueue("ep", None, dedupe_key="k", on_conflict="skip")
+    assert first is not None
+    assert await queries.enqueue("ep", None, dedupe_key="k", on_conflict="skip") == [None]
+
+    stats = await queries.queue_size()
+    assert sum(x.count for x in stats) == 1
+
+
+async def test_dedupe_key_on_conflict_skip_batch_preserves_shape(
+    queries: InMemoryQueries,
+) -> None:
+    await queries.enqueue("existing", None, dedupe_key="b")
+
+    ids = await queries.enqueue(
+        ["ep_a", "ep_b", "ep_c"],
+        [b"a", b"b", b"c"],
+        [0, 0, 0],
+        dedupe_key=["a", None, "b"],
+        on_conflict="skip",
+    )
+    assert len(ids) == 3
+    assert ids[0] is not None
+    assert ids[1] is not None
+    assert ids[2] is None
+
+
+async def test_dedupe_key_on_conflict_skip_within_batch_duplicate(
+    queries: InMemoryQueries,
+) -> None:
+    ids = await queries.enqueue(
+        ["ep", "ep"],
+        [None, None],
+        [0, 0],
+        dedupe_key=["k", "k"],
+        on_conflict="skip",
+    )
+    assert ids[0] is not None
+    assert ids[1] is None
+    assert sum(x.count for x in await queries.queue_size()) == 1
+
+
+async def test_dedupe_key_within_batch_duplicate_raises(queries: InMemoryQueries) -> None:
+    with pytest.raises(DuplicateJobError):
+        await queries.enqueue(
+            ["ep", "ep"],
+            [None, None],
+            [0, 0],
+            dedupe_key=["k", "k"],
+        )
+    assert sum(x.count for x in await queries.queue_size()) == 0
+
+
+async def test_dedupe_key_on_conflict_skip_no_log_for_skipped(
+    queries: InMemoryQueries,
+) -> None:
+    await queries.enqueue("ep", None, dedupe_key="k")
+    await queries.enqueue("ep", None, dedupe_key="k", on_conflict="skip")
+
+    logged = [log for log in await queries.queue_log() if log.status == "queued"]
+    assert len(logged) == 1
+
+
+async def test_dedupe_key_on_conflict_skip_freed_after_log(queries: InMemoryQueries) -> None:
+    await queries.enqueue("ep", None, dedupe_key="dk1")
+    qm_id = uuid.uuid4()
+    jobs = await queries.dequeue(
+        10,
+        {"ep": EntrypointExecutionParameter(0)},
+        qm_id,
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    await queries.log_jobs([(jobs[0], "successful", None)])
+
+    (job_id,) = await queries.enqueue("ep", None, dedupe_key="dk1", on_conflict="skip")
+    assert job_id is not None
+
+
 # ---------------------------------------------------------------------------
 # Dequeue
 # ---------------------------------------------------------------------------
