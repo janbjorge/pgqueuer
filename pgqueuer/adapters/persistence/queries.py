@@ -288,7 +288,7 @@ class Queries:
             raise
 
         if on_conflict == "skip":
-            return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
+            return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
             return [models.JobId(row["id"]) for row in rows]
         assert_never(on_conflict)
@@ -655,7 +655,7 @@ class SyncQueries:
             raise
 
         if on_conflict == "skip":
-            return query_helpers.align_ids_with_dedupe_keys(rows, normed_params.dedupe_key)
+            return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
             return [models.JobId(row["id"]) for row in rows]
         assert_never(on_conflict)

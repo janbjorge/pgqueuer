@@ -56,20 +56,19 @@ def normalize_enqueue_params(
     )
 
 
-def align_ids_with_dedupe_keys(
+def scatter_ids_by_ordinal(
     rows: list[dict],
-    dedupe_keys: list[str | None],
+    count: int,
 ) -> list[JobId | None]:
-    """Map inserted (id, dedupe_key) rows back onto input positions.
+    """Place each inserted row's id at its 1-based input ordinal.
 
-    A non-null key appears at most once in *rows*, so it maps by lookup;
-    pop() hands the id to the first occurrence of a within-batch duplicate.
-    Null-key rows always insert and arrive in input order, so they pair
-    with the null-key positions one to one.
+    `count` input rows produce `count` slots; positions whose row was skipped by
+    ON CONFLICT never appear in *rows* and stay ``None``.
     """
-    keyed = {row["dedupe_key"]: JobId(row["id"]) for row in rows if row["dedupe_key"] is not None}
-    unkeyed = iter(JobId(row["id"]) for row in rows if row["dedupe_key"] is None)
-    return [next(unkeyed, None) if key is None else keyed.pop(key, None) for key in dedupe_keys]
+    ids: list[JobId | None] = [None] * count
+    for row in rows:
+        ids[row["ord"] - 1] = JobId(row["id"])
+    return ids
 
 
 def merge_tracing_headers(

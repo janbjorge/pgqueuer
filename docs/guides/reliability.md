@@ -149,6 +149,12 @@ jobs were inserted and which were skipped. Skipped jobs are not created at all: 
 job id and no `queued` entry in the log table. The same flag is available on the CLI via
 `pgq queue --dedupe-key ... --on-conflict skip`.
 
+**Duplicates within a single batch:** if the same `dedupe_key` appears more than once in one
+`enqueue` call — even with different payloads — the **first occurrence by input order** is
+enqueued and every later occurrence is treated as a conflict. Under `on_conflict="skip"` the
+later positions come back as `None`; under the default they fail the call. Order your inputs
+so the payload you want kept comes first.
+
 ## Poison Jobs
 
 A "poison job" is one that consistently causes worker crashes or hangs without updating its

@@ -557,8 +557,15 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         else:
             assert_never(on_conflict)
         return f"""
-        WITH input AS (
-            SELECT * FROM UNNEST(
+        WITH input AS MATERIALIZED (
+            -- MATERIALIZED: nextval is volatile and `input` is referenced twice,
+            -- so pin single evaluation -- each input row gets exactly one id.
+            -- The scalar sub-select resolves the sequence name once (InitPlan)
+            -- rather than a catalog lookup per row.
+            SELECT
+                nextval((SELECT pg_get_serial_sequence('{self.settings.queue_table}', 'id'))) AS id,
+                priority, entrypoint, payload, execute_after, dedupe_key, headers, ord
+            FROM UNNEST(
                 $1::int[], $2::text[], $3::bytea[],
                 $4::interval[], $5::text[], $6::jsonb[]
             ) WITH ORDINALITY AS
@@ -566,13 +573,12 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         ),
         inserted AS (
             INSERT INTO {self.settings.queue_table}
-            (priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
-            SELECT priority, entrypoint, payload, execute_after + NOW(),
+            (id, priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
+            SELECT id, priority, entrypoint, payload, execute_after + NOW(),
                 dedupe_key, headers, 'queued'
             FROM input
-            ORDER BY ord
             {on_conflict_clause}
-            RETURNING id, entrypoint, priority, dedupe_key
+            RETURNING id, entrypoint, priority
         ),
         logged AS (
             INSERT INTO {self.settings.queue_table_log}
@@ -580,12 +586,12 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
             SELECT id, 'queued', entrypoint, priority
             FROM inserted
         )
-        -- Ids ascend with input position because the INSERT's SELECT is
-        -- ordered by ord and identity values are assigned per row, so ORDER BY
-        -- id yields rows in input order (skipped duplicates absent).
-        SELECT id, dedupe_key
-        FROM inserted
-        ORDER BY id
+        -- Join maps each surviving id back to its input ordinal. Rows skipped by
+        -- ON CONFLICT are absent from `inserted`, so their positions never appear.
+        SELECT i.ord AS ord, ins.id AS id
+        FROM inserted ins
+        JOIN input i ON i.id = ins.id
+        ORDER BY i.ord
         """
 
     def build_delete_from_queue_query(self) -> str:

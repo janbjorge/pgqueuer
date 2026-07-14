@@ -324,7 +324,7 @@ def verify(
                 else:
                     print("No PgQueuer database objects found")
 
-            exit(1 if divergence else 0)
+            raise typer.Exit(code=1 if divergence else 0)
 
     asyncio_run(run())
 
@@ -566,7 +566,7 @@ def queue(
             print(f"Skipped: duplicate dedupe_key {dedupe_key!r}.")
         elif on_conflict is OnConflictChoice.RAISE:
             print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
-            exit(1)
+            raise typer.Exit(code=1)
         else:
             assert_never(on_conflict)
 
