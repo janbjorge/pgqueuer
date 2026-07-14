@@ -562,6 +562,8 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
             -- so pin single evaluation -- each input row gets exactly one id.
             -- The scalar sub-select resolves the sequence name once (InitPlan)
             -- rather than a catalog lookup per row.
+            -- Skipped ON CONFLICT rows leave harmless id gaps; a pre-count CTE
+            -- could avoid them but isn't worth the extra pass.
             SELECT
                 nextval((SELECT pg_get_serial_sequence('{self.settings.queue_table}', 'id'))) AS id,
                 priority, entrypoint, payload, execute_after, dedupe_key, headers, ord
