@@ -159,6 +159,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - Use **native Python types**: `list[int]`, `dict[str, Any]`, `int | None` (not `Optional`)
 - Use `NewType` for domain primitives: `JobId = NewType("JobId", int)`
 - Use `Literal` for string unions: `Literal["queued", "picked", "successful"]`
+- **Exhaustive dispatch.** When branching on a `Literal` or `Enum` value, handle every member in an explicit `if`/`elif` chain and terminate with `else: assert_never(value)` (`typing_extensions.assert_never`) so mypy proves totality. No bare fallthroughs, no catch-all `else` doing real work — adding a new member must produce a type error at every dispatch site.
 - Use `Protocol` for structural subtyping (port interfaces)
 - Use `TypeAlias` for complex callable types
 - **Avoid `Any`** at nearly all cost. The codebase only uses it on driver protocol boundaries for variadic `*args` in SQL query methods -- nowhere else. Use proper types, generics, protocols, or `object` instead.
@@ -176,6 +177,10 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 | Fixtures            | snake_case        | `apgdriver`, `dsn`                 |
 
 **No leading-underscore prefixes.** Python has no real public/private distinction. Use plain `snake_case` for all methods and attributes — pick a descriptive name instead of hiding it behind a prefix.
+
+### Module-Level State
+
+**No mutable globals.** Module level may hold only immutable constants (`UPPER_SNAKE_CASE` values, `Literal`/`NewType` aliases, the deprecation `_SENTINEL = object()`) and framework singletons that require it (`app = typer.Typer(...)`). Anything mutated at runtime lives on an instance and is passed explicitly. Existing registries (e.g. `tracing.TRACER`) are grandfathered — do not add new ones.
 
 ### Error Handling
 
