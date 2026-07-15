@@ -107,34 +107,16 @@ async def test_cache_exception_propagation() -> None:
 
 
 async def test_expiration_resets_after_update() -> None:
-    """Cache TTL should be counted from when the update finishes."""
+    """Cache TTL is counted from when the update finishes, not when it starts."""
 
-    call_count = 0
+    with time_machine.travel(datetime.now(), tick=False) as tm:
 
-    async def on_expired() -> str:
-        nonlocal call_count
-        call_count += 1
-        await asyncio.sleep(0.05)
-        return f"value_{call_count}"
+        async def on_expired() -> str:
+            tm.shift(10)  # simulate a slow update
+            return "value"
 
-    ttl = timedelta(seconds=0.2)
-    cache = TTLCache(ttl=ttl, on_expired=on_expired)
+        cache = TTLCache(ttl=timedelta(seconds=5), on_expired=on_expired)
+        await cache()
 
-    start = datetime.now()
-    value1 = await cache()
-    expires_after_first = cache.expires_at
-
-    # Expiration should be at least `ttl` seconds after update finished
-    assert expires_after_first - start >= ttl
-
-    # Call again shortly before expiration; value should still be cached
-    await asyncio.sleep(0.18)
-    assert await cache() == value1
-    assert call_count == 1
-
-    # After expiration we should refresh and update the expiration timestamp
-    await asyncio.sleep(0.1)
-    value2 = await cache()
-    assert call_count == 2
-    assert value2 != value1
-    assert cache.expires_at > expires_after_first
+        # `datetime.now()` is the update's finish time under the frozen clock
+        assert cache.expires_at == datetime.now() + timedelta(seconds=5)
