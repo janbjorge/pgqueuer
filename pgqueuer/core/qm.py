@@ -376,9 +376,13 @@ class QueueManager:
             ) as hbuff,
             tm.TaskManager() as task_manager,
             self.queries.driver,
+            # Listed after the driver so they are cancelled before it closes;
+            # a failing loop body must not leak tasks probing a closing driver.
+            tm.cancel_on_exit(
+                asyncio.create_task(self._run_periodic_health_check())
+            ) as periodic_health_check_task,
+            tm.cancel_on_exit(asyncio.create_task(self.shutdown.wait())) as shutdown_task,
         ):
-            periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
-
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
@@ -390,8 +394,6 @@ class QueueManager:
                 ),
             )
 
-            shutdown_task = asyncio.create_task(self.shutdown.wait())
-            event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
             cached_queued_work = cache.TTLCache.create(
                 ttl=timedelta(seconds=0.250),
                 on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
@@ -417,24 +419,16 @@ class QueueManager:
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
 
-                event_task = listeners.wait_for_notice_event(
-                    notice_event_listener,
-                    await self._effective_dequeue_timeout(dequeue_timeout),
-                )
-                await asyncio.wait(
-                    (shutdown_task, event_task),
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-            periodic_health_check_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await periodic_health_check_task
-
-        if event_task and not event_task.done():
-            event_task.cancel()
-
-        if not shutdown_task.done():
-            shutdown_task.cancel()
+                async with tm.cancel_on_exit(
+                    listeners.wait_for_notice_event(
+                        notice_event_listener,
+                        await self._effective_dequeue_timeout(dequeue_timeout),
+                    )
+                ) as event_task:
+                    await asyncio.wait(
+                        (shutdown_task, event_task),
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
 
     async def _dispatch(
         self,
