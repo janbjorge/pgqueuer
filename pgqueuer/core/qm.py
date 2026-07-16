@@ -408,9 +408,6 @@ class QueueManager:
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
-                    if self.shutdown.is_set():
-                        break
-
                 await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
