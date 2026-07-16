@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from tools.append_benchmarks import append
+from tools.append_benchmarks import append, append_via_bucket
 from tools.benchmark_data import (
     BenchmarkRow,
     baseline_window,
@@ -130,6 +130,37 @@ def write_current(current_dir: Path, rows: list[BenchmarkRow]) -> None:
     current_dir.mkdir(parents=True, exist_ok=True)
     for i, row in enumerate(rows):
         (current_dir / f"benchmark-{i}.json").write_text(row.model_dump_json())
+
+
+class StubStorage:
+    """In-memory ObjectStorage double backed by a dict of key -> bytes."""
+
+    def __init__(self, objects: dict[str, bytes]) -> None:
+        self.objects = objects
+        self.uploaded = list[str]()
+
+    def list_objects_v2(self, *, Bucket: str, Prefix: str) -> dict[str, list[dict[str, str]]]:
+        return {"Contents": [{"Key": key} for key in self.objects if key.startswith(Prefix)]}
+
+    def download_file(self, Bucket: str, Key: str, Filename: str) -> None:
+        Path(Filename).write_bytes(self.objects[Key])
+
+    def upload_file(self, Filename: str, Bucket: str, Key: str) -> None:
+        self.objects[Key] = Path(Filename).read_bytes()
+        self.uploaded.append(Key)
+
+
+def test_append_via_bucket_roundtrip(tmp_path: Path) -> None:
+    old = make_row(90.0, utc(0))
+    storage = StubStorage({"benchmark/2026.ndjson": f"{old.model_dump_json()}\n".encode()})
+    new_dir = tmp_path / "new"
+    write_current(new_dir, [make_row(100.0, utc(1))])
+
+    append_via_bucket(storage, "bucket", tmp_path / "data", new_dir)
+
+    assert storage.uploaded == ["benchmark/2026.ndjson"]
+    lines = storage.objects["benchmark/2026.ndjson"].decode().splitlines()
+    assert [json.loads(line)["rate"] for line in lines] == [90.0, 100.0]
 
 
 def test_append_is_idempotent(tmp_path: Path) -> None:
