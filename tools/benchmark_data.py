@@ -41,7 +41,7 @@ class BenchmarkRow(BaseModel):
 
 
 def load_ndjson_dir(data_dir: Path) -> list[BenchmarkRow]:
-    """Load all rows from `benchmark/*.ndjson` under a benchmarks-branch checkout."""
+    """Load all rows from `benchmark/*.ndjson` under a history directory."""
     rows = list[BenchmarkRow]()
     for file in sorted((data_dir / "benchmark").glob("*.ndjson")):
         with file.open() as fh:

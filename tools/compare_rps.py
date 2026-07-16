@@ -1,11 +1,4 @@
-"""
-Gate fresh benchmark results against the main-branch history window.
-
-Usage (from the repository root, with the yearly NDJSON history fetched
-into `<data-dir>/benchmark/`)::
-
-    python3 -m tools.compare_rps --data-dir benchmark-data --current-dir current
-"""
+"""Gate fresh benchmark results against the main-branch history window."""
 
 from __future__ import annotations
 

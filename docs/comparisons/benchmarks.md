@@ -96,6 +96,42 @@ The benchmark tool supports all four drivers via the `-d` flag:
 | `psy` | `PsycopgDriver` (async psycopg) |
 | `mem` | `InMemoryDriver` (no database) |
 
+## CI Benchmark History and Regression Gate
+
+Every CI run benchmarks all four drivers under both strategies. Results from `main`
+(pushes and the 6-hourly schedule) are stored as yearly NDJSON files in a public
+object-storage bucket — one JSON object per line, matching the `--output-json`
+format of `tools/benchmark.py`:
+
+```bash
+curl -sL https://fly.storage.tigris.dev/pgqueuer-benchmarks/benchmark/2026.ndjson
+```
+
+No authentication is needed to read the history. Rows before 2025 may lack
+`strategy` (implied `throughput`) and `queued`.
+
+### The Gate
+
+The `validate-benchmark` CI job compares every fresh result — including pull
+requests — against the newest 30 `main` samples for the same driver/strategy
+pair:
+
+- **Fail** below `median − 3·MAD` (MAD: median absolute deviation).
+- **Warn** below `median − 2·MAD`.
+- **Skip** when fewer than 5 baseline samples exist.
+
+MAD makes the gate robust to outlier CI runs and adapts it to each pair's real
+variance. When the baseline is perfectly flat (MAD of 0) the thresholds fall back
+to 95% / 97.5% of the median.
+
+### Tooling
+
+- `tools/benchmark_data.py` — row model, NDJSON storage, gate math.
+- `tools/compare_rps.py` — the gate: `python3 -m tools.compare_rps --data-dir <history> --current-dir <results>`.
+- `tools/append_benchmarks.py` — appends results to the history, deduplicating on
+  `(created_at, driver, strategy)`; with `--bucket <name>` it syncs directly against
+  the bucket (credentials from the standard AWS env vars, endpoint defaults to Tigris).
+
 ## Tuning for Higher Throughput
 
 If you're not seeing the throughput you expect, see [Performance Tuning](../guides/performance-tuning.md)

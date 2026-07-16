@@ -1,16 +1,4 @@
-"""
-Append fresh benchmark results to the yearly NDJSON history files.
-Idempotent: rows are deduped on (created_at, driver, strategy) and
-non-main refs are dropped.
-
-Local usage (from the repository root)::
-
-    python3 -m tools.append_benchmarks --data-dir benchmark-data --new-dir current
-
-With ``--bucket`` the history is downloaded from and uploaded back to an
-S3-compatible bucket; credentials come from the standard AWS env vars and
-the endpoint defaults to Tigris (override with ``AWS_ENDPOINT_URL_S3``).
-"""
+"""Append fresh benchmark results to the yearly NDJSON history files, idempotently."""
 
 from __future__ import annotations
 
