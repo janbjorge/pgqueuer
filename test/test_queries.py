@@ -320,6 +320,50 @@ async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
     assert await q.queued_work(["foo"]) == 0
 
 
+async def test_dequeue_caps_picks_to_entrypoint_remaining_slots(apgdriver: db.Driver) -> None:
+    """One dequeue never picks more jobs for an entrypoint than its free slots."""
+    q = queries.Queries(apgdriver)
+
+    await q.enqueue(["tight"] * 10, [None] * 10, [0] * 10)
+    await q.enqueue(["loose"] * 10, [None] * 10, [0] * 10)
+
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints={
+            "tight": queries.EntrypointExecutionParameter(2),
+            "loose": queries.EntrypointExecutionParameter(0),
+        },
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+
+    tight = [job for job in picked if job.entrypoint == "tight"]
+    assert len(tight) <= 2
+    assert len(picked) == 10
+
+
+async def test_dequeue_hard_caps_worker_budget(apgdriver: db.Driver) -> None:
+    """A worker's picked total never exceeds global_concurrency_limit, even mid-batch."""
+    q = queries.Queries(apgdriver)
+    queue_manager_id = uuid.uuid4()
+
+    await q.enqueue(["fetch"] * 10, [None] * 10, [0] * 10)
+
+    async def dequeue() -> list[models.Job]:
+        return await q.dequeue(
+            batch_size=4,
+            entrypoints={"fetch": queries.EntrypointExecutionParameter(0)},
+            queue_manager_id=queue_manager_id,
+            global_concurrency_limit=5,
+            heartbeat_timeout=timedelta(seconds=30),
+        )
+
+    assert len(await dequeue()) == 4
+    assert len(await dequeue()) == 1
+    assert len(await dequeue()) == 0
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
     apgdriver: db.Driver,

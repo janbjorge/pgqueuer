@@ -454,9 +454,17 @@ worker_load AS (
       AND entrypoint = ANY($2)
 ),
 
--- Entrypoints with free capacity (concurrency gate applied here instead of row-scan).
+-- Entrypoints with free capacity (concurrency gate applied here instead of
+-- row-scan). remaining is NULL for unlimited entrypoints; otherwise it caps
+-- how many rows one dequeue may pick so a single statement cannot exceed
+-- the entrypoint's concurrency_limit.
 available AS (
-    SELECT p.entrypoint
+    SELECT
+        p.entrypoint,
+        CASE
+            WHEN p.concurrency_limit <= 0 THEN NULL
+            ELSE p.concurrency_limit - COALESCE(pk.total, 0)
+        END AS remaining
     FROM params p
     LEFT JOIN picked pk ON pk.entrypoint = p.entrypoint
     WHERE p.concurrency_limit <= 0
@@ -464,6 +472,7 @@ available AS (
 ),
 
 -- New queued jobs: per-entrypoint LATERAL lookup hits (entrypoint, priority, id) partial index.
+-- LEAST($1, NULL) = $1, so unlimited entrypoints keep the full batch.
 next_queued AS (
     SELECT q.id, q.priority
     FROM available a
@@ -474,7 +483,7 @@ next_queued AS (
           AND q2.status = 'queued'
           AND q2.execute_after < NOW()
         ORDER BY q2.priority DESC, q2.id ASC
-        LIMIT $1
+        LIMIT LEAST($1, a.remaining)
         FOR UPDATE SKIP LOCKED
     ) q
     WHERE ($5::BIGINT IS NULL
@@ -503,6 +512,9 @@ next_stale AS (
 
 -- Merge both sets into one global priority order so a recovered stale job
 -- competes on priority with fresh work instead of always losing to it.
+-- The LIMIT hard-caps this worker's total picked rows at $5: the binary
+-- worker_load gates above only stop a dequeue from starting once over
+-- budget, they do not stop one batch from overshooting it.
 eligible AS (
     SELECT id FROM (
         SELECT id, priority FROM next_queued
@@ -510,7 +522,7 @@ eligible AS (
         SELECT id, priority FROM next_stale
     ) combined
     ORDER BY priority DESC, id ASC
-    LIMIT $1
+    LIMIT GREATEST(LEAST($1, COALESCE($5 - (SELECT total FROM worker_load), $1)), 0)
 ),
 
 -- Atomically claim the jobs and log the pick event.
