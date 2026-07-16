@@ -226,3 +226,24 @@ async def test_effective_dequeue_timeout_toctou_fallback() -> None:
     assert timeout < timedelta(seconds=1), (
         f"Expected short timeout due to queued work, got {timeout}"
     )
+
+
+async def test_effective_dequeue_timeout_eligible_work_beats_deferred_eta() -> None:
+    """Eligible work must trigger a fast re-poll even when a deferred job exists
+    (the eligible job's notification may have been coalesced away)."""
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("ep")
+    async def handler(job: Job) -> None:
+        pass
+
+    # One job eligible now, one deferred far into the future.
+    await pq.qm.queries.enqueue("ep", None, 0, timedelta(seconds=-1))
+    await pq.qm.queries.enqueue("ep", None, 0, timedelta(seconds=20))
+
+    timeout = await pq.qm._effective_dequeue_timeout(timedelta(seconds=30))
+
+    # Without the eligibility check, the deferred job's ~20s eta would win.
+    assert timeout == pq.qm.min_dequeue_poll_interval, (
+        f"Expected fast re-poll for eligible work despite deferred eta, got {timeout}"
+    )

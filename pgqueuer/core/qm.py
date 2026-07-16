@@ -328,16 +328,17 @@ class QueueManager:
             await periodic_health_check_task
 
     async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
-        """Return a potentially shortened timeout if a deferred job is about to become eligible."""
+        """Return a potentially shortened timeout if work is ready or a deferred job is due soon."""
         entrypoints = list(self.entrypoint_registry.keys())
+        # A job may have become eligible between the preceding dequeue and this
+        # check (TOCTOU), and its notification may already have been consumed by
+        # the per-dispatch drain. Eligible work always warrants a fast re-poll,
+        # even when deferred jobs exist.
+        if await self.queries.eligible_queued_work(entrypoints) > 0:
+            return self.min_dequeue_poll_interval
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
             return max(eta, self.min_dequeue_poll_interval)
-        # When eta is None there are no future-deferred jobs, but a job may have
-        # become eligible between the preceding dequeue and this check (TOCTOU).
-        # If queued work exists, wake up quickly so the next iteration picks it up.
-        if eta is None and await self.queries.queued_work(entrypoints) > 0:
-            return self.min_dequeue_poll_interval
         return dequeue_timeout
 
     async def run(

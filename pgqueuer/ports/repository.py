@@ -136,6 +136,10 @@ class QueueRepositoryPort(Protocol):
 
     async def queued_work(self, entrypoints: list[str]) -> int: ...
 
+    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+        """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
+        ...
+
     async def queue_log(self) -> list[models.Log]: ...
 
     async def log_statistics(

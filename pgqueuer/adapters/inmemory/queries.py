@@ -560,6 +560,16 @@ class InMemoryQueries:
             1 for j in self._jobs.values() if j["status"] == "queued" and j["entrypoint"] in ep_set
         )
 
+    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+        """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
+        now = utc_now()
+        ep_set = set(entrypoints)
+        return sum(
+            1
+            for j in self._jobs.values()
+            if j["status"] == "queued" and j["entrypoint"] in ep_set and j["execute_after"] <= now
+        )
+
     async def queue_log(self) -> list[models.Log]:
         return [models.Log.model_validate(entry) for entry in self._log]
 
