@@ -71,17 +71,19 @@ def merge_rows(
     return sorted(merged.values(), key=lambda row: row.created_at)
 
 
-def write_yearly_ndjson(rows: list[BenchmarkRow], data_dir: Path) -> list[Path]:
-    """Rewrite `benchmark/<year>.ndjson` files; return the paths written."""
+def month_key(row: BenchmarkRow) -> str:
+    return row.created_at.strftime("%Y-%m")
+
+
+def write_monthly_ndjson(rows: list[BenchmarkRow], data_dir: Path) -> list[Path]:
+    """Rewrite `benchmark/<YYYY-MM>.ndjson` files; return the paths written."""
     out_dir = data_dir / "benchmark"
     out_dir.mkdir(parents=True, exist_ok=True)
     written = list[Path]()
-    for year in sorted({row.created_at.year for row in rows}):
-        file = out_dir / f"{year}.ndjson"
+    for month in sorted({month_key(row) for row in rows}):
+        file = out_dir / f"{month}.ndjson"
         with file.open("w") as fh:
-            fh.writelines(
-                f"{row.model_dump_json()}\n" for row in rows if row.created_at.year == year
-            )
+            fh.writelines(f"{row.model_dump_json()}\n" for row in rows if month_key(row) == month)
         written.append(file)
     return written
 

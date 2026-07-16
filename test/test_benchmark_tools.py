@@ -1,21 +1,29 @@
 from __future__ import annotations
 
+import io
 import json
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
-from tools.append_benchmarks import append, append_via_bucket
+from tools.append_benchmarks import append
 from tools.benchmark_data import (
     BenchmarkRow,
     baseline_window,
     gate,
     load_ndjson_dir,
     merge_rows,
-    write_yearly_ndjson,
+    write_monthly_ndjson,
 )
 from tools.compare_rps import compare
+from tools.fetch_history import (
+    ArtifactListing,
+    convert_archive,
+    extract_history,
+    newest_artifact,
+)
 
 
 def make_row(
@@ -105,8 +113,8 @@ def test_write_and_load_ndjson_roundtrip(tmp_path: Path) -> None:
         make_row(100.0, datetime(2025, 12, 31, tzinfo=timezone.utc)),
         make_row(101.0, datetime(2026, 1, 1, tzinfo=timezone.utc)),
     ]
-    written = write_yearly_ndjson(rows, tmp_path)
-    assert [file.name for file in written] == ["2025.ndjson", "2026.ndjson"]
+    written = write_monthly_ndjson(rows, tmp_path)
+    assert [file.name for file in written] == ["2025-12.ndjson", "2026-01.ndjson"]
     assert load_ndjson_dir(tmp_path) == rows
 
 
@@ -132,35 +140,56 @@ def write_current(current_dir: Path, rows: list[BenchmarkRow]) -> None:
         (current_dir / f"benchmark-{i}.json").write_text(row.model_dump_json())
 
 
-class StubStorage:
-    """In-memory ObjectStorage double backed by a dict of key -> bytes."""
-
-    def __init__(self, objects: dict[str, bytes]) -> None:
-        self.objects = objects
-        self.uploaded = list[str]()
-
-    def list_objects_v2(self, *, Bucket: str, Prefix: str) -> dict[str, list[dict[str, str]]]:
-        return {"Contents": [{"Key": key} for key in self.objects if key.startswith(Prefix)]}
-
-    def download_file(self, Bucket: str, Key: str, Filename: str) -> None:
-        Path(Filename).write_bytes(self.objects[Key])
-
-    def upload_file(self, Filename: str, Bucket: str, Key: str) -> None:
-        self.objects[Key] = Path(Filename).read_bytes()
-        self.uploaded.append(Key)
+def make_listing(*artifacts: dict[str, object]) -> ArtifactListing:
+    defaults: dict[str, object] = {
+        "name": "benchmark-history",
+        "expired": False,
+        "created_at": "2026-07-16T00:00:00Z",
+        "archive_download_url": "https://api.github.invalid/zip",
+    }
+    return ArtifactListing.model_validate({"artifacts": [defaults | a for a in artifacts]})
 
 
-def test_append_via_bucket_roundtrip(tmp_path: Path) -> None:
-    old = make_row(90.0, utc(0))
-    storage = StubStorage({"benchmark/2026.ndjson": f"{old.model_dump_json()}\n".encode()})
-    new_dir = tmp_path / "new"
-    write_current(new_dir, [make_row(100.0, utc(1))])
+def test_newest_artifact_picks_latest_non_expired() -> None:
+    listing = make_listing(
+        {"created_at": "2026-07-14T00:00:00Z", "archive_download_url": "old"},
+        {"created_at": "2026-07-16T00:00:00Z", "expired": True, "archive_download_url": "dead"},
+        {"created_at": "2026-07-15T00:00:00Z", "archive_download_url": "newest-live"},
+        {"created_at": "2026-07-16T00:00:00Z", "name": "other", "archive_download_url": "wrong"},
+    )
+    artifact = newest_artifact(listing)
+    assert artifact is not None
+    assert artifact.archive_download_url == "newest-live"
 
-    append_via_bucket(storage, "bucket", tmp_path / "data", new_dir)
 
-    assert storage.uploaded == ["benchmark/2026.ndjson"]
-    lines = storage.objects["benchmark/2026.ndjson"].decode().splitlines()
-    assert [json.loads(line)["rate"] for line in lines] == [90.0, 100.0]
+def test_newest_artifact_empty_listing() -> None:
+    assert newest_artifact(make_listing()) is None
+
+
+def test_extract_history_roundtrip(tmp_path: Path) -> None:
+    row = make_row(100.0, utc(0))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("2026-01.ndjson", f"{row.model_dump_json()}\n")
+        archive.writestr("README.md", "ignored")
+
+    extracted = extract_history(buffer.getvalue(), tmp_path)
+
+    assert [file.name for file in extracted] == ["2026-01.ndjson"]
+    assert load_ndjson_dir(tmp_path) == [row]
+
+
+def test_convert_archive_from_single_json_files(tmp_path: Path) -> None:
+    archive_dir = tmp_path / "archive"
+    write_current(
+        archive_dir,
+        [make_row(100.0, utc(0)), make_row(200.0, utc(1), github_ref_name="pr")],
+    )
+
+    written = convert_archive(archive_dir, tmp_path / "dest")
+
+    assert [file.name for file in written] == ["2026-01.ndjson"]
+    assert [row.rate for row in load_ndjson_dir(tmp_path / "dest")] == [100.0]
 
 
 def test_append_is_idempotent(tmp_path: Path) -> None:
@@ -185,7 +214,7 @@ def test_compare_exit_status(
     expected_exit: int,
 ) -> None:
     data_dir = tmp_path / "data"
-    write_yearly_ndjson([make_row(100.0 + i, utc(i)) for i in range(10)], data_dir)
+    write_monthly_ndjson([make_row(100.0 + i, utc(i)) for i in range(10)], data_dir)
     current_dir = tmp_path / "current"
     write_current(current_dir, [make_row(current_rate, utc(100))])
     assert compare(data_dir, current_dir, window_size=30) == expected_exit

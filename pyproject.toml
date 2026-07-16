@@ -110,7 +110,6 @@ docs = [
 [dependency-groups]
 dev = [
     "async-timeout>=5.0.1",
-    "boto3>=1.43.49",
 ]
 
 [tool.ruff]

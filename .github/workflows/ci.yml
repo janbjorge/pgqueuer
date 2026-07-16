@@ -75,8 +75,9 @@ jobs:
     name: Validate Benchmark Results
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    env:
-      BENCHMARK_BUCKET_URL: https://fly.storage.tigris.dev/pgqueuer-benchmarks
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
@@ -89,23 +90,9 @@ jobs:
           pattern: benchmark-*
           path: current
       - name: Fetch Benchmark History
-        run: |
-          mkdir -p benchmark-data/benchmark
-          year=$(date -u +%Y)
-          fetched=0
-          for y in $year $((year - 1)); do
-            if curl -fsSL -o "benchmark-data/benchmark/$y.ndjson" \
-              "$BENCHMARK_BUCKET_URL/benchmark/$y.ndjson"; then
-              fetched=1
-            else
-              rm -f "benchmark-data/benchmark/$y.ndjson"
-              echo "No history for $y"
-            fi
-          done
-          if [ "$fetched" -eq 0 ]; then
-            echo "No benchmark history could be fetched from $BENCHMARK_BUCKET_URL"
-            exit 1
-          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run python3 -m tools.fetch_history --dest benchmark-data
       - name: Validate RPS Against Main History
         run: |
           PYTHONUNBUFFERED=1 uv run python3 -m tools.compare_rps \
@@ -117,35 +104,38 @@ jobs:
     name: Store Benchmark Results
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
     concurrency:
       group: benchmark-store
       cancel-in-progress: false
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      HAS_TIGRIS_CREDENTIALS: ${{ secrets.AWS_ACCESS_KEY_ID != '' }}
     steps:
       - uses: actions/checkout@v4
-        if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
       - name: Install uv
-        if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
         uses: astral-sh/setup-uv@v3
       - name: Install Dependencies
-        if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
         run: uv sync --frozen
       - name: Download Benchmark Results
-        if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
         uses: actions/download-artifact@v4
         with:
           pattern: benchmark-*
           path: current
-      - name: Append and Upload
-        if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
+      - name: Fetch Benchmark History
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: uv run python3 -m tools.fetch_history --dest benchmark-data
+      - name: Append Fresh Results
         run: |
           uv run python3 -m tools.append_benchmarks \
-            --bucket pgqueuer-benchmarks \
             --data-dir benchmark-data \
             --new-dir current
+      - name: Upload Benchmark History
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-history
+          path: benchmark-data/benchmark
+          retention-days: 90
   run-tests:
     if: github.event_name != 'schedule'
     strategy:

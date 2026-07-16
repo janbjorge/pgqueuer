@@ -98,17 +98,25 @@ The benchmark tool supports all four drivers via the `-d` flag:
 
 ## CI Benchmark History and Regression Gate
 
-Every CI run benchmarks all four drivers under both strategies. Results from `main`
-(pushes and the 6-hourly schedule) are stored as yearly NDJSON files in a public
-object-storage bucket — one JSON object per line, matching the `--output-json`
-format of `tools/benchmark.py`:
+Every CI run benchmarks all four drivers under both strategies. History from `main`
+(pushes and the 6-hourly schedule) lives in the `benchmark-history` workflow
+artifact: monthly NDJSON files (`benchmark/<YYYY-MM>.ndjson`), one JSON object per
+line in the `--output-json` format of `tools/benchmark.py`.
+
+Workflow artifacts expire after 90 days, so the `store-benchmark` job rolls the
+history forward: on every main run it downloads the newest `benchmark-history`
+artifact, appends the fresh results, and re-uploads it — resetting the expiry
+clock each time. If no artifact exists (first run, or after a long dormant
+period), the tooling bootstraps the full history from the public
+[artifacts-storage](https://github.com/janbjorge/artifacts-storage) archive.
+
+Fetch the history:
 
 ```bash
-curl -sL https://fly.storage.tigris.dev/pgqueuer-benchmarks/benchmark/2026.ndjson
+gh run download --repo janbjorge/PgQueuer -n benchmark-history
 ```
 
-No authentication is needed to read the history. Rows before 2025 may lack
-`strategy` (implied `throughput`) and `queued`.
+Rows before 2025 may lack `strategy` (implied `throughput`) and `queued`.
 
 ### The Gate
 
@@ -127,10 +135,11 @@ to 95% / 97.5% of the median.
 ### Tooling
 
 - `tools/benchmark_data.py` — row model, NDJSON storage, gate math.
+- `tools/fetch_history.py` — downloads the newest `benchmark-history` artifact,
+  falling back to the artifacts-storage bootstrap.
 - `tools/compare_rps.py` — the gate: `python3 -m tools.compare_rps --data-dir <history> --current-dir <results>`.
 - `tools/append_benchmarks.py` — appends results to the history, deduplicating on
-  `(created_at, driver, strategy)`; with `--bucket <name>` it syncs directly against
-  the bucket (credentials from the standard AWS env vars, endpoint defaults to Tigris).
+  `(created_at, driver, strategy)`.
 
 ## Tuning for Higher Throughput
 
