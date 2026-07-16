@@ -396,9 +396,7 @@ class QueueManager:
 
             cached_queued_work = cache.TTLCache.create(
                 ttl=timedelta(seconds=0.250),
-                on_expired=lambda: self.queries.queued_work(
-                    list(self.entrypoint_registry.keys())
-                ),
+                on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
             )
 
             while not self.shutdown.is_set():
