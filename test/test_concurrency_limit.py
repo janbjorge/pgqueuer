@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import timedelta
+from typing import Any
 
 import async_timeout
 import pytest
@@ -105,3 +106,48 @@ async def test_concurrency_entrypoint_isolation(
             dequeue_timeout=timedelta(seconds=5),
         ),
     )
+
+
+async def test_tight_entrypoint_does_not_throttle_unlimited_entrypoint(
+    apgdriver: Driver,
+) -> None:
+    """A limit=1 entrypoint must not collapse dequeue batches for other entrypoints."""
+    N = 20
+    batch_size = 10
+    q = Queries(apgdriver)
+    await q.enqueue(["unlimited"] * N, [None] * N, [0] * N)
+
+    qm = QueueManager(q)
+    event = asyncio.Event()
+
+    @qm.entrypoint("tight", concurrency_limit=1)
+    async def tight(job: Job) -> None:
+        await event.wait()
+
+    @qm.entrypoint("unlimited")
+    async def unlimited(job: Job) -> None:
+        await event.wait()
+
+    dequeue_batches = list[int]()
+    original_dequeue = q.dequeue
+
+    async def recording_dequeue(*, batch_size: int, **kwargs: Any) -> list[Job]:
+        dequeue_batches.append(batch_size)
+        return await original_dequeue(batch_size=batch_size, **kwargs)
+
+    q.dequeue = recording_dequeue  # type: ignore[assignment]
+
+    async def timer() -> None:
+        async with async_timeout.timeout(10):
+            while len(event._waiters) < N:
+                await asyncio.sleep(0.001)
+            qm.shutdown.set()
+            event.set()
+
+    await asyncio.gather(
+        timer(),
+        qm.run(batch_size=batch_size, dequeue_timeout=timedelta(seconds=1)),
+    )
+
+    assert dequeue_batches
+    assert set(dequeue_batches) == {batch_size}
