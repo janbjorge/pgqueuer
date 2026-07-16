@@ -1,9 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
+from typing import AsyncGenerator, TypeVar
 
 from pgqueuer.core import logconfig
+
+T = TypeVar("T")
+
+
+@contextlib.asynccontextmanager
+async def cancel_on_exit(task: asyncio.Task[T]) -> AsyncGenerator[asyncio.Task[T], None]:
+    """Yield *task*; on exit cancel it and discard its outcome.
+
+    The task's result or exception is intentionally swallowed: callers that
+    care about the outcome must observe it before the context exits.
+    """
+    try:
+        yield task
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
 
 
 @dataclasses.dataclass

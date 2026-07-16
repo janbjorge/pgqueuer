@@ -376,75 +376,61 @@ class QueueManager:
             ) as hbuff,
             tm.TaskManager() as task_manager,
             self.queries.driver,
+            # Listed after the driver so they are cancelled before it closes;
+            # a failing loop body must not leak tasks probing a closing driver.
+            tm.cancel_on_exit(
+                asyncio.create_task(self._run_periodic_health_check())
+            ) as periodic_health_check_task,
+            tm.cancel_on_exit(asyncio.create_task(self.shutdown.wait())) as shutdown_task,
         ):
-            periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
-            shutdown_task = asyncio.create_task(self.shutdown.wait())
-            event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
+            notice_event_listener = listeners.PGNoticeEventListener()
+            await listeners.initialize_notice_event_listener(
+                self.queries.driver,
+                self.channel,
+                listeners.default_event_router(
+                    notice_event_queue=notice_event_listener,
+                    canceled=self.job_context,
+                    pending_health_check=self.pending_health_check,
+                ),
+            )
 
-            try:
-                notice_event_listener = listeners.PGNoticeEventListener()
-                await listeners.initialize_notice_event_listener(
-                    self.queries.driver,
-                    self.channel,
-                    listeners.default_event_router(
-                        notice_event_queue=notice_event_listener,
-                        canceled=self.job_context,
-                        pending_health_check=self.pending_health_check,
-                    ),
-                )
+            cached_queued_work = cache.TTLCache.create(
+                ttl=timedelta(seconds=0.250),
+                on_expired=lambda: self.queries.queued_work(
+                    list(self.entrypoint_registry.keys())
+                ),
+            )
 
-                cached_queued_work = cache.TTLCache.create(
-                    ttl=timedelta(seconds=0.250),
-                    on_expired=lambda: self.queries.queued_work(
-                        list(self.entrypoint_registry.keys())
-                    ),
-                )
-
-                while not self.shutdown.is_set():
-                    async for job in self.fetch_jobs(
-                        batch_size, max_concurrent_tasks, heartbeat_timeout
-                    ):
-                        self.job_context[job.id] = models.Context(
-                            cancellation=anyio.CancelScope(),
-                            resources=self.resources,
-                        )
-                        task_manager.add(
-                            asyncio.create_task(
-                                self._dispatch(job, jbuff, hbuff, heartbeat_timeout)
-                            )
-                        )
-
-                        with contextlib.suppress(asyncio.QueueEmpty):
-                            notice_event_listener.get_nowait()
-
-                    await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
-                    await self._maybe_health_shutdown(
-                        periodic_health_check_task, mode, shutdown_on_listener_failure
+            while not self.shutdown.is_set():
+                async for job in self.fetch_jobs(
+                    batch_size, max_concurrent_tasks, heartbeat_timeout
+                ):
+                    self.job_context[job.id] = models.Context(
+                        cancellation=anyio.CancelScope(),
+                        resources=self.resources,
+                    )
+                    task_manager.add(
+                        asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
                     )
 
-                    event_task = listeners.wait_for_notice_event(
+                    with contextlib.suppress(asyncio.QueueEmpty):
+                        notice_event_listener.get_nowait()
+
+                await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
+                await self._maybe_health_shutdown(
+                    periodic_health_check_task, mode, shutdown_on_listener_failure
+                )
+
+                async with tm.cancel_on_exit(
+                    listeners.wait_for_notice_event(
                         notice_event_listener,
                         await self._effective_dequeue_timeout(dequeue_timeout),
                     )
+                ) as event_task:
                     await asyncio.wait(
                         (shutdown_task, event_task),
                         return_when=asyncio.FIRST_COMPLETED,
                     )
-            finally:
-                # Runs before the buffers/driver close so a failing loop body
-                # cannot leak tasks that probe a driver mid-teardown.
-                periodic_health_check_task.cancel()
-                with suppress(asyncio.CancelledError, Exception):
-                    await periodic_health_check_task
-
-                shutdown_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await shutdown_task
-
-                if event_task is not None:
-                    event_task.cancel()
-                    with suppress(asyncio.CancelledError):
-                        await event_task
 
     async def _dispatch(
         self,

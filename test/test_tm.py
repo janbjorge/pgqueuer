@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from pgqueuer.core.tm import TaskManager
+from pgqueuer.core.tm import TaskManager, cancel_on_exit
 
 
 @pytest.mark.parametrize("N", (1, 2, 3, 5, 64))
@@ -98,3 +98,27 @@ async def test_task_manager_no_log_on_cancel(
         task.cancel()
 
     assert len(caplog.messages) == 0
+
+
+async def test_cancel_on_exit_cancels_pending_task() -> None:
+    async with cancel_on_exit(asyncio.create_task(asyncio.Event().wait())) as task:
+        assert not task.done()
+    assert task.cancelled()
+
+
+async def test_cancel_on_exit_swallows_task_exception() -> None:
+    async def raises() -> None:
+        raise RuntimeError("boom")
+
+    async with cancel_on_exit(asyncio.create_task(raises())) as task:
+        await asyncio.sleep(0)
+    assert task.done()
+
+
+async def test_cancel_on_exit_leaves_completed_result() -> None:
+    async def result() -> int:
+        return 42
+
+    async with cancel_on_exit(asyncio.create_task(result())) as task:
+        assert await task == 42
+    assert task.result() == 42
