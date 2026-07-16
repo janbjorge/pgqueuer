@@ -296,7 +296,11 @@ class QueueManager:
             return
         if task_manager.tasks:
             await asyncio.sleep(0)
-        if (await cached_queued_work()) == 0 and not task_manager.tasks:
+        if task_manager.tasks or (await cached_queued_work()) != 0:
+            return
+        # The cached count may predate a RetryRequested re-queue that landed
+        # within the TTL window; confirm with an uncached read before exiting.
+        if await self.queries.queued_work(list(self.entrypoint_registry.keys())) == 0:
             self.shutdown.set()
 
     async def _maybe_health_shutdown(
@@ -316,14 +320,20 @@ class QueueManager:
             await periodic_health_check_task
 
     async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
-        """Return a potentially shortened timeout if a deferred job is about to become eligible."""
+        """Return a potentially shortened timeout if work is ready or a deferred job is due soon."""
         entrypoints = list(self.entrypoint_registry.keys())
+        # A job may have become eligible between the preceding dequeue and this
+        # check (TOCTOU), and its notification may already have been consumed by
+        # the per-dispatch drain. Eligible work always warrants a fast re-poll,
+        # even when deferred jobs exist.
+        if await self.queries.eligible_queued_work(entrypoints) > 0:
+            return self.min_dequeue_poll_interval
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
             return max(eta, self.min_dequeue_poll_interval)
-        # When eta is None there are no future-deferred jobs, but a job may have
-        # become eligible between the preceding dequeue and this check (TOCTOU).
-        # If queued work exists, wake up quickly so the next iteration picks it up.
+        # A deferred job can cross its execute_after between the two probes
+        # above: the eligibility probe still saw it as deferred, the eta probe
+        # no longer sees it as future. queued_work counts both, closing the gap.
         if eta is None and await self.queries.queued_work(entrypoints) > 0:
             return self.min_dequeue_poll_interval
         return dequeue_timeout
@@ -368,9 +378,13 @@ class QueueManager:
             ) as hbuff,
             tm.TaskManager() as task_manager,
             self.queries.driver,
+            # Listed after the driver so they are cancelled before it closes;
+            # a failing loop body must not leak tasks probing a closing driver.
+            tm.cancel_on_exit(
+                asyncio.create_task(self._run_periodic_health_check())
+            ) as periodic_health_check_task,
+            tm.cancel_on_exit(asyncio.create_task(self.shutdown.wait())) as shutdown_task,
         ):
-            periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
-
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
@@ -382,8 +396,6 @@ class QueueManager:
                 ),
             )
 
-            shutdown_task = asyncio.create_task(self.shutdown.wait())
-            event_task: None | asyncio.Task[None | models.TableChangedEvent] = None
             cached_queued_work = cache.TTLCache.create(
                 ttl=timedelta(seconds=0.250),
                 on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
@@ -404,32 +416,21 @@ class QueueManager:
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
-                    if self.shutdown.is_set():
-                        break
-
                 await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
 
-                event_task = listeners.wait_for_notice_event(
-                    notice_event_listener,
-                    await self._effective_dequeue_timeout(dequeue_timeout),
-                )
-                await asyncio.wait(
-                    (shutdown_task, event_task),
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-
-            periodic_health_check_task.cancel()
-            with suppress(asyncio.CancelledError, Exception):
-                await periodic_health_check_task
-
-        if event_task and not event_task.done():
-            event_task.cancel()
-
-        if not shutdown_task.done():
-            shutdown_task.cancel()
+                async with tm.cancel_on_exit(
+                    listeners.wait_for_notice_event(
+                        notice_event_listener,
+                        await self._effective_dequeue_timeout(dequeue_timeout),
+                    )
+                ) as event_task:
+                    await asyncio.wait(
+                        (shutdown_task, event_task),
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
 
     async def _dispatch(
         self,

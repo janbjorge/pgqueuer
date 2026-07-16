@@ -18,6 +18,7 @@ def test_queries_has_queue_repository_methods() -> None:
         "mark_job_as_cancelled",
         "update_heartbeat",
         "queued_work",
+        "eligible_queued_work",
         "queue_log",
         "job_status",
     }
@@ -65,6 +66,7 @@ def test_inmemory_has_queue_repository_methods() -> None:
         "mark_job_as_cancelled",
         "update_heartbeat",
         "queued_work",
+        "eligible_queued_work",
         "queue_log",
         "job_status",
     }

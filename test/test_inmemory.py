@@ -506,6 +506,13 @@ async def test_queued_work(queries: InMemoryQueries) -> None:
     assert count == 2
 
 
+async def test_eligible_queued_work_excludes_deferred(queries: InMemoryQueries) -> None:
+    await queries.enqueue("ep", None, 0)
+    await queries.enqueue("ep", None, 0, execute_after=timedelta(seconds=30))
+    assert await queries.queued_work(["ep"]) == 2
+    assert await queries.eligible_queued_work(["ep"]) == 1
+
+
 # ---------------------------------------------------------------------------
 # Schedule CRUD
 # ---------------------------------------------------------------------------
