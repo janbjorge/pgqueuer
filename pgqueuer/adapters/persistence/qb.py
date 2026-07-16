@@ -542,6 +542,19 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         ) sub
         """
 
+    def build_has_eligible_queued_work(self) -> str:
+        return f"""
+        SELECT COUNT(*) AS queued_work
+        FROM (
+            SELECT 1
+            FROM {self.settings.queue_table}
+            WHERE entrypoint = ANY($1)
+              AND status = 'queued'
+              AND execute_after <= NOW()
+            LIMIT 1
+        ) sub
+        """
+
     def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
         if on_conflict == "skip":
             # The arbiter predicate must textually match the partial unique index
