@@ -364,6 +364,30 @@ async def test_dequeue_hard_caps_worker_budget(apgdriver: db.Driver) -> None:
     assert len(await dequeue()) == 0
 
 
+async def test_eligible_queued_work_excludes_deferred(apgdriver: db.Driver) -> None:
+    """eligible_queued_work ignores jobs whose execute_after is in the future."""
+    q = queries.Queries(apgdriver)
+
+    await q.enqueue("foo", None, 0)
+    await q.enqueue("foo", None, 0, execute_after=timedelta(seconds=30))
+
+    assert await q.queued_work(["foo"]) > 0
+    assert await q.eligible_queued_work(["foo"]) > 0
+
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert len(picked) == 1
+
+    # Only the deferred job remains: still queued work, but none eligible.
+    assert await q.queued_work(["foo"]) > 0
+    assert await q.eligible_queued_work(["foo"]) == 0
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_retry_timer(
     apgdriver: db.Driver,

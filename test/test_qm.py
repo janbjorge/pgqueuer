@@ -1,11 +1,16 @@
 import asyncio
+import itertools
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import async_timeout
 import pytest
 
 from pgqueuer import db
+from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.core.cache import TTLCache
+from pgqueuer.core.tm import TaskManager
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -218,3 +223,104 @@ async def test_max_concurrent_tasks(
         )
 
     assert len(picked_jobs) == max_concurrent_tasks
+
+
+async def test_run_failure_leaves_no_pending_lifecycle_tasks(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    async def failing_dequeue(*args: Any, **kwargs: Any) -> list[Job]:
+        raise RuntimeError("boom")
+
+    queries.dequeue = failing_dequeue  # type: ignore[method-assign]
+
+    before = asyncio.all_tasks()
+    with pytest.raises(RuntimeError, match="boom"):
+        async with async_timeout.timeout(10):
+            await qm.run(dequeue_timeout=timedelta(seconds=0.01))
+
+    leaked = asyncio.all_tasks() - before
+    assert not leaked
+
+
+async def test_shutdown_mid_batch_leaves_no_stranded_picked_jobs(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+    processed = list[Job]()
+    batch_size = 5
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        processed.append(job)
+
+    payloads: list[bytes | None] = [None] * (batch_size * 2)
+    await qm.queries.enqueue(
+        ["fetch"] * batch_size * 2,
+        payloads,
+        [0] * batch_size * 2,
+    )
+
+    original_dequeue = queries.dequeue
+    calls = itertools.count()
+
+    async def dequeue_then_shutdown(*args: Any, **kwargs: Any) -> list[Job]:
+        # Set shutdown while the second batch is being picked, mimicking a
+        # signal arriving after rows are marked picked but before dispatch.
+        if next(calls) == 1:
+            qm.shutdown.set()
+        return await original_dequeue(*args, **kwargs)
+
+    queries.dequeue = dequeue_then_shutdown  # type: ignore[method-assign]
+
+    async with async_timeout.timeout(10):
+        await qm.run(dequeue_timeout=timedelta(seconds=0.01), batch_size=batch_size)
+
+    assert len(processed) == batch_size * 2
+    assert sum(x.count for x in await queries.queue_size()) == 0
+
+
+async def test_drain_shutdown_ignores_stale_cached_queued_work(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    cached = TTLCache.create(
+        ttl=timedelta(hours=1),
+        on_expired=lambda: qm.queries.queued_work(["fetch"]),
+    )
+    assert await cached() == 0
+
+    # A job enqueued after the cache refresh (e.g. a RetryRequested re-queue)
+    # must block drain shutdown even though the cached count still reads 0.
+    await qm.queries.enqueue(["fetch"], [None], [0])
+
+    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager(), cached)
+    assert not qm.shutdown.is_set()
+
+
+async def test_drain_shutdown_sets_shutdown_when_queue_confirmed_empty(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    cached = TTLCache.create(
+        ttl=timedelta(hours=1),
+        on_expired=lambda: qm.queries.queued_work(["fetch"]),
+    )
+
+    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager(), cached)
+    assert qm.shutdown.is_set()
