@@ -6,6 +6,12 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 
+[manifest]
+members = [
+    "pgqueuer",
+    "pgqueuer-tools",
+]
+
 [[package]]
 name = "annotated-types"
 version = "0.7.0"
@@ -1421,6 +1427,7 @@ sentry = [
 [package.dev-dependencies]
 dev = [
     { name = "async-timeout" },
+    { name = "pgqueuer-tools" },
 ]
 
 [package.metadata]
@@ -1477,7 +1484,21 @@ requires-dist = [
 provides-extras = ["asyncpg", "psycopg", "logfire", "sentry", "opentelemetry", "fastapi", "mcp", "dev", "docs"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "async-timeout", specifier = ">=5.0.1" }]
+dev = [
+    { name = "async-timeout", specifier = ">=5.0.1" },
+    { name = "pgqueuer-tools", editable = "tools" },
+]
+
+[[package]]
+name = "pgqueuer-tools"
+version = "0.0.0"
+source = { editable = "tools" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2.0.0" }]
 
 [[package]]
 name = "platformdirs"

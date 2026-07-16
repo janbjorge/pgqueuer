@@ -110,7 +110,14 @@ docs = [
 [dependency-groups]
 dev = [
     "async-timeout>=5.0.1",
+    "pgqueuer-tools",
 ]
+
+[tool.uv.workspace]
+members = ["tools"]
+
+[tool.uv.sources]
+pgqueuer-tools = { workspace = true }
 
 [tool.ruff]
 line-length = 100
@@ -155,8 +162,6 @@ explicit_package_bases = true
 asyncio_mode = "auto"
 timeout = "20"
 timeout_func_only = true
-# Repo root on sys.path so tests can import the `tools` namespace package.
-pythonpath = ["."]
 # -n 4: modest parallelism; each xdist worker gets its own session-scoped
 # Postgres container, so this scales the suite across a few extra servers.
 addopts = "--durations=15 -n 4"

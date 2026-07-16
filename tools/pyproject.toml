@@ -1,0 +1,15 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=64"]
+
+[project]
+name = "pgqueuer-tools"
+version = "0.0.0"
+description = "Internal benchmark and CI tooling for the PgQueuer repository."
+requires-python = ">=3.10"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = ["pydantic>=2.0.0"]
+
+[tool.setuptools]
+packages = ["tools"]
+package-dir = {"tools" = "."}
