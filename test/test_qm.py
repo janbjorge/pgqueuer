@@ -1,11 +1,13 @@
 import asyncio
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import async_timeout
 import pytest
 
 from pgqueuer import db
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -218,3 +220,26 @@ async def test_max_concurrent_tasks(
         )
 
     assert len(picked_jobs) == max_concurrent_tasks
+
+
+async def test_run_failure_leaves_no_pending_lifecycle_tasks(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    async def failing_dequeue(*args: Any, **kwargs: Any) -> list[Job]:
+        raise RuntimeError("boom")
+
+    queries.dequeue = failing_dequeue  # type: ignore[method-assign]
+
+    before = asyncio.all_tasks()
+    with pytest.raises(RuntimeError, match="boom"):
+        async with async_timeout.timeout(10):
+            await qm.run(dequeue_timeout=timedelta(seconds=0.01))
+
+    leaked = asyncio.all_tasks() - before
+    assert not leaked
