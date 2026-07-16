@@ -20,8 +20,10 @@ Producer ──enqueue──▶ PostgreSQL ──NOTIFY──▶ EventRouter
 
 1. **Producer** inserts a job using `Queries.enqueue()`.
 2. A trigger emits a `table_changed_event` via **NOTIFY** on the configured channel.
-3. The **EventRouter** places the event in a `PGNoticeEventListener` queue.
-4. The **QueueManager** waits for events, fetches ready jobs with `FOR UPDATE SKIP LOCKED` (see [Row Locking & SKIP LOCKED](skip-locked.md) for a deep dive), and dispatches them to registered entrypoints.
+3. The **EventRouter** places the event in a `PGNoticeEventListener` queue — but only for
+   operations that can create work (`INSERT`/`UPDATE`); `DELETE`/`TRUNCATE` notifications
+   (e.g. completed jobs moving to the log table) are dropped to avoid pointless wake-ups.
+4. The **QueueManager** waits for events, fetches ready jobs with `FOR UPDATE SKIP LOCKED` (see [Row Locking & SKIP LOCKED](skip-locked.md) for a deep dive), and dispatches them to registered entrypoints. Once the queue table has been observed empty, any notifications buffered in the meantime are discarded in one go, coalescing bursts into a single dequeue cycle per worker.
 5. After execution, the **Consumer** updates job status back in PostgreSQL.
 
 Endpoint routing is handled by `EventRouter` which maps notification types to

@@ -476,6 +476,14 @@ def run(
         "--shutdown-on-listener-failure",
         help="Shutdown the manager if the listener fails.",
     ),
+    dequeue_jitter: float = typer.Option(
+        0.0,
+        "--dequeue-jitter",
+        help=(
+            "Max seconds of random delay after a NOTIFY wake before dequeuing; "
+            "desynchronizes large worker fleets. 0 disables."
+        ),
+    ),
 ) -> None:
     """
     Run the job manager, pulling tasks from the queue and handling them with workers.
@@ -500,6 +508,7 @@ def run(
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
             heartbeat_timeout=timedelta(seconds=heartbeat_timeout),
+            dequeue_jitter=timedelta(seconds=dequeue_jitter),
         )
     )
 

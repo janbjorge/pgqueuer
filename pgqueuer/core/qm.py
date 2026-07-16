@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import dataclasses
+import random
 import sys
 import uuid
 from collections.abc import MutableMapping
@@ -324,16 +324,17 @@ class QueueManager:
             await periodic_health_check_task
 
     async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
-        """Return a potentially shortened timeout if a deferred job is about to become eligible."""
+        """Return a potentially shortened timeout if work is ready or a deferred job is due soon."""
         entrypoints = list(self.entrypoint_registry.keys())
+        # A job may have become eligible between the preceding dequeue and this
+        # check (TOCTOU), and its notification may already have been coalesced
+        # away by drain_nowait. Eligible work always warrants a fast re-poll,
+        # even when deferred jobs exist.
+        if await self.queries.eligible_queued_work(entrypoints) > 0:
+            return self.min_dequeue_poll_interval
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
             return max(eta, self.min_dequeue_poll_interval)
-        # When eta is None there are no future-deferred jobs, but a job may have
-        # become eligible between the preceding dequeue and this check (TOCTOU).
-        # If queued work exists, wake up quickly so the next iteration picks it up.
-        if eta is None and await self.queries.queued_work(entrypoints) > 0:
-            return self.min_dequeue_poll_interval
         return dequeue_timeout
 
     async def run(
@@ -344,12 +345,16 @@ class QueueManager:
         max_concurrent_tasks: int | None = None,
         shutdown_on_listener_failure: bool = False,
         heartbeat_timeout: timedelta = timedelta(seconds=30),
+        dequeue_jitter: timedelta = timedelta(seconds=0),
     ) -> None:
         """Process jobs until shutdown.
 
         ``mode=drain`` exits once the queue is empty and in-flight tasks finish.
         ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
         heartbeats are emitted at half this interval.
+        ``dequeue_jitter`` is the upper bound of a random delay applied after a
+        notification wake before dequeuing; it desynchronizes worker fleets so
+        they do not all race the dequeue query at once. ``0`` disables it.
         """
         await self.verify_structure()
 
@@ -358,10 +363,28 @@ class QueueManager:
         if max_concurrent_tasks < 2 * batch_size:
             raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
+        notice_event_listener = listeners.PGNoticeEventListener()
+
+        def wake_on_logged_completions() -> None:
+            # A log flush just deleted completed jobs, freeing concurrency
+            # slots in the database. Wake this worker's dequeue loop locally
+            # instead of relying on a broadcast NOTIFY (delete notifications
+            # are filtered out of the dequeue wake-up path).
+            notice_event_listener.put_nowait(
+                models.TableChangedEvent(
+                    channel=self.channel,
+                    operation="delete",
+                    sent_at=models.utc_now(),
+                    table=DBSettings().queue_table,
+                    type="table_changed_event",
+                )
+            )
+
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 repository=self.queries,
+                on_flush=wake_on_logged_completions,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 # Flush will be mainly driven by timeouts, but allow flush if
@@ -375,7 +398,6 @@ class QueueManager:
         ):
             periodic_health_check_task = asyncio.create_task(self._run_periodic_health_check())
 
-            notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
                 self.channel,
@@ -405,11 +427,14 @@ class QueueManager:
                         asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
                     )
 
-                    with contextlib.suppress(asyncio.QueueEmpty):
-                        notice_event_listener.get_nowait()
-
                     if self.shutdown.is_set():
                         break
+
+                # The table was just observed empty by fetch_jobs, so every
+                # buffered notification is stale; coalesce the backlog into
+                # this one cycle. A row inserted after that observation is
+                # caught by the queued_work check in _effective_dequeue_timeout.
+                notice_event_listener.drain_nowait()
 
                 await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
                 await self._maybe_health_shutdown(
@@ -424,6 +449,27 @@ class QueueManager:
                     (shutdown_task, event_task),
                     return_when=asyncio.FIRST_COMPLETED,
                 )
+
+                # Jitter only broadcast notification wakes: each worker draws an
+                # independent delay per event, rotating which worker dequeues
+                # first instead of the whole fleet stampeding at once. Events
+                # arriving during the sleep buffer up and coalesce above.
+                # Local self-wakes (the on_flush completion event) carry
+                # operation="delete" — broadcast deletes never reach this queue —
+                # and are exempt: there is no herd to spread out, only this
+                # worker's own slot-freed dequeue to delay.
+                if (
+                    (jitter := dequeue_jitter.total_seconds()) > 0
+                    and event_task.done()
+                    and (event := event_task.result()) is not None
+                    and event.operation != "delete"
+                    and not self.shutdown.is_set()
+                ):
+                    with suppress(TimeoutError, asyncio.TimeoutError):
+                        await asyncio.wait_for(
+                            self.shutdown.wait(),
+                            timeout=random.uniform(0, jitter),
+                        )
 
             periodic_health_check_task.cancel()
             with suppress(asyncio.CancelledError, Exception):

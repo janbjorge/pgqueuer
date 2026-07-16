@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import MutableMapping, TypeAlias, TypeVar
 
+from typing_extensions import assert_never
+
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
@@ -20,6 +22,12 @@ HandlerTypeVar = TypeVar("HandlerTypeVar", bound=Callable[..., None])
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
     """Queue for PostgreSQL NOTIFY events."""
+
+    def drain_nowait(self) -> None:
+        """Discard all buffered events; a completed dequeue cycle already consumed the work."""
+        with contextlib.suppress(asyncio.QueueEmpty):
+            while True:
+                self.get_nowait()
 
 
 @dataclass
@@ -59,7 +67,14 @@ def default_event_router(
 
     @router.register("table_changed_event")
     def _table_changed(evt: models.TableChangedEvent) -> None:
-        notice_event_queue.put_nowait(evt)
+        if evt.operation == "insert" or evt.operation == "update":
+            notice_event_queue.put_nowait(evt)
+        elif evt.operation == "delete" or evt.operation == "truncate":
+            # Removed rows can never make a job available; waking the
+            # dequeue loop for these would be a pointless herd wake-up.
+            return
+        else:
+            assert_never(evt.operation)
 
     @router.register("cancellation_event")
     def _cancellation(evt: models.CancellationEvent) -> None:

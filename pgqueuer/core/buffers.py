@@ -7,7 +7,7 @@ import dataclasses
 import random
 from contextlib import suppress
 from datetime import timedelta
-from typing import Generic, Protocol, TypeVar
+from typing import Callable, Generic, Protocol, TypeVar
 
 from typing_extensions import Self
 
@@ -28,6 +28,12 @@ class TimedOverflowBuffer(Generic[T]):
     _: dataclasses.KW_ONLY
     timeout: timedelta = dataclasses.field(
         default_factory=lambda: timedelta(seconds=0.1),
+    )
+    # Invoked after each successful flush; lets owners react to the batch
+    # having reached the database (e.g. wake a dequeue loop).
+    on_flush: Callable[[], None] | None = dataclasses.field(
+        default=None,
+        repr=False,
     )
 
     events: asyncio.Queue[T] = dataclasses.field(
@@ -74,6 +80,12 @@ class TimedOverflowBuffer(Generic[T]):
             logconfig.logger.exception("Flush failed, requeuing %d items", len(items))
             for item in items:
                 self.events.put_nowait(item)
+        else:
+            if self.on_flush is not None:
+                try:
+                    self.on_flush()
+                except Exception:
+                    logconfig.logger.exception("on_flush callback failed")
 
     async def __aenter__(self) -> Self:
         self.add_task(asyncio.create_task(self.periodic_flush()))

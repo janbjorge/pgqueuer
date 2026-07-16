@@ -308,3 +308,70 @@ async def test_job_buffer_flush_returns_when_lock_held() -> None:
 
 
 LogEntry = tuple[Job, JOB_STATUS, TracebackRecord | None]
+
+
+async def test_on_flush_called_after_successful_flush() -> None:
+    flushed = []
+    on_flush_calls = list[int]()
+
+    async def helper(x: list) -> None:
+        flushed.extend(x)
+
+    async with JobStatusLogBuffer(
+        max_size=2,
+        timeout=timedelta(seconds=100),
+        repository=_FakeJobLogSink(helper),
+        on_flush=lambda: on_flush_calls.append(len(flushed)),
+    ) as buffer:
+        await buffer.add((job_faker(), "successful", None))
+        await buffer.add((job_faker(), "successful", None))
+        while not on_flush_calls:
+            await asyncio.sleep(0)
+
+    # Called once for the max_size flush, with the batch already persisted.
+    assert on_flush_calls[0] == 2
+
+
+async def test_on_flush_not_called_when_flush_fails() -> None:
+    on_flush_calls = list[None]()
+
+    async def helper(x: list) -> None:
+        raise RuntimeError("flush failed")
+
+    buffer = JobStatusLogBuffer(
+        max_size=1,
+        timeout=timedelta(seconds=100),
+        repository=_FakeJobLogSink(helper),
+        on_flush=lambda: on_flush_calls.append(None),
+    )
+    await buffer.add((job_faker(), "successful", None))
+    await buffer.flush()
+
+    assert on_flush_calls == []
+    # Failed items are requeued, not dropped.
+    assert buffer.events.qsize() == 1
+
+
+async def test_on_flush_exception_does_not_disrupt_flushing() -> None:
+    flushed = []
+
+    async def helper(x: list) -> None:
+        flushed.extend(x)
+
+    def broken_on_flush() -> None:
+        raise RuntimeError("on_flush failed")
+
+    buffer = JobStatusLogBuffer(
+        max_size=100,
+        timeout=timedelta(seconds=100),
+        repository=_FakeJobLogSink(helper),
+        on_flush=broken_on_flush,
+    )
+    await buffer.add((job_faker(), "successful", None))
+    await buffer.flush()
+    assert len(flushed) == 1
+
+    # The callback error is swallowed; subsequent flushes keep working.
+    await buffer.add((job_faker(), "successful", None))
+    await buffer.flush()
+    assert len(flushed) == 2

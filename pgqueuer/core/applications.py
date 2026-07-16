@@ -161,6 +161,7 @@ class PgQueuer:
         max_concurrent_tasks: int | None = None,
         shutdown_on_listener_failure: bool = False,
         heartbeat_timeout: timedelta = timedelta(seconds=30),
+        dequeue_jitter: timedelta = timedelta(seconds=0),
     ) -> None:
         """Run QueueManager and SchedulerManager concurrently."""
         tasks = [
@@ -172,6 +173,7 @@ class PgQueuer:
                     max_concurrent_tasks=max_concurrent_tasks,
                     shutdown_on_listener_failure=shutdown_on_listener_failure,
                     heartbeat_timeout=heartbeat_timeout,
+                    dequeue_jitter=dequeue_jitter,
                 )
             ),
             asyncio.create_task(self.sm.run()),

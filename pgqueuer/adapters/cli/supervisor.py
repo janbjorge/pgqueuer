@@ -60,6 +60,7 @@ async def runit(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
     heartbeat_timeout: timedelta = timedelta(seconds=30),
+    dequeue_jitter: timedelta = timedelta(seconds=0),
 ) -> None:
     """Supervise a manager lifecycle; optionally restart after *restart_delay* on failure.
 
@@ -82,6 +83,7 @@ async def runit(
                     max_concurrent_tasks,
                     shutdown_on_listener_failure,
                     heartbeat_timeout,
+                    dequeue_jitter,
                 )
         except Exception as exc:
             if not restart_on_failure:
@@ -103,6 +105,7 @@ async def run_manager(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
     heartbeat_timeout: timedelta = timedelta(seconds=30),
+    dequeue_jitter: timedelta = timedelta(seconds=0),
 ) -> None:
     """Dispatch ``run()`` on the concrete manager type.
 
@@ -117,6 +120,7 @@ async def run_manager(
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
             heartbeat_timeout=heartbeat_timeout,
+            dequeue_jitter=dequeue_jitter,
         )
     elif isinstance(manager, sm.SchedulerManager):
         await manager.run()
@@ -128,6 +132,7 @@ async def run_manager(
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
             heartbeat_timeout=heartbeat_timeout,
+            dequeue_jitter=dequeue_jitter,
         )
     else:
         raise NotImplementedError(f"Unsupported instance type: {type(manager)}")

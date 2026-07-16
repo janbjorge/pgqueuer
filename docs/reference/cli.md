@@ -220,6 +220,7 @@ Start a `QueueManager` to process jobs.
 | `--mode` | str | continuous | `continuous` or `drain` |
 | `--max-concurrent-tasks` | int | None | Cap total concurrent tasks (None = unlimited) |
 | `--shutdown-on-listener-failure` | bool | False | Shut down if the LISTEN channel health check fails |
+| `--dequeue-jitter` | float | 0.0 | Max seconds of random delay after a NOTIFY wake before dequeuing; desynchronizes large worker fleets (0 disables) |
 
 ```bash
 # Run with a limit of 5 concurrent tasks

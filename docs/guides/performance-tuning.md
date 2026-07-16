@@ -114,6 +114,47 @@ pgq autovac --rollback
 PgQueuer uses `LISTEN/NOTIFY` for low-latency job pickup. A trigger fires on every insert
 into `pgqueuer` and sends a notification on the `ch_pgqueuer` channel.
 
+Every worker on the channel receives every notification, so PgQueuer limits "thundering
+herd" wake-ups (all workers racing the dequeue query for the same event) automatically:
+
+- **Operation filtering** — notifications for `DELETE`/`TRUNCATE` statements (e.g. moving
+  completed jobs to the log table) never wake the dequeue loop; removed rows cannot make a
+  job available. Because completions can free `concurrency_limit` slots, a worker wakes
+  *itself* locally after its own completion-log flush; a worker waiting on a slot freed by
+  a *different* worker is covered by the fast re-poll below.
+- **Burst coalescing** — notifications that pile up while a worker is dequeuing are
+  discarded once the queue table has been observed empty, so a burst of N inserts costs one
+  dequeue cycle instead of N. A job inserted in the narrow window after that observation is
+  picked up by a fast (100 ms) re-poll, backed by the `dequeue_timeout` ceiling.
+
+### Dequeue Jitter
+
+With many workers, one insert still wakes the whole fleet at the same instant. Setting
+`dequeue_jitter` makes each worker sleep a random delay in `[0, dequeue_jitter]` after a
+notification wake before dequeuing. Each worker draws independently per event, so which
+worker dequeues first rotates randomly — early wakers claim the jobs and the rest find the
+queue drained, instead of all workers racing the `FOR UPDATE SKIP LOCKED` query at once.
+
+```python
+await pgq.run(dequeue_jitter=timedelta(milliseconds=100))
+```
+
+```bash
+pgq run myapp:main --dequeue-jitter 0.1
+```
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `dequeue_jitter` | `0 s` (disabled) | Max random delay after a NOTIFY wake before dequeuing |
+
+**Tuning guidance:**
+- Leave at `0` for small deployments (a handful of workers) or latency-sensitive jobs —
+  the added dispatch latency buys little there.
+- Set to `50–200 ms` when running tens of workers against one queue; contention on the
+  dequeue query drops roughly in proportion to how far the wake-ups spread out.
+- Timeout-driven polls and a worker's own completion self-wake are never jittered; only
+  broadcast notification wakes are.
+
 **What can go wrong:** pgBouncer in transaction-pooling mode drops `LISTEN` subscriptions
 between transactions. PgQueuer handles this in two ways:
 

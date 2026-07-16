@@ -6,6 +6,7 @@ import async_timeout
 import pytest
 
 from pgqueuer import db
+from pgqueuer.domain.errors import FailingListenerError
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -218,3 +219,160 @@ async def test_max_concurrent_tasks(
         )
 
     assert len(picked_jobs) == max_concurrent_tasks
+
+
+async def wait_until_listening(qm: QueueManager, timeout_seconds: float = 10.0) -> None:
+    """Block until *qm*'s NOTIFY listener answers a health-check round trip."""
+    async with async_timeout.timeout(timeout_seconds):
+        while True:
+            try:
+                await qm.listener_healthy(timeout=timedelta(seconds=0.5))
+                return
+            except FailingListenerError:
+                await asyncio.sleep(0.05)
+
+
+async def test_notification_burst_coalesces_dequeue_cycles(
+    apgdriver: db.Driver,
+) -> None:
+    # A burst of N single-statement inserts emits N notifications. The buffered
+    # backlog must collapse into a few dequeue cycles instead of one wake ->
+    # dequeue round trip per notification (the thundering-herd replay).
+    q = Queries(apgdriver)
+    qm = QueueManager(q)
+    dequeue_calls = 0
+    original_dequeue = q.dequeue
+
+    async def counting_dequeue(*args: object, **kwargs: object) -> list[Job]:
+        nonlocal dequeue_calls
+        dequeue_calls += 1
+        # Slow the query down so the whole burst lands while one dequeue is in
+        # flight; a loop that replays the backlog one event at a time would
+        # need ~N cycles to consume it, a coalescing loop needs a couple.
+        await asyncio.sleep(0.1)
+        return await original_dequeue(*args, **kwargs)  # type: ignore[arg-type]
+
+    q.dequeue = counting_dequeue  # type: ignore[method-assign]
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    async def burst_then_shutdown() -> None:
+        await wait_until_listening(qm)
+        # Deferred far into the future: notifications fire, nothing is
+        # eligible, so every dequeue in this test returns empty.
+        for _ in range(20):
+            await q.enqueue("fetch", None, execute_after=timedelta(seconds=30))
+        await asyncio.sleep(1.5)
+        qm.shutdown.set()
+
+    async with async_timeout.timeout(10):
+        await asyncio.gather(
+            qm.run(dequeue_timeout=timedelta(seconds=5)),
+            burst_then_shutdown(),
+        )
+
+    assert dequeue_calls <= 5, f"burst was not coalesced: {dequeue_calls} dequeue calls"
+
+
+async def test_dequeue_jitter_delays_notification_wake(
+    apgdriver: db.Driver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pgqueuer.core.qm.random.uniform", lambda a, b: b)
+
+    q = Queries(apgdriver)
+    qm = QueueManager(q)
+    loop = asyncio.get_running_loop()
+    picked_at = list[float]()
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        picked_at.append(loop.time())
+
+    enqueued_at: float = 0.0
+
+    async def enqueue_then_shutdown() -> None:
+        nonlocal enqueued_at
+        await wait_until_listening(qm)
+        # Let the manager finish its startup dequeue and park in the event wait;
+        # only notification-driven wakes are jittered.
+        await asyncio.sleep(0.2)
+        enqueued_at = loop.time()
+        await q.enqueue("fetch", None)
+        async with async_timeout.timeout(5):
+            while not picked_at:
+                await asyncio.sleep(0.01)
+        qm.shutdown.set()
+
+    async with async_timeout.timeout(15):
+        await asyncio.gather(
+            qm.run(
+                dequeue_timeout=timedelta(seconds=5),
+                dequeue_jitter=timedelta(seconds=0.3),
+            ),
+            enqueue_then_shutdown(),
+        )
+
+    assert picked_at[0] - enqueued_at >= 0.25
+
+
+async def test_shutdown_during_dequeue_jitter(
+    apgdriver: db.Driver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pgqueuer.core.qm.random.uniform", lambda a, b: b)
+
+    q = Queries(apgdriver)
+    qm = QueueManager(q)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    async def trigger_then_shutdown() -> None:
+        await wait_until_listening(qm)
+        await asyncio.sleep(0.2)
+        # Wakes the manager into a 10 s jitter sleep; shutdown must interrupt it.
+        await q.enqueue("fetch", None)
+        await asyncio.sleep(0.3)
+        qm.shutdown.set()
+
+    async with async_timeout.timeout(5):
+        await asyncio.gather(
+            qm.run(
+                dequeue_timeout=timedelta(seconds=30),
+                dequeue_jitter=timedelta(seconds=10),
+            ),
+            trigger_then_shutdown(),
+        )
+
+
+async def test_completion_self_wake_not_jittered(
+    apgdriver: db.Driver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pgqueuer.core.qm.random.uniform", lambda a, b: b)
+
+    q = Queries(apgdriver)
+    qm = QueueManager(q)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        # Keep the task alive past the drain check so the manager parks in the
+        # event wait and gets woken by the completion-log flush self-wake.
+        await asyncio.sleep(0.05)
+
+    # Enqueued before run: picked by the startup dequeue, not a notification.
+    # The only notification-queue event in this run is the local self-wake
+    # emitted after the completion-log flush; jittering it would stall this
+    # drain run for the full 10 s and trip the timeout.
+    await q.enqueue("fetch", None)
+
+    async with async_timeout.timeout(5):
+        await qm.run(
+            dequeue_timeout=timedelta(seconds=30),
+            mode=QueueExecutionMode.drain,
+            dequeue_jitter=timedelta(seconds=10),
+        )

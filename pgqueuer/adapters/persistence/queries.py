@@ -297,6 +297,11 @@ class Queries:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
         return rows[0]["queued_work"] if rows else 0
 
+    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+        """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
+        rows = await self.driver.fetch(self.qbq.build_has_eligible_queued_work(), entrypoints)
+        return rows[0]["queued_work"] if rows else 0
+
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """Delete jobs; restrict to *entrypoint* when given, else truncate."""
         if entrypoint:

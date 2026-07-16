@@ -147,6 +147,16 @@ async def test_has_queued_work_is_existence_probe(apgdriver: db.Driver) -> None:
     )
 
 
+async def test_has_eligible_queued_work_is_existence_probe(apgdriver: db.Driver) -> None:
+    """has_eligible_queued_work keeps its LIMIT 1 existence shape, not a full COUNT(*)."""
+    q = await _seed(apgdriver)
+    nodes = await _plan_nodes(apgdriver, q.qbq.build_has_eligible_queued_work(), ENTRYPOINTS)
+    assert any(n.get("Node Type") == "Limit" for n in nodes), (
+        "has_eligible_queued_work lost its LIMIT 1 existence-probe shape; "
+        f"nodes={[n.get('Node Type') for n in nodes]}"
+    )
+
+
 async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) -> None:
     """Dequeue scans O(entrypoints*batch) rows, not the whole backlog (#668)."""
     await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)

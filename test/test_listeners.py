@@ -15,6 +15,7 @@ from pgqueuer.core.listeners import (
     initialize_notice_event_listener,
 )
 from pgqueuer.domain.settings import DBSettings, add_prefix
+from pgqueuer.domain.types import OPERATIONS
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
@@ -49,6 +50,75 @@ async def test_handle_table_changed_event() -> None:
 
     assert notice_event_queue.qsize() == 1
     assert isinstance(notice_event_queue.get_nowait(), TableChangedEvent)
+
+
+@pytest.mark.parametrize("operation", ["insert", "update"])
+async def test_table_changed_work_creating_operations_enqueued(operation: OPERATIONS) -> None:
+    notice_event_queue = PGNoticeEventListener()
+    canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+
+    event = AnyEvent(
+        root=TableChangedEvent(
+            channel="channel_1",
+            sent_at=datetime.now(tz=timezone.utc),
+            type="table_changed_event",
+            operation=operation,
+            table="jobs_table",
+        )
+    )
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        canceled=canceled,
+        pending_health_check=pending_health_check,
+    )(event)
+
+    assert notice_event_queue.qsize() == 1
+
+
+@pytest.mark.parametrize("operation", ["delete", "truncate"])
+async def test_table_changed_non_work_operations_not_enqueued(operation: OPERATIONS) -> None:
+    notice_event_queue = PGNoticeEventListener()
+    canceled: MutableMapping[JobId, Context] = {}
+    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+
+    event = AnyEvent(
+        root=TableChangedEvent(
+            channel="channel_1",
+            sent_at=datetime.now(tz=timezone.utc),
+            type="table_changed_event",
+            operation=operation,
+            table="jobs_table",
+        )
+    )
+    default_event_router(
+        notice_event_queue=notice_event_queue,
+        canceled=canceled,
+        pending_health_check=pending_health_check,
+    )(event)
+
+    assert notice_event_queue.qsize() == 0
+
+
+async def test_notice_event_listener_drain_nowait() -> None:
+    listener = PGNoticeEventListener()
+
+    listener.drain_nowait()
+    assert listener.empty()
+
+    for _ in range(5):
+        listener.put_nowait(
+            TableChangedEvent(
+                channel="channel_1",
+                sent_at=datetime.now(tz=timezone.utc),
+                type="table_changed_event",
+                operation="insert",
+                table="jobs_table",
+            )
+        )
+
+    listener.drain_nowait()
+    assert listener.empty()
 
 
 async def test_handle_cancellation_event() -> None:
