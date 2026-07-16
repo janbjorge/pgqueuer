@@ -121,12 +121,10 @@ jobs:
       group: benchmark-store
       cancel-in-progress: false
     env:
-      AWS_ENDPOINT_URL_S3: https://fly.storage.tigris.dev
-      AWS_REGION: auto
-      AWS_ACCESS_KEY_ID: ${{ secrets.BENCHMARK_TIGRIS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.BENCHMARK_TIGRIS_SECRET_ACCESS_KEY }}
+      TIGRIS_ACCESS_KEY_ID: ${{ secrets.BENCHMARK_TIGRIS_ACCESS_KEY_ID }}
+      TIGRIS_SECRET_ACCESS_KEY: ${{ secrets.BENCHMARK_TIGRIS_SECRET_ACCESS_KEY }}
       HAS_TIGRIS_CREDENTIALS: ${{ secrets.BENCHMARK_TIGRIS_ACCESS_KEY_ID != '' }}
-      BENCHMARK_BUCKET: s3://pgqueuer-benchmarks
+      BENCHMARK_BUCKET_URL: https://fly.storage.tigris.dev/pgqueuer-benchmarks
     steps:
       - uses: actions/checkout@v4
         if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
@@ -145,11 +143,22 @@ jobs:
       - name: Append and Upload
         if: ${{ env.HAS_TIGRIS_CREDENTIALS == 'true' }}
         run: |
-          aws s3 sync "$BENCHMARK_BUCKET/benchmark" benchmark-data/benchmark
+          mkdir -p benchmark-data/benchmark
+          year=$(date -u +%Y)
+          for y in $year $((year - 1)); do
+            curl -fsSL --retry 3 -o "benchmark-data/benchmark/$y.ndjson" \
+              "$BENCHMARK_BUCKET_URL/benchmark/$y.ndjson" \
+              || rm -f "benchmark-data/benchmark/$y.ndjson"
+          done
           uv run python3 -m tools.append_benchmarks \
             --data-dir benchmark-data \
             --new-dir current
-          aws s3 sync benchmark-data/benchmark "$BENCHMARK_BUCKET/benchmark"
+          for file in benchmark-data/benchmark/*.ndjson; do
+            [ -e "$file" ] || continue
+            curl -fsS --retry 3 --aws-sigv4 "aws:amz:auto:s3" \
+              -u "$TIGRIS_ACCESS_KEY_ID:$TIGRIS_SECRET_ACCESS_KEY" \
+              -T "$file" "$BENCHMARK_BUCKET_URL/benchmark/$(basename "$file")"
+          done
   run-tests:
     if: github.event_name != 'schedule'
     strategy:
