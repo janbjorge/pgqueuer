@@ -1,0 +1,40 @@
+<h2>Active workers</h2>
+{% if workers %}
+<table>
+  <thead><tr><th>Queue manager</th><th>Active jobs</th><th>Oldest heartbeat</th><th>Newest heartbeat</th><th>Entrypoints</th></tr></thead>
+  <tbody>
+  {% for w in workers %}
+    <tr id="worker-{{ w.queue_manager_id }}">
+      <td><code>{{ w.queue_manager_id }}</code></td>
+      <td>{{ w.active_jobs }}</td>
+      <td>{{ w.oldest_heartbeat | dt }}</td>
+      <td>{{ w.newest_heartbeat | dt }}</td>
+      <td>{{ w.entrypoints | join(", ") }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No workers are currently processing jobs.</p>
+{% endif %}
+
+<h2>Stale jobs <small>(no heartbeat for {{ stale_after }}s)</small></h2>
+{% if stale %}
+<table>
+  <thead><tr><th>ID</th><th>Entrypoint</th><th>Worker</th><th>Last heartbeat</th><th>Silent for</th></tr></thead>
+  <tbody>
+  {% for s in stale %}
+    <tr id="stale-{{ s.id }}" class="alert">
+      <td><a href="{{ url_for('job_detail', job_id=s.id) }}">{{ s.id }}</a></td>
+      <td>{{ s.entrypoint }}</td>
+      <td><code>{{ s.queue_manager_id or "–" }}</code></td>
+      <td>{{ s.heartbeat | dt }}</td>
+      <td>{{ s.seconds_since_heartbeat | age }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="hint">Stale picked jobs are re-picked automatically once they exceed the workers' heartbeat timeout.</p>
+{% else %}
+<p class="empty">No stale jobs.</p>
+{% endif %}

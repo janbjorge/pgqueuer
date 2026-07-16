@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · schedules{% endblock %}
+{% block content %}
+<h1>Schedules</h1>
+{% if schedules %}
+<table>
+  <thead><tr><th>ID</th><th>Entrypoint</th><th>Expression</th><th>Status</th><th>Next run</th><th>Last run</th><th>Heartbeat</th></tr></thead>
+  <tbody>
+  {% for s in schedules %}
+    <tr {% if s.next_run < now and s.status != "picked" %}class="alert"{% endif %}>
+      <td>{{ s.id }}</td>
+      <td>{{ s.entrypoint }}</td>
+      <td><code>{{ s.expression }}</code></td>
+      <td><span class="status status-{{ s.status }}">{{ s.status }}</span></td>
+      <td>{{ s.next_run | dt }}</td>
+      <td>{{ s.last_run | dt }}</td>
+      <td>{{ s.heartbeat | dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="hint">Rows highlighted in red are overdue: next_run has passed without the schedule being picked.</p>
+{% else %}
+<p class="empty">No schedules registered.</p>
+{% endif %}
+{% endblock %}

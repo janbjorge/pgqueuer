@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · system{% endblock %}
+{% block content %}
+<h1>System</h1>
+<h2>Tables</h2>
+<table>
+  <thead><tr><th>Table</th><th>Persistence</th><th>Estimated rows</th><th>Total size</th></tr></thead>
+  <tbody>
+  {% for t in tables %}
+    <tr>
+      <td><code>{{ t.table_name }}</code></td>
+      <td>{{ t.persistence }}</td>
+      <td>{{ t.estimated_rows }}</td>
+      <td>{{ t.total_size }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Log aggregation</h2>
+<p>Un-aggregated log rows: <strong {% if unaggregated > 1000000 %}class="alert"{% endif %}>{{ unaggregated }}</strong></p>
+<p class="hint">Log rows are rolled into the statistics table on demand. A persistently large backlog inflates the log table and slows aggregation (see the autovacuum guide).</p>
+{% endblock %}

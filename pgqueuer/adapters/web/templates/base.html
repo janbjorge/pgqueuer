@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}pgqueuer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('web_static', filename='style.css') }}">
+  <script>
+    (function () {
+      var t = localStorage.getItem('pgq-theme');
+      if (t === 'light' || t === 'dark') {
+        document.documentElement.setAttribute('data-theme', t);
+      }
+      window.pgqSetTheme = function (v) {
+        if (v === 'auto') {
+          localStorage.removeItem('pgq-theme');
+          document.documentElement.removeAttribute('data-theme');
+        } else {
+          localStorage.setItem('pgq-theme', v);
+          document.documentElement.setAttribute('data-theme', v);
+        }
+      };
+    })();
+  </script>
+  <script src="{{ url_for('web_static', filename='htmx.min.js') }}"></script>
+  <script src="{{ url_for('web_static', filename='idiomorph-ext.min.js') }}"></script>
+  {% if sse_enabled %}<script src="{{ url_for('web_static', filename='sse.js') }}"></script>{% endif %}
+</head>
+<body hx-ext="morph{% if sse_enabled %}, sse{% endif %}" {% if sse_enabled %}sse-connect="{{ url_for('sse_events') }}"{% endif %}>
+  <header>
+    <span class="brand">pgqueuer</span>
+    <nav>
+      <a href="{{ url_for('overview') }}">Overview</a>
+      <a href="{{ url_for('entrypoints') }}">Entrypoints</a>
+      <a href="{{ url_for('jobs') }}">Jobs</a>
+      <a href="{{ url_for('failures') }}">Failures</a>
+      <a href="{{ url_for('workers') }}">Workers</a>
+      <a href="{{ url_for('schedules') }}">Schedules</a>
+      <a href="{{ url_for('system') }}">System</a>
+    </nav>
+    <select class="theme" aria-label="Theme" onchange="pgqSetTheme(this.value)">
+      <option value="auto">auto</option>
+      <option value="light">light</option>
+      <option value="dark">dark</option>
+    </select>
+    <script>document.currentScript.previousElementSibling.value = localStorage.getItem('pgq-theme') || 'auto';</script>
+  </header>
+  <main>
+  {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

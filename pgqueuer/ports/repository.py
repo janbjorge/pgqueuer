@@ -163,6 +163,71 @@ class QueueRepositoryPort(Protocol):
         ...
 
 
+class InsightsRepositoryPort(Protocol):
+    """Read-only queue introspection consumed by presentation layers (web, MCP, CLI)."""
+
+    async def queue_size(self) -> list[models.QueueStatistics]: ...
+
+    async def queue_age(self) -> list[models.QueueAgeStats]: ...
+
+    async def job_duration_percentiles(
+        self,
+        last: timedelta,
+    ) -> list[models.JobDurationStats]: ...
+
+    async def throughput_summary(
+        self,
+        last: timedelta | None = None,
+    ) -> list[models.ThroughputStats]: ...
+
+    async def throughput_timeseries(
+        self,
+        last: timedelta,
+    ) -> list[models.ThroughputBucket]: ...
+
+    async def log_statistics(
+        self,
+        limit: int | None,
+        last: timedelta | None = None,
+    ) -> list[models.LogStatistics]: ...
+
+    async def active_workers(self) -> list[models.ActiveWorker]: ...
+
+    async def stale_jobs(
+        self,
+        threshold: timedelta,
+        limit: int = 100,
+    ) -> list[models.StaleJob]: ...
+
+    async def exception_logs(self, limit: int = 100) -> list[models.Log]: ...
+
+    async def list_failed_jobs(
+        self, limit: int = 100, order: SortOrder = "DESC"
+    ) -> list[models.Job]: ...
+
+    async def browse_queue(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        statuses: list[models.JOB_STATUS] | None = None,
+        entrypoints: list[str] | None = None,
+    ) -> list[models.Job]: ...
+
+    async def queue_job_by_id(self, id: models.JobId) -> models.Job | None: ...
+
+    async def job_log_history(
+        self,
+        id: models.JobId,
+        limit: int = 100,
+    ) -> list[models.Log]: ...
+
+    async def unaggregated_log_count(self) -> int: ...
+
+    async def schema_info(self) -> list[models.TableInfo]: ...
+
+    async def peek_schedule(self) -> list[models.Schedule]: ...
+
+
 class ScheduleRepositoryPort(Protocol):
     """Persistence operations for cron schedules."""
 

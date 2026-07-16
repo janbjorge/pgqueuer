@@ -1,0 +1,27 @@
+# Example: run the pgqueuer web dashboard as a sidecar next to your database.
+# Build from the repository root:
+#   docker compose -f tools/web/docker-compose.yml up --build
+services:
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: tools/web/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PGHOST: db
+      PGUSER: pgquser
+      PGPASSWORD: pgqpw
+      PGDATABASE: pgqdb
+      # Optional HTTP Basic auth — the dashboard is open when unset:
+      # PGQUEUER_WEB_USER: admin
+      # PGQUEUER_WEB_PASSWORD: change-me
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: pgquser
+      POSTGRES_PASSWORD: pgqpw
+      POSTGRES_DB: pgqdb

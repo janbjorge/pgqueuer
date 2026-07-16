@@ -403,6 +403,34 @@ def dashboard(
     asyncio_run(run())
 
 
+@app.command(help="Serve the web dashboard (requires the 'web' extra).")
+def web(
+    ctx: Context,
+    host: str = typer.Option(
+        "127.0.0.1",
+        "--host",
+        help="Bind address. Use 0.0.0.0 to expose beyond localhost.",
+    ),
+    port: int = typer.Option(
+        8080,
+        "--port",
+    ),
+) -> None:
+    try:
+        import uvicorn
+
+        from pgqueuer.adapters.web.app import create_web_app
+    except ImportError as exc:
+        raise typer.BadParameter(
+            "The web dashboard requires extra dependencies. "
+            "Install with: pip install pgqueuer[web,asyncpg]"
+        ) from exc
+
+    logconfig.setup_fancy_logger(logconfig.LogLevel.INFO)
+    config: AppConfig = ctx.obj
+    uvicorn.run(create_web_app(config.pg_dsn or None), host=host, port=port)
+
+
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
 def listen(
     ctx: Context,

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · jobs{% endblock %}
+{% block content %}
+<h1>Jobs</h1>
+<form class="toolbar"
+      hx-get="{{ filter_url }}"
+      hx-target="#jobs-results"
+      hx-swap="morph:innerHTML"
+      hx-trigger="change, keyup changed delay:400ms from:input[name=entrypoint]">
+  <select name="status">
+    <option value="">all active</option>
+    {% for s in statuses %}
+    <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="entrypoint" placeholder="filter by entrypoint" value="{{ entrypoint }}">
+</form>
+<p class="hint">Active queue rows only — failed jobs live on <a href="{{ url_for('failures') }}">Failures</a>.</p>
+<div id="jobs-results">
+  {% include "partials/jobs_table.html" %}
+</div>
+{% endblock %}

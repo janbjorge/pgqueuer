@@ -1,0 +1,144 @@
+:root {
+  --bg: #ffffff;
+  --fg: #1c1c1e;
+  --muted: #8a8f98;
+  --line: #ececee;
+  --accent: #2563eb;
+  --alert: #d13438;
+  --ok: #1a7f4b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131417;
+    --fg: #e8e8ea;
+    --muted: #7d828b;
+    --line: #26272b;
+    --accent: #6ea8ff;
+    --alert: #ef6f6c;
+    --ok: #55b785;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131417;
+  --fg: #e8e8ea;
+  --muted: #7d828b;
+  --line: #26272b;
+  --accent: #6ea8ff;
+  --alert: #ef6f6c;
+  --ok: #55b785;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 2rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 600; letter-spacing: 0.02em; }
+nav { display: flex; gap: 1.25rem; flex-wrap: wrap; }
+nav a { color: var(--muted); }
+nav a:hover { color: var(--fg); text-decoration: none; }
+.theme { margin-left: auto; color: var(--muted); }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+main { padding: 1.5rem; max-width: 72rem; margin: 0 auto; }
+h1 { font-size: 1.05rem; font-weight: 600; margin: 0.25rem 0 1.25rem; }
+h2 { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 2rem 0 0.25rem; }
+h2 small { font-weight: 400; text-transform: none; letter-spacing: normal; }
+table { border-collapse: collapse; width: 100%; margin: 0.25rem 0 0.5rem; }
+th, td {
+  text-align: left;
+  padding: 0.5rem 1.25rem 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+table.kv th { width: 10rem; border-bottom-color: transparent; }
+table.kv td { border-bottom-color: transparent; }
+tr.alert td, td.alert { color: var(--alert); }
+.cards { display: flex; gap: 3rem; flex-wrap: wrap; margin: 0.5rem 0 1.5rem; }
+.card { display: flex; flex-direction: column-reverse; }
+.card .value { font-size: 1.8rem; font-weight: 300; line-height: 1.2; }
+.card .label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.card.alert .value { color: var(--alert); }
+.status { color: var(--muted); white-space: nowrap; }
+.status::before { content: "•"; margin-right: 0.35em; }
+.status-queued { color: var(--accent); }
+.status-picked, .status-successful { color: var(--ok); }
+.status-failed, .status-exception { color: var(--alert); }
+button {
+  background: none;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+button.danger { color: var(--alert); }
+button:hover { border-color: currentColor; }
+select, input[type="text"] {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.toolbar { display: flex; gap: 0.6rem; align-items: center; margin: 0.5rem 0 1rem; }
+.toolbar a { color: var(--muted); }
+.toolbar a.active { color: var(--fg); font-weight: 600; }
+pre {
+  border-left: 2px solid var(--line);
+  padding: 0.25rem 0 0.25rem 0.85rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+}
+details summary { cursor: pointer; }
+.empty, .hint { color: var(--muted); font-size: 0.85rem; }
+.pager { display: flex; gap: 1rem; color: var(--muted); }
+.sparkline rect { fill: var(--muted); opacity: 0.55; }
+.sparkline { display: block; }
+code { font-size: 0.85em; }
+.exc {
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--alert);
+  border-radius: 4px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0 1rem;
+}
+.exc-title { font-weight: 600; }
+.exc-meta { color: var(--muted); font-size: 0.8rem; margin: 0.1rem 0 0.5rem; }
+.exc-tb {
+  border-left: none;
+  padding: 0;
+  max-height: 420px;
+  overflow: auto;
+  white-space: pre;
+  word-break: normal;
+}

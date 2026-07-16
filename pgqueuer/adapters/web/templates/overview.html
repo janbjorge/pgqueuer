@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · overview{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+<div hx-get="{{ url_for('partial_overview') }}"
+     hx-trigger="{% if sse_enabled %}sse:queue-change throttle:2s, {% endif %}every 30s"
+     hx-swap="morph:innerHTML">
+  {% include "partials/overview.html" %}
+</div>
+{% endblock %}

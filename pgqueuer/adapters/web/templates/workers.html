@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · workers{% endblock %}
+{% block content %}
+<h1>Workers</h1>
+<div hx-get="{{ url_for('partial_workers') }}?stale_after={{ stale_after }}"
+     hx-trigger="{% if sse_enabled %}sse:queue-change throttle:2s, {% endif %}every 30s"
+     hx-swap="morph:innerHTML">
+  {% include "partials/workers.html" %}
+</div>
+{% endblock %}

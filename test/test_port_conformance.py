@@ -104,6 +104,50 @@ def test_inmemory_has_schema_management_methods() -> None:
     assert required <= set(dir(InMemoryQueries))
 
 
+def test_queries_has_insights_repository_methods() -> None:
+    required = {
+        "queue_size",
+        "queue_age",
+        "job_duration_percentiles",
+        "throughput_summary",
+        "throughput_timeseries",
+        "log_statistics",
+        "active_workers",
+        "stale_jobs",
+        "exception_logs",
+        "list_failed_jobs",
+        "browse_queue",
+        "queue_job_by_id",
+        "job_log_history",
+        "unaggregated_log_count",
+        "schema_info",
+        "peek_schedule",
+    }
+    assert required <= set(dir(Queries))
+
+
+def test_inmemory_has_insights_repository_methods() -> None:
+    required = {
+        "queue_size",
+        "queue_age",
+        "job_duration_percentiles",
+        "throughput_summary",
+        "throughput_timeseries",
+        "log_statistics",
+        "active_workers",
+        "stale_jobs",
+        "exception_logs",
+        "list_failed_jobs",
+        "browse_queue",
+        "queue_job_by_id",
+        "job_log_history",
+        "unaggregated_log_count",
+        "schema_info",
+        "peek_schedule",
+    }
+    assert required <= set(dir(InMemoryQueries))
+
+
 def test_tracing_implementations_have_required_methods() -> None:
     required = {"trace_publish", "trace_process"}
     assert required <= set(dir(LogfireTracing))
