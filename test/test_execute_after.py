@@ -228,6 +228,32 @@ async def test_effective_dequeue_timeout_toctou_fallback() -> None:
     )
 
 
+async def test_effective_dequeue_timeout_deferred_job_crossing_eligibility() -> None:
+    """A deferred job whose execute_after passes between the eligibility probe
+    and the eta probe must still trigger a fast re-poll, not a full timeout."""
+    from unittest.mock import AsyncMock, patch
+
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("ep")
+    async def handler(job: Job) -> None:
+        pass
+
+    # The job is queued throughout, but both probes miss it: the eligibility
+    # probe ran before execute_after passed, the eta probe after.
+    await pq.qm.queries.enqueue("ep", None, 0, timedelta(seconds=5))
+
+    with (
+        patch.object(pq.qm.queries, "eligible_queued_work", new_callable=AsyncMock, return_value=0),
+        patch.object(pq.qm.queries, "next_deferred_eta", new_callable=AsyncMock, return_value=None),
+    ):
+        timeout = await pq.qm._effective_dequeue_timeout(timedelta(seconds=30))
+
+    assert timeout == pq.qm.min_dequeue_poll_interval, (
+        f"Expected fast re-poll for job crossing eligibility, got {timeout}"
+    )
+
+
 async def test_effective_dequeue_timeout_eligible_work_beats_deferred_eta() -> None:
     """Eligible work must trigger a fast re-poll even when a deferred job exists
     (the eligible job's notification may have been coalesced away)."""

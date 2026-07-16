@@ -339,6 +339,11 @@ class QueueManager:
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
             return max(eta, self.min_dequeue_poll_interval)
+        # A deferred job can cross its execute_after between the two probes
+        # above: the eligibility probe still saw it as deferred, the eta probe
+        # no longer sees it as future. queued_work counts both, closing the gap.
+        if eta is None and await self.queries.queued_work(entrypoints) > 0:
+            return self.min_dequeue_poll_interval
         return dequeue_timeout
 
     async def run(
