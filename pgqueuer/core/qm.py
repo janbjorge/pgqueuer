@@ -304,7 +304,11 @@ class QueueManager:
             return
         if task_manager.tasks:
             await asyncio.sleep(0)
-        if (await cached_queued_work()) == 0 and not task_manager.tasks:
+        if task_manager.tasks or (await cached_queued_work()) != 0:
+            return
+        # The cached count may predate a RetryRequested re-queue that landed
+        # within the TTL window; confirm with an uncached read before exiting.
+        if await self.queries.queued_work(list(self.entrypoint_registry.keys())) == 0:
             self.shutdown.set()
 
     async def _maybe_health_shutdown(
