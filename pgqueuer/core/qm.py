@@ -210,17 +210,9 @@ class QueueManager:
                 for x in self.entrypoints_below_capacity_limits()
             }
 
-            # Cap batch_size to the smallest concurrency limit so a single
-            # dequeue never picks more jobs than the tightest entrypoint allows.
-            effective_batch = min(
-                (p.concurrency_limit for p in entrypoints.values() if p.concurrency_limit > 0),
-                default=batch_size,
-            )
-            effective_batch = min(batch_size, effective_batch)
-
             if not (
                 jobs := await self.queries.dequeue(
-                    batch_size=effective_batch,
+                    batch_size=batch_size,
                     entrypoints=entrypoints,
                     queue_manager_id=self.queue_manager_id,
                     global_concurrency_limit=global_concurrency_limit,
@@ -348,6 +340,10 @@ class QueueManager:
         """Process jobs until shutdown.
 
         ``mode=drain`` exits once the queue is empty and in-flight tasks finish.
+        ``max_concurrent_tasks`` is a hard cap on this worker's picked jobs,
+        enforced by the dequeue query. Per-entrypoint concurrency limits are
+        likewise enforced in SQL, so batches keep their full size regardless
+        of the tightest registered limit.
         ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
         heartbeats are emitted at half this interval.
         """
