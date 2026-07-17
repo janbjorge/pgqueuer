@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import heapq
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Literal, overload
@@ -48,6 +49,19 @@ class InMemoryQueries:
     _statistics: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
     _schedules: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
     _dedupe_index: dict[str, int] = dataclasses.field(default_factory=dict, init=False)
+    _dedupe_key_by_job: dict[int, str] = dataclasses.field(default_factory=dict, init=False)
+
+    # Dequeue indexes. Heap entries are never removed eagerly; validity is
+    # re-checked against ``_jobs`` on pop, so entries for jobs that were
+    # cancelled, cleared, or re-queued are skipped as tombstones.
+    _ready_heaps: dict[str, list[tuple[int, int]]] = dataclasses.field(
+        default_factory=dict, init=False
+    )
+    _deferred_heap: list[tuple[datetime, int, str]] = dataclasses.field(
+        default_factory=list, init=False
+    )
+    _picked_ids: set[int] = dataclasses.field(default_factory=set, init=False)
+
     _next_job_id: int = dataclasses.field(default=1, init=False)
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
@@ -65,6 +79,10 @@ class InMemoryQueries:
         self._statistics.clear()
         self._schedules.clear()
         self._dedupe_index.clear()
+        self._dedupe_key_by_job.clear()
+        self._ready_heaps.clear()
+        self._deferred_heap.clear()
+        self._picked_ids.clear()
 
     async def has_table(self, table: str) -> bool:
         return True
@@ -205,8 +223,10 @@ class InMemoryQueries:
 
             if dk is not None:
                 self._dedupe_index[dk] = job_id
+                self._dedupe_key_by_job[job_id] = dk
 
             self._jobs[job_id] = job_dict
+            self._push_queued_job(job_dict, now)
             ids.append(JobId(job_id))
 
             self._log.append(
@@ -226,6 +246,57 @@ class InMemoryQueries:
         await self.emit_table_changed("insert")
         return ids
 
+    def _push_queued_job(self, job: dict[str, Any], now: datetime) -> None:
+        if job["execute_after"] <= now:
+            heapq.heappush(
+                self._ready_heaps.setdefault(job["entrypoint"], []),
+                (-job["priority"], job["id"]),
+            )
+        else:
+            heapq.heappush(
+                self._deferred_heap,
+                (job["execute_after"], job["id"], job["entrypoint"]),
+            )
+
+    def _promote_due_deferred(self, now: datetime) -> None:
+        while self._deferred_heap and self._deferred_heap[0][0] <= now:
+            _, job_id, ep = heapq.heappop(self._deferred_heap)
+            j = self._jobs.get(job_id)
+            if j is None or j["status"] != "queued":
+                continue
+            if j["execute_after"] > now:
+                # retry_job pushed the job further into the future after this
+                # entry was created; track the current deadline instead.
+                heapq.heappush(self._deferred_heap, (j["execute_after"], job_id, ep))
+            else:
+                heapq.heappush(
+                    self._ready_heaps.setdefault(ep, []),
+                    (-j["priority"], job_id),
+                )
+
+    def _pop_ready_jobs(
+        self,
+        entrypoint: str,
+        limit: int,
+        now: datetime,
+        seen: set[int],
+    ) -> list[dict[str, Any]]:
+        popped: list[dict[str, Any]] = []
+        heap = self._ready_heaps.get(entrypoint)
+        if heap is None:
+            return popped
+        while heap and len(popped) < limit:
+            _, job_id = heapq.heappop(heap)
+            j = self._jobs.get(job_id)
+            if j is None or j["status"] != "queued" or job_id in seen:
+                continue
+            if j["execute_after"] > now:
+                heapq.heappush(self._deferred_heap, (j["execute_after"], job_id, entrypoint))
+                continue
+            seen.add(job_id)
+            popped.append(j)
+        return popped
+
     def _count_picked_jobs(
         self,
         queue_manager_id: uuid.UUID,
@@ -233,83 +304,28 @@ class InMemoryQueries:
     ) -> tuple[dict[str, int], int]:
         picked_per_ep: dict[str, int] = {}
         total_picked = 0
-        for j in self._jobs.values():
-            if j["status"] != "picked":
-                continue
-            ep = j["entrypoint"]
+        for job_id in self._picked_ids:
+            j = self._jobs[job_id]
             if j["queue_manager_id"] == queue_manager_id:
                 total_picked += 1
+            ep = j["entrypoint"]
             if ep in entrypoints:
                 picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
         return picked_per_ep, total_picked
 
-    def _collect_queued_candidates(
-        self,
-        now: datetime,
-        entrypoints: dict[str, EntrypointExecutionParameter],
-    ) -> list[dict[str, Any]]:
-        candidates: list[dict[str, Any]] = []
-        for j in self._jobs.values():
-            if (
-                j["status"] != "queued"
-                or j["entrypoint"] not in entrypoints
-                or j["execute_after"] > now
-            ):
-                continue
-            candidates.append(j)
-        candidates.sort(key=lambda j: (-j["priority"], j["id"]))
-        return candidates
-
-    def _collect_retry_candidates(
+    def _collect_stale_candidates(
         self,
         now: datetime,
         entrypoints: dict[str, EntrypointExecutionParameter],
         heartbeat_timeout: timedelta,
     ) -> list[dict[str, Any]]:
-        candidates: list[dict[str, Any]] = []
-        for j in self._jobs.values():
-            if j["status"] != "picked" or j["entrypoint"] not in entrypoints:
-                continue
-            if now - j["heartbeat"] < heartbeat_timeout:
-                continue
-            candidates.append(j)
+        candidates = [
+            j
+            for j in (self._jobs[job_id] for job_id in self._picked_ids)
+            if j["entrypoint"] in entrypoints and now - j["heartbeat"] >= heartbeat_timeout
+        ]
         candidates.sort(key=lambda j: (-j["priority"], j["id"]))
         return candidates
-
-    def _select_jobs(
-        self,
-        batch_size: int,
-        candidates: list[tuple[dict[str, Any], bool]],
-        entrypoints: dict[str, EntrypointExecutionParameter],
-        picked_per_ep: dict[str, int],
-    ) -> list[dict[str, Any]]:
-        selected: list[dict[str, Any]] = []
-        seen: set[int] = set()
-        for j, stale in candidates:
-            if len(selected) >= batch_size:
-                break
-            if j["id"] in seen:
-                continue
-            seen.add(j["id"])
-
-            ep = j["entrypoint"]
-            params = entrypoints[ep]
-
-            # Stale recovery transfers ownership of a row already counted in
-            # picked_per_ep, so the concurrency gate does not apply
-            # (mirrors next_stale in qb.py).
-            if (
-                not stale
-                and params.concurrency_limit > 0
-                and picked_per_ep.get(ep, 0) >= params.concurrency_limit
-            ):
-                continue
-
-            selected.append(j)
-            if not stale:
-                picked_per_ep[ep] = picked_per_ep.get(ep, 0) + 1
-
-        return selected
 
     def _write_picked_logs(
         self,
@@ -356,31 +372,48 @@ class InMemoryQueries:
         if global_concurrency_limit is not None:
             remaining = min(remaining, global_concurrency_limit - total_picked)
 
-        queued_candidates = self._collect_queued_candidates(now, entrypoints)
-        retry_candidates = self._collect_retry_candidates(now, entrypoints, heartbeat_timeout)
+        self._promote_due_deferred(now)
+
+        seen = set[int]()
+        queued_candidates: list[dict[str, Any]] = []
+        for ep, params in entrypoints.items():
+            cap = remaining
+            if params.concurrency_limit > 0:
+                cap = min(cap, params.concurrency_limit - picked_per_ep.get(ep, 0))
+            if cap > 0:
+                queued_candidates.extend(self._pop_ready_jobs(ep, cap, now, seen))
+
+        stale_candidates = self._collect_stale_candidates(now, entrypoints, heartbeat_timeout)
 
         # One global priority order so recovered stale jobs compete on priority
-        # with fresh work instead of always losing to it (mirrors eligible in qb.py).
-        candidates = sorted(
-            [(j, False) for j in queued_candidates] + [(j, True) for j in retry_candidates],
-            key=lambda c: (-c[0]["priority"], c[0]["id"]),
+        # with fresh work instead of always losing to it (mirrors eligible in
+        # qb.py). Per-entrypoint concurrency is enforced by the capped pops
+        # above; stale rows transfer ownership of an already-counted pick, so
+        # they bypass the gate (mirrors next_stale in qb.py).
+        merged = sorted(
+            queued_candidates + stale_candidates,
+            key=lambda j: (-j["priority"], j["id"]),
         )
-        selected = self._select_jobs(
-            remaining,
-            candidates,
-            entrypoints,
-            picked_per_ep,
-        )
+        selected = merged[:remaining]
+        selected_ids = {j["id"] for j in selected}
+
+        # Popped-but-unselected queued jobs must return to their ready heap,
+        # or they would never be delivered.
+        for j in queued_candidates:
+            if j["id"] not in selected_ids:
+                heapq.heappush(
+                    self._ready_heaps.setdefault(j["entrypoint"], []),
+                    (-j["priority"], j["id"]),
+                )
 
         for j in selected:
             j["status"] = "picked"
             j["queue_manager_id"] = queue_manager_id
             j["updated"] = now
             j["heartbeat"] = now
+        self._picked_ids.update(selected_ids)
 
         self._write_picked_logs(selected, now)
-
-        selected.sort(key=lambda j: (-j["priority"], j["id"]))
 
         # Yield to the event loop.  In the PostgreSQL path every dequeue
         # suspends on real I/O (driver.fetch); without this explicit yield
@@ -413,6 +446,7 @@ class InMemoryQueries:
             else:
                 self._jobs.pop(jid, None)
                 self._remove_dedupe_for_job(jid)
+            self._picked_ids.discard(jid)
             self._log.append(
                 {
                     "id": self._next_log_id,
@@ -442,6 +476,8 @@ class InMemoryQueries:
             j["attempts"] = j["attempts"] + 1
             j["updated"] = now
             j["queue_manager_id"] = None
+            self._picked_ids.discard(jid)
+            self._push_queued_job(j, now)
             self._log.append(
                 {
                     "id": self._next_log_id,
@@ -467,6 +503,7 @@ class InMemoryQueries:
                 j["updated"] = now
                 j["attempts"] = 0
                 j["queue_manager_id"] = None
+                self._push_queued_job(j, now)
                 self._log.append(
                     {
                         "id": self._next_log_id,
@@ -497,6 +534,7 @@ class InMemoryQueries:
             job_dict = self._jobs.pop(int(jid), None)
             if job_dict is not None:
                 self._remove_dedupe_for_job(int(jid))
+                self._picked_ids.discard(int(jid))
                 self._log.append(
                     {
                         "id": self._next_log_id,
@@ -521,6 +559,7 @@ class InMemoryQueries:
             for jid in to_remove:
                 j = self._jobs.pop(jid)
                 self._remove_dedupe_for_job(jid)
+                self._picked_ids.discard(jid)
                 self._log.append(
                     {
                         "id": self._next_log_id,
@@ -538,6 +577,10 @@ class InMemoryQueries:
             # TRUNCATE equivalent — no log entries
             self._jobs.clear()
             self._dedupe_index.clear()
+            self._dedupe_key_by_job.clear()
+            self._ready_heaps.clear()
+            self._deferred_heap.clear()
+            self._picked_ids.clear()
 
     async def queue_size(self) -> list[models.QueueStatistics]:
         counts: dict[tuple[str, int, str], int] = {}
@@ -779,9 +822,9 @@ class InMemoryQueries:
         return None
 
     def _remove_dedupe_for_job(self, job_id: int) -> None:
-        to_remove = [k for k, v in self._dedupe_index.items() if v == job_id]
-        for k in to_remove:
-            del self._dedupe_index[k]
+        dk = self._dedupe_key_by_job.pop(job_id, None)
+        if dk is not None:
+            self._dedupe_index.pop(dk, None)
 
     async def emit_table_changed(self, operation: models.OPERATIONS) -> None:
         event = models.TableChangedEvent(
