@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
+import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
@@ -301,6 +302,131 @@ async def test_dequeue_stale_priority_beats_fresh_work(queries: InMemoryQueries)
         1, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
     )
     assert [j.id for j in recovered] == [stale_id]
+
+
+async def test_dequeue_deferred_jobs_delivered_in_priority_order_when_due(
+    queries: InMemoryQueries,
+) -> None:
+    await queries.enqueue(
+        ["ep", "ep"],
+        [b"lo", b"hi"],
+        [1, 10],
+        execute_after=[timedelta(hours=1), timedelta(hours=1)],
+    )
+    params = {"ep": EntrypointExecutionParameter(0)}
+    qm_id = uuid.uuid4()
+
+    assert (
+        await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+        == []
+    )
+
+    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+        jobs = await queries.dequeue(
+            10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+        )
+    assert [j.payload for j in jobs] == [b"hi", b"lo"]
+
+
+async def test_dequeue_redelivers_candidate_bumped_by_higher_priority(
+    queries: InMemoryQueries,
+) -> None:
+    """A job popped as a candidate but outranked in the merge must survive for
+    the next dequeue."""
+    await queries.enqueue("ep_a", b"lo", priority=0)
+    await queries.enqueue("ep_b", b"hi", priority=5)
+    params = {
+        "ep_a": EntrypointExecutionParameter(0),
+        "ep_b": EntrypointExecutionParameter(0),
+    }
+    qm_id = uuid.uuid4()
+
+    first = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+    assert [j.payload for j in first] == [b"hi"]
+
+    second = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+    assert [j.payload for j in second] == [b"lo"]
+
+
+async def test_retry_job_with_delay_defers_redelivery(queries: InMemoryQueries) -> None:
+    await queries.enqueue("ep", b"x")
+    params = {"ep": EntrypointExecutionParameter(0)}
+    qm_id = uuid.uuid4()
+
+    (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=1))
+    await queries.retry_job(job, timedelta(hours=1), None)
+
+    assert (
+        await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=1)) == []
+    )
+
+    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+        jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=4))
+    assert [j.id for j in jobs] == [job.id]
+    assert jobs[0].attempts == 1
+
+
+async def test_cancelled_queued_job_not_delivered(queries: InMemoryQueries) -> None:
+    (cancelled_id, kept_id) = await queries.enqueue(["ep", "ep"], [b"a", b"b"], [0, 0])
+    await queries.mark_job_as_cancelled([cancelled_id])
+
+    jobs = await queries.dequeue(
+        10,
+        {"ep": EntrypointExecutionParameter(0)},
+        uuid.uuid4(),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert [j.id for j in jobs] == [kept_id]
+
+
+async def test_cancelled_deferred_job_not_delivered_when_due(queries: InMemoryQueries) -> None:
+    (job_id,) = await queries.enqueue("ep", None, execute_after=timedelta(hours=1))
+    await queries.mark_job_as_cancelled([job_id])
+
+    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+        jobs = await queries.dequeue(
+            10,
+            {"ep": EntrypointExecutionParameter(0)},
+            uuid.uuid4(),
+            None,
+            heartbeat_timeout=timedelta(seconds=30),
+        )
+    assert jobs == []
+
+
+async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(
+    queries: InMemoryQueries,
+) -> None:
+    await queries.enqueue("ep", b"old")
+    await queries.clear_queue("ep")
+    await queries.enqueue("ep", b"new")
+
+    jobs = await queries.dequeue(
+        10,
+        {"ep": EntrypointExecutionParameter(0)},
+        uuid.uuid4(),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert [j.payload for j in jobs] == [b"new"]
+
+
+async def test_requeue_failed_job_dequeued_again(queries: InMemoryQueries) -> None:
+    await queries.enqueue("ep", b"x")
+    params = {"ep": EntrypointExecutionParameter(0)}
+    qm_id = uuid.uuid4()
+
+    (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+    await queries.log_jobs([(job, "failed", None)])
+    assert (
+        await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+        == []
+    )
+
+    await queries.requeue_jobs([job.id])
+    jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
+    assert [j.id for j in jobs] == [job.id]
 
 
 async def test_dequeue_empty_entrypoints(queries: InMemoryQueries) -> None:
