@@ -6,7 +6,7 @@ help:
 	@echo "Available commands:"
 	@echo "  pytest       Run pytest"
 	@echo "  benchmark    Run benchmark"
-	@echo "  lint         Run ruff linter"
+	@echo "  lint         Run ruff linter and formatting check"
 	@echo "  import-lint  Run import linter (hex architecture validation)"
 	@echo "  typecheck    Run mypy type checks"
 	@echo "  sync         Install dependencies via uv"
@@ -20,6 +20,7 @@ benchmark:
 
 lint:
 	 uv run ruff check .
+	 uv run ruff format . --check
 
 import-lint:
 	 uv run lint-imports
