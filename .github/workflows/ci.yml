@@ -23,7 +23,7 @@ jobs:
       PGHOST: localhost
     name: Run PGQueuer Benchmark
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:${{ matrix.postgres-version }}
@@ -60,16 +60,21 @@ jobs:
             echo "REF_NAME=${GITHUB_REF#refs/heads/}" >> $GITHUB_ENV
           fi
       - name: Benchmark
+        # The gate scores the median of these runs, which is what makes a
+        # tight threshold viable on noisy CI runners. Run count must match
+        # RUNS_PER_JOB in tools/benchmark_data.py.
         run: |
-          PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
-            --driver ${{ matrix.pgdriver }} \
-            --strategy ${{ matrix.strategy }} \
-            --output-json benchmark.json
+          for run in 1 2 3; do
+            PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
+              --driver ${{ matrix.pgdriver }} \
+              --strategy ${{ matrix.strategy }} \
+              --output-json benchmark-run-$run.json
+          done
       - name: Upload Benchmark Result
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-${{ matrix.strategy }}-${{ matrix.pgdriver }}
-          path: benchmark.json
+          path: benchmark-run-*.json
   validate-benchmark:
     needs: [run-benchmark]
     name: Validate Benchmark Results
@@ -94,10 +99,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: uv run python3 -m tools.fetch_history --dest benchmark-data
       - name: Validate RPS Against Main History
+        # Drift in main's own history is only actionable on main/scheduled
+        # runs; pull requests are gated solely on their fresh results.
         run: |
           PYTHONUNBUFFERED=1 uv run python3 -m tools.compare_rps \
             --data-dir benchmark-data \
-            --current-dir current
+            --current-dir current \
+            ${{ github.event_name != 'pull_request' && '--fail-on-drift' || '' }}
   store-benchmark:
     needs: [run-benchmark]
     if: github.ref == 'refs/heads/main'

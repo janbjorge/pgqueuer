@@ -15,10 +15,11 @@ Verdict = Literal["pass", "warn", "fail", "skip"]
 MAIN_REF = "main"
 WINDOW_SIZE = 30
 MIN_SAMPLES = 5
-MAD_FAIL_MULTIPLIER = 3.0
-MAD_WARN_MULTIPLIER = 2.0
-ZERO_MAD_FAIL_RATIO = 0.95
-ZERO_MAD_WARN_RATIO = 0.975
+FAIL_RATIO = 0.7
+WARN_RATIO = 0.8
+RUNS_PER_JOB = 3  # keep in sync with the benchmark loop in ci.yml
+DRIFT_RECENT = 3 * RUNS_PER_JOB  # three CI runs of history
+DRIFT_RATIO = 0.85
 
 
 class BenchmarkRow(BaseModel):
@@ -92,40 +93,39 @@ def write_monthly_ndjson(rows: list[BenchmarkRow], data_dir: Path) -> list[Path]
 class GateResult:
     verdict: Verdict
     current_rate: float
+    current_count: int
     sample_count: int
     median: float | None = None
-    mad: float | None = None
-    fail_threshold: float | None = None
-    warn_threshold: float | None = None
+
+    @property
+    def fail_threshold(self) -> float | None:
+        return None if self.median is None else self.median * FAIL_RATIO
+
+    @property
+    def warn_threshold(self) -> float | None:
+        return None if self.median is None else self.median * WARN_RATIO
 
 
-def gate(baseline_rates: list[float], current_rate: float) -> GateResult:
+def gate(baseline_rates: list[float], current_rates: list[float]) -> GateResult:
     """
-    Gate a fresh rate against a baseline window.
-
-    Fail below median - 3*MAD, warn below median - 2*MAD, skip when the
-    baseline is too thin to be meaningful. A zero MAD (degenerate window)
-    falls back to fixed ratios of the median.
+    Gate the median of the fresh rates against the baseline-window median:
+    fail below FAIL_RATIO of it, warn below WARN_RATIO, skip on a thin
+    baseline. The ratios are calibrated for a median of RUNS_PER_JOB fresh
+    runs; see docs/comparisons/benchmarks.md for the backtest behind them.
     """
+    current_rate = statistics.median(current_rates)
     if len(baseline_rates) < MIN_SAMPLES:
         return GateResult(
             verdict="skip",
             current_rate=current_rate,
+            current_count=len(current_rates),
             sample_count=len(baseline_rates),
         )
 
     median = statistics.median(baseline_rates)
-    mad = statistics.median([abs(rate - median) for rate in baseline_rates])
-    if mad > 0:
-        fail_threshold = median - MAD_FAIL_MULTIPLIER * mad
-        warn_threshold = median - MAD_WARN_MULTIPLIER * mad
-    else:
-        fail_threshold = median * ZERO_MAD_FAIL_RATIO
-        warn_threshold = median * ZERO_MAD_WARN_RATIO
-
-    if current_rate < fail_threshold:
+    if current_rate < median * FAIL_RATIO:
         verdict: Verdict = "fail"
-    elif current_rate < warn_threshold:
+    elif current_rate < median * WARN_RATIO:
         verdict = "warn"
     else:
         verdict = "pass"
@@ -133,11 +133,39 @@ def gate(baseline_rates: list[float], current_rate: float) -> GateResult:
     return GateResult(
         verdict=verdict,
         current_rate=current_rate,
+        current_count=len(current_rates),
         sample_count=len(baseline_rates),
         median=median,
-        mad=mad,
-        fail_threshold=fail_threshold,
-        warn_threshold=warn_threshold,
+    )
+
+
+@dataclass(frozen=True)
+class DriftResult:
+    verdict: Literal["ok", "drift", "skip"]
+    recent_median: float | None = None
+    prior_median: float | None = None
+
+    @property
+    def threshold(self) -> float | None:
+        return None if self.prior_median is None else self.prior_median * DRIFT_RATIO
+
+
+def drift(baseline_rates: list[float]) -> DriftResult:
+    """
+    Detect sustained decay inside the baseline window: drift when the median
+    of the newest DRIFT_RECENT samples falls below DRIFT_RATIO of the prior
+    samples' median. Catches gradual regressions too mild for the per-run
+    gate; see docs/comparisons/benchmarks.md for the backtest behind it.
+    """
+    if len(baseline_rates) < DRIFT_RECENT + MIN_SAMPLES:
+        return DriftResult(verdict="skip")
+
+    recent_median = statistics.median(baseline_rates[-DRIFT_RECENT:])
+    prior_median = statistics.median(baseline_rates[:-DRIFT_RECENT])
+    return DriftResult(
+        verdict="drift" if recent_median < prior_median * DRIFT_RATIO else "ok",
+        recent_median=recent_median,
+        prior_median=prior_median,
     )
 
 

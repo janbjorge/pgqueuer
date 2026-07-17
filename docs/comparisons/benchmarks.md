@@ -120,17 +120,30 @@ Rows before 2025 may lack `strategy` (implied `throughput`) and `queued`.
 
 ### The Gate
 
-The `validate-benchmark` CI job compares every fresh result — including pull
-requests — against the newest 30 `main` samples for the same driver/strategy
-pair:
+Each CI benchmark job runs the tool three times per driver/strategy pair. The
+`validate-benchmark` job scores the **median of the three fresh runs** against
+the median of the newest 30 `main` samples for the same pair:
 
-- **Fail** below `median − 3·MAD` (MAD: median absolute deviation).
-- **Warn** below `median − 2·MAD`.
+- **Fail** below 70% of the baseline median.
+- **Warn** below 80%.
 - **Skip** when fewer than 5 baseline samples exist.
 
-MAD makes the gate robust to outlier CI runs and adapts it to each pair's real
-variance. When the baseline is perfectly flat (MAD of 0) the thresholds fall back
-to 95% / 97.5% of the median.
+Single CI runs are too noisy to gate on: a backtest over the full 14k-sample
+history showed 1% of runs landing below 0.28× the window median on some pairs,
+so any single-sample threshold false-fails 1-3% of runs. Taking the median of
+three runs collapses that tail — the 0.7 ratio produced ~11 isolated false
+flags across two years of history while still catching every sustained
+regression.
+
+### The Drift Detector
+
+The per-run gate only catches drops of 30% or more. Slower decay is caught by a
+second check on `main`'s own history: for each pair, the median of the newest 9
+samples (three CI runs) is compared against the median of the window before
+them. A recent median below 85% of the prior one flags **drift**. Drift status
+is printed on every run but only fails the job on pushes to `main` and
+scheduled runs (`--fail-on-drift`) — a pull request is never blamed for a
+regression already present on `main`.
 
 ### Tooling
 

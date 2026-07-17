@@ -12,6 +12,7 @@ from tools.append_benchmarks import append
 from tools.benchmark_data import (
     BenchmarkRow,
     baseline_window,
+    drift,
     gate,
     load_ndjson_dir,
     merge_rows,
@@ -51,44 +52,66 @@ def utc(hours: int) -> datetime:
 
 
 def test_gate_skips_thin_baseline() -> None:
-    assert gate([100.0] * 4, 50.0).verdict == "skip"
+    assert gate([100.0] * 4, [50.0]).verdict == "skip"
 
 
 def test_gate_passes_stable_baseline() -> None:
     baseline = [100.0, 101.0, 99.0, 100.5, 99.5, 100.0]
-    assert gate(baseline, 99.0).verdict == "pass"
+    assert gate(baseline, [99.0, 98.0, 101.0]).verdict == "pass"
 
 
-def test_gate_warns_between_two_and_three_mad() -> None:
+def test_gate_thresholds_are_ratios_of_median() -> None:
     baseline = [95.0, 98.0, 100.0, 102.0, 105.0]
-    result = gate(baseline, 95.0)
+    result = gate(baseline, [75.0, 76.0, 74.0])
     assert result.median == 100.0
-    assert result.mad == 2.0
-    assert result.warn_threshold == 96.0
-    assert result.fail_threshold == 94.0
+    assert result.fail_threshold == 70.0
+    assert result.warn_threshold == 80.0
     assert result.verdict == "warn"
 
 
-def test_gate_fails_below_three_mad() -> None:
+def test_gate_fails_below_ratio() -> None:
     baseline = [95.0, 98.0, 100.0, 102.0, 105.0]
-    assert gate(baseline, 90.0).verdict == "fail"
+    assert gate(baseline, [65.0, 60.0, 69.0]).verdict == "fail"
 
 
-def test_gate_tolerates_single_outlier() -> None:
-    """One crazy-slow CI run must not widen the gate the way mean-std would."""
-    baseline = [100.0, 101.0, 99.0, 100.0, 12.0, 100.5, 99.5]
-    result = gate(baseline, 95.0)
-    assert result.verdict == "fail"
-
-
-def test_gate_zero_mad_falls_back_to_ratio() -> None:
+def test_gate_scores_median_of_current_runs() -> None:
+    """One crazy-slow run out of three must not fail the gate."""
     baseline = [100.0] * 10
-    result = gate(baseline, 96.0)
-    assert result.fail_threshold == 95.0
-    assert result.warn_threshold == 97.5
-    assert result.verdict == "warn"
-    assert gate(baseline, 94.0).verdict == "fail"
-    assert gate(baseline, 98.0).verdict == "pass"
+    result = gate(baseline, [12.0, 99.0, 101.0])
+    assert result.current_rate == 99.0
+    assert result.current_count == 3
+    assert result.verdict == "pass"
+
+
+def test_gate_single_current_run_still_gates() -> None:
+    baseline = [100.0] * 10
+    assert gate(baseline, [65.0]).verdict == "fail"
+    assert gate(baseline, [99.0]).verdict == "pass"
+
+
+def test_drift_skips_thin_history() -> None:
+    assert drift([100.0] * 10).verdict == "skip"
+
+
+def test_drift_steady_history_is_ok() -> None:
+    window = [100.0, 101.0, 99.0] * 10
+    assert drift(window).verdict == "ok"
+
+
+def test_drift_flags_sustained_regression() -> None:
+    """Slow 20% decay must trip the drift check even though the gate passes."""
+    window = [100.0] * 21 + [80.0] * 9
+    result = drift(window)
+    assert result.verdict == "drift"
+    assert result.prior_median == 100.0
+    assert result.recent_median == 80.0
+    assert result.threshold == 85.0
+    assert gate(window, [80.0, 81.0, 79.0]).verdict == "pass"
+
+
+def test_drift_single_outlier_run_does_not_trip() -> None:
+    window = [100.0] * 24 + [10.0, 10.0, 10.0] + [100.0] * 3
+    assert drift(window).verdict == "ok"
 
 
 def test_baseline_window_takes_newest_main_rows() -> None:
@@ -218,6 +241,28 @@ def test_compare_exit_status(
     current_dir = tmp_path / "current"
     write_current(current_dir, [make_row(current_rate, utc(100))])
     assert compare(data_dir, current_dir, window_size=30) == expected_exit
+
+
+def test_compare_gates_median_of_runs_per_combo(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    write_monthly_ndjson([make_row(100.0 + i, utc(i)) for i in range(10)], data_dir)
+    current_dir = tmp_path / "current"
+    write_current(
+        current_dir,
+        [make_row(10.0, utc(100)), make_row(100.0, utc(101)), make_row(101.0, utc(102))],
+    )
+    assert compare(data_dir, current_dir, window_size=30) == 0
+
+
+def test_compare_fail_on_drift_only_when_asked(tmp_path: Path) -> None:
+    data_dir = tmp_path / "data"
+    rows = [make_row(100.0, utc(i)) for i in range(21)]
+    rows += [make_row(80.0, utc(21 + i)) for i in range(9)]
+    write_monthly_ndjson(rows, data_dir)
+    current_dir = tmp_path / "current"
+    write_current(current_dir, [make_row(80.0, utc(100))])
+    assert compare(data_dir, current_dir, window_size=30) == 0
+    assert compare(data_dir, current_dir, window_size=30, fail_on_drift=True) == 1
 
 
 def test_compare_empty_current_dir_fails(tmp_path: Path) -> None:
