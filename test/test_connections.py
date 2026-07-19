@@ -9,23 +9,11 @@ from __future__ import annotations
 import pytest
 
 from pgqueuer.adapters import connections
+from pgqueuer.adapters.cli.cli import AppConfig, create_default_queries_factory
+from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.domain.settings import ConnectionSettings
 
-CONNECTION_ENV_VARS = (
-    "PGQUEUER_DSN",
-    "PGDSN",
-    "PGQUEUER_POOL_MIN_SIZE",
-    "PGQUEUER_POOL_MAX_SIZE",
-    "PGQUEUER_CONNECT_TIMEOUT",
-    "PGQUEUER_APPLICATION_NAME",
-    "PGCONNECT_TIMEOUT",
-)
-
-
-@pytest.fixture(autouse=True)
-def clean_connection_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in CONNECTION_ENV_VARS:
-        monkeypatch.delenv(var, raising=False)
+pytestmark = pytest.mark.usefixtures("clean_connection_env")
 
 
 def with_query_param(dsn: str, param: str) -> str:
@@ -112,49 +100,39 @@ class TestCreateAsyncpgPoolForwarding:
         assert "server_settings" not in captured
 
 
+async def run_cli_factory_capturing(
+    monkeypatch: pytest.MonkeyPatch,
+    config: AppConfig,
+) -> dict[str, object]:
+    """Run the default CLI factory with asyncpg.connect faked; return captured kwargs."""
+    import asyncpg
+
+    captured: dict[str, object] = {}
+
+    async def fake_connect(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()  # AsyncpgDriver only stores the connection at init.
+
+    monkeypatch.setattr(asyncpg, "connect", fake_connect)
+    factory = create_default_queries_factory(config, DBSettings())
+    async with factory():
+        pass
+    return captured
+
+
 class TestCliDefaultFactory:
     async def test_forwards_connection_settings_from_env(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        import asyncpg
-
-        from pgqueuer.adapters.cli.cli import AppConfig, create_default_queries_factory
-        from pgqueuer.adapters.persistence.qb import DBSettings
-
-        captured: dict[str, object] = {}
-
-        async def fake_connect(**kwargs: object) -> object:
-            captured.update(kwargs)
-            return object()  # AsyncpgDriver only stores the connection at init.
-
-        monkeypatch.setattr(asyncpg, "connect", fake_connect)
         monkeypatch.setenv("PGQUEUER_APPLICATION_NAME", "pgq-cli")
-
-        factory = create_default_queries_factory(AppConfig(), DBSettings())
-        async with factory():
-            pass
-
+        captured = await run_cli_factory_capturing(monkeypatch, AppConfig())
         assert captured["dsn"] is None
         assert captured["server_settings"] == {"application_name": "pgq-cli"}
 
     async def test_no_extra_kwargs_when_env_unset(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import asyncpg
-
-        from pgqueuer.adapters.cli.cli import AppConfig, create_default_queries_factory
-        from pgqueuer.adapters.persistence.qb import DBSettings
-
-        captured: dict[str, object] = {}
-
-        async def fake_connect(**kwargs: object) -> object:
-            captured.update(kwargs)
-            return object()
-
-        monkeypatch.setattr(asyncpg, "connect", fake_connect)
-
-        factory = create_default_queries_factory(AppConfig(pg_dsn="postgresql://x/y"), DBSettings())
-        async with factory():
-            pass
-
+        captured = await run_cli_factory_capturing(
+            monkeypatch, AppConfig(pg_dsn="postgresql://x/y")
+        )
         assert captured == {"dsn": "postgresql://x/y"}
 
 
@@ -215,3 +193,13 @@ class TestPsycopgPoolIntegration:
             cursor = await conn.execute("SELECT current_setting('application_name')")
             row = await cursor.fetchone()
         assert row is not None and row[0] == "weird"
+
+    async def test_single_connection_via_connect_psycopg(self, dsn: str) -> None:
+        connection = await connections.connect_psycopg(dsn=dsn)
+        try:
+            assert connection.autocommit  # PsycopgDriver requires autocommit.
+            cursor = await connection.execute("SELECT 1")
+            row = await cursor.fetchone()
+            assert row is not None and row[0] == 1
+        finally:
+            await connection.close()

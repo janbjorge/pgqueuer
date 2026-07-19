@@ -130,33 +130,22 @@ def create_default_queries_factory(
     @contextlib.asynccontextmanager
     async def factory() -> AsyncGenerator[queries.Queries, None]:
         with contextlib.suppress(ImportError):
-            import asyncpg  # noqa: F401
-
             from pgqueuer.adapters.connections import connect_asyncpg
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
-            from pgqueuer.domain.settings import ConnectionSettings
 
             yield queries.Queries(
-                AsyncpgDriver(
-                    await connect_asyncpg(
-                        dsn=config.pg_dsn or None,
-                        settings=ConnectionSettings(),
-                    )
-                ),
+                AsyncpgDriver(await connect_asyncpg(dsn=config.pg_dsn or None)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),
             )
             return
         with contextlib.suppress(ImportError):
-            import psycopg
-
+            from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             yield queries.Queries(
-                PsycopgDriver(
-                    await psycopg.AsyncConnection.connect(config.pg_dsn or "", autocommit=True)
-                ),
+                PsycopgDriver(await connect_psycopg(dsn=config.pg_dsn or None)),
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),

@@ -366,8 +366,8 @@ libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASS
 DSN (works with both drivers); `PGOPTIONS="-csearch_path=myschema"` works on the
 psycopg path only, since asyncpg does not read that variable.
 
-The CLI's asyncpg connection also honors `PGQUEUER_CONNECT_TIMEOUT` and
-`PGQUEUER_APPLICATION_NAME`. See
+The CLI connection (both drivers) also honors `PGQUEUER_DSN`,
+`PGQUEUER_CONNECT_TIMEOUT`, and `PGQUEUER_APPLICATION_NAME`. See
 [Pool and Connection Tuning](../getting-started/installation.md#pool-and-connection-tuning)
 for the full list of `PGQUEUER_*` connection variables and the
 [libpq variable support matrix](../getting-started/installation.md#libpq-environment-variable-support).
