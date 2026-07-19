@@ -2,10 +2,10 @@
 
 PgQueuer ships a built-in web dashboard for queue insights and job management:
 backlog age, throughput, execution-duration percentiles, failures with
-tracebacks, worker liveness, schedules, and table health — plus requeue and
+tracebacks, worker liveness, schedules, and table health, plus requeue and
 cancel actions. It is pure Python (FastAPI + [htmx](https://htmx.org), no
-JavaScript build step) and reads the tables PgQueuer already maintains.
-**No schema changes are required.**
+JavaScript build step) and reads the tables PgQueuer already maintains, so
+there is no schema migration to run.
 
 ## Installation
 
@@ -101,8 +101,8 @@ docker run -e PGHOST=db -e PGUSER=... -p 8080:8080 pgqueuer-dashboard
 
 ## Reusing the insights API
 
-The dashboard is one frontend over `pgqueuer.core.insights`, which any code
-can consume — the same getters power scripts, exporters, and future UIs:
+The dashboard is one frontend over `pgqueuer.core.insights`. Any code can
+consume the same getters, whether from a one-off script or a metrics exporter:
 
 ```python
 from pgqueuer.core.insights import InsightsService, QueueManagementService
