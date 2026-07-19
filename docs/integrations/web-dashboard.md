@@ -21,6 +21,8 @@ pgq web --host 0.0.0.0 --port 8080
 
 Connection settings follow the same rules as every other `pgq` command:
 `--pg-dsn`, `PGDSN`, or the standard libpq env vars (`PGHOST`, `PGUSER`, ...).
+`--host` and `--port` can also be set through `PGQUEUER_WEB_HOST` and
+`PGQUEUER_WEB_PORT`, which is how the Docker image configures them.
 
 Screens:
 

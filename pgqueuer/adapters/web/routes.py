@@ -166,8 +166,7 @@ def throughput_chart_svg(slots: Sequence[ChartSlot], width: int = 720, height: i
             h = max((count / peak) * height, 1.0)
             y -= h
             rects.append(
-                f'<rect class="{name}" x="{x:.1f}" y="{y:.1f}" '
-                f'width="{w:.1f}" height="{h:.1f}"/>'
+                f'<rect class="{name}" x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}"/>'
             )
             y -= 2  # surface gap between stacked segments
         title = (

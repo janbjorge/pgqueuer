@@ -409,11 +409,13 @@ def web(
     host: str = typer.Option(
         "127.0.0.1",
         "--host",
+        envvar="PGQUEUER_WEB_HOST",
         help="Bind address. Use 0.0.0.0 to expose beyond localhost.",
     ),
     port: int = typer.Option(
         8080,
         "--port",
+        envvar="PGQUEUER_WEB_PORT",
     ),
 ) -> None:
     try:
