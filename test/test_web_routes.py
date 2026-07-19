@@ -480,8 +480,9 @@ class TestGotoJob:
         assert response.status_code == 307
         assert response.headers["location"].endswith(f"/jobs/{job_id}")
 
-    async def test_garbage_redirects_to_jobs(self, client: httpx.AsyncClient) -> None:
-        response = await client.get("/jobs/goto", params={"id": "-1; drop"})
+    @pytest.mark.parametrize("bad", ["-1; drop", "²", "12.5", ""])
+    async def test_garbage_redirects_to_jobs(self, client: httpx.AsyncClient, bad: str) -> None:
+        response = await client.get("/jobs/goto", params={"id": bad})
         assert response.status_code == 307
         assert response.headers["location"].endswith("/jobs")
 

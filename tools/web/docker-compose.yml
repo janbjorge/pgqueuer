@@ -16,9 +16,9 @@ services:
       # Bind address and port (defaults baked into the image):
       # PGQUEUER_WEB_HOST: 0.0.0.0
       # PGQUEUER_WEB_PORT: "8080"
-      # Optional HTTP Basic auth — the dashboard is open when unset:
-      # PGQUEUER_WEB_USER: admin
-      # PGQUEUER_WEB_PASSWORD: change-me
+      # HTTP Basic auth — the dashboard is open when unset:
+      PGQUEUER_WEB_USER: admin
+      PGQUEUER_WEB_PASSWORD: admin
     depends_on:
       - db
 

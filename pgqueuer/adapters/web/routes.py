@@ -417,7 +417,8 @@ def create_web_router(  # noqa: C901
     async def goto_job(request: Request, id: str = "") -> RedirectResponse:
         """Jump box in the header: numeric input lands on the job detail page."""
         target = id.strip()
-        if target.isdigit():
+        # isdecimal, not isdigit: isdigit accepts superscripts like "²" that int() rejects
+        if target.isdecimal():
             return RedirectResponse(request.url_for("job_detail", job_id=int(target)))
         return RedirectResponse(request.url_for("jobs"))
 
