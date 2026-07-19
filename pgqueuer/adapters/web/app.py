@@ -38,21 +38,19 @@ def create_web_app(dsn: str | None = None) -> FastAPI:
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
         settings = qb.DBSettings()
-        pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10)
-        assert pool is not None
-        driver = AsyncpgPoolDriver(pool)
-        app.state.pgq_queries = queries.Queries(
-            driver,
-            qbe=qb.QueryBuilderEnvironment(settings),
-            qbq=qb.QueryQueueBuilder(settings),
-            qbs=qb.QuerySchedulerBuilder(settings),
-        )
-        broadcaster = Broadcaster(driver=driver, channel=settings.channel)
-        await broadcaster.start()
-        app.state.pgq_broadcaster = broadcaster
-        async with driver:
-            yield
-        await pool.close()
+        async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10) as pool:
+            driver = AsyncpgPoolDriver(pool)
+            app.state.pgq_queries = queries.Queries(
+                driver,
+                qbe=qb.QueryBuilderEnvironment(settings),
+                qbq=qb.QueryQueueBuilder(settings),
+                qbs=qb.QuerySchedulerBuilder(settings),
+            )
+            broadcaster = Broadcaster(driver=driver, channel=settings.channel)
+            await broadcaster.start()
+            app.state.pgq_broadcaster = broadcaster
+            async with driver:
+                yield
 
     auth = create_basic_auth_dependency()
     if auth is None:
