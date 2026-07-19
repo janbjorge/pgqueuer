@@ -8,7 +8,7 @@ import re
 from enum import Enum
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pgqueuer.domain.models import Channel
@@ -89,6 +89,31 @@ class Durability(Enum):
                 )
             case _:
                 raise ValueError(f"Unknown durability level: {self}")
+
+
+class ConnectionSettings(BaseSettings):
+    """Connection/pool parameters, read from ``PGQUEUER_*`` env vars.
+
+    Unset optional fields are never passed to the driver, so DSN parameters
+    and libpq environment variables keep full control of connection
+    behavior (pass-through principle, #605/#701).
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="PGQUEUER_",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    dsn: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PGQUEUER_DSN", "PGDSN"),
+    )
+    # Size sanity (max >= min) is enforced by the drivers themselves.
+    pool_min_size: int = Field(default=1, ge=0)
+    pool_max_size: int = Field(default=5, ge=1)
+    connect_timeout: float | None = Field(default=None, gt=0)
+    application_name: str | None = Field(default=None)
 
 
 class DBSettings(BaseSettings):

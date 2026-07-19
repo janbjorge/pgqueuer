@@ -88,6 +88,11 @@ This exits with code 0 if the schema is correctly installed, or code 1 if anythi
 
 ## Connection Configuration
 
+PgQueuer never parses or rewrites your connection string. The DSN and all
+libpq environment variables are passed to the driver untouched, so multi-host
+DSNs, `sslmode`, `target_session_attrs`, `options`, `service=` and any other
+libpq parameter keep working.
+
 PgQueuer reads standard PostgreSQL environment variables:
 
 | Variable | Purpose | Default |
@@ -99,6 +104,52 @@ PgQueuer reads standard PostgreSQL environment variables:
 | `PGDATABASE` | Database name | same as user |
 
 You can also pass a connection string directly when constructing drivers in code.
+
+### Pool and Connection Tuning
+
+`PGQUEUER_*` variables configure the built-in adapters (CLI, MCP server, and
+the shared pool factories):
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `PGQUEUER_DSN` (or `PGDSN`) | Connection string | (libpq env vars) |
+| `PGQUEUER_POOL_MIN_SIZE` | Minimum pool connections | `1` |
+| `PGQUEUER_POOL_MAX_SIZE` | Maximum pool connections | `5` |
+| `PGQUEUER_CONNECT_TIMEOUT` | Connect timeout in seconds | driver default |
+| `PGQUEUER_APPLICATION_NAME` | `application_name` shown in `pg_stat_activity` | (unset) |
+
+Unset variables are never passed to the driver, so DSN parameters and libpq
+environment variables always keep control.
+
+The same knobs are available in code through the pool factories:
+
+```python
+from pgqueuer.adapters.connections import create_asyncpg_pool, create_psycopg_pool
+from pgqueuer.domain.settings import ConnectionSettings
+
+async with create_asyncpg_pool(settings=ConnectionSettings(pool_max_size=10)) as pool:
+    ...
+```
+
+### libpq Environment Variable Support
+
+psycopg links the real libpq, so every libpq variable works there. asyncpg
+reimplements the parsing and supports a subset:
+
+| Variable | asyncpg | psycopg |
+|----------|---------|---------|
+| `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGPASSFILE` | yes | yes |
+| `PGSSLMODE`, `PGSSLROOTCERT`, `PGSSLCERT`, `PGSSLKEY`, `PGSSLCRL` | yes | yes |
+| `PGSSLMINPROTOCOLVERSION`, `PGSSLMAXPROTOCOLVERSION`, `PGSSLNEGOTIATION` | yes | yes |
+| `PGTARGETSESSIONATTRS`, `PGKRBSRVNAME`, `PGGSSLIB` | yes | yes |
+| `PGCONNECT_TIMEOUT` | via PgQueuer fallback | yes |
+| `PGAPPNAME` | no; use `PGQUEUER_APPLICATION_NAME` or a DSN parameter | yes |
+| `PGSERVICE` | no; put the settings in a DSN | yes |
+| `PGOPTIONS` | no; use a DSN `options=` parameter | yes |
+
+On the asyncpg path PgQueuer fills the `PGCONNECT_TIMEOUT` gap itself:
+`PGQUEUER_CONNECT_TIMEOUT` takes precedence, then `PGCONNECT_TIMEOUT`, then
+the driver default.
 
 ## Table Prefix
 

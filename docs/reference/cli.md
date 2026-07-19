@@ -362,4 +362,12 @@ All commands accept the following connection options:
 
 When `--pg-dsn` is omitted, the database drivers (asyncpg / psycopg) read standard
 libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
-`PGDATABASE`. Use `PGOPTIONS="-csearch_path=myschema"` to set a custom schema.
+`PGDATABASE`. To set a custom schema, add `?options=-csearch_path%3Dmyschema` to the
+DSN (works with both drivers); `PGOPTIONS="-csearch_path=myschema"` works on the
+psycopg path only, since asyncpg does not read that variable.
+
+The CLI's asyncpg connection also honors `PGQUEUER_CONNECT_TIMEOUT` and
+`PGQUEUER_APPLICATION_NAME`. See
+[Pool and Connection Tuning](../getting-started/installation.md#pool-and-connection-tuning)
+for the full list of `PGQUEUER_*` connection variables and the
+[libpq variable support matrix](../getting-started/installation.md#libpq-environment-variable-support).

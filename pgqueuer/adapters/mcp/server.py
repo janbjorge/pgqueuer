@@ -12,11 +12,13 @@ import asyncpg
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
+from pgqueuer.adapters.connections import create_asyncpg_pool
 from pgqueuer.adapters.persistence.qb import (
     DBSettings,
     QueryQueueBuilder,
     QuerySchedulerBuilder,
 )
+from pgqueuer.domain.settings import ConnectionSettings
 
 
 class PgQueuerDatabase:
@@ -458,19 +460,28 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
 def create_mcp_server(
     dsn: str | None = None,
     settings: DBSettings = DBSettings(),
+    connection_settings: ConnectionSettings | None = None,
 ) -> FastMCP:
     """Factory that builds a fully-configured PgQueuer MCP server.
 
     Args:
-        dsn: PostgreSQL connection string. If None, asyncpg reads standard
-             libpq environment variables (PGHOST, PGPORT, PGUSER,
-             PGPASSWORD, PGDATABASE) automatically.
+        dsn: PostgreSQL connection string. If None, the DSN comes from
+             PGQUEUER_DSN/PGDSN, else asyncpg reads standard libpq
+             environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD,
+             PGDATABASE) automatically.
         settings: PgQueuer DBSettings (table names, channel, etc.).
+        connection_settings: Pool sizing/timeouts. If None, read from
+             PGQUEUER_* env vars at startup (PGQUEUER_POOL_MIN_SIZE,
+             PGQUEUER_POOL_MAX_SIZE, PGQUEUER_CONNECT_TIMEOUT,
+             PGQUEUER_APPLICATION_NAME).
     """
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:
-        async with asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5) as pool:
+        conn_settings = (
+            connection_settings if connection_settings is not None else ConnectionSettings()
+        )
+        async with create_asyncpg_pool(dsn=dsn, settings=conn_settings) as pool:
             yield PgQueuerDatabase(pool, settings)
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)

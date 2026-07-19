@@ -61,7 +61,7 @@ pgq = "pgqueuer.__main__:main"
 
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.30.0"]
-psycopg = ["psycopg>=3.2.0"]
+psycopg = ["psycopg>=3.2.0", "psycopg-pool>=3.2"]
 logfire = ["logfire>=3.0.0"]
 sentry = ["sentry-sdk>=2.0.0"]
 opentelemetry = [
@@ -81,6 +81,7 @@ dev = [
     "mypy",
     "mypy-extensions",
     "psycopg>=3.2.0",
+    "psycopg-pool>=3.2",
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
