@@ -106,10 +106,11 @@ The drivers read the standard PostgreSQL environment variables:
 
 ### Pool and Connection Tuning
 
-The `pgq` CLI and the MCP server have no application code to open a
-connection for them, so they read `PGQUEUER_*` variables. The opt-in
-factories in `pgqueuer.adapters.connections` read the same variables if you
-want that behavior in your own startup code:
+When the `pgq` CLI and the MCP server open their own connection, they read
+`PGQUEUER_*` variables. Passing your own factory (`pgq --factory`) skips
+this path entirely and hands connection control back to your code. The
+opt-in factories in `pgqueuer.adapters.connections` read the same variables
+if you want that behavior in your own startup code:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
