@@ -4,20 +4,7 @@ import pytest
 
 from pgqueuer.domain.settings import ConnectionSettings
 
-CONNECTION_ENV_VARS = (
-    "PGQUEUER_DSN",
-    "PGDSN",
-    "PGQUEUER_POOL_MIN_SIZE",
-    "PGQUEUER_POOL_MAX_SIZE",
-    "PGQUEUER_CONNECT_TIMEOUT",
-    "PGQUEUER_APPLICATION_NAME",
-)
-
-
-@pytest.fixture(autouse=True)
-def clean_connection_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    for var in CONNECTION_ENV_VARS:
-        monkeypatch.delenv(var, raising=False)
+pytestmark = pytest.mark.usefixtures("clean_connection_env")
 
 
 def test_statistics_table_status_type_removed() -> None:
@@ -46,6 +33,12 @@ def test_connection_settings_reads_pgqueuer_env(monkeypatch: pytest.MonkeyPatch)
     assert settings.pool_max_size == 9
     assert settings.connect_timeout == 4.5
     assert settings.application_name == "pgq-env"
+
+
+def test_connection_settings_accepts_dsn_by_field_name() -> None:
+    # Requires populate_by_name=True: without it the init kwarg would be
+    # swallowed by extra="ignore" because the field has a validation_alias.
+    assert ConnectionSettings(dsn="postgresql://x/y").dsn == "postgresql://x/y"
 
 
 def test_connection_settings_dsn_from_pgdsn(monkeypatch: pytest.MonkeyPatch) -> None:

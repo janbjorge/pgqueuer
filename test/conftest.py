@@ -98,6 +98,24 @@ def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
     return asyncio.DefaultEventLoopPolicy() if uvloop is None else uvloop.EventLoopPolicy()
 
 
+CONNECTION_ENV_VARS = (
+    "PGQUEUER_DSN",
+    "PGDSN",
+    "PGQUEUER_POOL_MIN_SIZE",
+    "PGQUEUER_POOL_MAX_SIZE",
+    "PGQUEUER_CONNECT_TIMEOUT",
+    "PGQUEUER_APPLICATION_NAME",
+    "PGCONNECT_TIMEOUT",
+)
+
+
+@pytest.fixture
+def clean_connection_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Clear connection-related env vars so tests see a deterministic environment."""
+    for var in CONNECTION_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture(scope="session")
 async def postgres_container() -> AsyncGenerator[str, None]:
     if external_postgres_dsn := os.environ.get("EXTERNAL_POSTGRES_DSN"):

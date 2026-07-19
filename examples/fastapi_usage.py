@@ -2,9 +2,9 @@ import json
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import asyncpg
 from fastapi import Depends, FastAPI, Request, Response
 
-from pgqueuer.adapters.connections import create_asyncpg_pool
 from pgqueuer.db import AsyncpgPoolDriver
 from pgqueuer.queries import Queries
 
@@ -23,9 +23,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage async database connection throughout the app's lifespan."""
-        # Pool sizing/timeouts come from PGQUEUER_* env vars; DSN resolution
-        # falls through to PGDSN / libpq env vars.
-        async with create_asyncpg_pool() as pool:
+        async with asyncpg.create_pool() as pool:
             app.extra["pgq_queries"] = Queries(AsyncpgPoolDriver(pool))
             yield
 

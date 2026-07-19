@@ -62,10 +62,6 @@ class TestParseInterval:
 
 class TestCreateMcpServer:
     def test_factory_returns_fastmcp(self) -> None:
-        server = create_mcp_server(dsn="postgresql://localhost/test")
-        assert server.name == "pgqueuer"
-
-    def test_factory_accepts_connection_settings(self) -> None:
         server = create_mcp_server(
             dsn="postgresql://localhost/test",
             connection_settings=ConnectionSettings(pool_min_size=1, pool_max_size=2),

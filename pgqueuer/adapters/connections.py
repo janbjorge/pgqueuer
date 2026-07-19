@@ -27,6 +27,7 @@ from pgqueuer.domain.settings import ConnectionSettings
 
 if TYPE_CHECKING:
     import asyncpg
+    import psycopg
     import psycopg_pool
 
 
@@ -39,6 +40,15 @@ class PsycopgConnectKwargs(TypedDict, total=False):
     autocommit: bool
     connect_timeout: int
     application_name: str
+
+
+def _resolve(
+    dsn: str | None,
+    settings: ConnectionSettings | None,
+) -> tuple[str | None, ConnectionSettings]:
+    """Resolution ladder: explicit ``dsn`` argument > ``settings.dsn`` (env-backed)."""
+    settings = settings or ConnectionSettings()
+    return (dsn if dsn is not None else settings.dsn), settings
 
 
 def _asyncpg_connect_kwargs(settings: ConnectionSettings) -> AsyncpgConnectKwargs:
@@ -82,10 +92,21 @@ async def connect_asyncpg(
     """Open a single asyncpg connection honoring ``ConnectionSettings``."""
     import asyncpg
 
-    settings = settings or ConnectionSettings()
-    return await asyncpg.connect(
-        dsn=dsn if dsn is not None else settings.dsn,
-        **_asyncpg_connect_kwargs(settings),
+    dsn, settings = _resolve(dsn, settings)
+    return await asyncpg.connect(dsn=dsn, **_asyncpg_connect_kwargs(settings))
+
+
+async def connect_psycopg(
+    dsn: str | None = None,
+    settings: ConnectionSettings | None = None,
+) -> psycopg.AsyncConnection:
+    """Open a single psycopg connection honoring ``ConnectionSettings``."""
+    import psycopg
+
+    dsn, settings = _resolve(dsn, settings)
+    return await psycopg.AsyncConnection.connect(
+        dsn or "",
+        **_psycopg_connect_kwargs(settings),
     )
 
 
@@ -97,9 +118,9 @@ async def create_asyncpg_pool(
     """Create an asyncpg pool sized/configured by ``ConnectionSettings``."""
     import asyncpg
 
-    settings = settings or ConnectionSettings()
+    dsn, settings = _resolve(dsn, settings)
     async with asyncpg.create_pool(
-        dsn=dsn if dsn is not None else settings.dsn,
+        dsn=dsn,
         min_size=settings.pool_min_size,
         max_size=settings.pool_max_size,
         **_asyncpg_connect_kwargs(settings),
@@ -115,9 +136,9 @@ async def create_psycopg_pool(
     """Create a psycopg async pool sized/configured by ``ConnectionSettings``."""
     import psycopg_pool
 
-    settings = settings or ConnectionSettings()
+    dsn, settings = _resolve(dsn, settings)
     async with psycopg_pool.AsyncConnectionPool(
-        conninfo=dsn if dsn is not None else (settings.dsn or ""),
+        conninfo=dsn or "",
         min_size=settings.pool_min_size,
         max_size=settings.pool_max_size,
         kwargs=dict(_psycopg_connect_kwargs(settings)),
