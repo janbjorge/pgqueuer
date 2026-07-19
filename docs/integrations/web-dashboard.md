@@ -26,10 +26,10 @@ Connection settings follow the same rules as every other `pgq` command:
 
 ![The overview screen: headline stats, hourly throughput chart, and backlog by entrypoint](web-dashboard.png)
 
-The navigation covers entrypoint health (durations, failure rates), job
-browsing with cancel, per-job detail and history, held failures with bulk
-requeue, worker liveness, cron schedules, and table health. A `/healthz`
-liveness probe is included for orchestrators.
+The other screens drill into the same data: per-entrypoint durations and
+failure rates, a browsable job table with per-job detail, held failures with
+bulk requeue, workers, schedules, and system health. Orchestrators can hit
+`/healthz` for liveness.
 
 Live updates ride the `LISTEN/NOTIFY` channel PgQueuer already installs:
 queue-table changes push a debounced server-sent event and the affected
