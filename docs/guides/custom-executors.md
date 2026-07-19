@@ -51,7 +51,7 @@ async def notification_task(job: Job) -> None:
 
 `DatabaseRetryEntrypointExecutor` converts unhandled exceptions into database-level retries
 via `RetryRequested`. The job is re-queued in the database so any worker can pick it up after
-the delay — retries survive worker restarts.
+the delay; retries survive worker restarts.
 
 ### When to Use It
 
@@ -91,7 +91,7 @@ async def sync_inventory(job: Job) -> None:
 | `max_delay` | `5m` | Cap on exponential backoff |
 | `backoff_multiplier` | `2.0` | Multiplier applied to delay after each attempt |
 
-If the handler raises `RetryRequested` directly, it passes through unchanged — the executor
+If the handler raises `RetryRequested` directly, it passes through unchanged; the executor
 only converts non-retry exceptions. See [Database-Level Retry](retry.md) for the full guide.
 
 !!! tip "Combine with `on_failure=\"hold\"`"

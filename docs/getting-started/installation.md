@@ -95,7 +95,7 @@ PgQueuer reads standard PostgreSQL environment variables:
 | `PGHOST` | Database host | `localhost` |
 | `PGPORT` | Database port | `5432` |
 | `PGUSER` | Database user | current OS user |
-| `PGPASSWORD` | Database password | — |
+| `PGPASSWORD` | Database password | (none) |
 | `PGDATABASE` | Database name | same as user |
 
 You can also pass a connection string directly when constructing drivers in code.
@@ -113,5 +113,5 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 
 ## Next Steps
 
-- **[Quick Start](quickstart.md)** -- build your first consumer and producer
-- **[Core Concepts](core-concepts.md)** -- understand the mental model behind PgQueuer
+- **[Quick Start](quickstart.md)**: build your first consumer and producer
+- **[Core Concepts](core-concepts.md)**: understand the mental model behind PgQueuer

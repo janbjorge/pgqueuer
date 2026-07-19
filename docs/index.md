@@ -5,7 +5,7 @@
 **Your PostgreSQL database is already a job queue.**
 
 PgQueuer turns PostgreSQL into a fast, reliable background job processor.
-Jobs live in the same database as your application data -- one stack,
+Jobs live in the same database as your application data: one stack,
 full ACID guarantees, zero additional infrastructure.
 
 [Get Started](getting-started/installation.md){ .md-button .md-button--primary }
@@ -21,18 +21,18 @@ If you're already running PostgreSQL, it can do double duty as your job queue.
 That gives you:
 
 - **One fewer service** to provision, monitor, and keep available
-- **Transactional enqueuing** -- commit a job in the same transaction as your application data
-- **Consistent state** -- your queue and your data always agree because they share the same database
-- **Lower latency** -- jobs stay local, no round-trip to an external broker
+- **Transactional enqueuing**: commit a job in the same transaction as your application data
+- **Consistent state**: your queue and your data always agree because they share the same database
+- **Lower latency**: jobs stay local, no round-trip to an external broker
 
 ## How PgQueuer Works
 
-PgQueuer uses battle-tested PostgreSQL primitives to deliver jobs safely and fast:
+PgQueuer builds on standard PostgreSQL primitives to deliver jobs safely and fast:
 
-- **`FOR UPDATE SKIP LOCKED`** -- workers claim jobs atomically; a job is never handed to two workers
-- **`LISTEN/NOTIFY`** -- a trigger on the queue table fires `pg_notify()` on every insert, waking workers instantly
-- **ACID transactions** -- jobs are enqueued and processed with the same guarantees as your application data
-- **Row-level locking** -- multiple workers scale horizontally against a single database
+- **`FOR UPDATE SKIP LOCKED`**: workers claim jobs atomically; a job is never handed to two workers
+- **`LISTEN/NOTIFY`**: a trigger on the queue table fires `pg_notify()` on every insert, waking workers instantly
+- **ACID transactions**: jobs are enqueued and processed with the same guarantees as your application data
+- **Row-level locking**: multiple workers scale horizontally against a single database
 
 ```
 ┌──────────┐  enqueue   ┌────────────┐  NOTIFY   ┌──────────┐
@@ -106,8 +106,8 @@ That's it. Just PostgreSQL and your application code.
     ---
 
     Cron-style recurring tasks via the `@schedule` decorator with 5-field
-    (minute-level) or 6-field (second-level) expressions. No separate
-    beat process required.
+    (minute-level) or 6-field (second-level) expressions, without a
+    separate beat process.
 
 -   **Automatic Retries & Heartbeat**
 
@@ -130,14 +130,14 @@ That's it. Just PostgreSQL and your application code.
     ---
 
     `PgQueuer.in_memory()` provides a drop-in replacement for tests
-    and CI. No Docker, no PostgreSQL instance needed.
+    and CI that needs neither Docker nor a PostgreSQL instance.
 
 -   **Completion Tracking**
 
     ---
 
     `CompletionWatcher` lets callers await job results via
-    `LISTEN/NOTIFY` -- no polling required. Wait for one job, many jobs,
+    `LISTEN/NOTIFY` instead of polling. Wait for one job, many jobs,
     or race them with `asyncio.wait`.
 
 -   **Deferred Execution**
@@ -189,8 +189,8 @@ are backed by PostgreSQL and you want a simpler operational footprint.
 
 ## Next Steps
 
-- **[Installation](getting-started/installation.md)** -- install PgQueuer and set up the database schema
-- **[Quick Start](getting-started/quickstart.md)** -- build your first consumer and producer in 5 minutes
-- **[Core Concepts](getting-started/core-concepts.md)** -- understand jobs, entrypoints, and the status lifecycle
-- **[Architecture](reference/architecture.md)** -- how data flows from producer to consumer
-- **[Upgrading from 0.x](getting-started/upgrading.md)** -- migration guide for users coming from pre-1.0 releases
+- **[Installation](getting-started/installation.md)**: install PgQueuer and set up the database schema
+- **[Quick Start](getting-started/quickstart.md)**: build your first consumer and producer in 5 minutes
+- **[Core Concepts](getting-started/core-concepts.md)**: understand jobs, entrypoints, and the status lifecycle
+- **[Architecture](reference/architecture.md)**: how data flows from producer to consumer
+- **[Upgrading from 0.x](getting-started/upgrading.md)**: migration guide for users coming from pre-1.0 releases

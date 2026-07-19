@@ -25,8 +25,8 @@ async def heartbeat(schedule: Schedule) -> None:
 
 - **Registration**: Define tasks using the `@schedule` decorator with a name and a cron expression.
 - **Execution**: The scheduler runs tasks at defined intervals and tracks execution state.
-- **Database Integration**: Schedules are stored in PostgreSQL, ensuring durability and recovery
-  across process restarts.
+- **Database Integration**: Schedules are stored in PostgreSQL and survive process
+  restarts.
 
 ### Scheduler Flow Diagram
 
@@ -44,11 +44,11 @@ in the final position.
 ### 5-field format
 
 ```
-┌───────────── minute (0–59)
-│ ┌───────────── hour (0–23)
-│ │ ┌───────────── day of month (1–31)
-│ │ │ ┌───────────── month (1–12)
-│ │ │ │ ┌───────────── day of week (0–6, Sunday=0)
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, Sunday=0)
 │ │ │ │ │
 * * * * *
 ```
@@ -73,12 +73,12 @@ Second-level schedules follow croniter's
 behavior.
 
 ```
-┌───────────── minute (0–59)
-│ ┌───────────── hour (0–23)
-│ │ ┌───────────── day of month (1–31)
-│ │ │ ┌───────────── month (1–12)
-│ │ │ │ ┌───────────── day of week (0–6, Sunday=0)
-│ │ │ │ │ ┌───────────── second (0–59)
+┌───────────── minute (0-59)
+│ ┌───────────── hour (0-23)
+│ │ ┌───────────── day of month (1-31)
+│ │ │ ┌───────────── month (1-12)
+│ │ │ │ ┌───────────── day of week (0-6, Sunday=0)
+│ │ │ │ │ ┌───────────── second (0-59)
 │ │ │ │ │ │
 * * * * * *
 ```
@@ -123,7 +123,7 @@ async def fetch_db(schedule: Schedule) -> None:
     await perform_task()
 ```
 
-By default, `clean_old=False` — old schedules are retained.
+By default, `clean_old=False`: old schedules are retained.
 
 ## Managing Schedules via CLI
 

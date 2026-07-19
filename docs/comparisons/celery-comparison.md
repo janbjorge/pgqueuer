@@ -1,6 +1,6 @@
 # PgQueuer vs Celery
 
-Celery and PgQueuer solve the same core problem -- reliable background job processing --
+Celery and PgQueuer solve the same core problem (reliable background job processing)
 with different trade-offs. This page compares them side by side so you can pick the
 right tool for your situation.
 

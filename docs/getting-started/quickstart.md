@@ -1,7 +1,7 @@
 # Quick Start
 
 This guide walks you through creating a job consumer, enqueuing work, and monitoring
-the queue -- all in under 5 minutes.
+the queue, all in under 5 minutes.
 
 **Prerequisites:** PgQueuer installed and schema created. See [Installation](installation.md)
 if you haven't done that yet.
@@ -180,7 +180,7 @@ From another process or script, push jobs into the queue:
 
 `Queries.enqueue()` accepts lists for batch enqueuing. Each list element corresponds to one
 job. The method returns the IDs of the newly created jobs. When deduplicating with
-`dedupe_key` and `on_conflict="skip"`, the result keeps one entry per input — `None` marks
+`dedupe_key` and `on_conflict="skip"`, the result keeps one entry per input; `None` marks
 positions skipped as duplicates. See
 [Reliability & Failure Handling](../guides/reliability.md#idempotency).
 

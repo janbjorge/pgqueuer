@@ -43,8 +43,8 @@ return Response(content=content, media_type="text/plain; version=0.0.4")
 
 ## Standalone Metrics Service
 
-A Docker-based standalone metrics service is available in `tools/prometheus`. Note that
-this service uses its own implementation separate from the `pgqueuer.metrics` library module.
+A Docker-based standalone metrics service is available in `tools/prometheus`. This
+service uses its own implementation, separate from the `pgqueuer.metrics` library module.
 
 ### Building the Image
 

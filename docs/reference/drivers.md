@@ -8,21 +8,21 @@ abstracting database communication.
 Drivers:
 
 - Manage database connections and enforce required configuration (e.g., autocommit).
-- Abstract PostgreSQL-specific features to streamline queue operations.
+- Abstract the PostgreSQL-specific features that queue operations rely on.
 - Provide a consistent interface for executing queries.
 
 ## Requirements
 
 For any driver:
 
-1. **Autocommit mode** — The connection must operate in autocommit mode.
+1. **Autocommit mode**: The connection must operate in autocommit mode.
    - For `psycopg`, explicitly set `connection.autocommit = True`.
    - For `asyncpg`, autocommit is the default unless a transaction is explicitly started.
 
-2. **PostgreSQL compatibility** — The driver must support PostgreSQL-specific features
+2. **PostgreSQL compatibility**: The driver must support PostgreSQL-specific features
    used by PgQueuer.
 
-3. **Default isolation level** — Connections should maintain the default PostgreSQL
+3. **Default isolation level**: Connections should maintain the default PostgreSQL
    isolation level unless explicitly modified.
 
 ## Driver Protocol
@@ -100,7 +100,7 @@ driver = PsycopgDriver(conn)
 
 ### `SyncPsycopgDriver`
 
-Designed for blocking code or frameworks such as Flask. **Can only enqueue jobs** — PgQueuer's
+Designed for blocking code or frameworks such as Flask. **Can only enqueue jobs**: PgQueuer's
 consumers and internals require an async driver.
 
 ```python

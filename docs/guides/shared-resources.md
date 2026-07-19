@@ -36,7 +36,7 @@ async def build_pgqueuer():
 
     pgq = PgQueuer(driver, resources=resources)
 
-    # Annotating a parameter as Context is enough — PgQueuer injects it.
+    # Annotating a parameter as Context is enough; PgQueuer injects it.
     @pgq.entrypoint("process_user")
     async def process_user(job: Job, ctx: Context) -> None:
         http = ctx.resources["http_client"]
@@ -92,7 +92,7 @@ async def process_with_context(job: Job, ctx: Context) -> None:
 ```
 
 Detection is annotation-driven, so a handler with an unrelated extra parameter
-(`async def f(job: Job, config: dict | None = None)`) is left untouched—no `Context` is injected
+(`async def f(job: Job, config: dict | None = None)`) is left untouched and no `Context` is injected
 into it. Entry points that declare only the job are invoked with the job alone:
 
 ```python

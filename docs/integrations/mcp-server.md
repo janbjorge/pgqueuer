@@ -2,7 +2,7 @@
 
 PgQueuer ships an optional [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
 that gives AI agents read-only access to your queue state, statistics, and schedules.
-All queries are predefined — no arbitrary SQL is accepted.
+All queries are predefined; the server does not accept arbitrary SQL.
 
 ## Installation
 
@@ -163,7 +163,7 @@ globals, so you can create multiple servers or embed one in a larger application
 ```python
 from pgqueuer.adapters.mcp.server import create_mcp_server
 
-# All parameters are optional — asyncpg reads libpq env vars by default
+# All parameters are optional; asyncpg reads libpq env vars by default
 server = create_mcp_server()
 
 # Or pass an explicit DSN and/or custom settings
@@ -177,9 +177,9 @@ server.run(transport="stdio")
 The MCP server lives in the adapter layer (`pgqueuer/adapters/mcp/`) and follows
 the same hexagonal architecture as the rest of PgQueuer:
 
-- **`server.py`** — `create_mcp_server()` factory, `PgQueuerDatabase` wrapper,
+- **`server.py`**: `create_mcp_server()` factory, `PgQueuerDatabase` wrapper,
   all tool registrations.
-- **`__main__.py`** — `python -m pgqueuer.adapters.mcp` entry point.
+- **`__main__.py`**: `python -m pgqueuer.adapters.mcp` entry point.
 - All SQL queries are defined as `build_*` methods in
-  `pgqueuer/adapters/persistence/qb.py` — no SQL is constructed at runtime.
+  `pgqueuer/adapters/persistence/qb.py`: no SQL is constructed at runtime.
 - The server uses an asyncpg connection pool managed by FastMCP's lifespan.

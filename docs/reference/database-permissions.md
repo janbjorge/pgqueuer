@@ -90,7 +90,7 @@ PGOPTIONS="-csearch_path=pgq" pgq install
 ```
 
 This separates PgQueuer objects from application tables and makes privilege management
-cleaner — you can grant or revoke schema-level access as a single operation.
+cleaner: you can grant or revoke schema-level access as a single operation.
 
 ## Verifying Permissions
 
