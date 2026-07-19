@@ -88,12 +88,13 @@ This exits with code 0 if the schema is correctly installed, or code 1 if anythi
 
 ## Connection Configuration
 
-PgQueuer never parses or rewrites your connection string. The DSN and all
-libpq environment variables are passed to the driver untouched, so multi-host
-DSNs, `sslmode`, `target_session_attrs`, `options`, `service=` and any other
-libpq parameter keep working.
+PgQueuer is bring-your-own-connection: your application opens the connection
+or pool with asyncpg/psycopg directly and wraps it in a driver. PgQueuer never
+opens, parses, or rewrites anything on that path, so every libpq parameter
+(multi-host DSNs, `sslmode`, `target_session_attrs`, `options`, `service=`)
+works exactly as your driver supports it.
 
-PgQueuer reads standard PostgreSQL environment variables:
+The drivers read the standard PostgreSQL environment variables:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -103,12 +104,12 @@ PgQueuer reads standard PostgreSQL environment variables:
 | `PGPASSWORD` | Database password | (none) |
 | `PGDATABASE` | Database name | same as user |
 
-You can also pass a connection string directly when constructing drivers in code.
-
 ### Pool and Connection Tuning
 
-`PGQUEUER_*` variables configure the built-in adapters (CLI, MCP server, and
-the shared pool factories):
+The `pgq` CLI and the MCP server have no application code to open a
+connection for them, so they read `PGQUEUER_*` variables. The opt-in
+factories in `pgqueuer.adapters.connections` read the same variables if you
+want that behavior in your own startup code:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -118,6 +119,7 @@ the shared pool factories):
 | `PGQUEUER_CONNECT_TIMEOUT` | Connect timeout in seconds | driver default |
 | `PGQUEUER_APPLICATION_NAME` | `application_name` shown in `pg_stat_activity` | (unset) |
 
+**These variables have no effect on connections you create yourself.**
 Unset variables are never passed to the driver, so DSN parameters and libpq
 environment variables always keep control.
 

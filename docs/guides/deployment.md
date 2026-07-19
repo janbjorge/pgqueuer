@@ -177,7 +177,7 @@ pgq upgrade          # apply schema changes
 
 ## Environment Configuration
 
-PgQueuer reads standard PostgreSQL environment variables:
+The database drivers read standard PostgreSQL environment variables:
 
 | Variable | Purpose |
 |----------|---------|
