@@ -100,9 +100,9 @@ def main(
         "",
         help=(
             "PostgreSQL connection string (DSN). "
-            "When omitted, standard libpq env vars "
+            "When omitted, PGQUEUER_DSN and standard libpq env vars "
             "(PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT) are used. "
-            "Use PGOPTIONS for search_path."
+            "For a custom schema, add ?options=-csearch_path%3Dmyschema to the DSN."
         ),
         envvar="PGDSN",
     ),
