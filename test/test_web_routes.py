@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import httpx
@@ -13,7 +13,15 @@ from fastapi import Depends, FastAPI
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
 from pgqueuer.adapters.web.payload import render_payload
-from pgqueuer.adapters.web.routes import create_web_router, sparkline_svg
+from pgqueuer.adapters.web.routes import (
+    PAGE_SIZE,
+    create_web_router,
+    fmt_age,
+    fmt_dt,
+    fmt_duration,
+    fmt_rate,
+    sparkline_svg,
+)
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.domain import models
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -338,3 +346,73 @@ class TestSparklineSvg:
         svg = sparkline_svg([0, 1, 2])
         assert svg.startswith("<svg")
         assert svg.count("<rect") == 3
+
+
+class TestTemplateFormatters:
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (None, "–"),
+            (5, "5s"),
+            (65, "1m 5s"),
+            (3660, "1h 1m"),
+            (90000, "1d 1h"),
+        ],
+    )
+    def test_fmt_age(self, seconds: float | None, expected: str) -> None:
+        assert fmt_age(seconds) == expected
+
+    @pytest.mark.parametrize(
+        ("seconds", "expected"),
+        [
+            (None, "–"),
+            (0.25, "250ms"),
+            (5.5, "5.50s"),
+            (65, "1m 5s"),
+        ],
+    )
+    def test_fmt_duration(self, seconds: float | None, expected: str) -> None:
+        assert fmt_duration(seconds) == expected
+
+    def test_fmt_dt(self) -> None:
+        assert fmt_dt(None) == "–"
+        aware = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        assert fmt_dt(aware) == "2026-01-02 03:04:05"
+
+    def test_fmt_rate(self) -> None:
+        assert fmt_rate(None) == "–"
+        assert fmt_rate(0.123) == "12.3%"
+
+
+class TestJobsPagination:
+    async def fill(self, queries: InMemoryQueries, count: int) -> None:
+        for _ in range(count):
+            await queries.enqueue("page_ep", None)
+
+    async def test_first_page_links_forward_only(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await self.fill(queries, PAGE_SIZE + 1)
+        response = await client.get("/partials/jobs")
+        assert response.status_code == 200
+        assert "older »" in response.text
+        assert "page=2" in response.text
+        assert "« newer" not in response.text
+
+    async def test_second_page_links_back(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await self.fill(queries, PAGE_SIZE + 1)
+        response = await client.get("/partials/jobs", params={"page": 2})
+        assert response.status_code == 200
+        assert "« newer" in response.text
+        assert "older »" not in response.text
+        assert response.text.count("<tr id=") == 1
+
+    async def test_page_clamped_to_one(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await self.fill(queries, 1)
+        response = await client.get("/partials/jobs", params={"page": 0})
+        assert response.status_code == 200
+        assert "page 1" in response.text
