@@ -1,6 +1,6 @@
 # Database-Level Retry
 
-PgQueuer supports **database-level retry** — when a job handler raises `RetryRequested`, the
+PgQueuer supports **database-level retry**: when a job handler raises `RetryRequested`, the
 job stays in the queue table and is re-queued for another attempt. The job row is updated
 in-place (not deleted and re-inserted), so the `id`, `payload`, `headers`, and all metadata
 are preserved across retries.
@@ -58,7 +58,7 @@ execution it is `0`, after one retry it is `1`, and so on:
 @pgq.entrypoint("resilient_task")
 async def resilient_task(job: Job) -> None:
     if job.attempts > 5:
-        # Give up after 5 retries — let it fail terminally
+        # Give up after 5 retries and let it fail terminally
         raise RuntimeError("Too many retries, giving up")
 
     try:
@@ -100,7 +100,7 @@ async def flaky_api(job: Job) -> None:
 After `max_attempts` consecutive failures, the original exception propagates as a terminal
 failure (the job is deleted and logged with status `exception`).
 
-If your handler raises `RetryRequested` directly, it passes through the executor unchanged —
+If your handler raises `RetryRequested` directly, it passes through the executor unchanged;
 the executor only converts non-retry exceptions.
 
 ### Parameters
@@ -127,7 +127,7 @@ With `initial_delay=1s`, `backoff_multiplier=2.0`, `max_delay=60s`:
 | 6+ | 60s (capped) |
 
 The table shows the delay *formula* independent of `max_attempts`. With the default
-`max_attempts=5`, only attempts 0–4 are retried (delays 1s–16s); the 5th failure is terminal,
+`max_attempts=5`, only attempts 0-4 are retried (delays 1s-16s); the 5th failure is terminal,
 so the 32s/60s rows never apply unless you raise `max_attempts`.
 
 ## Retry vs. Heartbeat Recovery
@@ -177,7 +177,7 @@ ORDER BY created;
 | Scenario | What happens |
 |----------|-------------|
 | Handler raises `RetryRequested` | Job updated to `queued`, attempts incremented, log entry written |
-| Handler raises any other exception | Job deleted, logged as `exception` (or held if `on_failure="hold"` — see [Holding Failed Jobs](hold-failed-jobs.md)) |
+| Handler raises any other exception | Job deleted, logged as `exception` (or held if `on_failure="hold"`: see [Holding Failed Jobs](hold-failed-jobs.md)) |
 | Handler completes normally | Job deleted, logged as `successful` (existing behavior) |
 | `DatabaseRetryEntrypointExecutor` + exception + attempts < max | Converted to `RetryRequested` with backoff |
 | `DatabaseRetryEntrypointExecutor` + exception + attempts >= max | Exception propagates as terminal failure (or held if `on_failure="hold"`) |

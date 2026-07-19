@@ -1,6 +1,6 @@
 # Deployment Patterns
 
-PgQueuer requires no message broker, Redis instance, or additional infrastructure — just
+PgQueuer requires no message broker, Redis instance, or additional infrastructure, just
 PostgreSQL. This page covers how to run workers in production.
 
 ## Single Worker Process
@@ -55,7 +55,7 @@ Run multiple worker processes against the same PostgreSQL database. PgQueuer use
 
 Each worker:
 - Listens on the same `ch_pgqueuer` channel independently
-- Claims jobs atomically — no coordinator or leader election needed
+- Claims jobs atomically; no coordinator or leader election needed
 - Can run on separate VMs, containers, or processes on the same host
 
 **Starting multiple workers:**
@@ -151,7 +151,7 @@ LISTEN connection causes a clean restart rather than silent degradation:
 `pgq run` handles `SIGTERM` and `SIGINT`. On receiving a signal:
 
 1. Stop accepting new jobs from the queue.
-2. Wait for in-flight jobs to finish. PgQueuer has no built-in drain timeout — it awaits
+2. Wait for in-flight jobs to finish. PgQueuer has no built-in drain timeout; it awaits
    running jobs to completion, so bound the wait via your orchestrator (see below).
 3. Exit cleanly.
 
@@ -165,7 +165,7 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 ## Schema Migrations on Deploy
 
 Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database — migrations are additive and non-destructive:
+database. Migrations are additive and non-destructive:
 
 ```bash
 # Deploy workflow
@@ -186,7 +186,7 @@ PgQueuer reads standard PostgreSQL environment variables:
 | `PGUSER` | Database user |
 | `PGPASSWORD` | Database password |
 | `PGDATABASE` | Database name |
-| `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty — names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
+| `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty; names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 

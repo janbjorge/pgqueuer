@@ -16,7 +16,7 @@ PostgreSQL function.
     - Applying appropriate network and authentication controls.
 
     These examples are minimal and need hardening. Table names (`pgqueuer`,
-    `pgqueuer_log`) may differ if you installed PgQueuer with custom settings — adjust
+    `pgqueuer_log`) may differ if you installed PgQueuer with custom settings; adjust
     everywhere accordingly.
 
 ## Overview

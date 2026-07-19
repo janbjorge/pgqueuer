@@ -1,7 +1,7 @@
 # Upgrading from 0.x to 1.0
 
 PgQueuer 1.0 is the first stable release. From this point on, the project
-follows [semantic versioning](https://semver.org/) strictly — patch releases
+follows [semantic versioning](https://semver.org/) strictly: patch releases
 for bug fixes, minor releases for backward-compatible features, major releases
 only when a break is unavoidable.
 
@@ -23,7 +23,7 @@ The full list of 23 numbered breaking changes lives in
    `DatabaseRetryEntrypointExecutor`.
 7. Construct `QueueManager` / `SchedulerManager` /  `CompletionWatcher` with a
    `Queries` instance rather than a raw driver.
-8. Run your test suite — most breakages surface at decoration or startup time.
+8. Run your test suite; most breakages surface at decoration or startup time.
 
 ## 1. Database schema
 
@@ -78,7 +78,7 @@ async def resize_image(job: Job) -> None:
 ```
 
 Wrap blocking calls with `asyncio.to_thread`. Drop imports of `SyncEntrypoint`
-and `SyncContextEntrypoint` — both are removed.
+and `SyncContextEntrypoint`: both are removed.
 
 ## 3. Factory functions are async context managers
 
@@ -86,7 +86,7 @@ and `SyncContextEntrypoint` — both are removed.
 functions that return a value, and `@contextmanager` factories, are rejected.
 
 ```python
-# Before — any of these worked
+# Before: any of these worked
 async def factory() -> PgQueuer:
     return PgQueuer(...)
 
@@ -110,7 +110,7 @@ async def factory():
 ```
 
 Replace any `from pgqueuer.factories import run_factory` with
-`validate_factory_result` — the new name validates the type but does not
+`validate_factory_result`: the new name validates the type but does not
 convert it.
 
 ## 4. CLI connection options
@@ -127,7 +127,7 @@ pgq --pg-host db.internal --pg-user app --pg-database queue install
 # After
 PGHOST=db.internal PGUSER=app PGDATABASE=queue pgq install
 
-# Custom schema — use PGOPTIONS
+# Custom schema: use PGOPTIONS
 PGOPTIONS="-csearch_path=myschema" pgq install
 ```
 
@@ -235,7 +235,7 @@ sm = SchedulerManager(queries)
 watcher = CompletionWatcher(driver, queries=queries)
 ```
 
-`PgQueuer(driver)` is **unchanged** — it still accepts a driver and constructs
+`PgQueuer(driver)` is **unchanged**: it still accepts a driver and constructs
 `Queries` internally. Most user code only touches `PgQueuer`.
 
 Replace `qm.connection` / `sm.connection` accesses with `qm.queries.driver`.
@@ -290,7 +290,7 @@ async def notify(self, channel: str, payload: str) -> None:
 ```
 
 Remove any imports of `build_notify_query` from
-`pgqueuer.adapters.persistence.qb` — the helper is gone.
+`pgqueuer.adapters.persistence.qb`: the helper is gone.
 
 ## 11. Other API renames and removals
 
@@ -309,11 +309,11 @@ Remove any imports of `build_notify_query` from
 
 ## New features worth adopting
 
-- `RetryRequested` for transient errors — see [Database-Level Retry](../guides/retry.md).
-- `on_failure="hold"` to park failed jobs instead of deleting them — see
+- `RetryRequested` for transient errors; see [Database-Level Retry](../guides/retry.md).
+- `on_failure="hold"` to park failed jobs instead of deleting them; see
   [Holding Failed Jobs](../guides/hold-failed-jobs.md). Pairs with `pgq failed`
   and `pgq requeue`.
-- MCP server for read-only queue introspection — see
+- MCP server for read-only queue introspection; see
   [MCP Server](../integrations/mcp-server.md).
 - `ScheduleContext` gives scheduled tasks access to the same shared `resources`
   mapping as queue handlers.

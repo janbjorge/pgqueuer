@@ -72,17 +72,17 @@ CREATE TYPE pgqueuer_status AS ENUM (
 
 The lifecycle of a job flows through these statuses:
 
-- **`queued`** — Newly enqueued jobs start here and wait for a worker to pick them up.
-- **`picked`** — Set by `QueueManager` when a worker begins processing. A heartbeat
+- **`queued`**: Newly enqueued jobs start here and wait for a worker to pick them up.
+- **`picked`**: Set by `QueueManager` when a worker begins processing. A heartbeat
   timestamp tracks active work.
-- **`successful`** — Assigned after a job completes without errors. Details are copied to
+- **`successful`**: Assigned after a job completes without errors. Details are copied to
   the statistics log and removed from the queue.
-- **`exception`** — Indicates the job failed with an uncaught error. The traceback is
+- **`exception`**: Indicates the job failed with an uncaught error. The traceback is
   stored for later inspection.
-- **`failed`** — Job held in the queue for manual review when `on_failure="hold"` is set.
+- **`failed`**: Job held in the queue for manual review when `on_failure="hold"` is set.
   Can be re-queued or deleted manually.
-- **`canceled`** — Jobs canceled before completion receive this status and are logged.
-- **`deleted`** — Used when jobs are removed from the queue without running, such as during
+- **`canceled`**: Jobs canceled before completion receive this status and are logged.
+- **`deleted`**: Used when jobs are removed from the queue without running, such as during
   manual cleanup operations.
 
 ### Status Transition Diagram

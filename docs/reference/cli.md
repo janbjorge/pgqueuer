@@ -12,10 +12,10 @@ Set up the necessary database schema for PgQueuer.
 **Options:**
 
 - `--durability`: Define the durability level for tables.
-  - `volatile`: All tables are unlogged — maximum performance, no crash recovery.
+  - `volatile`: All tables are unlogged: maximum performance, no crash recovery.
   - `balanced`: Critical tables (`pgqueuer`, `pgqueuer_schedules`) are logged; auxiliary
     tables are unlogged.
-  - `durable` *(default)*: All tables are logged — full crash recovery.
+  - `durable` *(default)*: All tables are logged: full crash recovery.
 - `--dry-run`: Print SQL commands without executing them.
 
 ```bash
@@ -115,7 +115,7 @@ Manually enqueue a job.
 
 - `--dedupe-key`: Deduplication key; an active (`queued`/`picked`) job with the same key
   blocks the enqueue.
-- `--on-conflict`: What to do on a dedupe-key conflict — `raise` (default) exits with an
+- `--on-conflict`: What to do on a dedupe-key conflict: `raise` (default) exits with an
   error, `skip` exits 0 without enqueuing.
 
 ```bash
@@ -172,7 +172,7 @@ pgq schedules --remove fetch_db
 ### `failed`
 
 List jobs held with `status='failed'` for manual intervention. Held jobs come from
-entrypoints registered with `on_failure="hold"` — see [Holding Failed Jobs](../guides/hold-failed-jobs.md).
+entrypoints registered with `on_failure="hold"`: see [Holding Failed Jobs](../guides/hold-failed-jobs.md).
 
 **Options:**
 
@@ -225,7 +225,7 @@ Start a `QueueManager` to process jobs.
 # Run with a limit of 5 concurrent tasks
 pgq run my_module:my_factory --max-concurrent-tasks 5
 
-# Drain mode — process all queued jobs then exit
+# Drain mode: process all queued jobs then exit
 pgq run my_module:my_factory --mode drain
 ```
 
@@ -245,20 +245,20 @@ crash recovery.
 
 ### Volatile
 
-- All tables are **unlogged** — no Write-Ahead Log (WAL) writes.
+- All tables are **unlogged**: no Write-Ahead Log (WAL) writes.
 - Data is **lost** if PostgreSQL crashes.
 - Best for: temporary workloads where data loss is acceptable, or maximum throughput testing.
 
 ### Balanced
 
-- Critical tables (`pgqueuer`, `pgqueuer_schedules`) are **logged** — survive crashes.
-- Auxiliary tables (`pgqueuer_log`, `pgqueuer_statistics`) are **unlogged** — faster writes.
+- Critical tables (`pgqueuer`, `pgqueuer_schedules`) are **logged**: survive crashes.
+- Auxiliary tables (`pgqueuer_log`, `pgqueuer_statistics`) are **unlogged**: faster writes.
 - Best for: production systems where job data must survive crashes but log/statistics can be
   sacrificed for speed.
 
 ### Durable *(default)*
 
-- All tables are **logged** — full WAL writes.
+- All tables are **logged**: full WAL writes.
 - Data survives crashes and restarts.
 - Best for: production environments where data integrity is critical.
 
@@ -275,19 +275,19 @@ manager instance; the CLI loads it, calls it, and runs the returned manager unti
 pgq run my_module:factory
           │
           ▼
-  1. LOAD FACTORY — import module, retrieve function
+  1. LOAD FACTORY: import module, retrieve function
           │
           ▼
-  2. SETUP SIGNAL HANDLERS — SIGINT, SIGTERM
+  2. SETUP SIGNAL HANDLERS: SIGINT, SIGTERM
           │
           ▼
-  3. SUPERVISOR LOOP — continues until shutdown
+  3. SUPERVISOR LOOP: continues until shutdown
           │
           ▼
-  4. INVOKE YOUR FACTORY — create connection, register entrypoints
+  4. INVOKE YOUR FACTORY: create connection, register entrypoints
           │
           ▼
-  5. LINK SHUTDOWN EVENT — connect signal to manager
+  5. LINK SHUTDOWN EVENT: connect signal to manager
           │
           ▼
   6. RUN THE MANAGER
@@ -301,7 +301,7 @@ pgq run my_module:factory
 ### Factory Contract
 
 The factory **must** return an `AsyncContextManager` (typically via `@asynccontextmanager`).
-Bare awaitables and sync context managers are **not** accepted — passing one raises
+Bare awaitables and sync context managers are **not** accepted; passing one raises
 `TypeError` with migration instructions.
 
 ```python

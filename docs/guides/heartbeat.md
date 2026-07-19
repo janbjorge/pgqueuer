@@ -1,7 +1,7 @@
 # Heartbeat Monitoring
 
-PgQueuer's automatic heartbeat mechanism ensures active jobs are continuously monitored
-for liveness.
+PgQueuer updates a heartbeat timestamp on every active job so that stalled or
+crashed workers can be detected.
 
 ## How It Works
 
@@ -11,8 +11,8 @@ timestamp on the job record. This signals that the job is still actively being p
 - **Periodic updates**: The heartbeat timestamp is refreshed at a configurable interval.
 - **Stall detection**: External monitoring can compare `heartbeat` against `NOW()` to
   identify stalled or hung jobs.
-- **Resource management**: Prevents unresponsive jobs from holding locks indefinitely,
-  enabling external supervisors to detect and handle stuck workers.
+- **Resource management**: Unresponsive jobs do not hold locks indefinitely, and
+  external supervisors can detect and handle stuck workers.
 
 ## Stall Detection Pattern
 

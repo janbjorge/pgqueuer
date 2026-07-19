@@ -11,7 +11,7 @@ When a job raises an unhandled exception, PgQueuer:
 2. Captures the full traceback, exception type, and message into a **TracebackRecord**.
 3. Moves the record from the active queue (`pgqueuer`) to the log table (`pgqueuer_log`).
 
-The job is **not** automatically retried at this point — it is considered definitively failed
+The job is **not** automatically retried at this point; it is considered definitively failed
 for this execution attempt. The traceback is persisted in `pgqueuer_log` for inspection
 via a direct query:
 
@@ -33,7 +33,7 @@ PgQueuer provides three complementary retry mechanisms.
 ### Database-level retry: durable re-queuing
 
 Raise `RetryRequested` from your handler to re-queue the job in the database. The job row is
-updated in-place — the `id`, `payload`, and all metadata are preserved. Any worker can pick
+updated in-place: the `id`, `payload`, and all metadata are preserved. Any worker can pick
 up the retried job.
 
 ```python
@@ -119,17 +119,17 @@ WHERE status IN ('queued', 'picked') AND dedupe_key IS NOT NULL
 ```
 
 If a job with the same `dedupe_key` already exists in `queued` or `picked` state, a
-`DuplicateJobError` is raised. The constraint only covers `queued` and `picked`, so once the
-job leaves those states — `successful`, `exception`, `canceled`, `deleted`, or `failed`
-(held) — the key is released and the same key can be used again.
+`DuplicateJobError` is raised. The constraint only covers `queued` and `picked`. Once the
+job moves to `successful`, `exception`, `canceled`, `deleted`, or `failed`
+(held), the key is released and the same key can be used again.
 
-**Choosing a dedupe key:** Use a stable, business-meaningful identifier — for example,
+**Choosing a dedupe key:** Use a stable, business-meaningful identifier, for example
 `f"invoice-{order_id}"` or `f"report-{date}-{user_id}"`. This turns enqueue into an
 idempotent operation: calling it twice with the same key and payload is safe.
 
 ### Skipping duplicates instead of raising
 
-By default a duplicate fails the whole enqueue call — in a batch, nothing is inserted.
+By default a duplicate fails the whole enqueue call: in a batch, nothing is inserted.
 Pass `on_conflict="skip"` to insert the non-duplicate jobs and skip the rest:
 
 ```python
@@ -150,7 +150,7 @@ job id and no `queued` entry in the log table. The same flag is available on the
 `pgq queue --dedupe-key ... --on-conflict skip`.
 
 **Duplicates within a single batch:** if the same `dedupe_key` appears more than once in one
-`enqueue` call — even with different payloads — the **first occurrence by input order** is
+`enqueue` call, even with different payloads, the **first occurrence by input order** is
 enqueued and every later occurrence is treated as a conflict. Under `on_conflict="skip"` the
 later positions come back as `None`; under the default they fail the call. Order your inputs
 so the payload you want kept comes first.

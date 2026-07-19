@@ -2,12 +2,12 @@
 
 ## Overview
 
-The in-memory adapter is a drop-in replacement for the PostgreSQL backend, allowing PgQueuer
-to run entirely without a database connection. Located in `pgqueuer.adapters.inmemory`, it
+The in-memory adapter is a drop-in replacement for the PostgreSQL backend, so PgQueuer
+can run entirely without a database connection. Located in `pgqueuer.adapters.inmemory`, it
 provides `InMemoryDriver` and `InMemoryQueries` classes that satisfy the same
 `RepositoryPort` protocol as the production PostgreSQL-backed implementation.
 
-`QueueManager` and `SchedulerManager` work unchanged against the in-memory adapter — you
+`QueueManager` and `SchedulerManager` work unchanged against the in-memory adapter. You
 don't need to rewrite your job handlers or business logic.
 
 The simplest way to use it is via the factory method:
@@ -60,20 +60,20 @@ asyncio.run(main())
 
 **Recommended for:**
 
-- **Unit and integration tests** — no PostgreSQL instance or Docker container required
-- **CI/CD pipelines** — resource-constrained environments (GitHub Actions, lightweight containers)
-- **Local development** — prototype queue logic without infrastructure setup
-- **Short-lived batch containers** — process a fixed job set and discard (ETL, one-time cleanup)
-- **Proof-of-concept** — quickly demonstrate queue logic
+- **Unit and integration tests**: no PostgreSQL instance or Docker container required
+- **CI/CD pipelines**: resource-constrained environments (GitHub Actions, lightweight containers)
+- **Local development**: prototype queue logic without infrastructure setup
+- **Short-lived batch containers**: process a fixed job set and discard (ETL, one-time cleanup)
+- **Proof-of-concept**: quickly demonstrate queue logic
 
 **Not suitable for:**
 
-- **Production workloads requiring durability** — any restart loses all queued and in-flight jobs
-- **Multi-process workers** — no visibility across processes
-- **Multi-node / distributed deployments** — no shared state between machines
-- **Long-running services** — process restarts lose data
-- **ACID transaction guarantees** — no rollback or atomic retry semantics
-- **Monitoring and observability** — no external store for post-exit inspection
+- **Production workloads requiring durability**: any restart loses all queued and in-flight jobs
+- **Multi-process workers**: no visibility across processes
+- **Multi-node / distributed deployments**: no shared state between machines
+- **Long-running services**: process restarts lose data
+- **ACID transaction guarantees**: no rollback or atomic retry semantics
+- **Monitoring and observability**: no external store for post-exit inspection
 
 ## Limitations Reference
 
@@ -97,15 +97,15 @@ in-memory dictionaries and never executes SQL.
 ### Event Loop Yielding
 
 The `dequeue()` method includes an explicit `await asyncio.sleep(0)` to yield control to
-the event loop. This is critical — without it, `QueueManager.fetch_jobs` would starve signal
+the event loop. This is critical: without it, `QueueManager.fetch_jobs` would starve signal
 handlers, timers, and concurrent jobs. The PostgreSQL adapter naturally yields during real
 I/O; the in-memory adapter must do so explicitly.
 
 ### Schema Management
 
-- `install()`, `upgrade()` — no-ops
-- `uninstall()` — clears all internal dictionaries, resetting queue state
-- Schema inspection methods — always return `True`
+- `install()`, `upgrade()`: no-ops
+- `uninstall()`: clears all internal dictionaries, resetting queue state
+- Schema inspection methods always return `True`
 
 ### Job State
 

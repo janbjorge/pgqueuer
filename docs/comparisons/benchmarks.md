@@ -23,7 +23,7 @@ Continuously enqueues and dequeues jobs for a fixed duration:
 python3 tools/benchmark.py --dequeue 5 --dequeue-batch-size 10
 ```
 
-Example output — the tool prints a settings table, a live `tqdm` progress bar, then a
+Example output: the tool prints a settings table, a live `tqdm` progress bar, then a
 results table (exact numbers depend on your environment):
 
 ```
@@ -55,7 +55,7 @@ Use this when evaluating batch processing performance rather than sustained thro
 ## asyncpg vs psycopg
 
 The figures below come from a single reference run on one machine and are illustrative
-only — run the tool in your own environment for numbers that mean anything. Both tests use
+only; run the tool in your own environment for numbers that mean anything. Both tests use
 identical settings: 10-second timer, 5 dequeue workers (batch size 10), 1 enqueue worker
 (batch size 10).
 

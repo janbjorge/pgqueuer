@@ -52,7 +52,7 @@ to new paths, thin re-export shims preserve the old import locations.
 Ports are `Protocol` classes living in `pgqueuer/ports/`. They capture what the core needs
 without specifying how.
 
-**QueueRepositoryPort** — persistence for the job queue:
+**QueueRepositoryPort**: persistence for the job queue:
 
 ```python
 class QueueRepositoryPort(Protocol):
@@ -66,7 +66,7 @@ class QueueRepositoryPort(Protocol):
     async def queued_work(self, entrypoints) -> int: ...
 ```
 
-**ScheduleRepositoryPort** — persistence for cron schedules:
+**ScheduleRepositoryPort**: persistence for cron schedules:
 
 ```python
 class ScheduleRepositoryPort(Protocol):
@@ -77,7 +77,7 @@ class ScheduleRepositoryPort(Protocol):
     async def delete_schedule(self, ids, entrypoints) -> None: ...
 ```
 
-**NotificationPort** — PostgreSQL NOTIFY abstraction:
+**NotificationPort**: PostgreSQL NOTIFY abstraction:
 
 ```python
 class NotificationPort(Protocol):
@@ -85,7 +85,7 @@ class NotificationPort(Protocol):
     async def notify_health_check(self, health_check_event_id) -> None: ...
 ```
 
-**SchemaManagementPort** — DDL operations:
+**SchemaManagementPort**: DDL operations:
 
 ```python
 class SchemaManagementPort(Protocol):
@@ -103,11 +103,11 @@ inheritance or registration required.
 
 ### Existing Ports (Already In Place)
 
-- **`Driver`** (`pgqueuer.ports.driver`) — database execution abstraction.
+- **`Driver`** (`pgqueuer.ports.driver`): database execution abstraction.
   Methods: `fetch`, `execute`, `add_listener`, `notify`. Adapters:
   `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`,
   and the in-memory driver.
-- **`TracingProtocol`** (`pgqueuer.ports.tracing`) — distributed tracing.
+- **`TracingProtocol`** (`pgqueuer.ports.tracing`): distributed tracing.
   Adapters: `LogfireTracing`, `SentryTracing`, `OpenTelemetryTracing`.
 
 ### Dependency Injection Pattern
@@ -189,24 +189,24 @@ root: `pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`, `pgqueuer.sm`,
 Internal-only modules (`buffers`, `cache`, `cli`, `completion`, `heartbeat`,
 `listeners`, `logconfig`, `qb`, `query_helpers`, `supervisor`, `tm`, `tracing`)
 were exposed at the package root in pre-v1 releases. In v1.0.0 those shims were
-removed — import from the canonical location under `pgqueuer.core.*`,
+removed; import from the canonical location under `pgqueuer.core.*`,
 `pgqueuer.adapters.*`, or `pgqueuer.ports.*` instead. See breaking change #11
 in the v1.0.0 release notes for the full mapping.
 
 ### Migration Phases
 
-**Phase 0** — ~~Deprecate unused infrastructure fields in executor parameters.~~ Done — deprecated fields removed.
+**Phase 0**: ~~Deprecate unused infrastructure fields in executor parameters.~~ Done; deprecated fields removed.
 
-**Phase 1** — Extract port protocols. Purely additive.
+**Phase 1**: Extract port protocols. Purely additive.
 
-**Phase 2** — Dependency injection for `QueueManager` and `SchedulerManager`.
+**Phase 2**: Dependency injection for `QueueManager` and `SchedulerManager`.
 
-**Phase 3** — Inject tracing instead of global singleton.
+**Phase 3**: Inject tracing instead of global singleton.
 
-**Phase 4** — Directory restructure. Move modules into `domain/`, `ports/`, `core/`,
+**Phase 4**: Directory restructure. Move modules into `domain/`, `ports/`, `core/`,
 `adapters/`. Old paths become re-export shims.
 
-**Phase 5** — Enforce boundaries via `import-linter` CI rules.
+**Phase 5**: Enforce boundaries via `import-linter` CI rules.
 
 Phase dependency graph:
 

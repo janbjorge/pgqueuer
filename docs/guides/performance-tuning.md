@@ -4,7 +4,7 @@ This page covers the knobs available for tuning PgQueuer throughput and latency 
 
 ## Batch Size
 
-`batch_size` controls how many jobs are fetched from the database in a single `FOR UPDATE SKIP LOCKED` query. Per the PostgreSQL manual, the `LIMIT` this maps to also bounds how many rows the statement locks per round-trip — see [Row Locking & SKIP LOCKED](../reference/skip-locked.md) for the mechanics.
+`batch_size` controls how many jobs are fetched from the database in a single `FOR UPDATE SKIP LOCKED` query. Per the PostgreSQL manual, the `LIMIT` this maps to also bounds how many rows the statement locks per round-trip; see [Row Locking & SKIP LOCKED](../reference/skip-locked.md) for the mechanics.
 
 ```python
 await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))
@@ -35,7 +35,7 @@ async def resize_image(job: Job) -> None:
     ...
 ```
 
-`concurrency_limit` is enforced **globally at the database level** across every worker — set
+`concurrency_limit` is enforced **globally at the database level** across every worker; set
 `concurrency_limit=4` and at most 4 such jobs run across your entire fleet. Use it when tasks
 share a scarce external resource (e.g., an API with rate limits). `max_concurrent_tasks`, by
 contrast, is a per-process safety ceiling on total asyncio tasks.
@@ -117,9 +117,9 @@ into `pgqueuer` and sends a notification on the `ch_pgqueuer` channel.
 **What can go wrong:** pgBouncer in transaction-pooling mode drops `LISTEN` subscriptions
 between transactions. PgQueuer handles this in two ways:
 
-1. **Polling fallback** — `QueueManager` re-polls after `dequeue_timeout` even without a
+1. **Polling fallback**: `QueueManager` re-polls after `dequeue_timeout` even without a
    NOTIFY, so jobs are never permanently stuck.
-2. **Listener health check** — start with `--shutdown-on-listener-failure` so a supervisor
+2. **Listener health check**: start with `--shutdown-on-listener-failure` so a supervisor
    can restart a manager whose LISTEN channel has become unhealthy:
 
 ```bash

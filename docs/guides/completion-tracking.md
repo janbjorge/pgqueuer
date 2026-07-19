@@ -143,11 +143,11 @@ async def wait_for_first(
 
 To improve reliability without heavy polling:
 
-1. **Listener health check** — Run with the `pgq run --shutdown-on-listener-failure` flag
+1. **Listener health check**: Run with the `pgq run --shutdown-on-listener-failure` flag
    (or pass `shutdown_on_listener_failure=True` to `QueueManager.run()`) so the manager stops
    (and can be restarted by a supervisor) if the LISTEN channel becomes unhealthy.
 
-2. **Minimize the refresh poll** — Set a long `refresh_interval` to rely primarily on
+2. **Minimize the refresh poll**: Set a long `refresh_interval` to rely primarily on
    notifications when your channel is stable:
 
     ```python

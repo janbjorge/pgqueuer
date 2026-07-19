@@ -18,7 +18,7 @@ workers until explicitly re-queued.
 4. If `"delete"` (default): the job is deleted and logged with `exception` (existing behavior).
 5. Failed jobs sit in the queue table until someone re-queues or deletes them.
 
-The hold operation flows through the same batched buffer as normal job completions — there is
+The hold operation flows through the same batched buffer as normal job completions; there is
 no performance penalty in the common (non-failure) path.
 
 ## Use Cases
@@ -132,8 +132,8 @@ await queries.requeue_jobs([JobId(42), JobId(43)])
 ### What happens on re-queue
 
 - Status changes from `failed` to `queued`.
-- `execute_after` is set to `NOW()` — the job is immediately eligible.
-- `attempts` is reset to `0` — a fresh start.
+- `execute_after` is set to `NOW()`: the job is immediately eligible.
+- `attempts` is reset to `0`: a fresh start.
 - A log entry with `status='queued'` is written for auditability.
 - Any worker can pick up the re-queued job.
 - If `DatabaseRetryEntrypointExecutor` is configured, the job gets a full new set of retry

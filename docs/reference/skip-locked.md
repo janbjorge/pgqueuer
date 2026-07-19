@@ -13,7 +13,7 @@ same job twice and without blocking each other.
 
 ## Why plain reads don't work
 
-PostgreSQL's MVCC means a plain `SELECT` never blocks and never locks a row —
+PostgreSQL's MVCC means a plain `SELECT` never blocks and never locks a row:
 "reading never blocks writing and writing never blocks reading."[^mvcc] So two
 workers running the same `SELECT ... LIMIT 1` both read `id=1`. MVCC gives each a
 consistent snapshot; it does **not** hand them *different* rows. Coordinating
@@ -40,11 +40,11 @@ different transactions):[^explicit]
  FOR UPDATE           X        X          X          X
 ```
 
-PgQueuer uses `FOR UPDATE` (strongest) because a claim is a write intent — the
+PgQueuer uses `FOR UPDATE` (strongest) because a claim is a write intent: the
 next step is `UPDATE ... status='picked'`. Two facts about these locks:[^explicit]
 
 - Held until the transaction ends; a claim is durable only after commit.
-- They block writers/lockers, never plain readers — a dashboard `SELECT count(*)`
+- They block writers/lockers, never plain readers: a dashboard `SELECT count(*)`
   is never blocked by a dequeue.
 
 ---
@@ -60,9 +60,9 @@ next step is `UPDATE ... status='picked'`. Two facts about these locks:[^explici
    forever       immediately   keep scanning
 ```
 
-- **default** — waits indefinitely.[^explicit] Fatal for a queue: workers convoy.
-- **`NOWAIT`** — errors instead of waiting; forces app-side retry.
-- **`SKIP LOCKED`** — locked rows are treated as nonexistent. No wait, no error.
+- **default**: waits indefinitely.[^explicit] Fatal for a queue: workers convoy.
+- **`NOWAIT`**: errors instead of waiting; forces app-side retry.
+- **`SKIP LOCKED`**: locked rows are treated as nonexistent. No wait, no error.
 
 ---
 
@@ -85,7 +85,7 @@ No worker blocks another; no job is handed out twice.
 
 !!! note "Inconsistent by design"
     `SKIP LOCKED` "provides an inconsistent view of the data."[^locking] Worker B
-    genuinely can't see jobs 1 and 2 — exactly what a queue wants, and why the
+    genuinely can't see jobs 1 and 2: exactly what a queue wants, and why the
     manual warns against it for general-purpose queries.
 
 ---
@@ -98,7 +98,7 @@ SELECT id FROM pgqueuer WHERE status='queued' ORDER BY id LIMIT 1 FOR UPDATE;
 ```
 
 All workers target the same top row; `N-1` block on the winner and process
-single-file no matter how many you add — the failure mode behind Craig Ringer's
+single-file no matter how many you add: the failure mode behind Craig Ringer's
 "most work-queue implementations are wrong."[^ringer] `SKIP LOCKED` fixes it.
 
 ---
@@ -126,14 +126,14 @@ on commit. Three documented details:[^locking]
   return rows out of order under `READ COMMITTED`. The subquery form contains it.
 - `LIMIT` stops locking once satisfied, so `LIMIT $batch_size` also bounds rows
   locked.
-- `OFFSET` still locks skipped rows — avoid it in a dequeue path.
+- `OFFSET` still locks skipped rows; avoid it in a dequeue path.
 
 ---
 
 ## In PgQueuer
 
 [`build_dequeue_query`](https://github.com/janbjorge/pgqueuer/blob/main/pgqueuer/adapters/persistence/qb.py)
-is the correct pattern, twice (simplified below — the real query adds
+is the correct pattern, twice (simplified below; the real query adds
 concurrency-limit gating and a pick-logging CTE):
 
 ```sql
@@ -164,15 +164,15 @@ claimed AS (            -- atomic claim
 SELECT * FROM claimed ORDER BY priority DESC, id ASC;
 ```
 
-- **Two scans, both `SKIP LOCKED`** — fresh `queued` work plus `picked` jobs with
+- **Two scans, both `SKIP LOCKED`**: fresh `queued` work plus `picked` jobs with
   a stale `heartbeat`. Recovery never blocks on jobs a live worker still holds.
 - **The `UPDATE ... RETURNING` is the claim.** After commit, `status='picked'` +
   `queue_manager_id` keep other workers off the rows; the locks themselves are
   already released.
 - **Stale recovery, not stuck jobs.** A crashed worker drops its locks but leaves
-  a `picked` row; the `heartbeat` timeout — not the lock — lets `next_stale`
+  a `picked` row; the `heartbeat` timeout, not the lock, lets `next_stale`
   reclaim it. See [Heartbeat Monitoring](../guides/heartbeat.md).
-- **`LIMIT $1` is `batch_size`** — also the bound on rows locked. See
+- **`LIMIT $1` is `batch_size`**: also the bound on rows locked. See
   [Performance Tuning](../guides/performance-tuning.md).
 
 ---

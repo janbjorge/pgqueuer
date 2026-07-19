@@ -2,7 +2,7 @@
 
 PgQueuer's integration tests use [Testcontainers](https://testcontainers.com/) to launch
 an ephemeral PostgreSQL instance automatically. You no longer need to run or manage a local
-database manually — just have a container runtime available (Docker Desktop, Colima,
+database manually; just have a container runtime available (Docker Desktop, Colima,
 Rancher Desktop, etc.).
 
 ## Prerequisites
