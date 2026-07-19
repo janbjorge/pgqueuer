@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import sys
-from functools import partial
 from http import HTTPStatus
 from pathlib import Path
 from typing import Generator
 
-import asyncpg
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,12 +15,9 @@ from examples.fastapi_usage import create_app
 
 
 @pytest.fixture(autouse=True)
-def patch_asyncpg(dsn: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        asyncpg,
-        "create_pool",
-        partial(asyncpg.create_pool, dsn=dsn),
-    )
+def patch_dsn_env(dsn: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The example's create_asyncpg_pool() resolves its DSN from PGDSN.
+    monkeypatch.setenv("PGDSN", dsn)
 
 
 @pytest.fixture

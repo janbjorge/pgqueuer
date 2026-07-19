@@ -24,7 +24,11 @@ This pulls in `mcp>=1.0` and `asyncpg>=0.30.0`.
 
 The server connects to PostgreSQL using the same
 [libpq environment variables](../getting-started/installation.md#connection-configuration)
-you already use (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`):
+you already use (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`), or a
+full DSN from `PGQUEUER_DSN`/`PGDSN`. Pool sizing and connection extras come from
+[`PGQUEUER_*` variables](../getting-started/installation.md#pool-and-connection-tuning)
+(`PGQUEUER_POOL_MIN_SIZE`, `PGQUEUER_POOL_MAX_SIZE`, `PGQUEUER_CONNECT_TIMEOUT`,
+`PGQUEUER_APPLICATION_NAME`; defaults: min 1, max 5):
 
 === "uv"
 
@@ -163,11 +167,20 @@ globals, so you can create multiple servers or embed one in a larger application
 ```python
 from pgqueuer.adapters.mcp.server import create_mcp_server
 
-# All parameters are optional; asyncpg reads libpq env vars by default
+# All parameters are optional; the DSN comes from PGQUEUER_DSN/PGDSN,
+# else asyncpg reads libpq env vars. Pool sizing from PGQUEUER_* env vars.
 server = create_mcp_server()
 
 # Or pass an explicit DSN and/or custom settings
 server = create_mcp_server(dsn="postgresql://...")
+
+# Pool sizing/timeouts can also be passed explicitly
+from pgqueuer.domain.settings import ConnectionSettings
+
+server = create_mcp_server(
+    dsn="postgresql://...",
+    connection_settings=ConnectionSettings(pool_min_size=2, pool_max_size=10),
+)
 
 server.run(transport="stdio")
 ```
