@@ -133,23 +133,25 @@ def create_default_queries_factory(
             from pgqueuer.adapters.connections import connect_asyncpg
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-            yield queries.Queries(
-                AsyncpgDriver(await connect_asyncpg(dsn=config.pg_dsn or None)),
-                qbe=qb.QueryBuilderEnvironment(settings),
-                qbq=qb.QueryQueueBuilder(settings),
-                qbs=qb.QuerySchedulerBuilder(settings),
-            )
+            async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
+                yield queries.Queries(
+                    AsyncpgDriver(connection),
+                    qbe=qb.QueryBuilderEnvironment(settings),
+                    qbq=qb.QueryQueueBuilder(settings),
+                    qbs=qb.QuerySchedulerBuilder(settings),
+                )
             return
         with contextlib.suppress(ImportError):
             from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-            yield queries.Queries(
-                PsycopgDriver(await connect_psycopg(dsn=config.pg_dsn or None)),
-                qbe=qb.QueryBuilderEnvironment(settings),
-                qbq=qb.QueryQueueBuilder(settings),
-                qbs=qb.QuerySchedulerBuilder(settings),
-            )
+            async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
+                yield queries.Queries(
+                    PsycopgDriver(connection),
+                    qbe=qb.QueryBuilderEnvironment(settings),
+                    qbq=qb.QueryQueueBuilder(settings),
+                    qbs=qb.QuerySchedulerBuilder(settings),
+                )
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
