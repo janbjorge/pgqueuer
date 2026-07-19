@@ -38,6 +38,9 @@
       <a href="{{ url_for('schedules') }}">Schedules</a>
       <a href="{{ url_for('system') }}">System</a>
     </nav>
+    <form class="jump" action="{{ url_for('goto_job') }}" method="get">
+      <input type="text" name="id" inputmode="numeric" placeholder="job id" aria-label="Go to job">
+    </form>
     <select class="theme" aria-label="Theme" onchange="pgqSetTheme(this.value)">
       <option value="auto">auto</option>
       <option value="light">light</option>

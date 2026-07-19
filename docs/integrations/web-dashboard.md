@@ -26,7 +26,7 @@ Screens:
 
 | Route | Purpose |
 | --- | --- |
-| `/` | Headline stats: depth, in-flight, held-failed, workers, oldest queued age |
+| `/` | Headline stats: depth, in-flight, held-failed, workers, oldest queued age, hourly throughput chart |
 | `/entrypoints` | Per-entrypoint health: backlog age, p50/p95/p99 durations, failure rate, throughput sparkline |
 | `/jobs` | Browse/filter queue rows; cancel queued or in-flight jobs |
 | `/jobs/{id}` | Job detail: decoded payload, headers, full state-transition history |

@@ -4,7 +4,11 @@
 <form hx-post="{{ url_for('requeue_jobs_action') }}"
       hx-confirm="Requeue the selected jobs?">
 <table>
-  <thead><tr><th></th><th>ID</th><th>Entrypoint</th><th>Priority</th><th>Attempts</th><th>Created</th><th>Updated</th></tr></thead>
+  <thead><tr>
+    <th><input type="checkbox" aria-label="Select all"
+               onclick="this.closest('form').querySelectorAll('input[name=ids]').forEach(c => c.checked = this.checked)"></th>
+    <th>ID</th><th>Entrypoint</th><th>Priority</th><th>Attempts</th><th>Created</th><th>Updated</th>
+  </tr></thead>
   <tbody>
   {% for j in held %}
     <tr id="held-{{ j.id }}">

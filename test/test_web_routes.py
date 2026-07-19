@@ -15,12 +15,15 @@ from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth
 from pgqueuer.adapters.web.payload import render_payload
 from pgqueuer.adapters.web.routes import (
     PAGE_SIZE,
+    ChartSlot,
+    chart_slots,
     create_web_router,
     fmt_age,
     fmt_dt,
     fmt_duration,
     fmt_rate,
     sparkline_svg,
+    throughput_chart_svg,
 )
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.domain import models
@@ -382,6 +385,120 @@ class TestTemplateFormatters:
     def test_fmt_rate(self) -> None:
         assert fmt_rate(None) == "–"
         assert fmt_rate(0.123) == "12.3%"
+
+
+class TestChartSlots:
+    def now(self) -> datetime:
+        return datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+
+    def bucket(
+        self, minutes_ago: int, status: models.JOB_STATUS, count: int
+    ) -> models.ThroughputBucket:
+        return models.ThroughputBucket(
+            bucket=self.now() - timedelta(minutes=minutes_ago),
+            entrypoint="ep",
+            status=status,
+            count=count,
+        )
+
+    def test_counts_conserved_and_routed(self) -> None:
+        series = [
+            self.bucket(30, "successful", 7),
+            self.bucket(30, "exception", 2),
+            self.bucket(30, "failed", 1),
+            self.bucket(30, "canceled", 4),
+            self.bucket(5, "successful", 3),
+        ]
+        slots = chart_slots(series, timedelta(hours=1), end=self.now())
+        assert sum(s.successful for s in slots) == 10
+        assert sum(s.errors for s in slots) == 3
+        assert sum(s.canceled for s in slots) == 4
+
+    def test_non_terminal_and_out_of_window_dropped(self) -> None:
+        series = [
+            self.bucket(30, "queued", 5),
+            self.bucket(90, "successful", 5),
+        ]
+        slots = chart_slots(series, timedelta(hours=1), end=self.now())
+        assert all(s.total == 0 for s in slots)
+
+    def test_slot_boundaries_cover_window(self) -> None:
+        slots = chart_slots([], timedelta(hours=1), end=self.now())
+        assert len(slots) == 60
+        assert slots[0].start == self.now() - timedelta(hours=1)
+        assert slots[-1].end == self.now()
+
+
+class TestThroughputChartSvg:
+    def test_empty_is_blank(self) -> None:
+        assert throughput_chart_svg([]) == ""
+        empty = chart_slots([], timedelta(hours=1), end=datetime.now(timezone.utc))
+        assert throughput_chart_svg(empty) == ""
+
+    def test_stacked_rects_and_tooltip(self) -> None:
+        now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+        slot = ChartSlot(
+            start=now - timedelta(minutes=1),
+            end=now,
+            successful=5,
+            errors=2,
+            canceled=1,
+        )
+        svg = throughput_chart_svg([slot])
+        assert svg.count("<rect") == 3
+        assert 'class="successful"' in svg
+        assert 'class="errors"' in svg
+        assert 'class="canceled"' in svg
+        assert "5 successful · 2 errors · 1 canceled" in svg
+        assert "11:59–12:00 UTC" in svg
+
+
+class TestOverviewChart:
+    async def test_overview_renders_chart_after_completions(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await queries.enqueue("ep", None)
+        (job,) = await dequeue_all(queries, "ep")
+        await queries.log_jobs([(job, "successful", None)])
+        response = await client.get("/")
+        assert response.status_code == 200
+        assert '<svg class="tchart"' in response.text
+        assert "successful 1" in response.text
+
+    async def test_overview_empty_chart_message(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/")
+        assert "No jobs finished in the last hour." in response.text
+        assert "tchart" not in response.text
+
+
+class TestGotoJob:
+    async def test_numeric_redirects_to_detail(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        (job_id,) = await queries.enqueue("ep", None)
+        response = await client.get("/jobs/goto", params={"id": f" {job_id} "})
+        assert response.status_code == 307
+        assert response.headers["location"].endswith(f"/jobs/{job_id}")
+
+    async def test_garbage_redirects_to_jobs(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/jobs/goto", params={"id": "-1; drop"})
+        assert response.status_code == 307
+        assert response.headers["location"].endswith("/jobs")
+
+    async def test_jump_box_in_header(self, client: httpx.AsyncClient) -> None:
+        response = await client.get("/")
+        assert 'action="http://testserver/jobs/goto"' in response.text
+
+
+class TestFailuresSelectAll:
+    async def test_header_checkbox_present_with_held_jobs(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await queries.enqueue("ep", None)
+        (job,) = await dequeue_all(queries, "ep")
+        await queries.log_jobs([(job, "failed", None)])
+        response = await client.get("/failures")
+        assert 'aria-label="Select all"' in response.text
 
 
 class TestJobsPagination:

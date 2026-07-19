@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Sequence
 
 try:
     from fastapi import APIRouter, Depends, HTTPException, Request, Response, params
-    from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+    from fastapi.responses import (
+        FileResponse,
+        HTMLResponse,
+        RedirectResponse,
+        StreamingResponse,
+    )
     from fastapi.templating import Jinja2Templates
 except ImportError as e:
     raise ImportError(
@@ -78,6 +84,101 @@ def fmt_rate(rate: float | None) -> str:
     if rate is None:
         return "–"
     return f"{rate * 100:.1f}%"
+
+
+@dataclasses.dataclass(frozen=True)
+class ChartSlot:
+    """One stacked-bar column of the overview throughput chart."""
+
+    start: datetime
+    end: datetime
+    successful: int
+    errors: int
+    canceled: int
+
+    @property
+    def total(self) -> int:
+        return self.successful + self.errors + self.canceled
+
+
+def chart_slots(
+    timeseries: list[models.ThroughputBucket],
+    window: timedelta,
+    end: datetime,
+    slots: int = 60,
+) -> list[ChartSlot]:
+    """Fold terminal-status buckets into *slots* stacked columns ending at *end*."""
+    series = {
+        "successful": "successful",
+        "exception": "errors",
+        "failed": "errors",
+        "canceled": "canceled",
+    }
+    start = end - window
+    span = window.total_seconds()
+    counts: list[dict[str, int]] = [
+        {"successful": 0, "errors": 0, "canceled": 0} for _ in range(slots)
+    ]
+    for t in timeseries:
+        key = series.get(t.status)
+        if key is None or t.bucket < start or t.bucket > end:
+            continue
+        offset = (t.bucket - start).total_seconds() / span
+        counts[min(int(offset * slots), slots - 1)][key] += t.count
+    step = window / slots
+    return [
+        ChartSlot(
+            start=start + i * step,
+            end=start + (i + 1) * step,
+            successful=c["successful"],
+            errors=c["errors"],
+            canceled=c["canceled"],
+        )
+        for i, c in enumerate(counts)
+    ]
+
+
+def throughput_chart_svg(slots: Sequence[ChartSlot], width: int = 720, height: int = 72) -> str:
+    """Stacked-bar SVG: successful at the baseline, errors above, canceled on top.
+
+    Fixed stacking order plus per-slot tooltips keep the series readable without
+    relying on the red/green hue pair alone.
+    """
+    if not slots or not any(s.total for s in slots):
+        return ""
+    peak = max(s.total for s in slots)
+    bar_width = width / len(slots)
+    columns = []
+    for i, slot in enumerate(slots):
+        if not slot.total:
+            continue
+        x = i * bar_width
+        w = max(bar_width - 2, 1)
+        rects = []
+        y = float(height)
+        for name, count in (
+            ("successful", slot.successful),
+            ("errors", slot.errors),
+            ("canceled", slot.canceled),
+        ):
+            if not count:
+                continue
+            h = max((count / peak) * height, 1.0)
+            y -= h
+            rects.append(
+                f'<rect class="{name}" x="{x:.1f}" y="{y:.1f}" '
+                f'width="{w:.1f}" height="{h:.1f}"/>'
+            )
+            y -= 2  # surface gap between stacked segments
+        title = (
+            f"{slot.start:%H:%M}–{slot.end:%H:%M} UTC · {slot.successful} successful"
+            f" · {slot.errors} errors · {slot.canceled} canceled"
+        )
+        columns.append(f"<g><title>{title}</title>{''.join(rects)}</g>")
+    return (
+        f'<svg class="tchart" viewBox="0 0 {width} {height}" width="{width}" '
+        f'height="{height}" preserveAspectRatio="none">{"".join(columns)}</svg>'
+    )
 
 
 def sparkline_svg(values: Sequence[int], width: int = 120, height: int = 24) -> str:
@@ -189,9 +290,21 @@ def create_web_router(  # noqa: C901
             )
 
     async def overview_context(insights: InsightsService) -> dict[str, object]:
+        window = WINDOWS["1h"]
+        slots = chart_slots(
+            await insights.throughput_timeseries(window),
+            window,
+            end=datetime.now(timezone.utc),
+        )
         return {
             "snapshot": await insights.overview(),
             "ages": await insights.queue_age(),
+            "chart_svg": throughput_chart_svg(slots),
+            "chart_totals": {
+                "successful": sum(s.successful for s in slots),
+                "errors": sum(s.errors for s in slots),
+                "canceled": sum(s.canceled for s in slots),
+            },
         }
 
     @router.get("/", name="overview", response_class=HTMLResponse)
@@ -300,6 +413,14 @@ def create_web_router(  # noqa: C901
             "partials/jobs_table.html",
             await jobs_context(request, insights, status, entrypoint, page),
         )
+
+    @router.get("/jobs/goto", name="goto_job", include_in_schema=False)
+    async def goto_job(request: Request, id: str = "") -> RedirectResponse:
+        """Jump box in the header: numeric input lands on the job detail page."""
+        target = id.strip()
+        if target.isdigit():
+            return RedirectResponse(request.url_for("job_detail", job_id=int(target)))
+        return RedirectResponse(request.url_for("jobs"))
 
     @router.get("/jobs/{job_id}", name="job_detail", response_class=HTMLResponse)
     async def job_detail(

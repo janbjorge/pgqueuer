@@ -124,6 +124,12 @@ details summary { cursor: pointer; }
 .pager { display: flex; gap: 1rem; color: var(--muted); }
 .sparkline rect { fill: var(--muted); opacity: 0.55; }
 .sparkline { display: block; }
+.tchart { display: block; width: 100%; margin: 0.25rem 0 0.75rem; }
+.tchart rect.successful { fill: var(--ok); opacity: 0.85; }
+.tchart rect.errors { fill: var(--alert); opacity: 0.85; }
+.tchart rect.canceled { fill: var(--muted); opacity: 0.85; }
+.legend { display: flex; gap: 1.25rem; margin: 0.25rem 0 0.5rem; font-size: 0.85rem; }
+.jump input { width: 6.5rem; }
 code { font-size: 0.85em; }
 .exc {
   border: 1px solid var(--line);

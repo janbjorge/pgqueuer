@@ -7,6 +7,18 @@
   <div class="card {% if snapshot.exceptions_recent %}alert{% endif %}"><span class="value">{{ snapshot.exceptions_recent }}</span><span class="label">exceptions (1h)</span></div>
 </div>
 
+<h2>Throughput <small>(last hour)</small></h2>
+{% if chart_svg %}
+<p class="legend">
+  <span class="status status-successful">successful {{ chart_totals.successful }}</span>
+  <span class="status status-exception">errors {{ chart_totals.errors }}</span>
+  <span class="status status-canceled">canceled {{ chart_totals.canceled }}</span>
+</p>
+{{ chart_svg | safe }}
+{% else %}
+<p class="empty">No jobs finished in the last hour.</p>
+{% endif %}
+
 <h2>Backlog by entrypoint</h2>
 {% if ages %}
 <table>
