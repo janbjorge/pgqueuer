@@ -24,19 +24,12 @@ Connection settings follow the same rules as every other `pgq` command:
 `--host` and `--port` can also be set through `PGQUEUER_WEB_HOST` and
 `PGQUEUER_WEB_PORT`, which is how the Docker image configures them.
 
-Screens:
+![The overview screen: headline stats, hourly throughput chart, and backlog by entrypoint](web-dashboard.png)
 
-| Route | Purpose |
-| --- | --- |
-| `/` | Headline stats: depth, in-flight, held-failed, workers, oldest queued age, hourly throughput chart |
-| `/entrypoints` | Per-entrypoint health: backlog age, p50/p95/p99 durations, failure rate, throughput sparkline |
-| `/jobs` | Browse/filter queue rows; cancel queued or in-flight jobs |
-| `/jobs/{id}` | Job detail: decoded payload, headers, full state-transition history |
-| `/failures` | Held `failed` jobs (requeue-able) and the historical exception log |
-| `/workers` | Active queue managers and stale picked jobs |
-| `/schedules` | Cron schedules with overdue highlighting |
-| `/system` | Table sizes, persistence modes, un-aggregated log backlog |
-| `/healthz` | Liveness probe |
+The navigation covers entrypoint health (durations, failure rates), job
+browsing with cancel, per-job detail and history, held failures with bulk
+requeue, worker liveness, cron schedules, and table health. A `/healthz`
+liveness probe is included for orchestrators.
 
 Live updates ride the `LISTEN/NOTIFY` channel PgQueuer already installs:
 queue-table changes push a debounced server-sent event and the affected
