@@ -85,29 +85,36 @@ def _psycopg_connect_kwargs(settings: ConnectionSettings) -> PsycopgConnectKwarg
     return kwargs
 
 
+@asynccontextmanager
 async def connect_asyncpg(
     dsn: str | None = None,
     settings: ConnectionSettings | None = None,
-) -> asyncpg.Connection:
+) -> AsyncIterator[asyncpg.Connection]:
     """Open a single asyncpg connection honoring ``ConnectionSettings``."""
     import asyncpg
 
     dsn, settings = _resolve(dsn, settings)
-    return await asyncpg.connect(dsn=dsn, **_asyncpg_connect_kwargs(settings))
+    connection = await asyncpg.connect(dsn=dsn, **_asyncpg_connect_kwargs(settings))
+    try:
+        yield connection
+    finally:
+        await connection.close()
 
 
+@asynccontextmanager
 async def connect_psycopg(
     dsn: str | None = None,
     settings: ConnectionSettings | None = None,
-) -> psycopg.AsyncConnection:
+) -> AsyncIterator[psycopg.AsyncConnection]:
     """Open a single psycopg connection honoring ``ConnectionSettings``."""
     import psycopg
 
     dsn, settings = _resolve(dsn, settings)
-    return await psycopg.AsyncConnection.connect(
+    async with await psycopg.AsyncConnection.connect(
         dsn or "",
         **_psycopg_connect_kwargs(settings),
-    )
+    ) as connection:
+        yield connection
 
 
 @asynccontextmanager

@@ -109,9 +109,13 @@ async def run_cli_factory_capturing(
 
     captured: dict[str, object] = {}
 
-    async def fake_connect(**kwargs: object) -> object:
+    class FakeConnection:
+        async def close(self) -> None:
+            return None
+
+    async def fake_connect(**kwargs: object) -> FakeConnection:
         captured.update(kwargs)
-        return object()  # AsyncpgDriver only stores the connection at init.
+        return FakeConnection()  # AsyncpgDriver only stores the connection at init.
 
     monkeypatch.setattr(asyncpg, "connect", fake_connect)
     factory = create_default_queries_factory(config, DBSettings())
@@ -155,11 +159,9 @@ class TestAsyncpgPoolIntegration:
         assert current == "weird"
 
     async def test_single_connection_via_connect_asyncpg(self, dsn: str) -> None:
-        connection = await connections.connect_asyncpg(dsn=dsn)
-        try:
+        async with connections.connect_asyncpg(dsn=dsn) as connection:
             assert await connection.fetchval("SELECT 1") == 1
-        finally:
-            await connection.close()
+        assert connection.is_closed()
 
 
 class TestPsycopgPoolIntegration:
@@ -195,11 +197,9 @@ class TestPsycopgPoolIntegration:
         assert row is not None and row[0] == "weird"
 
     async def test_single_connection_via_connect_psycopg(self, dsn: str) -> None:
-        connection = await connections.connect_psycopg(dsn=dsn)
-        try:
+        async with connections.connect_psycopg(dsn=dsn) as connection:
             assert connection.autocommit  # PsycopgDriver requires autocommit.
             cursor = await connection.execute("SELECT 1")
             row = await cursor.fetchone()
             assert row is not None and row[0] == 1
-        finally:
-            await connection.close()
+        assert connection.closed
