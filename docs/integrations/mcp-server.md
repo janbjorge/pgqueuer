@@ -101,15 +101,17 @@ server = create_mcp_server(dsn="postgresql://user:pass@host:5432/mydb")
 server.run(transport="stdio")
 ```
 
-### Custom Table Prefix
+### Custom Table Prefix or Schema
 
-If you use `PGQUEUER_PREFIX` to namespace your tables, pass custom settings:
+If you use `PGQUEUER_PREFIX` or `PGQUEUER_SCHEMA` to namespace your tables, pass
+custom settings:
 
 ```python
 from pgqueuer.adapters.mcp.server import create_mcp_server
 from pgqueuer.adapters.persistence.qb import DBSettings
 
-server = create_mcp_server(settings=DBSettings())  # reads PGQUEUER_PREFIX
+# reads PGQUEUER_PREFIX / PGQUEUER_SCHEMA
+server = create_mcp_server(settings=DBSettings())
 server.run(transport="stdio")
 ```
 

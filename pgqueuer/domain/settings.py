@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import dataclasses
+import functools
 import os
 import re
 import warnings
 from enum import Enum
 from typing import Callable, Literal
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pgqueuer.domain.models import Channel
@@ -131,8 +132,25 @@ class ConnectionSettings(BaseSettings):
     application_name: str | None = Field(default=None)
 
 
+@dataclasses.dataclass(frozen=True)
+class QualifiedNames:
+    """Schema-qualified spellings of the schema-scoped DB objects.
+
+    Deliberately omits ``channel`` (NOTIFY channels are database-global),
+    ``trigger`` (trigger names are referenced unqualified, scoped by their
+    table) and index names (unqualified, they inherit the table's schema).
+    """
+
+    queue_table: str
+    queue_table_log: str
+    statistics_table: str
+    schedules_table: str
+    function: str
+    queue_status_type: str
+
+
 class DBSettings(BaseSettings):
-    """Names of PgQueuer DB objects, namespaced by ``prefix``.
+    """Names of PgQueuer DB objects, namespaced by ``prefix`` and placed in ``db_schema``.
 
     Each name field accepts two env spellings: the ``PGQUEUER_``-prefixed one
     (preferred) and the legacy bare one that predates it (e.g.
@@ -148,6 +166,13 @@ class DBSettings(BaseSettings):
     # PgQueuer instances share one database. Declared first: the name-field
     # default factories read it from the validated data.
     prefix: str = Field(default="")
+
+    # Postgres schema holding all PgQueuer objects; None defers to the
+    # connection's search_path (env var: PGQUEUER_SCHEMA).
+    db_schema: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("db_schema", "pgqueuer_schema"),
+    )
 
     channel: Channel = Field(
         default_factory=lambda data: Channel(f"{data['prefix']}ch_pgqueuer"),
@@ -200,7 +225,65 @@ class DBSettings(BaseSettings):
             )
         return value
 
+    @field_validator("db_schema")
+    @classmethod
+    def validate_db_schema(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not IDENTIFIER_PATTERN.match(value):
+            raise ValueError(
+                "db_schema must be a single unquoted identifier (letters, digits, "
+                "underscores; no dots)"
+            )
+        # Rendered both as an unquoted identifier (folds to lowercase) and as a
+        # nspname string literal (does not fold); normalize so both agree.
+        return value.lower()
+
+    @model_validator(mode="after")
+    def reject_dotted_names_with_db_schema(self) -> DBSettings:
+        """A pre-qualified name plus db_schema would render ``schema.a.b``; refuse the mix."""
+        if not self.db_schema:
+            return self
+        # Derived from QualifiedNames so a new schema-scoped object cannot
+        # silently skip this check.
+        for field in dataclasses.fields(QualifiedNames):
+            name: str = getattr(self, field.name)
+            if "." in name:
+                raise ValueError(
+                    f"object name {name!r} already contains a schema qualifier; "
+                    "drop the dot or unset db_schema/PGQUEUER_SCHEMA"
+                )
+        return self
+
     @property
     def legacy_statistics_status_type(self) -> str:
         """Pre-v0.27 enum type name, kept only so uninstall can drop it."""
         return f"{self.prefix}pgqueuer_statistics_status"
+
+    def qualify(self, name: str) -> str:
+        """Schema-qualified reference for *name*; bare when no db_schema is set."""
+        return f"{self.db_schema}.{name}" if self.db_schema else name
+
+    # cached_property: query builders access this on every SQL render (the
+    # dequeue loop rebuilds its query each iteration). Safe because names are
+    # fixed once validation and apply_prefix have run.
+    @functools.cached_property
+    def qualified(self) -> QualifiedNames:
+        return QualifiedNames(
+            queue_table=self.qualify(self.queue_table),
+            queue_table_log=self.qualify(self.queue_table_log),
+            statistics_table=self.qualify(self.statistics_table),
+            schedules_table=self.qualify(self.schedules_table),
+            function=self.qualify(self.function),
+            queue_status_type=self.qualify(self.queue_status_type),
+        )
+
+    @property
+    def schema_expr(self) -> str:
+        """SQL expression selecting the effective schema in catalog queries.
+
+        Interpolated literal when db_schema is set (safe: identifier-validated,
+        lowercase-normalized); current_schema() otherwise, and usable inside
+        DO-blocks which cannot take bind parameters.
+        """
+        return f"'{self.db_schema}'" if self.db_schema else "current_schema()"

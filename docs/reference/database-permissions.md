@@ -81,16 +81,28 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO pgqueuer_app;
 
 For stronger isolation, install PgQueuer into its own schema:
 
-```sql
-CREATE SCHEMA pgq;
-GRANT USAGE ON SCHEMA pgq TO pgqueuer_app;
-
--- Install into the dedicated schema
-PGOPTIONS="-csearch_path=pgq" pgq install
+```bash
+pgq --schema pgq install
 ```
 
-This separates PgQueuer objects from application tables and makes privilege management
-cleaner: you can grant or revoke schema-level access as a single operation.
+`pgq install` runs `CREATE SCHEMA IF NOT EXISTS pgq`, which requires `CREATE` on
+the database. For a locked-down role, pre-create the schema as an administrator
+and skip the schema creation on install:
+
+```sql
+CREATE SCHEMA pgq;
+GRANT USAGE, CREATE ON SCHEMA pgq TO pgqueuer_installer;
+GRANT USAGE ON SCHEMA pgq TO pgqueuer_app;
+```
+
+```bash
+pgq --schema pgq install --no-create-schema
+```
+
+At runtime the application role needs `USAGE` on the schema (plus the table
+privileges above). This separates PgQueuer objects from application tables and
+makes privilege management cleaner: you can grant or revoke schema-level access
+as a single operation.
 
 ## Verifying Permissions
 

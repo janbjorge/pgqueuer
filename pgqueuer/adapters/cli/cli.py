@@ -80,12 +80,15 @@ class OnConflictChoice(Enum):
 @dataclass
 class AppConfig:
     prefix: str = ""
+    schema: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
 
     def setup_env(self) -> None:
         if self.prefix:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
+        if self.schema:
+            os.environ["PGQUEUER_SCHEMA"] = self.schema
 
 
 @app.callback()
@@ -96,13 +99,18 @@ def main(
         help="Prefix for pgqueuer objects.",
         envvar="PGQUEUER_PREFIX",
     ),
+    schema: str = typer.Option(
+        "",
+        help="Postgres schema holding all pgqueuer objects.",
+        envvar="PGQUEUER_SCHEMA",
+    ),
     pg_dsn: str = typer.Option(
         "",
         help=(
             "PostgreSQL connection string (DSN). "
             "When omitted, PGQUEUER_DSN and standard libpq env vars "
             "(PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT) are used. "
-            "For a custom schema, add ?options=-csearch_path%3Dmyschema to the DSN."
+            "Use --schema/PGQUEUER_SCHEMA to target a Postgres schema."
         ),
         envvar="PGDSN",
     ),
@@ -114,6 +122,7 @@ def main(
 ) -> None:
     config = AppConfig(
         prefix=prefix,
+        schema=schema,
         pg_dsn=pg_dsn,
         factory_fn_ref=factory_fn_ref,
     )
@@ -272,12 +281,21 @@ def install(
         "-d",
         help="Durability level for tables.",
     ),
+    create_schema: bool = typer.Option(
+        True,
+        "--create-schema/--no-create-schema",
+        help=(
+            "Run CREATE SCHEMA IF NOT EXISTS when --schema is set. Disable when "
+            "the role lacks CREATE on the database and the schema already exists."
+        ),
+    ),
 ) -> None:
-    print(qb.QueryBuilderEnvironment(qb.DBSettings(durability=durability)).build_install_query())
+    settings = qb.DBSettings(durability=durability)
+    print(qb.QueryBuilderEnvironment(settings).build_install_query(create_schema=create_schema))
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings(durability=durability)) as q:
-            await q.install()
+        async with yield_queries(ctx, settings) as q:
+            await q.install(create_schema=create_schema)
 
     if not dry_run:
         asyncio_run(run())
