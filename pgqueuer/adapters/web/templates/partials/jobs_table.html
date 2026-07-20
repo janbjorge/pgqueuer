@@ -1,0 +1,34 @@
+{% if jobs %}
+<table>
+  <thead>
+    <tr><th>ID</th><th>Entrypoint</th><th>Status</th><th>Priority</th><th>Attempts</th><th>Created</th><th>Execute after</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for j in jobs %}
+    <tr id="job-{{ j.id }}">
+      <td><a href="{{ url_for('job_detail', job_id=j.id) }}">{{ j.id }}</a></td>
+      <td>{{ j.entrypoint }}</td>
+      <td><span class="status status-{{ j.status }}">{{ j.status }}</span></td>
+      <td>{{ j.priority }}</td>
+      <td>{{ j.attempts }}</td>
+      <td>{{ j.created | dt }}</td>
+      <td>{{ j.execute_after | dt }}</td>
+      <td>
+        {% if j.status in ("queued", "picked") %}
+        <button class="danger"
+                hx-post="{{ url_for('cancel_job', job_id=j.id) }}"
+                hx-confirm="Cancel job {{ j.id }} ({{ j.entrypoint }})?">Cancel</button>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="pager">
+  {% if prev_url %}<a href="#" hx-get="{{ prev_url }}" hx-target="#jobs-results" hx-swap="morph:innerHTML">« newer</a>{% endif %}
+  <span>page {{ page }}</span>
+  {% if next_url %}<a href="#" hx-get="{{ next_url }}" hx-target="#jobs-results" hx-swap="morph:innerHTML">older »</a>{% endif %}
+</p>
+{% else %}
+<p class="empty">No jobs match the current filter.</p>
+{% endif %}

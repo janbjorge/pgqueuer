@@ -825,7 +825,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         FROM {self.settings.queue_table}
         WHERE status = 'queued'::{self.settings.queue_status_type}
         GROUP BY entrypoint
-        ORDER BY oldest_age_seconds DESC
+        ORDER BY entrypoint
         """
 
     def build_throughput_summary_query(self) -> str:
@@ -850,7 +850,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         WHERE status = 'picked'::{self.settings.queue_status_type}
           AND queue_manager_id IS NOT NULL
         GROUP BY queue_manager_id
-        ORDER BY active_jobs DESC
+        ORDER BY queue_manager_id
         """
 
     def build_schema_info_query(self) -> str:
@@ -890,6 +890,79 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
           AND entrypoint = ANY($1)
         ORDER BY execute_after
         LIMIT 1
+        """
+
+    def build_job_duration_percentiles_query(self) -> str:
+        """Execution-duration percentiles per entrypoint, derived from log transitions.
+
+        Pairs each terminal log row with the preceding 'picked' row of the same
+        job. Jobs picked before the window start lose their pair and are
+        undercounted rather than miscounted.
+        """
+        return f"""WITH transitions AS (
+            SELECT
+                entrypoint,
+                status,
+                created,
+                LAG(status) OVER w AS prev_status,
+                LAG(created) OVER w AS prev_created
+            FROM {self.settings.queue_table_log}
+            WHERE created > NOW() - $1::interval
+            WINDOW w AS (PARTITION BY job_id ORDER BY created, id)
+        ), durations AS (
+            SELECT
+                entrypoint,
+                EXTRACT(EPOCH FROM created - prev_created) AS duration_seconds
+            FROM transitions
+            WHERE prev_status = 'picked'
+              AND status IN ('successful', 'exception', 'canceled', 'failed')
+        )
+        SELECT
+            entrypoint,
+            COUNT(*) AS completed,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY duration_seconds) AS p50_seconds,
+            percentile_cont(0.95) WITHIN GROUP (ORDER BY duration_seconds) AS p95_seconds,
+            percentile_cont(0.99) WITHIN GROUP (ORDER BY duration_seconds) AS p99_seconds,
+            MAX(duration_seconds) AS max_seconds
+        FROM durations
+        GROUP BY entrypoint
+        ORDER BY p95_seconds DESC
+        """
+
+    def build_throughput_timeseries_query(self) -> str:
+        return f"""SELECT
+            DATE_TRUNC('minute', created) AS bucket,
+            entrypoint,
+            status,
+            SUM(count) AS count
+        FROM {self.settings.statistics_table}
+        WHERE created > NOW() - $1::interval
+        GROUP BY bucket, entrypoint, status
+        ORDER BY bucket
+        """
+
+    def build_queue_job_by_id_query(self) -> str:
+        return f"SELECT * FROM {self.settings.queue_table} WHERE id = $1::bigint"
+
+    def build_job_log_history_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.queue_table_log}
+        WHERE job_id = $1::bigint
+        ORDER BY created ASC, id ASC
+        LIMIT $2
+        """
+
+    def build_unaggregated_log_count_query(self) -> str:
+        return f"""SELECT COUNT(*) AS unaggregated
+        FROM {self.settings.queue_table_log}
+        WHERE NOT aggregated
+        """
+
+    def build_browse_queue_query(self) -> str:
+        return f"""SELECT * FROM {self.settings.queue_table}
+        WHERE ($3::text[] IS NULL OR status::text = ANY($3::text[]))
+          AND ($4::text[] IS NULL OR entrypoint = ANY($4::text[]))
+        ORDER BY priority DESC, id ASC
+        LIMIT $1 OFFSET $2
         """
 
 

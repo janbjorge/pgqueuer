@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · failures{% endblock %}
+{% block content %}
+<h1>Failures</h1>
+<p class="hint">
+  Held failed jobs are still in the queue table and can be requeued;
+  the exception log below is the historical record of raised exceptions.
+</p>
+<div hx-get="{{ url_for('partial_failures') }}"
+     hx-trigger="{% if sse_enabled %}sse:queue-change throttle:2s, {% endif %}every 30s"
+     hx-swap="morph:innerHTML">
+  {% include "partials/failures.html" %}
+</div>
+{% endblock %}

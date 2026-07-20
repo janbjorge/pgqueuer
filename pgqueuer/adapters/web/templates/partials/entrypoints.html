@@ -1,0 +1,30 @@
+{% if stats %}
+<table>
+  <thead>
+    <tr>
+      <th>Entrypoint</th><th>Queued</th><th>In flight</th><th>Oldest</th>
+      <th>p50</th><th>p95</th><th>p99</th>
+      <th>Completed</th><th>Failure rate</th><th>Throughput</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for s in stats %}
+    <tr id="ep-{{ s.entrypoint }}">
+      <td><a href="{{ url_for('jobs') }}?entrypoint={{ s.entrypoint | urlencode }}">{{ s.entrypoint }}</a></td>
+      <td>{{ s.queued }}</td>
+      <td>{{ s.picked }}</td>
+      <td>{{ s.oldest_age_seconds | age }}</td>
+      <td>{{ s.p50_seconds | duration }}</td>
+      <td>{{ s.p95_seconds | duration }}</td>
+      <td>{{ s.p99_seconds | duration }}</td>
+      <td>{{ s.completed }}</td>
+      <td {% if s.failure_rate and s.failure_rate > 0 %}class="alert"{% endif %}>{{ s.failure_rate | rate }}</td>
+      <td>{{ s.sparkline | sparkline | safe }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="hint">Durations are derived from log transitions inside the selected window; jobs picked before the window start are not counted.</p>
+{% else %}
+<p class="empty">No activity recorded yet.</p>
+{% endif %}

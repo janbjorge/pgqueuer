@@ -1,0 +1,57 @@
+<h2>Held failed jobs</h2>
+<p class="hint">These jobs hit their retry limit and are held in the queue with status <code>failed</code>. Requeueing resets attempts and makes them eligible again.</p>
+{% if held %}
+<form hx-post="{{ url_for('requeue_jobs_action') }}"
+      hx-confirm="Requeue the selected jobs?">
+<table>
+  <thead><tr>
+    <th><input type="checkbox" aria-label="Select all"
+               onclick="this.closest('form').querySelectorAll('input[name=ids]').forEach(c => c.checked = this.checked)"></th>
+    <th>ID</th><th>Entrypoint</th><th>Priority</th><th>Attempts</th><th>Created</th><th>Updated</th>
+  </tr></thead>
+  <tbody>
+  {% for j in held %}
+    <tr id="held-{{ j.id }}">
+      <td><input type="checkbox" name="ids" value="{{ j.id }}"></td>
+      <td><a href="{{ url_for('job_detail', job_id=j.id) }}">{{ j.id }}</a></td>
+      <td>{{ j.entrypoint }}</td>
+      <td>{{ j.priority }}</td>
+      <td>{{ j.attempts }}</td>
+      <td>{{ j.created | dt }}</td>
+      <td>{{ j.updated | dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<button type="submit">Requeue selected</button>
+</form>
+{% else %}
+<p class="empty">No jobs are held as failed.</p>
+{% endif %}
+
+<h2>Exception log</h2>
+<p class="hint">Historical <code>exception</code> log entries. These jobs already left the queue and cannot be requeued from here.</p>
+{% if exceptions %}
+<table>
+  <thead><tr><th>When</th><th>Job</th><th>Entrypoint</th><th>Exception</th></tr></thead>
+  <tbody>
+  {% for e in exceptions %}
+    <tr>
+      <td>{{ e.created | dt }}</td>
+      <td><a href="{{ url_for('job_detail', job_id=e.job_id) }}">{{ e.job_id }}</a></td>
+      <td>{{ e.entrypoint }}</td>
+      <td>
+        {% if e.traceback %}
+        <details>
+          <summary>{{ e.traceback.exception_type }}: {{ e.traceback.exception_message }}</summary>
+          <pre>{{ e.traceback.traceback }}</pre>
+        </details>
+        {% else %}–{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No exceptions logged.</p>
+{% endif %}

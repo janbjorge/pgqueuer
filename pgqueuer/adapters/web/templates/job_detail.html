@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · job {{ job_id }}{% endblock %}
+{% block content %}
+<h1>Job {{ job_id }}</h1>
+
+{% if job %}
+<table class="kv">
+  <tr><th>Entrypoint</th><td>{{ job.entrypoint }}</td></tr>
+  <tr><th>Status</th><td><span class="status status-{{ job.status }}">{{ job.status }}</span></td></tr>
+  <tr><th>Priority</th><td>{{ job.priority }}</td></tr>
+  <tr><th>Attempts</th><td>{{ job.attempts }}</td></tr>
+  <tr><th>Created</th><td>{{ job.created | dt }}</td></tr>
+  <tr><th>Updated</th><td>{{ job.updated | dt }}</td></tr>
+  <tr><th>Heartbeat</th><td>{{ job.heartbeat | dt }}</td></tr>
+  <tr><th>Execute after</th><td>{{ job.execute_after | dt }}</td></tr>
+  <tr><th>Worker</th><td>{{ job.queue_manager_id or "–" }}</td></tr>
+</table>
+
+<p class="toolbar">
+  {% if job.status in ("queued", "picked") %}
+  <button class="danger"
+          hx-post="{{ url_for('cancel_job', job_id=job.id) }}"
+          hx-confirm="Cancel job {{ job.id }} ({{ job.entrypoint }})?">Cancel job</button>
+  {% endif %}
+  {% if job.status == "failed" %}
+  <form style="display:inline"
+        hx-post="{{ url_for('requeue_jobs_action') }}"
+        hx-confirm="Requeue job {{ job.id }} ({{ job.entrypoint }})?">
+    <input type="hidden" name="ids" value="{{ job.id }}">
+    <button type="submit">Requeue job</button>
+  </form>
+  {% endif %}
+</p>
+
+<h2>Payload <small>({{ payload.kind }})</small></h2>
+{% if payload.kind == "empty" %}
+<p class="empty">No payload.</p>
+{% else %}
+<pre>{{ payload.text }}</pre>
+{% endif %}
+
+{% if job.headers %}
+<h2>Headers</h2>
+<pre>{{ job.headers | tojson(indent=2) }}</pre>
+{% endif %}
+{% else %}
+<p class="empty">This job is no longer in the queue table; only its log history remains.</p>
+{% endif %}
+
+{% set exceptions = history | selectattr("traceback") | list %}
+{% if exceptions %}
+<h2>Exception{% if exceptions | length > 1 %}s{% endif %}</h2>
+{% for h in exceptions %}
+<div class="exc">
+  <div class="exc-title">{{ h.traceback.exception_type }}: {{ h.traceback.exception_message }}</div>
+  <div class="exc-meta">{{ h.created | dt }}</div>
+  <pre class="exc-tb">{{ h.traceback.traceback }}</pre>
+  {% if h.traceback.additional_context %}
+  <pre class="exc-tb">{{ h.traceback.additional_context | tojson(indent=2) }}</pre>
+  {% endif %}
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>History</h2>
+{% if history %}
+<table>
+  <thead><tr><th>When</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for h in history %}
+    <tr>
+      <td>{{ h.created | dt }}</td>
+      <td><span class="status status-{{ h.status }}">{{ h.status }}</span></td>
+      <td>
+        {% if h.traceback %}
+        <span class="status status-exception">exception</span>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No log history for this job.</p>
+{% endif %}
+{% endblock %}

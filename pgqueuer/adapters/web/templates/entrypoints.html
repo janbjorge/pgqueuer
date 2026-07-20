@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}pgqueuer · entrypoints{% endblock %}
+{% block content %}
+<h1>Entrypoints</h1>
+<p class="toolbar">Window:
+{% for w in windows %}
+  <a href="{{ url_for('entrypoints') }}?window={{ w }}" {% if w == window %}class="active"{% endif %}>{{ w }}</a>
+{% endfor %}
+</p>
+<div hx-get="{{ url_for('partial_entrypoints') }}?window={{ window }}"
+     hx-trigger="every 30s"
+     hx-swap="morph:innerHTML">
+  {% include "partials/entrypoints.html" %}
+</div>
+{% endblock %}

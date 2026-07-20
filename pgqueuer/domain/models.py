@@ -192,6 +192,104 @@ class Schedule(BaseModel):
     entrypoint: CronEntrypoint
 
 
+class QueueAgeStats(BaseModel):
+    """Per-entrypoint backlog age for queued jobs."""
+
+    entrypoint: str
+    queued_count: int
+    oldest_created: AwareDatetime
+    oldest_age_seconds: float
+    avg_age_seconds: float
+
+
+class JobDurationStats(BaseModel):
+    """Per-entrypoint execution-duration percentiles derived from log transitions."""
+
+    entrypoint: str
+    completed: int
+    p50_seconds: float
+    p95_seconds: float
+    p99_seconds: float
+    max_seconds: float
+
+
+class ThroughputStats(BaseModel):
+    """Total processed jobs per (entrypoint, status) over a time window."""
+
+    entrypoint: str
+    status: JOB_STATUS
+    total_count: int
+
+
+class ThroughputBucket(BaseModel):
+    """Per-minute processed-job count for one (entrypoint, status)."""
+
+    bucket: AwareDatetime
+    entrypoint: str
+    status: JOB_STATUS
+    count: int
+
+
+class ActiveWorker(BaseModel):
+    """A queue manager currently holding picked jobs."""
+
+    queue_manager_id: uuid.UUID
+    active_jobs: int
+    oldest_heartbeat: AwareDatetime
+    newest_heartbeat: AwareDatetime
+    entrypoints: list[str]
+
+
+class StaleJob(BaseModel):
+    """A picked job whose heartbeat is older than the staleness threshold."""
+
+    id: JobId
+    priority: int
+    queue_manager_id: uuid.UUID | None
+    created: AwareDatetime
+    updated: AwareDatetime
+    heartbeat: AwareDatetime
+    execute_after: AwareDatetime
+    status: JOB_STATUS
+    entrypoint: str
+    seconds_since_heartbeat: float
+
+
+class TableInfo(BaseModel):
+    """Size and persistence mode of one PgQueuer table."""
+
+    table_name: str
+    persistence: str
+    estimated_rows: int
+    total_size: str
+
+
+class EntrypointStat(BaseModel):
+    """Combined per-entrypoint health row: depth, latency, durations, failure rate."""
+
+    entrypoint: str
+    queued: int
+    picked: int
+    oldest_age_seconds: float | None
+    p50_seconds: float | None
+    p95_seconds: float | None
+    p99_seconds: float | None
+    completed: int
+    failure_rate: float | None
+    sparkline: list[int]
+
+
+class OverviewSnapshot(BaseModel):
+    """Headline numbers for the dashboard overview."""
+
+    queued_total: int
+    picked_total: int
+    failed_total: int
+    active_workers: int
+    oldest_queued_age_seconds: float | None
+    exceptions_recent: int
+
+
 class TracebackRecord(BaseModel):
     job_id: JobId
     timestamp: datetime

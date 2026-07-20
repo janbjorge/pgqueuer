@@ -26,6 +26,17 @@ from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
 
+def percentile_cont(values: list[float], fraction: float) -> float:
+    """Linear-interpolated percentile matching PostgreSQL's ``percentile_cont``."""
+    if not values:
+        raise ValueError("percentile of an empty sequence")
+    ordered = sorted(values)
+    rank = (len(ordered) - 1) * fraction
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
+
+
 @dataclasses.dataclass
 class InMemoryQueries:
     """Drop-in replacement for ``Queries`` backed by pure Python dicts."""
@@ -635,11 +646,8 @@ class InMemoryQueries:
                 latest[jid] = entry["status"]
         return [(JobId(jid), st) for jid, st in latest.items()]
 
-    async def log_statistics(
-        self,
-        limit: int | None,
-        last: timedelta | None = None,
-    ) -> list[models.LogStatistics]:
+    def aggregate_log_to_statistics(self) -> None:
+        """Roll un-aggregated log rows into per-second statistics buckets."""
         to_agg: dict[tuple[str, int, str, datetime], int] = {}
         for entry in self._log:
             if entry["aggregated"]:
@@ -666,6 +674,13 @@ class InMemoryQueries:
                 }
             )
             self._next_stats_id += 1
+
+    async def log_statistics(
+        self,
+        limit: int | None,
+        last: timedelta | None = None,
+    ) -> list[models.LogStatistics]:
+        self.aggregate_log_to_statistics()
 
         result = list(self._statistics)
 
@@ -820,6 +835,195 @@ class InMemoryQueries:
         if candidates:
             return min(candidates) - now
         return None
+
+    async def queue_age(self) -> list[models.QueueAgeStats]:
+        now = utc_now()
+        grouped: dict[str, list[datetime]] = {}
+        for j in self._jobs.values():
+            if j["status"] == "queued":
+                grouped.setdefault(j["entrypoint"], []).append(j["created"])
+        stats = [
+            models.QueueAgeStats(
+                entrypoint=ep,
+                queued_count=len(createds),
+                oldest_created=min(createds),
+                oldest_age_seconds=(now - min(createds)).total_seconds(),
+                avg_age_seconds=(sum((now - c).total_seconds() for c in createds) / len(createds)),
+            )
+            for ep, createds in grouped.items()
+        ]
+        stats.sort(key=lambda s: s.entrypoint)
+        return stats
+
+    async def job_duration_percentiles(
+        self,
+        last: timedelta,
+    ) -> list[models.JobDurationStats]:
+        cutoff = utc_now() - last
+        ordered = sorted(
+            (e for e in self._log if e["created"] > cutoff),
+            key=lambda e: (e["job_id"], e["created"], e["id"]),
+        )
+        terminal = {"successful", "exception", "canceled", "failed"}
+        durations: dict[str, list[float]] = {}
+        prev: dict[str, Any] | None = None
+        for entry in ordered:
+            if (
+                prev is not None
+                and prev["job_id"] == entry["job_id"]
+                and prev["status"] == "picked"
+                and entry["status"] in terminal
+            ):
+                durations.setdefault(entry["entrypoint"], []).append(
+                    (entry["created"] - prev["created"]).total_seconds()
+                )
+            prev = entry
+        stats = [
+            models.JobDurationStats(
+                entrypoint=ep,
+                completed=len(vals),
+                p50_seconds=percentile_cont(vals, 0.5),
+                p95_seconds=percentile_cont(vals, 0.95),
+                p99_seconds=percentile_cont(vals, 0.99),
+                max_seconds=max(vals),
+            )
+            for ep, vals in durations.items()
+        ]
+        stats.sort(key=lambda s: s.p95_seconds, reverse=True)
+        return stats
+
+    async def throughput_summary(
+        self,
+        last: timedelta | None = None,
+    ) -> list[models.ThroughputStats]:
+        self.aggregate_log_to_statistics()
+        cutoff = utc_now() - last if last is not None else None
+        totals: dict[tuple[str, str], int] = {}
+        for r in self._statistics:
+            if cutoff is not None and r["created"] <= cutoff:
+                continue
+            key = (r["entrypoint"], r["status"])
+            totals[key] = totals.get(key, 0) + r["count"]
+        return [
+            models.ThroughputStats(entrypoint=ep, status=st, total_count=count)
+            for (ep, st), count in sorted(totals.items())
+        ]
+
+    async def throughput_timeseries(
+        self,
+        last: timedelta,
+    ) -> list[models.ThroughputBucket]:
+        self.aggregate_log_to_statistics()
+        cutoff = utc_now() - last
+        buckets: dict[tuple[datetime, str, str], int] = {}
+        for r in self._statistics:
+            if r["created"] <= cutoff:
+                continue
+            bucket = r["created"].replace(second=0, microsecond=0)
+            key = (bucket, r["entrypoint"], r["status"])
+            buckets[key] = buckets.get(key, 0) + r["count"]
+        return [
+            models.ThroughputBucket(bucket=bucket, entrypoint=ep, status=st, count=count)
+            for (bucket, ep, st), count in sorted(buckets.items())
+        ]
+
+    async def active_workers(self) -> list[models.ActiveWorker]:
+        grouped: dict[uuid.UUID, list[dict[str, Any]]] = {}
+        for j in self._jobs.values():
+            if j["status"] == "picked" and j["queue_manager_id"] is not None:
+                grouped.setdefault(j["queue_manager_id"], []).append(j)
+        workers = [
+            models.ActiveWorker(
+                queue_manager_id=qmid,
+                active_jobs=len(jobs),
+                oldest_heartbeat=min(j["heartbeat"] for j in jobs),
+                newest_heartbeat=max(j["heartbeat"] for j in jobs),
+                entrypoints=sorted({j["entrypoint"] for j in jobs}),
+            )
+            for qmid, jobs in grouped.items()
+        ]
+        workers.sort(key=lambda w: str(w.queue_manager_id))
+        return workers
+
+    async def stale_jobs(
+        self,
+        threshold: timedelta,
+        limit: int = 100,
+    ) -> list[models.StaleJob]:
+        now = utc_now()
+        stale = [
+            models.StaleJob(
+                id=JobId(j["id"]),
+                priority=j["priority"],
+                queue_manager_id=j["queue_manager_id"],
+                created=j["created"],
+                updated=j["updated"],
+                heartbeat=j["heartbeat"],
+                execute_after=j["execute_after"],
+                status=j["status"],
+                entrypoint=j["entrypoint"],
+                seconds_since_heartbeat=(now - j["heartbeat"]).total_seconds(),
+            )
+            for j in self._jobs.values()
+            if j["status"] == "picked" and j["heartbeat"] < now - threshold
+        ]
+        stale.sort(key=lambda s: s.heartbeat)
+        return stale[:limit]
+
+    async def exception_logs(self, limit: int = 100) -> list[models.Log]:
+        entries = [e for e in self._log if e["status"] == "exception"]
+        entries.sort(key=lambda e: (e["created"], e["id"]), reverse=True)
+        return [models.Log.model_validate(e) for e in entries[:limit]]
+
+    async def browse_queue(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        statuses: list[models.JOB_STATUS] | None = None,
+        entrypoints: list[str] | None = None,
+    ) -> list[models.Job]:
+        rows = [
+            j
+            for j in self._jobs.values()
+            if (statuses is None or j["status"] in statuses)
+            and (entrypoints is None or j["entrypoint"] in entrypoints)
+        ]
+        rows.sort(key=lambda j: (-j["priority"], j["id"]))
+        return [models.Job.model_validate(j) for j in rows[offset : offset + limit]]
+
+    async def queue_job_by_id(self, id: JobId) -> models.Job | None:
+        j = self._jobs.get(int(id))
+        return models.Job.model_validate(j) if j is not None else None
+
+    async def job_log_history(
+        self,
+        id: JobId,
+        limit: int = 100,
+    ) -> list[models.Log]:
+        entries = [e for e in self._log if e["job_id"] == int(id)]
+        entries.sort(key=lambda e: (e["created"], e["id"]))
+        return [models.Log.model_validate(e) for e in entries[:limit]]
+
+    async def unaggregated_log_count(self) -> int:
+        return sum(1 for e in self._log if not e["aggregated"])
+
+    async def schema_info(self) -> list[models.TableInfo]:
+        s = self.qbq.settings
+        tables = [
+            (s.queue_table, len(self._jobs)),
+            (s.queue_table_log, len(self._log)),
+            (s.statistics_table, len(self._statistics)),
+            (s.schedules_table, len(self._schedules)),
+        ]
+        return [
+            models.TableInfo(
+                table_name=name,
+                persistence="IN-MEMORY",
+                estimated_rows=rows,
+                total_size="-",
+            )
+            for name, rows in sorted(tables)
+        ]
 
     def _remove_dedupe_for_job(self, job_id: int) -> None:
         dk = self._dedupe_key_by_job.pop(job_id, None)

@@ -1,0 +1,39 @@
+<div class="cards">
+  <div class="card"><span class="value">{{ snapshot.queued_total }}</span><span class="label">queued</span></div>
+  <div class="card"><span class="value">{{ snapshot.picked_total }}</span><span class="label">in flight</span></div>
+  <div class="card {% if snapshot.failed_total %}alert{% endif %}"><span class="value">{{ snapshot.failed_total }}</span><span class="label">held failed</span></div>
+  <div class="card"><span class="value">{{ snapshot.active_workers }}</span><span class="label">workers</span></div>
+  <div class="card"><span class="value">{{ snapshot.oldest_queued_age_seconds | age }}</span><span class="label">oldest queued</span></div>
+  <div class="card {% if snapshot.exceptions_recent %}alert{% endif %}"><span class="value">{{ snapshot.exceptions_recent }}</span><span class="label">exceptions (1h)</span></div>
+</div>
+
+<h2>Throughput <small>(last hour)</small></h2>
+{% if chart_svg %}
+<p class="legend">
+  <span class="status status-successful">successful {{ chart_totals.successful }}</span>
+  <span class="status status-exception">errors {{ chart_totals.errors }}</span>
+  <span class="status status-canceled">canceled {{ chart_totals.canceled }}</span>
+</p>
+{{ chart_svg | safe }}
+{% else %}
+<p class="empty">No jobs finished in the last hour.</p>
+{% endif %}
+
+<h2>Backlog by entrypoint</h2>
+{% if ages %}
+<table>
+  <thead><tr><th>Entrypoint</th><th>Queued</th><th>Oldest</th><th>Avg age</th></tr></thead>
+  <tbody>
+  {% for a in ages %}
+    <tr id="backlog-{{ a.entrypoint }}">
+      <td><a href="{{ url_for('jobs') }}?entrypoint={{ a.entrypoint | urlencode }}">{{ a.entrypoint }}</a></td>
+      <td>{{ a.queued_count }}</td>
+      <td>{{ a.oldest_age_seconds | age }}</td>
+      <td>{{ a.avg_age_seconds | age }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No queued jobs — the backlog is empty.</p>
+{% endif %}
