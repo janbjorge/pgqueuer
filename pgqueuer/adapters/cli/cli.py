@@ -173,6 +173,11 @@ async def yield_queries(
         yield q
 
 
+def tablefmt() -> str:
+    """Tabulate table format; PGQUEUER_TABLEFMT preferred, legacy TABLEFMT honored."""
+    return os.environ.get("PGQUEUER_TABLEFMT", os.environ.get("TABLEFMT", "pretty"))
+
+
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
     print(
         tabulate(
@@ -187,7 +192,7 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
                 for stat in log_stats
             ],
             headers=["Created", "Count", "Entrypoint", "Status", "Priority"],
-            tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
+            tablefmt=tablefmt(),
         )
     )
 
@@ -235,7 +240,7 @@ async def display_schedule(schedules: list[models.Schedule]) -> None:
                 "status",
                 "entrypoint",
             ],
-            tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
+            tablefmt=tablefmt(),
         )
     )
 
@@ -626,7 +631,7 @@ def failed(
                 tabulate(
                     rows,
                     headers=["ID", "Entrypoint", "Attempts", "Created", "Payload bytes"],
-                    tablefmt=os.environ.get(qb.add_prefix("TABLEFMT"), "pretty"),
+                    tablefmt=tablefmt(),
                 )
             )
 

@@ -134,8 +134,8 @@ Display a live dashboard showing job statistics.
 - `-i`, `--interval <seconds>`: Refresh interval. If not set, updates once and exits.
 - `-n`, `--limit <number>`: Number of most recent log entries to display (default: `25`).
 
-The table format can be controlled via the `TABLEFMT` environment variable
-(prefixed by `PGQUEUER_PREFIX` if set; default: `pretty`).
+The table format can be controlled via the `PGQUEUER_TABLEFMT` environment
+variable (legacy spelling `TABLEFMT` still works; default: `pretty`).
 
 ```bash
 pgq dashboard --interval 10 --limit 25

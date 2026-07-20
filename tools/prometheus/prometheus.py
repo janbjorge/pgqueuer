@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from itertools import groupby
@@ -10,7 +11,6 @@ from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import Response
 
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.domain.settings import add_prefix
 from pgqueuer.models import LogStatistics, QueueStatistics
 from pgqueuer.queries import Queries
 
@@ -40,7 +40,8 @@ def prometheus_format(
 ) -> str:
     """Format metric data into a Prometheus-compatible string."""
     label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
-    return f"{add_prefix(metric_name)}{{{label_parts}}} {value}"
+    prefix = os.environ.get("PGQUEUER_PREFIX", "")
+    return f"{prefix}{metric_name}{{{label_parts}}} {value}"
 
 
 def aggregated_queue_statistics(
