@@ -364,7 +364,7 @@ class QueryBuilderEnvironment:
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
     JOIN pg_namespace ON pg_type.typnamespace = pg_namespace.oid
-    WHERE pg_namespace.nspname = '{self.settings.db_schema}'"""
+    WHERE pg_namespace.nspname = {self.settings.schema_expr}"""
         return """SELECT enumlabel, typname
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""

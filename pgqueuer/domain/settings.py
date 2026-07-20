@@ -244,14 +244,10 @@ class DBSettings(BaseSettings):
         """A pre-qualified name plus db_schema would render ``schema.a.b``; refuse the mix."""
         if not self.db_schema:
             return self
-        for name in (
-            self.function,
-            self.statistics_table,
-            self.queue_status_type,
-            self.queue_table,
-            self.queue_table_log,
-            self.schedules_table,
-        ):
+        # Derived from QualifiedNames so a new schema-scoped object cannot
+        # silently skip this check.
+        for field in dataclasses.fields(QualifiedNames):
+            name: str = getattr(self, field.name)
             if "." in name:
                 raise ValueError(
                     f"object name {name!r} already contains a schema qualifier; "

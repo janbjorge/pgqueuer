@@ -11,7 +11,7 @@ from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel
-from test.helpers import id_data_type, simulate_legacy_serial
+from test.helpers import id_data_type, queries_for, simulate_legacy_serial
 
 # Object names sharing no substring with the defaults: if any migration
 # statement hardcoded a default name, upgrading this schema would miss its
@@ -33,15 +33,6 @@ CUSTOM_WIDENED_TABLES = [
 ]
 
 
-def _custom_queries(driver: db.Driver) -> queries.Queries:
-    return queries.Queries(
-        driver,
-        qbe=qb.QueryBuilderEnvironment(settings=CUSTOM),
-        qbq=qb.QueryQueueBuilder(settings=CUSTOM),
-        qbs=qb.QuerySchedulerBuilder(settings=CUSTOM),
-    )
-
-
 async def test_upgrade_reruns_cleanly_on_current_schema(apgdriver: db.Driver) -> None:
     """pgq upgrade is idempotent: re-running on an up-to-date schema is a no-op that still works."""
     q = queries.Queries(apgdriver)
@@ -59,7 +50,7 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
     # than silently hit the template's default-named tables.
     await queries.Queries(apgdriver).uninstall()
 
-    q = _custom_queries(apgdriver)
+    q = queries_for(apgdriver, CUSTOM)
     await q.install()
     for table in CUSTOM_WIDENED_TABLES:
         await simulate_legacy_serial(apgdriver, table)
