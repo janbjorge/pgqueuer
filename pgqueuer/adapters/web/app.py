@@ -15,9 +15,13 @@ from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.core import logconfig
+from pgqueuer.domain.settings import ConnectionSettings
 
 
-def create_web_app(dsn: str | None = None) -> FastAPI:
+def create_web_app(
+    dsn: str | None = None,
+    connection_settings: ConnectionSettings | None = None,
+) -> FastAPI:
     """Standalone dashboard app: asyncpg pool, NOTIFY-driven SSE, optional Basic auth.
 
     Usage example::
@@ -27,18 +31,19 @@ def create_web_app(dsn: str | None = None) -> FastAPI:
 
         uvicorn.run(create_web_app(), host="0.0.0.0", port=8080)
 
-    When *dsn* is None, standard libpq env vars (PGHOST, PGUSER, ...) apply.
+    When *dsn* is None, the DSN comes from PGQUEUER_DSN/PGDSN, else asyncpg
+    reads standard libpq env vars (PGHOST, PGUSER, ...). Pool sizing and
+    timeouts come from *connection_settings*, or PGQUEUER_* env vars when None.
     Auth is enabled only when PGQUEUER_WEB_USER and PGQUEUER_WEB_PASSWORD are set.
     """
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        import asyncpg
-
+        from pgqueuer.adapters.connections import create_asyncpg_pool
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
         settings = qb.DBSettings()
-        async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=10) as pool:
+        async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             driver = AsyncpgPoolDriver(pool)
             app.state.pgq_queries = queries.Queries(
                 driver,
