@@ -22,10 +22,14 @@ from tqdm.asyncio import tqdm
 from pgqueuer import PgQueuer, types
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
-from pgqueuer.domain.settings import add_prefix
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.queries import Queries
+
+
+def tablefmt() -> str:
+    """Tabulate table format; PGQUEUER_TABLEFMT preferred, legacy TABLEFMT honored."""
+    return os.environ.get("PGQUEUER_TABLEFMT", os.environ.get("TABLEFMT", "pretty"))
 
 
 def job_progress_bar(total: int | None = None) -> tqdm:
@@ -73,7 +77,7 @@ class BenchmarkResult(BaseModel):
                     ["Queued", self.queued],
                 ],
                 headers=["Field", "Value"],
-                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                tablefmt=tablefmt(),
                 colalign=("left", "left"),
             )
         )
@@ -127,7 +131,7 @@ class ThroughputSettings(BaseModel):
                     ["Output JSON", self.output_json or "None"],
                 ],
                 headers=["Field", "Value"],
-                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                tablefmt=tablefmt(),
                 colalign=("left", "left"),
             )
         )
@@ -171,7 +175,7 @@ class DrainSettings(BaseModel):
                     ["Output JSON", self.output_json or "None"],
                 ],
                 headers=["Field", "Value"],
-                tablefmt=os.environ.get(add_prefix("TABLEFMT"), "pretty"),
+                tablefmt=tablefmt(),
                 colalign=("left", "left"),
             )
         )

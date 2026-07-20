@@ -14,7 +14,7 @@ from pgqueuer.core.listeners import (
     default_event_router,
     initialize_notice_event_listener,
 )
-from pgqueuer.domain.settings import DBSettings, add_prefix
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
@@ -125,7 +125,7 @@ async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
     (event,) = evnets
 
     assert event.root.type == "table_changed_event"
-    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.table == DBSettings().queue_table
     assert event.root.operation == "insert"
 
 
@@ -149,7 +149,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
     (event,) = evnets
 
     assert event.root.type == "table_changed_event"
-    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.table == DBSettings().queue_table
     assert event.root.operation == "insert"
     evnets.clear()
 
@@ -190,7 +190,7 @@ async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
     (event,) = evnets
 
     assert event.root.type == "table_changed_event"
-    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.table == DBSettings().queue_table
     assert event.root.operation == "truncate"
     evnets.clear()
 
@@ -214,7 +214,7 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
 
     (event,) = evnets
     assert event.root.type == "table_changed_event"
-    assert event.root.table == add_prefix("pgqueuer")
+    assert event.root.table == DBSettings().queue_table
     evnets.clear()
 
     await asyncio.gather(
