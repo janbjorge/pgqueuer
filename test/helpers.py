@@ -12,6 +12,7 @@ import async_timeout
 
 from pgqueuer import db
 from pgqueuer.adapters.persistence import qb
+from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 
@@ -23,11 +24,22 @@ WIDENED_ID_TABLES = [
 ]
 
 
-async def id_data_type(driver: db.Driver, table: str) -> str:
-    """SQL data_type of ``table.id`` in the current schema."""
+def queries_for(driver: db.Driver, settings: qb.DBSettings) -> Queries:
+    """Queries wired to non-default DBSettings across all three builders."""
+    return Queries(
+        driver,
+        qbe=qb.QueryBuilderEnvironment(settings=settings),
+        qbq=qb.QueryQueueBuilder(settings=settings),
+        qbs=qb.QuerySchedulerBuilder(settings=settings),
+    )
+
+
+async def id_data_type(driver: db.Driver, table: str, schema: str | None = None) -> str:
+    """SQL data_type of ``table.id`` in *schema* (default: the current schema)."""
+    schema_expr = f"'{schema}'" if schema else "current_schema()"
     rows = await driver.fetch(
-        """SELECT data_type FROM information_schema.columns
-        WHERE table_schema = current_schema()
+        f"""SELECT data_type FROM information_schema.columns
+        WHERE table_schema = {schema_expr}
           AND table_name = $1
           AND column_name = 'id';""",
         table,
@@ -35,19 +47,20 @@ async def id_data_type(driver: db.Driver, table: str) -> str:
     return rows[0]["data_type"]
 
 
-async def simulate_legacy_serial(driver: db.Driver, table: str) -> None:
+async def simulate_legacy_serial(driver: db.Driver, table: str, schema: str | None = None) -> None:
     """Recreate the pre-#671 state: int4 column backed by an int4 SERIAL sequence.
 
     Resets from any current shape (BIGSERIAL or identity) so it is stable
     regardless of what the install builder produces.
     """
-    seq = f"{table}_id_seq"
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP IDENTITY IF EXISTS;")
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id DROP DEFAULT;")
+    target = f"{schema}.{table}" if schema else table
+    seq = f"{schema}.{table}_id_seq" if schema else f"{table}_id_seq"
+    await driver.execute(f"ALTER TABLE {target} ALTER COLUMN id DROP IDENTITY IF EXISTS;")
+    await driver.execute(f"ALTER TABLE {target} ALTER COLUMN id DROP DEFAULT;")
     await driver.execute(f"DROP SEQUENCE IF EXISTS {seq};")
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id TYPE INTEGER;")
-    await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {table}.id;")
-    await driver.execute(f"ALTER TABLE {table} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
+    await driver.execute(f"ALTER TABLE {target} ALTER COLUMN id TYPE INTEGER;")
+    await driver.execute(f"CREATE SEQUENCE {seq} AS INTEGER OWNED BY {target}.id;")
+    await driver.execute(f"ALTER TABLE {target} ALTER COLUMN id SET DEFAULT nextval('{seq}');")
 
 
 def env_from_dsn(dsn: str) -> dict[str, str]:

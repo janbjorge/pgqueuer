@@ -154,9 +154,26 @@ On the asyncpg path PgQueuer fills the `PGCONNECT_TIMEOUT` gap itself:
 `PGQUEUER_CONNECT_TIMEOUT` takes precedence, then `PGCONNECT_TIMEOUT`, then
 the driver default.
 
+## Custom Schema
+
+To keep PgQueuer objects out of `public`, install into a dedicated Postgres schema:
+
+```bash
+pgq --schema pgq install
+PGQUEUER_SCHEMA=pgq pgq run my_app:main
+```
+
+`pgq install` runs `CREATE SCHEMA IF NOT EXISTS` before the DDL. If the role lacks
+`CREATE` on the database and the schema already exists, pass `--no-create-schema`.
+All tables, the enum type, and the trigger function are created in and referenced
+through that schema, so the setting works regardless of the connection's
+`search_path`. The NOTIFY channel is unaffected: channels are global to the
+database, not schema-scoped.
+
 ## Table Prefix
 
-To run multiple isolated PgQueuer instances in the same database, set a custom prefix:
+To run multiple isolated PgQueuer instances in the same database (or the same
+schema), set a custom prefix:
 
 ```bash
 PGQUEUER_PREFIX=billing pgq install
@@ -164,6 +181,8 @@ PGQUEUER_PREFIX=billing pgq run billing_app:main
 ```
 
 This prefixes all table names, the enum type, the trigger, and the NOTIFY channel.
+The two settings are independent: a prefix separates instances that share a
+schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
 ## Next Steps
 

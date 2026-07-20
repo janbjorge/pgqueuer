@@ -127,11 +127,16 @@ pgq --pg-host db.internal --pg-user app --pg-database queue install
 # After
 PGHOST=db.internal PGUSER=app PGDATABASE=queue pgq install
 
-# Custom schema: use PGOPTIONS
-PGOPTIONS="-csearch_path=myschema" pgq install
+# Custom schema
+pgq --schema myschema install
 ```
 
 What stays: `--pg-dsn` / `PGDSN` and `--prefix` / `PGQUEUER_PREFIX`.
+
+An existing install placed in a schema via `PGOPTIONS="-csearch_path=..."`
+needs no DDL changes: set `--schema` / `PGQUEUER_SCHEMA` to that same schema
+and drop the `PGOPTIONS` workaround. All SQL then references the objects
+through their schema-qualified names.
 
 The `dsn()` helper in `pgqueuer.adapters.drivers` / `pgqueuer.db` is also
 removed; call `asyncpg.connect()` with no args and let it read the env vars

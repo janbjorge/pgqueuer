@@ -187,12 +187,21 @@ The database drivers read standard PostgreSQL environment variables:
 | `PGPASSWORD` | Database password |
 | `PGDATABASE` | Database name |
 | `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty; names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
+| `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects (default: unset; objects are resolved via the connection's `search_path`) |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 
 ```bash
 PGQUEUER_PREFIX=billing pgq install
 PGQUEUER_PREFIX=billing pgq run billing_app:main
+```
+
+Use `PGQUEUER_SCHEMA` to keep PgQueuer objects in a dedicated schema; workers must
+run with the same value the objects were installed with:
+
+```bash
+PGQUEUER_SCHEMA=pgq pgq install
+PGQUEUER_SCHEMA=pgq pgq run my_app:main
 ```
 
 ## Deployment Checklist

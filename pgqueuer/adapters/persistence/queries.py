@@ -81,9 +81,9 @@ class Queries:
 
         return cls(PsycopgDriver(connection))
 
-    async def install(self) -> None:
-        """Create tables, types, indexes, triggers, and functions."""
-        await self.driver.execute(self.qbe.build_install_query())
+    async def install(self, create_schema: bool = True) -> None:
+        """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
+        await self.driver.execute(self.qbe.build_install_query(create_schema=create_schema))
 
     async def uninstall(self) -> None:
         """Drop every PgQueuer schema object. Destructive."""

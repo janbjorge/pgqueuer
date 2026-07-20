@@ -359,12 +359,16 @@ All commands accept the following connection options:
 |------|-------------|-------------|
 | `--pg-dsn` | `PGDSN` | Full PostgreSQL connection string (DSN) |
 | `--prefix` | `PGQUEUER_PREFIX` | Prefix for PgQueuer database objects |
+| `--schema` | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects |
 
 When `--pg-dsn` is omitted, the database drivers (asyncpg / psycopg) read standard
 libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
-`PGDATABASE`. To set a custom schema, add `?options=-csearch_path%3Dmyschema` to the
-DSN (works with both drivers); `PGOPTIONS="-csearch_path=myschema"` works on the
-psycopg path only, since asyncpg does not read that variable.
+`PGDATABASE`.
+
+`pgq install` accepts `--create-schema/--no-create-schema` (default: create). It
+controls whether `CREATE SCHEMA IF NOT EXISTS` is emitted when `--schema` is set;
+disable it when the role lacks `CREATE` on the database and the schema already
+exists.
 
 The CLI connection (both drivers) also honors `PGQUEUER_DSN`,
 `PGQUEUER_CONNECT_TIMEOUT`, and `PGQUEUER_APPLICATION_NAME`. See
