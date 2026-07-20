@@ -2,7 +2,7 @@
 
 Design rules (issue #701, continuing #605):
 
-- The DSN is never parsed, inspected, or rebuilt here — it is passed to the
+- The DSN is never parsed, inspected, or rebuilt here. It is passed to the
   driver verbatim, so multi-host DSNs, ``sslmode``, ``options``,
   ``target_session_attrs``, ``service=`` and any future libpq parameter
   survive untouched.
@@ -11,8 +11,8 @@ Design rules (issue #701, continuing #605):
   precedence over DSN parameters, so an unconditional default would silently
   clobber user settings.
 - The psycopg path never forwards libpq-native env vars such as
-  ``PGCONNECT_TIMEOUT`` or ``PGAPPNAME`` — libpq already reads those with
-  correct precedence. Only ``PGQUEUER_*`` values are forwarded.
+  ``PGCONNECT_TIMEOUT`` or ``PGAPPNAME``, since libpq already reads those
+  with correct precedence. Only ``PGQUEUER_*`` values are forwarded.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _asyncpg_connect_kwargs(settings: ConnectionSettings) -> AsyncpgConnectKwarg
 
     Connect timeout ladder: PGQUEUER_CONNECT_TIMEOUT > PGCONNECT_TIMEOUT >
     driver default. asyncpg does not read ``PGCONNECT_TIMEOUT`` itself (real
-    libpq does), so the fallback lives here — on the asyncpg path only.
+    libpq does), so the fallback lives here, on the asyncpg path only.
     """
     kwargs: AsyncpgConnectKwargs = {}
     timeout = settings.connect_timeout
