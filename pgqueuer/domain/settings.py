@@ -7,9 +7,9 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Literal
+from typing import Callable, Literal
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pgqueuer.domain.models import Channel
@@ -31,6 +31,16 @@ def add_prefix(string: str) -> str:
 def name_env_alias(field_name: str) -> AliasChoices:
     """Env spellings for an object-name field: ``PGQUEUER_X`` plus the legacy bare ``X``."""
     return AliasChoices(f"pgqueuer_{field_name}", field_name)
+
+
+def prefixed_default(base: str) -> Callable[[dict[str, str]], str]:
+    """Default for an object-name field: *base* behind the already-validated ``prefix``.
+
+    Runs only when the field is not explicitly provided, so overrides are
+    never double-prefixed. Requires ``prefix`` to be declared before the name
+    fields (pydantic passes previously validated fields as ``data``).
+    """
+    return lambda data: f"{data['prefix']}{base}"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -135,28 +145,41 @@ class DBSettings(BaseSettings):
     )
 
     # Prepended to every object name not explicitly overridden; lets multiple
-    # PgQueuer instances share one database.
+    # PgQueuer instances share one database. Declared first: the name-field
+    # default factories read it from the validated data.
     prefix: str = Field(default="")
 
     channel: Channel = Field(
-        default=Channel("ch_pgqueuer"), validation_alias=name_env_alias("channel")
+        default_factory=lambda data: Channel(f"{data['prefix']}ch_pgqueuer"),
+        validation_alias=name_env_alias("channel"),
     )
     function: str = Field(
-        default="fn_pgqueuer_changed", validation_alias=name_env_alias("function")
+        default_factory=prefixed_default("fn_pgqueuer_changed"),
+        validation_alias=name_env_alias("function"),
     )
     statistics_table: str = Field(
-        default="pgqueuer_statistics", validation_alias=name_env_alias("statistics_table")
+        default_factory=prefixed_default("pgqueuer_statistics"),
+        validation_alias=name_env_alias("statistics_table"),
     )
     queue_status_type: str = Field(
-        default="pgqueuer_status", validation_alias=name_env_alias("queue_status_type")
+        default_factory=prefixed_default("pgqueuer_status"),
+        validation_alias=name_env_alias("queue_status_type"),
     )
-    queue_table: str = Field(default="pgqueuer", validation_alias=name_env_alias("queue_table"))
+    queue_table: str = Field(
+        default_factory=prefixed_default("pgqueuer"),
+        validation_alias=name_env_alias("queue_table"),
+    )
     queue_table_log: str = Field(
-        default="pgqueuer_log", validation_alias=name_env_alias("queue_table_log")
+        default_factory=prefixed_default("pgqueuer_log"),
+        validation_alias=name_env_alias("queue_table_log"),
     )
-    trigger: str = Field(default="tg_pgqueuer_changed", validation_alias=name_env_alias("trigger"))
+    trigger: str = Field(
+        default_factory=prefixed_default("tg_pgqueuer_changed"),
+        validation_alias=name_env_alias("trigger"),
+    )
     schedules_table: str = Field(
-        default="pgqueuer_schedules", validation_alias=name_env_alias("schedules_table")
+        default_factory=prefixed_default("pgqueuer_schedules"),
+        validation_alias=name_env_alias("schedules_table"),
     )
     durability: Durability = Field(
         default=Durability.durable, validation_alias=name_env_alias("durability")
@@ -176,30 +199,6 @@ class DBSettings(BaseSettings):
                 "letters, digits, and underscores"
             )
         return value
-
-    @model_validator(mode="after")
-    def apply_prefix(self) -> DBSettings:
-        """Prepend ``prefix`` to every object name not explicitly overridden."""
-        if not self.prefix:
-            return self
-        fields_set = self.model_fields_set
-        if "channel" not in fields_set:
-            self.channel = Channel(f"{self.prefix}{self.channel}")
-        if "function" not in fields_set:
-            self.function = f"{self.prefix}{self.function}"
-        if "statistics_table" not in fields_set:
-            self.statistics_table = f"{self.prefix}{self.statistics_table}"
-        if "queue_status_type" not in fields_set:
-            self.queue_status_type = f"{self.prefix}{self.queue_status_type}"
-        if "queue_table" not in fields_set:
-            self.queue_table = f"{self.prefix}{self.queue_table}"
-        if "queue_table_log" not in fields_set:
-            self.queue_table_log = f"{self.prefix}{self.queue_table_log}"
-        if "trigger" not in fields_set:
-            self.trigger = f"{self.prefix}{self.trigger}"
-        if "schedules_table" not in fields_set:
-            self.schedules_table = f"{self.prefix}{self.schedules_table}"
-        return self
 
     @property
     def legacy_statistics_status_type(self) -> str:
