@@ -56,8 +56,8 @@ def test_sql_commands_are_deterministic() -> None:
 
 def test_sql_install_respects_prefix_and_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     # AppConfig.setup_env writes PGQUEUER_* into os.environ. Clear them for a
-    # clean starting state; the autouse _restore_pgqueuer_env fixture in
-    # conftest restores them afterward so the mutation cannot leak.
+    # clean starting state; the autouse _isolate_environ fixture in conftest
+    # sandboxes os.environ so the mutation cannot leak into other tests.
     monkeypatch.delenv("PGQUEUER_PREFIX", raising=False)
     monkeypatch.delenv("PGQUEUER_SCHEMA", raising=False)
 
