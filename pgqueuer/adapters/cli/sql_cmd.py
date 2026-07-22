@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import typer
 from typing_extensions import Annotated
 
@@ -56,21 +58,25 @@ DurabilityArgument = Annotated[
 
 def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
     qbe = qb.QueryBuilderEnvironment(settings)
-    return qbe.build_install_query(create_schema=create_schema).strip()
+    return inspect.cleandoc(qbe.build_install_query(create_schema=create_schema)).strip()
 
 
 def render_uninstall() -> str:
-    return qb.QueryBuilderEnvironment().build_uninstall_query().strip()
+    return inspect.cleandoc(qb.QueryBuilderEnvironment().build_uninstall_query()).strip()
 
 
 def render_upgrade(settings: qb.DBSettings) -> str:
     qbe = qb.QueryBuilderEnvironment(settings)
-    return "\n\n".join(statement.strip() for statement in qbe.build_upgrade_queries())
+    return "\n\n".join(
+        inspect.cleandoc(statement).strip() for statement in qbe.build_upgrade_queries()
+    )
 
 
 def render_durability(settings: qb.DBSettings) -> str:
     qbe = qb.QueryBuilderEnvironment(settings)
-    return "\n\n".join(statement.strip() for statement in qbe.build_alter_durability_query())
+    return "\n\n".join(
+        inspect.cleandoc(statement).strip() for statement in qbe.build_alter_durability_query()
+    )
 
 
 def render_autovac(rollback: bool) -> str:
@@ -80,7 +86,7 @@ def render_autovac(rollback: bool) -> str:
         if rollback
         else qbe.build_optimize_autovacuum_query()
     )
-    return query.strip()
+    return inspect.cleandoc(query).strip()
 
 
 @sql_app.command(help="SQL to create the PgQueuer schema.")
