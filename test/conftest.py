@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Generator
 from urllib.parse import quote, urlparse, urlunparse
 
 import asyncpg
@@ -24,6 +24,26 @@ from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import HealthcheckWaitStrategy
 
 from pgqueuer.db import SyncPsycopgDriver
+
+
+@pytest.fixture(autouse=True)
+def _restore_pgqueuer_env() -> Generator[None, None, None]:
+    """Restore the env vars the CLI callback writes via AppConfig.setup_env.
+
+    `setup_env` mutates os.environ directly, and monkeypatch.delenv on an
+    absent key records nothing to undo, so a CLI invocation with --prefix or
+    --schema would otherwise leak into every later test on the same worker.
+    """
+    keys = ("PGQUEUER_PREFIX", "PGQUEUER_SCHEMA")
+    saved = {k: os.environ.get(k) for k in keys}
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 @pytest.fixture
