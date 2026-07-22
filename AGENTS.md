@@ -180,7 +180,17 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 ### Module-Level State
 
-**No mutable globals.** Module level may hold only immutable constants (`UPPER_SNAKE_CASE` values, `Literal`/`NewType` aliases, the deprecation `_SENTINEL = object()`) and framework singletons that require it (`app = typer.Typer(...)`). Anything mutated at runtime lives on an instance and is passed explicitly. Existing registries (e.g. `tracing.TRACER`) are grandfathered — do not add new ones.
+**No globals. Ever.** Globals are banned outright — mutable *and* immutable data structures alike. No module-level registries, lookup tables, caches, collections, config objects, or singletons that hold program data. Runtime state and data live on an instance and are passed explicitly; if something must be shared, thread it through a constructor or method argument, never a module attribute.
+
+A module-level `list`/`dict`/`set`/`tuple`/dataclass instance used as a registry, table, or accumulator **is a global — forbidden.** Put it on a class (class attribute or instance) and pass it explicitly.
+
+The only module-level names permitted are those the type system or a framework structurally requires, none of which hold program data:
+
+- Type-level declarations: `NewType`, `TypeAlias`, `Literal` aliases, `Protocol`/`TypeVar` definitions, `__all__`.
+- Scalar literal constants (`UPPER_SNAKE_CASE` `int`/`str`/`bytes`/`bool`) and the deprecation `_SENTINEL = object()`.
+- Framework-mandated singletons that hold no mutable state (`app = typer.Typer(...)`).
+
+The grandfathered `tracing.TRACER` is the sole legacy exception; add no more, and migrate it off module level when the code is next touched.
 
 ### Error Handling
 
