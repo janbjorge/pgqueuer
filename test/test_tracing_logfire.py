@@ -40,6 +40,12 @@ def exporter() -> Iterator[TestExporter]:
     logfire.configure(
         send_to_logfire=False,
         additional_span_processors=[SimpleSpanProcessor(exp)],
+        # pgqueuer deliberately continues the producer trace on the consumer,
+        # so extracting propagated context is intentional.  Declaring it here
+        # keeps logfire from installing its warn-on-extract propagator globally,
+        # which otherwise leaks into other tests on the same xdist worker (e.g.
+        # test_tracing_opentelemetry) and raises a spurious RuntimeWarning.
+        distributed_tracing=True,
     )
     yield exp
 
