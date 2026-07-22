@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Generator
+from collections.abc import Callable, Generator, Iterable
 
 from typing_extensions import assert_never
 
@@ -18,11 +18,30 @@ __all__ = [
     "DBSettings",
     "Durability",
     "DurabilityPolicy",
+    "Migration",
     "QualifiedNames",
     "QueryBuilderEnvironment",
     "QueryQueueBuilder",
     "QuerySchedulerBuilder",
 ]
+
+
+@dataclasses.dataclass(frozen=True)
+class Migration:
+    """One append-only step in the schema migration sequence.
+
+    ``render`` yields the SQL for the step, bound to a configured
+    :class:`QueryBuilderEnvironment` so object names honor the install's
+    settings. Migrations are append-only: a shipped migration's id, description,
+    and rendered SQL are frozen forever. To change the schema, append a new
+    migration; never edit an existing one (an in-place edit silently no-ops on
+    deployments that already ran the old statement). ``test_schema_migration_registry``
+    pins each shipped migration by content hash to enforce this.
+    """
+
+    id: int
+    description: str
+    render: Callable[[], Iterable[str]]
 
 
 @dataclasses.dataclass
@@ -65,6 +84,8 @@ class QueryBuilderEnvironment:
     CREATE INDEX {s.queue_table}_priority_id_id1_idx ON {qn.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
     CREATE INDEX {s.queue_table}_updated_id_id1_idx ON {qn.queue_table} (updated ASC, id DESC)
+        INCLUDE (id) WHERE status = 'picked';
+    CREATE INDEX {s.queue_table}_heartbeat_id_id1_idx ON {qn.queue_table} (heartbeat ASC, id DESC)
         INCLUDE (id) WHERE status = 'picked';
     CREATE INDEX {s.queue_table}_queue_manager_id_idx ON {qn.queue_table} (queue_manager_id)
         WHERE queue_manager_id IS NOT NULL;
@@ -177,11 +198,45 @@ class QueryBuilderEnvironment:
     DROP TYPE       IF EXISTS   {s.qualify(s.legacy_statistics_status_type)};
     """  # noqa
 
+    def migrations(self) -> tuple[Migration, ...]:
+        """The ordered, append-only migration sequence bound to this environment.
+
+        Each :class:`Migration` renders against this instance's settings. Append
+        new steps at the end; never edit or reorder shipped ones (see
+        :class:`Migration`). ``build_upgrade_queries`` walks this in order.
+        """
+        return (
+            Migration(1, "add updated column and picked index", self.migration_updated_tracking),
+            Migration(2, "refresh notify trigger function", self.migration_notify_function),
+            Migration(3, "add heartbeat column and index", self.migration_heartbeat_tracking),
+            Migration(4, "add queue_manager_id column and index", self.migration_queue_manager_id),
+            Migration(5, "create schedules table", self.migration_schedules_table),
+            Migration(6, "add execute_after column", self.migration_execute_after),
+            Migration(7, "add terminal status enum values", self.migration_terminal_status_enums),
+            Migration(8, "retype statistics status to enum", self.migration_statistics_status_type),
+            Migration(9, "create queue log table and indexes", self.migration_log_table),
+            Migration(10, "add log traceback column", self.migration_log_traceback),
+            Migration(11, "add dedupe_key column and unique index", self.migration_dedupe_key),
+            Migration(12, "add log job_id/status index", self.migration_log_job_id_status_index),
+            Migration(13, "add headers column", self.migration_headers),
+            Migration(14, "add attempts column", self.migration_attempts),
+            Migration(15, "add failed status enum value", self.migration_failed_status_enum),
+            Migration(16, "add dequeue entrypoint indexes", self.migration_dequeue_indexes),
+            Migration(17, "widen int4 id columns to bigint", self.migration_widen_id),
+        )
+
     def build_upgrade_queries(self) -> Generator[str, None, None]:
+        for migration in self.migrations():
+            yield from migration.render()
+
+    def migration_updated_tracking(self) -> Iterable[str]:
         s = self.settings
         qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS updated TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_updated_id_id1_idx ON {qn.queue_table} (updated ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
+
+    def migration_notify_function(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"""CREATE OR REPLACE FUNCTION {qn.function}() RETURNS TRIGGER AS $$
     DECLARE
         to_emit BOOLEAN := false;  -- Flag to decide whether to emit a notification
@@ -222,10 +277,21 @@ class QueryBuilderEnvironment:
 
     END;
     $$ LANGUAGE plpgsql;"""
+
+    def migration_heartbeat_tracking(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS heartbeat TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_heartbeat_id_id1_idx ON {qn.queue_table} (heartbeat ASC, id DESC) INCLUDE (id) WHERE status = 'picked';"  # noqa: E501
+
+    def migration_queue_manager_id(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS queue_manager_id UUID;"  # noqa: E501
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_queue_manager_id_idx ON {qn.queue_table} (queue_manager_id) WHERE queue_manager_id IS NOT NULL;"  # noqa: E501
+
+    def migration_schedules_table(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"""CREATE TABLE IF NOT EXISTS {qn.schedules_table} (
         id BIGSERIAL PRIMARY KEY,
         expression TEXT NOT NULL, -- Crontab-like schedule definition (e.g., '* * * * *')
@@ -238,12 +304,25 @@ class QueryBuilderEnvironment:
         status {qn.queue_status_type} DEFAULT 'queued',
         UNIQUE (expression, entrypoint)
     );"""
+
+    def migration_execute_after(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"""ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS execute_after TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW();"""  # noqa: E501
+
+    def migration_terminal_status_enums(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'successful';"
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'exception';"
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'canceled';"
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'deleted';"
+
+    def migration_statistics_status_type(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TABLE {qn.statistics_table} ALTER COLUMN status TYPE {qn.queue_status_type} USING status::TEXT::{qn.queue_status_type};"  # noqa
+
+    def migration_log_table(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"""CREATE UNLOGGED TABLE IF NOT EXISTS {qn.queue_table_log} (
         id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         created TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -256,37 +335,56 @@ class QueryBuilderEnvironment:
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_created ON {qn.queue_table_log} (created);"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_status ON {qn.queue_table_log} (status);"  # noqa
+
+    def migration_log_traceback(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table_log} ADD COLUMN IF NOT EXISTS traceback JSONB DEFAULT NULL;"  # noqa: E501
+
+    def migration_dedupe_key(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS dedupe_key TEXT DEFAULT NULL;"  # noqa: E501
         yield f"CREATE UNIQUE INDEX IF NOT EXISTS {s.queue_table}_unique_dedupe_key ON {qn.queue_table} (dedupe_key) WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL));"  # noqa
+
+    def migration_log_job_id_status_index(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_job_id_status ON {qn.queue_table_log} (job_id, created DESC);"  # noqa: E501
+
+    def migration_headers(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS headers JSONB;"
+
+    def migration_attempts(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TABLE {qn.queue_table} ADD COLUMN IF NOT EXISTS attempts INT NOT NULL DEFAULT 0;"  # noqa: E501
+
+    def migration_failed_status_enum(self) -> Iterable[str]:
+        qn = self.qualified
         yield f"ALTER TYPE {qn.queue_status_type} ADD VALUE IF NOT EXISTS 'failed';"
+
+    def migration_dequeue_indexes(self) -> Iterable[str]:
+        s = self.settings
+        qn = self.qualified
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_ep_prio_id_idx ON {qn.queue_table} (entrypoint, priority DESC, id ASC) WHERE status = 'queued';"  # noqa
         yield f"CREATE INDEX IF NOT EXISTS {s.queue_table}_ep_ea_idx ON {qn.queue_table} (entrypoint, execute_after) WHERE status = 'queued';"  # noqa
-        # #668 fattened this partial index to a 4-column composite, but the
-        # aggregation GROUP BY is on date_trunc('sec', created) (an expression),
-        # so the index ordering is never used -- the planner HashAggregates
-        # regardless, while every log insert pays to maintain the wider key.
-        # Revert to the constant-key worklist index. DROP first: CREATE INDEX
-        # IF NOT EXISTS cannot redefine an index that already exists by name.
-        yield f"DROP INDEX IF EXISTS {s.qualify(f'{s.queue_table_log}_not_aggregated')};"  # noqa
-        yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
+
+    def migration_widen_id(self) -> Iterable[str]:
         # Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
         # int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail.
         # ALTER TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table, so it
         # blocks briefly. Gated by settings.widen_id so operators can skip it and
         # widen a large table out-of-band; the DO-guards keep it a no-op once id
         # is already BIGINT.
-        if self.settings.widen_id:
-            for table in (
-                self.settings.queue_table,
-                self.settings.statistics_table,
-                self.settings.schedules_table,
-            ):
-                yield self.build_widen_id_column_query(table)
-                yield self.build_widen_id_sequence_query(table)
+        if not self.settings.widen_id:
+            return
+        for table in (
+            self.settings.queue_table,
+            self.settings.statistics_table,
+            self.settings.schedules_table,
+        ):
+            yield self.build_widen_id_column_query(table)
+            yield self.build_widen_id_sequence_query(table)
 
     def build_widen_id_column_query(self, table: str) -> str:
         """DO-guard on data_type keeps re-runs a no-op. *table* is a bare name."""
