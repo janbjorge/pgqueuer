@@ -163,6 +163,43 @@ async def test_drain_mode(
     assert len(jobs) == N
 
 
+async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
+    """The periodic task calls aggregate_logs repeatedly and stops on shutdown."""
+    calls = 0
+    qm: QueueManager
+
+    class Stub:
+        async def aggregate_logs(self) -> None:
+            nonlocal calls
+            calls += 1
+            if calls >= 3:
+                qm.shutdown.set()
+
+    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    async with async_timeout.timeout(5):
+        await qm._run_periodic_log_aggregation(timedelta(seconds=0))
+    assert calls == 3
+
+
+async def test_periodic_log_aggregation_survives_aggregate_errors() -> None:
+    """A failing aggregate_logs never tears down the loop; the next tick retries."""
+    calls = 0
+    qm: QueueManager
+
+    class Stub:
+        async def aggregate_logs(self) -> None:
+            nonlocal calls
+            calls += 1
+            if calls >= 3:
+                qm.shutdown.set()
+            raise RuntimeError("boom")
+
+    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    async with async_timeout.timeout(5):
+        await qm._run_periodic_log_aggregation(timedelta(seconds=0))
+    assert calls == 3
+
+
 @pytest.mark.parametrize("N", (1, 10, 100))
 async def test_traceback_log(
     apgdriver: db.Driver,

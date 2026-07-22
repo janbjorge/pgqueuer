@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import random
 import sys
 import uuid
 from collections.abc import MutableMapping
@@ -111,6 +112,23 @@ class QueueManager:
                 await asyncio.wait_for(
                     self.shutdown.wait(),
                     timeout=interval.total_seconds(),
+                )
+
+    async def _run_periodic_log_aggregation(self, interval: timedelta) -> None:
+        """Aggregate log->statistics every *interval* (jittered) until shutdown.
+
+        Non-cron: mirrors ``_run_periodic_health_check``. Aggregation failures are
+        swallowed so a transient DB hiccup never tears down the worker; the next
+        tick retries. The advisory lock in ``aggregate_logs`` serializes across
+        workers, and the jitter desyncs their ticks.
+        """
+        while not self.shutdown.is_set():
+            with suppress(Exception):
+                await self.queries.aggregate_logs()
+            with suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    self.shutdown.wait(),
+                    timeout=interval.total_seconds() * random.uniform(0.8, 1.2),
                 )
 
     def get_context(self, job_id: models.JobId) -> models.Context:
@@ -346,6 +364,7 @@ class QueueManager:
         max_concurrent_tasks: int | None = None,
         shutdown_on_listener_failure: bool = False,
         heartbeat_timeout: timedelta = timedelta(seconds=30),
+        log_aggregation_interval: timedelta = timedelta(seconds=30),
     ) -> None:
         """Process jobs until shutdown.
 
@@ -356,6 +375,9 @@ class QueueManager:
         of the tightest registered limit.
         ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
         heartbeats are emitted at half this interval.
+        ``log_aggregation_interval`` drives a background task that folds
+        ``pgqueuer_log`` into ``pgqueuer_statistics`` on a timer instead of only
+        on stats reads; pass ``timedelta(0)`` to disable (pure on-demand).
         """
         await self.verify_structure()
 
@@ -383,6 +405,15 @@ class QueueManager:
             tm.cancel_on_exit(
                 asyncio.create_task(self._run_periodic_health_check())
             ) as periodic_health_check_task,
+            (
+                tm.cancel_on_exit(
+                    asyncio.create_task(
+                        self._run_periodic_log_aggregation(log_aggregation_interval)
+                    )
+                )
+                if log_aggregation_interval.total_seconds() > 0
+                else nullcontext()
+            ),
             tm.cancel_on_exit(asyncio.create_task(self.shutdown.wait())) as shutdown_task,
         ):
             notice_event_listener = listeners.PGNoticeEventListener()

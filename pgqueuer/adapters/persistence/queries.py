@@ -417,13 +417,25 @@ class Queries:
         else:
             await self.driver.execute(self.qbq.build_truncate_log_query())
 
+    async def aggregate_logs(self) -> None:
+        """Fold unaggregated pgqueuer_log rows into pgqueuer_statistics.
+
+        Advisory-locked so concurrent workers running the periodic task serialize
+        on aggregation instead of double-counting.
+        """
+        await self.driver.execute(
+            self.qbq.build_aggregate_log_data_to_statistics_query(advisory_lock=True)
+        )
+
     async def log_statistics(
         self,
         limit: int | None,
         last: timedelta | None = None,
     ) -> list[models.LogStatistics]:
         """Aggregate pending log rows, then return up to *limit* recent stats within *last*."""
-        await self.driver.execute(self.qbq.build_aggregate_log_data_to_statistics_query())
+        await self.driver.execute(
+            self.qbq.build_aggregate_log_data_to_statistics_query(advisory_lock=False)
+        )
         return [
             models.LogStatistics.model_validate(x)
             for x in await self.driver.fetch(

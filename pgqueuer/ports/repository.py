@@ -142,6 +142,10 @@ class QueueRepositoryPort(Protocol):
 
     async def queue_log(self) -> list[models.Log]: ...
 
+    async def aggregate_logs(self) -> None:
+        """Fold unaggregated log rows into statistics without reading them back."""
+        ...
+
     async def log_statistics(
         self,
         limit: int | None,

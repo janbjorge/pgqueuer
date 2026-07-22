@@ -675,6 +675,10 @@ class InMemoryQueries:
             )
             self._next_stats_id += 1
 
+    async def aggregate_logs(self) -> None:
+        """Fold unaggregated log rows into per-second statistics buckets."""
+        self.aggregate_log_to_statistics()
+
     async def log_statistics(
         self,
         limit: int | None,
