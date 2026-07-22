@@ -193,6 +193,24 @@ or use `pgq dashboard` from the CLI.
     PgQueuer does not automatically prune `pgqueuer_log`. Add a periodic `DELETE` job or
     PostgreSQL table partition policy to manage log growth in high-throughput systems.
 
+## Statistics Aggregation
+
+Rows in `pgqueuer_log` are rolled up into per-second counts in `pgqueuer_statistics`
+(grouped by entrypoint, priority, and status). `QueueManager` runs this aggregation on a
+timer while it processes jobs, so statistics stay current without anyone reading them:
+
+```python
+await pgq.run(log_aggregation_interval=timedelta(seconds=30))
+```
+
+- Default interval is 30 seconds. The task runs on every worker, but a Postgres advisory
+  lock lets only one worker aggregate at a time, so counts are never doubled.
+- Pass `timedelta(0)` to disable the background task. Aggregation then happens only
+  on-demand, the first time statistics are read (CLI `pgq dashboard`, Prometheus metrics,
+  or the MCP server).
+- Aggregation never deletes log rows; it flags them `aggregated = TRUE`. Log retention is
+  still your responsibility (see the note above).
+
 ## Summary
 
 | Concern | Mechanism |
@@ -204,3 +222,4 @@ or use `pgq dashboard` from the CLI.
 | Graceful duplicate handling in batches | `enqueue(..., on_conflict="skip")` |
 | Failure inspection | `pgqueuer_log` with traceback |
 | Audit trail | `pgqueuer_log` for all terminal states |
+| Up-to-date statistics | periodic `log_aggregation_interval` |

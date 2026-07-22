@@ -21,6 +21,7 @@ def test_queries_has_queue_repository_methods() -> None:
         "eligible_queued_work",
         "queue_log",
         "job_status",
+        "aggregate_logs",
     }
     assert required <= set(dir(Queries))
 
@@ -69,6 +70,7 @@ def test_inmemory_has_queue_repository_methods() -> None:
         "eligible_queued_work",
         "queue_log",
         "job_status",
+        "aggregate_logs",
     }
     assert required <= set(dir(InMemoryQueries))
 

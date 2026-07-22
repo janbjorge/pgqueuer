@@ -746,31 +746,42 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
     def build_fetch_log_query(self) -> str:
         return f"SELECT * FROM {self.qualified.queue_table_log}"
 
-    def build_aggregate_log_data_to_statistics_query(self) -> str:
-        return f"""WITH log_aggregation AS (
+    def build_aggregate_log_data_to_statistics_query(self, advisory_lock: bool = False) -> str:
+        """Fold unaggregated log rows into per-second statistics buckets.
+
+        A single-row ``guard`` CTE gates the whole statement. With
+        ``advisory_lock=True`` its ``proceed`` column is a
+        ``pg_try_advisory_xact_lock``, so concurrent workers serialize on
+        aggregation (losers see ``proceed = FALSE`` and no-op) -- used by the
+        periodic background task. Without it ``proceed`` is an unconditional
+        ``TRUE`` (the on-demand ``log_statistics`` read path).
+        """
+        log = self.qualified.queue_table_log
+        stats = self.qualified.statistics_table
+        proceed = f"pg_try_advisory_xact_lock(hashtext('{stats}'))" if advisory_lock else "TRUE"
+        return f"""WITH guard AS (
+            SELECT {proceed} AS proceed
+        ),
+        log_aggregation AS (
             SELECT
                 entrypoint,
                 priority,
                 status,
                 COUNT(*) AS count,
                 date_trunc('sec', created) AS created
-            FROM {self.qualified.queue_table_log}
-            WHERE NOT aggregated
+            FROM {log}, guard
+            WHERE NOT aggregated AND guard.proceed
             GROUP BY entrypoint, priority, status, date_trunc('sec', created)
         ),
         updated_logs AS (
-            UPDATE {self.qualified.queue_table_log}
+            UPDATE {log}
             SET aggregated = TRUE
-            WHERE NOT aggregated
+            FROM guard
+            WHERE NOT aggregated AND guard.proceed
             RETURNING id
         )
-        INSERT INTO {self.qualified.statistics_table} (count, created, entrypoint, priority, status)
-        SELECT
-            count,
-            created,
-            entrypoint,
-            priority,
-            status
+        INSERT INTO {stats} (count, created, entrypoint, priority, status)
+        SELECT count, created, entrypoint, priority, status
         FROM log_aggregation
         ON CONFLICT (
             priority,
@@ -778,7 +789,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
             status,
             entrypoint
         ) DO UPDATE SET
-            count = {self.qualified.statistics_table}.count + EXCLUDED.count
+            count = {stats}.count + EXCLUDED.count
         """  # noqa
 
     def build_retry_job_query(self) -> str:

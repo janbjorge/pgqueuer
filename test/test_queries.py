@@ -857,6 +857,71 @@ async def test_log_statistics(
     assert sum(x.count for x in stats) == 3 * N
 
 
+async def _unaggregated_count(q: queries.Queries) -> int:
+    rows = await q.driver.fetch(q.qbq.build_unaggregated_log_count_query())
+    return int(rows[0]["unaggregated"])
+
+
+async def _log_n_successful(q: queries.Queries, N: int) -> None:
+    await q.enqueue(["placeholder"] * N, [None] * N, [0] * N)
+    jobs = await q.dequeue(
+        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        batch_size=N,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert len(jobs) == N
+    for job in jobs:
+        await q.log_jobs([(job, "successful", None)])
+
+
+async def test_aggregate_logs_populates_statistics_without_read(apgdriver: db.Driver) -> None:
+    """aggregate_logs folds log rows into statistics with no log_statistics read."""
+    q = queries.Queries(apgdriver)
+    N = 5
+    await _log_n_successful(q, N)
+
+    assert await _unaggregated_count(q) > 0
+
+    await q.aggregate_logs()
+
+    assert await _unaggregated_count(q) == 0
+    stats = await q.driver.fetch(q.qbq.build_log_statistics_query(), None, None)
+    assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
+
+
+async def test_aggregate_logs_advisory_lock_skips_when_held(
+    apgdriver: db.Driver,
+    dsn: str,
+) -> None:
+    """aggregate_logs no-ops while another session holds the aggregation advisory lock."""
+    q = queries.Queries(apgdriver)
+    N = 4
+    await _log_n_successful(q, N)
+
+    lock_key = f"hashtext('{q.qbq.qualified.statistics_table}')"
+
+    # Hold the advisory xact lock in a separate session for the duration.
+    holder = await asyncpg.connect(dsn=dsn)
+    try:
+        tx = holder.transaction()
+        await tx.start()
+        await holder.execute(f"SELECT pg_advisory_xact_lock({lock_key})")
+
+        # Lock held -> aggregation must be a no-op.
+        await q.aggregate_logs()
+        assert await _unaggregated_count(q) == 3 * N
+
+        await tx.rollback()  # release the lock
+    finally:
+        await holder.close()
+
+    # Lock free -> aggregation proceeds.
+    await q.aggregate_logs()
+    assert await _unaggregated_count(q) == 0
+
+
 async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     q = queries.Queries(apgdriver)
     headers = {"trace": "abc"}

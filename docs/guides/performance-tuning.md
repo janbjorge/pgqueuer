@@ -14,6 +14,7 @@ await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))
 |-----------|---------|--------|
 | `batch_size` | `10` | Jobs fetched per dequeue round-trip |
 | `dequeue_timeout` | `30 s` | How long to wait for new NOTIFY before polling |
+| `log_aggregation_interval` | `30 s` | How often to roll `pgqueuer_log` into `pgqueuer_statistics`; `0` disables (aggregate on read) |
 
 **Tuning guidance:**
 - Increase `batch_size` when jobs are short-lived (< 1 s) and you see many dequeue round-trips
