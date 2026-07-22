@@ -22,10 +22,16 @@ Install PgQueuer schema via the CLI. Make sure your PostgreSQL environment varia
 pgq install
 ```
 
-To see what SQL will be executed without applying it:
+To see what SQL will be executed without applying it, use the offline
+[`pgq sql`](cli.md#sql) group. It never connects to a database, so you can pipe
+the script to psql or hand it to your migration tool (Flyway, sqitch, Alembic)
+or a DBA with restricted permissions (see
+[Database Permissions](database-permissions.md)):
 
 ```bash
-pgq install --dry-run
+pgq sql install
+pgq sql install | psql -v ON_ERROR_STOP=1
+pgq sql upgrade > migrations/V2__pgqueuer_upgrade.sql
 ```
 
 ## Uninstallation
