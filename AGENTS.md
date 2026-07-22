@@ -69,7 +69,7 @@ To use docker-compose instead: `docker compose up db populate` (and `docker comp
 
 ```bash
 pgq install              # Create tables, triggers, functions
-pgq install --dry-run    # Preview SQL without applying
+pgq sql install          # Emit SQL to stdout without connecting (pipe to psql, etc.)
 pgq uninstall            # Remove all PgQueuer objects
 pgq upgrade              # Apply migrations after a library upgrade
 pgq verify --expect present  # Check schema exists (exit 1 on mismatch)

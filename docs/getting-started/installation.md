@@ -70,10 +70,12 @@ This creates the following objects in your database:
 | `tg_pgqueuer_changed` | Trigger | Fires the notify function on INSERT/UPDATE/DELETE/TRUNCATE |
 
 !!! note "Preview before applying"
-    Use `--dry-run` to see the SQL without executing it:
+    Use `pgq sql install` to see the SQL without executing it. It never connects
+    to a database, so it also works for piping to psql or saving a migration file:
 
     ```bash
-    pgq install --dry-run
+    pgq sql install
+    pgq sql install | psql -v ON_ERROR_STOP=1
     ```
 
 ## Verify the Installation

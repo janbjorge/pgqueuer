@@ -107,7 +107,7 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     base_env.update(env_from_dsn(dsn))
 
     # Helper to invoke and assert success
-    def invoke_ok(args: list[str], env: dict[str, str]) -> None:
+    def invoke_ok(args: list[str], env: dict[str, str]) -> str:
         result = runner.invoke(app, args, env=env)
         if result.exit_code != 0:
             pytest.fail(
@@ -115,9 +115,10 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
                 f"args={args}\nexit_code={result.exit_code}\n"
                 f"stdout={result.stdout}\nexc={result.exception}"
             )
+        return result.stdout
 
-    # 1. Ensure absent (uninstall). If uninstall fails due to objects missing,
-    #    it should still exit 0 (implementation prints SQL + runs uninstall).
+    # 1. Ensure absent (uninstall). All objects are dropped with IF EXISTS,
+    #    so this exits 0 even when nothing is installed.
     result_uninstall_initial = runner.invoke(app, ["uninstall"], env=base_env)
     # Accept exit_code 0 only.
     if result_uninstall_initial.exit_code != 0:
@@ -134,17 +135,17 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
             f"stdout={result_verify_absent.stdout}\nexc={result_verify_absent.exception}"
         )
 
-    # 3. install
-    invoke_ok(["install"], base_env)
+    # 3. install (real execution keeps stdout free of SQL; use 'pgq sql install' for that)
+    assert "CREATE TABLE" not in invoke_ok(["install"], base_env)
 
     # 4. verify present
     invoke_ok(["verify", "--expect", "present"], base_env)
 
     # 5. upgrade (should succeed even if no changes)
-    invoke_ok(["upgrade"], base_env)
+    assert "ALTER TABLE" not in invoke_ok(["upgrade"], base_env)
 
     # 6. uninstall
-    invoke_ok(["uninstall"], base_env)
+    assert "DROP TABLE" not in invoke_ok(["uninstall"], base_env)
 
     # 7. verify absent again
     invoke_ok(["verify", "--expect", "absent"], base_env)

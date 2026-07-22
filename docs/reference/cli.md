@@ -16,11 +16,14 @@ Set up the necessary database schema for PgQueuer.
   - `balanced`: Critical tables (`pgqueuer`, `pgqueuer_schedules`) are logged; auxiliary
     tables are unlogged.
   - `durable` *(default)*: All tables are logged: full crash recovery.
-- `--dry-run`: Print SQL commands without executing them.
+- `--dry-run` *(deprecated)*: Alias for [`pgq sql install`](#sql).
 
 ```bash
 pgq install --durability balanced
 ```
+
+On success, a confirmation is written to stderr; stdout stays empty. To preview or
+capture the SQL instead of executing it, use [`pgq sql install`](#sql).
 
 ---
 
@@ -30,7 +33,7 @@ Remove the PgQueuer schema from the database.
 
 **Options:**
 
-- `--dry-run`: Print SQL commands without executing them.
+- `--dry-run` *(deprecated)*: Alias for [`pgq sql uninstall`](#sql).
 
 ```bash
 pgq uninstall
@@ -45,7 +48,7 @@ Apply database schema upgrades.
 **Options:**
 
 - `--durability`: Adjust the durability level during the upgrade (same options as `install`).
-- `--dry-run`: Print SQL commands without executing them.
+- `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
 
 ```bash
 pgq upgrade --durability durable
@@ -77,11 +80,10 @@ Change the durability level of existing PgQueuer tables **without data loss**.
 **Arguments:**
 
 - `durability` *(required)*: `volatile`, `balanced`, or `durable`.
-- `--dry-run` *(optional)*: Print SQL commands without executing them.
+- `--dry-run` *(deprecated)*: Alias for [`pgq sql durability`](#sql).
 
 ```bash
 pgq durability durable
-pgq durability volatile --dry-run
 ```
 
 ---
@@ -92,13 +94,57 @@ Apply recommended autovacuum settings for PgQueuer tables.
 
 **Options:**
 
-- `--dry-run`: Print SQL commands without executing them.
+- `--dry-run` *(deprecated)*: Alias for [`pgq sql autovac`](#sql).
 - `--rollback`: Reset autovacuum settings to system defaults.
 
 ```bash
 pgq autovac
 pgq autovac --rollback
 ```
+
+---
+
+### `sql`
+
+Emit PgQueuer SQL to stdout without connecting to a database. No DSN or
+credentials are needed. Use it to preview DDL, pipe it to `psql` or another
+Postgres client, or capture it as a migration file for tools like Flyway,
+sqitch, or Alembic.
+
+**Subcommands:**
+
+- `sql install`: SQL to create the PgQueuer schema. Accepts `--durability` and
+  `--create-schema/--no-create-schema` like `install`.
+- `sql uninstall`: SQL to drop all PgQueuer objects.
+- `sql upgrade`: SQL to migrate an existing installation to the current version.
+  Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`.
+- `sql durability <level>`: SQL to switch table durability without data loss.
+- `sql autovac [--rollback]`: SQL for recommended autovacuum settings.
+
+Global `--prefix` and `--schema` apply as usual.
+
+**Output contract:** stdout carries only SQL: every statement is
+semicolon-terminated, statements are separated by blank lines, and the output is
+deterministic for a given PgQueuer version and settings (diff-friendly in CI).
+
+```bash
+# Preview the schema
+pgq sql install
+
+# Apply with psql instead of the built-in drivers
+pgq sql install | psql -v ON_ERROR_STOP=1
+
+# Capture a migration file for your migration tool
+pgq --schema billing sql upgrade > migrations/V2__pgqueuer_upgrade.sql
+```
+
+!!! warning "Transactions and `sql upgrade`"
+    The upgrade script adds enum values with `ALTER TYPE ... ADD VALUE` and then
+    references the enum in later statements. PostgreSQL forbids using a new enum
+    value in the same transaction that added it, so apply the script with
+    autocommit (the default). Do not wrap it in `psql --single-transaction` or a
+    `BEGIN`/`COMMIT` block. The `install`, `uninstall`, `durability`, and
+    `autovac` scripts have no such restriction.
 
 ---
 
