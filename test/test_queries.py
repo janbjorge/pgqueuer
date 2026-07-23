@@ -922,6 +922,44 @@ async def test_aggregate_logs_advisory_lock_skips_when_held(
     assert await _unaggregated_count(q) == 0
 
 
+async def test_upgrade_from_legacy_composite_index_still_aggregates(
+    apgdriver: db.Driver,
+) -> None:
+    """An install carrying #668's composite aggregation index upgrades and aggregates.
+
+    Reverting the index only matters if the migration SQL is sound: the
+    schema-qualified DROP must find the index, the CREATE must not collide, and
+    re-running upgrade must stay a no-op. Drive the real upgrade + aggregation
+    path against a seeded legacy composite so a broken migration fails here --
+    the index shape alone has no behavioral effect worth asserting.
+    """
+    log_table = DBSettings().queue_table_log
+    index = f"{log_table}_not_aggregated"
+    q = queries.Queries(apgdriver)
+
+    # Recreate the fattened index #668 shipped to fresh installs of its era.
+    await apgdriver.execute(f"DROP INDEX {index};")
+    await apgdriver.execute(
+        f"CREATE INDEX {index} ON {log_table} "
+        "(entrypoint, priority, status, created) WHERE not aggregated;"
+    )
+
+    # Upgrade rebuilds the index and stays idempotent across repeated runs.
+    await q.upgrade()
+    assert await q.table_has_index(log_table, index)
+    await q.upgrade()
+    assert await q.table_has_index(log_table, index)
+
+    # The aggregation path that relies on this index still folds log -> stats.
+    N = 5
+    await _log_n_successful(q, N)
+    assert await _unaggregated_count(q) > 0
+    await q.aggregate_logs()
+    assert await _unaggregated_count(q) == 0
+    stats = await q.driver.fetch(q.qbq.build_log_statistics_query(), None, None)
+    assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
+
+
 async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     q = queries.Queries(apgdriver)
     headers = {"trace": "abc"}
