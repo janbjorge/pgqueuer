@@ -100,7 +100,7 @@ async def test_dequeue_uses_entrypoint_priority_index(apgdriver: db.Driver) -> N
     q = await _seed(apgdriver)
     nodes = await _plan_nodes(
         apgdriver,
-        q.qbq.build_dequeue_query(),
+        q.dequeue_builder.render(),
         10,
         ENTRYPOINTS,
         [0] * len(ENTRYPOINTS),
@@ -154,7 +154,7 @@ async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) ->
     eps = [f"ep_{i}" for i in range(BULK_EPS)]
     nodes = await _analyze_nodes(
         apgdriver,
-        q.qbq.build_dequeue_query(),
+        q.dequeue_builder.render(),
         BATCH,
         eps,
         [0] * BULK_EPS,
@@ -198,7 +198,7 @@ async def test_dequeue_gate_skips_saturated_entrypoints(apgdriver: db.Driver) ->
     eps = [f"ep_{i}" for i in range(BULK_EPS)]
     nodes = await _analyze_nodes(
         apgdriver,
-        q.qbq.build_dequeue_query(),
+        q.dequeue_builder.render(),
         BATCH,
         eps,
         [1] * BULK_EPS,
