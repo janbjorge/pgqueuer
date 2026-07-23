@@ -159,6 +159,7 @@ def create_default_queries_factory(
                     qbe=qb.QueryBuilderEnvironment(settings),
                     qbq=qb.QueryQueueBuilder(settings),
                     qbs=qb.QuerySchedulerBuilder(settings),
+                    dequeue_builder=qb.DequeueQueryBuilder(settings),
                 )
             return
         with contextlib.suppress(ImportError):
@@ -171,6 +172,7 @@ def create_default_queries_factory(
                     qbe=qb.QueryBuilderEnvironment(settings),
                     qbq=qb.QueryQueueBuilder(settings),
                     qbs=qb.QuerySchedulerBuilder(settings),
+                    dequeue_builder=qb.DequeueQueryBuilder(settings),
                 )
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")

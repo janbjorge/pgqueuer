@@ -56,6 +56,9 @@ class Queries:
     qbs: qb.QuerySchedulerBuilder = dataclasses.field(
         default_factory=qb.QuerySchedulerBuilder,
     )
+    dequeue_builder: qb.DequeueQueryBuilder = dataclasses.field(
+        default_factory=qb.DequeueQueryBuilder,
+    )
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
@@ -182,7 +185,7 @@ class Queries:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
         rows = await self.driver.fetch(
-            self.qbq.build_dequeue_query(),
+            self.dequeue_builder.render(),
             batch_size,
             list(entrypoints.keys()),
             [x.concurrency_limit for x in entrypoints.values()],

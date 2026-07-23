@@ -50,6 +50,7 @@ def create_web_app(
                 qbe=qb.QueryBuilderEnvironment(settings),
                 qbq=qb.QueryQueueBuilder(settings),
                 qbs=qb.QuerySchedulerBuilder(settings),
+                dequeue_builder=qb.DequeueQueryBuilder(settings),
             )
             broadcaster = Broadcaster(driver=driver, channel=settings.channel)
             await broadcaster.start()
