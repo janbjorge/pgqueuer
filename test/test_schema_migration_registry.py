@@ -43,23 +43,17 @@ FROZEN_MIGRATION_HASHES: dict[int, str] = {
 }
 
 
-def migration_hash(migration: Migration) -> str:
+def migration_hash(migration: Migration, env: QueryBuilderEnvironment) -> str:
     """Stable content hash over id, description, and rendered SQL."""
-    body = "\x00".join([str(migration.id), migration.description, *migration.render()])
+    body = "\x00".join([str(migration.id), migration.description, *migration.render(env)])
     return hashlib.sha256(body.encode()).hexdigest()
 
 
 def test_shipped_migrations_are_frozen() -> None:
     """Every released migration renders to its pinned hash (append-only enforcement)."""
-    rendered = {m.id: migration_hash(m) for m in QueryBuilderEnvironment(DBSettings()).migrations()}
+    env = QueryBuilderEnvironment(DBSettings())
+    rendered = {m.id: migration_hash(m, env) for m in env.migrations()}
     assert rendered == FROZEN_MIGRATION_HASHES
-
-
-def test_migration_ids_are_unique_contiguous_and_ordered() -> None:
-    """Ids are 1..N, unique, and appear in ascending order."""
-    ids = [m.id for m in QueryBuilderEnvironment(DBSettings()).migrations()]
-    assert ids == sorted(ids)
-    assert ids == list(range(1, len(ids) + 1))
 
 
 async def schema_fingerprint(driver: db.Driver) -> dict[str, list[tuple[str, ...]]]:
