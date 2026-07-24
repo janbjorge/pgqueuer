@@ -150,6 +150,8 @@ async def test_valid_query_syntax(
 ) -> None:
     if name == "build_install_query":
         pytest.skip()
+    if name == "migrations":
+        pytest.skip("returns Migration objects, not SQL; covered by the migration registry tests")
     if any(
         p.default is inspect.Parameter.empty for p in inspect.signature(query).parameters.values()
     ):
