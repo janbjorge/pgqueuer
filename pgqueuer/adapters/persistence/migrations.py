@@ -214,6 +214,19 @@ def widen_id(env: QueryBuilderEnvironment) -> Iterable[str]:
         yield env.build_widen_id_sequence_query(table)
 
 
+def constant_key_aggregation_index(env: QueryBuilderEnvironment) -> Iterable[str]:
+    # #668 fattened the not_aggregated partial index to a 4-column composite
+    # (migration 9), but the aggregation GROUP BY is on date_trunc('sec', created),
+    # an expression, so the index ordering is never used while every log insert
+    # pays to maintain the wider key. Revert to the constant-key worklist index.
+    # DROP first: CREATE INDEX IF NOT EXISTS cannot redefine an index that already
+    # exists by name (migration 9 is a no-op on installs that already have it).
+    s = env.settings
+    qn = env.qualified
+    yield f"DROP INDEX IF EXISTS {s.qualify(f'{s.queue_table_log}_not_aggregated')};"  # noqa
+    yield f"CREATE INDEX IF NOT EXISTS {s.queue_table_log}_not_aggregated ON {qn.queue_table_log} ((1)) WHERE not aggregated;"  # noqa
+
+
 # Ordered, append-only sequence. Ids are the 1-based position; append new steps
 # at the end and never edit or reorder shipped ones (see module docstring).
 _STEPS: tuple[tuple[str, Render], ...] = (
@@ -234,6 +247,7 @@ _STEPS: tuple[tuple[str, Render], ...] = (
     ("add failed status enum value", failed_status_enum),
     ("add dequeue entrypoint indexes", dequeue_indexes),
     ("widen int4 id columns to bigint", widen_id),
+    ("revert aggregation index to constant key", constant_key_aggregation_index),
 )
 
 MIGRATIONS: tuple[Migration, ...] = tuple(
