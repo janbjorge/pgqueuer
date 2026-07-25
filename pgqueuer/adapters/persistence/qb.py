@@ -458,13 +458,15 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 
 @dataclasses.dataclass
 class DequeueQueryBuilder:
-    """The dequeue statement, assembled from one method per CTE.
+    """Build the single atomic statement that claims a batch of jobs.
 
-    ``render`` stitches the CTEs below into a single atomic statement -- the
-    LATERAL lookup, ``FOR UPDATE SKIP LOCKED`` claim, ``UPDATE ... RETURNING``,
-    and pick-log ``INSERT`` must stay in one statement to claim jobs without a
-    race. The pipeline is: params -> picked -> worker_load -> available ->
-    next_queued + next_stale -> eligible -> claimed -> log_pick.
+    The whole dequeue is one statement on purpose: the per-entrypoint LATERAL
+    lookup, the ``FOR UPDATE SKIP LOCKED`` selection, the ``UPDATE ...
+    RETURNING`` claim, and the pick-log ``INSERT`` must run together to claim
+    jobs without a race. ``render`` returns it as one linear block; read it
+    top-to-bottom, the CTEs run in the order they are written:
+    params -> picked -> worker_load -> available -> next_queued + next_stale
+    -> eligible -> claimed -> log_pick.
     """
 
     settings: DBSettings = dataclasses.field(default_factory=DBSettings)
@@ -473,35 +475,35 @@ class DequeueQueryBuilder:
     def qualified(self) -> QualifiedNames:
         return self.settings.qualified
 
-    def cte_params(self) -> str:
-        return """-- Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.
+    def render(self) -> str:
+        t = self.qualified.queue_table
+        t_log = self.qualified.queue_table_log
+        return f"""WITH
+-- Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.
 params AS (
     SELECT
         UNNEST($2::text[])   AS entrypoint,
         UNNEST($3::bigint[]) AS concurrency_limit
-)"""
+),
 
-    def cte_picked(self) -> str:
-        return f"""-- Per-entrypoint count of picked jobs (global, all workers).
+-- Per-entrypoint count of picked jobs (global, all workers).
 picked AS (
     SELECT entrypoint, COUNT(*) AS total
-    FROM {self.qualified.queue_table}
+    FROM {t}
     WHERE queue_manager_id IS NOT NULL
       AND entrypoint = ANY($2)
     GROUP BY entrypoint
-)"""
+),
 
-    def cte_worker_load(self) -> str:
-        return f"""-- This worker's total picked jobs (scalar, for max_concurrent_tasks).
+-- This worker's total picked jobs (scalar, for max_concurrent_tasks).
 worker_load AS (
     SELECT COUNT(*) AS total
-    FROM {self.qualified.queue_table}
+    FROM {t}
     WHERE queue_manager_id = $4
       AND entrypoint = ANY($2)
-)"""
+),
 
-    def cte_available(self) -> str:
-        return """-- Entrypoints with free capacity (concurrency gate applied here instead of
+-- Entrypoints with free capacity (concurrency gate applied here instead of
 -- row-scan). remaining is NULL for unlimited entrypoints; otherwise it caps
 -- how many rows one dequeue may pick so a single statement cannot exceed
 -- the entrypoint's concurrency_limit.
@@ -516,10 +518,8 @@ available AS (
     LEFT JOIN picked pk ON pk.entrypoint = p.entrypoint
     WHERE p.concurrency_limit <= 0
        OR COALESCE(pk.total, 0) < p.concurrency_limit
-)"""
+),
 
-    def cte_next_queued(self) -> str:
-        return f"""
 -- New queued jobs: per-entrypoint LATERAL lookup hits (entrypoint, priority, id) partial index.
 -- LEAST($1, NULL) = $1, so unlimited entrypoints keep the full batch.
 next_queued AS (
@@ -527,7 +527,7 @@ next_queued AS (
     FROM available a
     CROSS JOIN LATERAL (
         SELECT q2.id, q2.priority
-        FROM {self.qualified.queue_table} q2
+        FROM {t} q2
         WHERE q2.entrypoint = a.entrypoint
           AND q2.status = 'queued'
           AND q2.execute_after < NOW()
@@ -539,16 +539,15 @@ next_queued AS (
            OR (SELECT total FROM worker_load) < $5)
     ORDER BY q.priority DESC, q.id ASC
     LIMIT $1
-)"""
+),
 
-    def cte_next_stale(self) -> str:
-        return f"""-- Stale picked jobs whose heartbeat timed out. The concurrency gate from
+-- Stale picked jobs whose heartbeat timed out. The concurrency gate from
 -- next_queued is intentionally omitted: re-picking only transfers ownership
 -- of a row already counted in `picked`, so net live execution is unchanged.
 -- Applying the gate would deadlock recovery once leaked rows fill the slot.
 next_stale AS (
     SELECT q.id, q.priority
-    FROM {self.qualified.queue_table} q
+    FROM {t} q
     JOIN params p ON p.entrypoint = q.entrypoint
     WHERE q.status = 'picked'
       AND q.heartbeat < NOW() - $6::interval
@@ -558,10 +557,9 @@ next_stale AS (
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED
     LIMIT $1
-)"""
+),
 
-    def cte_eligible(self) -> str:
-        return """-- Merge both sets into one global priority order so a recovered stale job
+-- Merge both sets into one global priority order so a recovered stale job
 -- competes on priority with fresh work instead of always losing to it.
 -- The LIMIT hard-caps this worker's total picked rows at $5: the binary
 -- worker_load gates above only stop a dequeue from starting once over
@@ -574,44 +572,24 @@ eligible AS (
     ) combined
     ORDER BY priority DESC, id ASC
     LIMIT GREATEST(LEAST($1, COALESCE($5 - (SELECT total FROM worker_load), $1)), 0)
-)"""
+),
 
-    def cte_claimed(self) -> str:
-        return f"""-- Atomically claim the jobs and log the pick event.
+-- Atomically claim the jobs and log the pick event.
 claimed AS (
-    UPDATE {self.qualified.queue_table}
+    UPDATE {t}
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
         queue_manager_id = $4
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
-)"""
-
-    def cte_log_pick(self) -> str:
-        return f"""log_pick AS (
-    INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)
+),
+log_pick AS (
+    INSERT INTO {t_log} (job_id, status, entrypoint, priority)
     SELECT id, status, entrypoint, priority FROM claimed
-)"""
-
-    def render(self) -> str:
-        ctes = ",\n\n".join(
-            (
-                self.cte_params(),
-                self.cte_picked(),
-                self.cte_worker_load(),
-                self.cte_available(),
-                self.cte_next_queued(),
-                self.cte_next_stale(),
-                self.cte_eligible(),
-                self.cte_claimed(),
-                self.cte_log_pick(),
-            )
-        )
-        return f"""WITH
-{ctes}
+)
 SELECT * FROM claimed ORDER BY priority DESC, id ASC;
-"""  # noqa: E501
+"""  # noqa
 
 
 @dataclasses.dataclass
