@@ -9,7 +9,6 @@ Each test validates SQL-specific semantics that the in-memory fake cannot.
 from __future__ import annotations
 
 import asyncio
-import json
 import uuid
 from datetime import timedelta
 
@@ -286,5 +285,3 @@ async def test_traceback_jsonb_roundtrip(
     assert len(exc_logs) == 1
     exc_log = exc_logs[0]
     assert exc_log.traceback is not None
-
-
