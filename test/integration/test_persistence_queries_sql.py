@@ -26,7 +26,6 @@ async def test_dequeue_locking_race_single_job_one_picker(
 ) -> None:
     """SELECT FOR UPDATE SKIP LOCKED: only one worker picks same job."""
     q = Queries(apgdriver)
-    await q.install()
 
     await q.enqueue(["ep"], [None], [0])
     qm1_id = uuid.uuid4()
@@ -64,7 +63,6 @@ async def test_atomicity_dequeue_log_entry_created(
 ) -> None:
     """Dequeue + log is atomic: picked job always has log entry."""
     q = Queries(apgdriver)
-    await q.install()
 
     jids = await q.enqueue(["ep"], [None], [0])
     qm_id = uuid.uuid4()
@@ -147,7 +145,6 @@ async def test_stale_job_recovery_heartbeat_timeout(
 ) -> None:
     """Heartbeat timeout: stale job re-picked by different worker."""
     q = Queries(apgdriver)
-    await q.install()
 
     await q.enqueue(["ep"], [None], [0])
 
@@ -237,7 +234,6 @@ async def test_mark_job_cancellation(
 ) -> None:
     """mark_job_as_cancelled: job marked canceled, log entry created."""
     q = Queries(apgdriver)
-    await q.install()
 
     jids = await q.enqueue(["ep"], [None], [0])
     qm_id = uuid.uuid4()
@@ -263,7 +259,6 @@ async def test_traceback_jsonb_roundtrip(
 ) -> None:
     """Traceback JSONB round-trips correctly through log storage."""
     q = Queries(apgdriver)
-    await q.install()
 
     jids = await q.enqueue(["ep"], [None], [0])
     qm_id = uuid.uuid4()
