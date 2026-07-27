@@ -77,6 +77,11 @@ class QueueManager:
         )
     )
 
+    # Incremented once per dispatched job; the periodic log-aggregation task
+    # only calls the database when this is nonzero, so an idle worker never
+    # round-trips an aggregation query for nothing.
+    jobs_logged: int = dataclasses.field(init=False, default=0)
+
     # Minimum sleep before re-checking the queue. Prevents busy-looping when a
     # deferred job's ETA is near zero or when the TOCTOU fallback detects
     # eligible work that the preceding dequeue narrowly missed.
@@ -117,14 +122,20 @@ class QueueManager:
     async def _run_periodic_log_aggregation(self, interval: timedelta) -> None:
         """Aggregate log->statistics every *interval* (jittered) until shutdown.
 
-        Non-cron: mirrors ``_run_periodic_health_check``. Aggregation failures are
-        swallowed so a transient DB hiccup never tears down the worker; the next
-        tick retries. The advisory lock in ``aggregate_logs`` serializes across
-        workers, and the jitter desyncs their ticks.
+        Non-cron: mirrors ``_run_periodic_health_check``. Skipped when this worker
+        hasn't logged a job since the last tick: an idle worker has nothing new to
+        fold in, and the advisory lock in ``aggregate_logs`` already serializes real
+        work across workers. A failed attempt leaves ``jobs_logged`` set so the next
+        tick retries instead of silently dropping the backlog; only success resets it.
         """
         while not self.shutdown.is_set():
-            with suppress(Exception):
-                await self.queries.aggregate_logs()
+            if self.jobs_logged:
+                try:
+                    await self.queries.aggregate_logs()
+                except Exception:
+                    pass
+                else:
+                    self.jobs_logged = 0
             with suppress(TimeoutError, asyncio.TimeoutError):
                 await asyncio.wait_for(
                     self.shutdown.wait(),
@@ -551,3 +562,4 @@ class QueueManager:
                 await jbuff.add((job, "canceled" if canceled else "successful", None))
             finally:
                 self.job_context.pop(job.id, None)
+                self.jobs_logged += 1
