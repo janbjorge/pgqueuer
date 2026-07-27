@@ -30,13 +30,6 @@ uv run pytest
 No manual database bootstrapping required. Schema install happens inside the container
 during test setup.
 
-## Makefile (Optional)
-
-```bash
-make check
-```
-
-Runs `sync`, `lint`, `import-lint`, `typecheck`, and `pytest` in sequence.
 
 ## Test Structure & Tips
 
