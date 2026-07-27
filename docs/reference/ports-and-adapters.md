@@ -120,9 +120,8 @@ as the first positional parameter. The underlying driver is accessed via
 @dataclasses.dataclass
 class QueueManager:
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    # None derives the channel from the queries' settings.
+    channel: models.Channel | None = None
 ```
 
 Callers construct concrete adapters at the composition root:

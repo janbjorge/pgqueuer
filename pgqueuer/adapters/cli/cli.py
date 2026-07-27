@@ -456,14 +456,18 @@ def web(
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
 def listen(
     ctx: Context,
-    channel: str = typer.Option(
-        qb.DBSettings().channel,
+    channel: str | None = typer.Option(
+        None,
         "--channel",
+        show_default="channel from settings",
     ),
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await display_pg_channel(q.driver, models.Channel(channel))
+            await display_pg_channel(
+                q.driver,
+                models.Channel(channel) if channel else q.qbe.settings.channel,
+            )
 
     asyncio_run(run())
 

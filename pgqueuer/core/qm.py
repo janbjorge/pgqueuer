@@ -23,7 +23,6 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -38,9 +37,9 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    # None derives the channel from the queries' settings, so LISTEN always
+    # matches the channel NOTIFYs are sent on. An explicit value wins.
+    channel: models.Channel | None = None
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -84,6 +83,10 @@ class QueueManager:
         init=False,
         default=timedelta(seconds=0.1),
     )
+
+    def __post_init__(self) -> None:
+        if self.channel is None:
+            self.channel = self.queries.qbe.settings.channel
 
     async def listener_healthy(
         self,
@@ -380,6 +383,8 @@ class QueueManager:
         on stats reads; pass ``timedelta(0)`` to disable (pure on-demand).
         """
         await self.verify_structure()
+
+        assert self.channel is not None  # Derived in __post_init__.
 
         max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
 

@@ -20,7 +20,6 @@ from pgqueuer.core.executors import (
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.domain.models import Channel
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
@@ -45,9 +44,9 @@ class PgQueuer:
     """
 
     connection: Driver
-    channel: Channel = dataclasses.field(
-        default=Channel(DBSettings().channel),
-    )
+    # None derives the channel from the queries' settings, so LISTEN always
+    # matches the channel NOTIFYs are sent on. An explicit value wins.
+    channel: Channel | None = None
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
@@ -72,6 +71,7 @@ class PgQueuer:
             self.channel,
             resources=self.resources,
         )
+        self.channel = self.qm.channel
         self.sm = SchedulerManager(
             self.queries,
             resources=self.resources,
@@ -128,9 +128,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
     ) -> "PgQueuer":
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls(connection=driver, channel=channel, resources=resources or {})
 
     @classmethod
     def in_memory(
@@ -144,7 +142,6 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        channel = channel or Channel(DBSettings().channel)
         inmem = InMemoryQueries(driver=driver)
         return cls(
             connection=driver,
