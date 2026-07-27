@@ -160,6 +160,7 @@ class DBSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGQUEUER_",
         extra="ignore",
+        frozen=True,
     )
 
     # Prepended to every object name not explicitly overridden; lets multiple
@@ -265,8 +266,8 @@ class DBSettings(BaseSettings):
         return f"{self.db_schema}.{name}" if self.db_schema else name
 
     # cached_property: query builders access this on every SQL render (the
-    # dequeue loop rebuilds its query each iteration). Safe because names are
-    # fixed once validation and apply_prefix have run.
+    # dequeue loop rebuilds its query each iteration). Safe because the model
+    # is frozen; names cannot change after validation.
     @functools.cached_property
     def qualified(self) -> QualifiedNames:
         return QualifiedNames(

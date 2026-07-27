@@ -103,15 +103,14 @@ server.run(transport="stdio")
 
 ### Custom Table Prefix or Schema
 
-If you use `PGQUEUER_PREFIX` or `PGQUEUER_SCHEMA` to namespace your tables, pass
-custom settings:
+`PGQUEUER_PREFIX` and `PGQUEUER_SCHEMA` are read automatically when the server
+starts. To configure names in code instead, pass a `DBSettings` instance:
 
 ```python
+from pgqueuer import DBSettings
 from pgqueuer.adapters.mcp.server import create_mcp_server
-from pgqueuer.adapters.persistence.qb import DBSettings
 
-# reads PGQUEUER_PREFIX / PGQUEUER_SCHEMA
-server = create_mcp_server(settings=DBSettings())
+server = create_mcp_server(settings=DBSettings(prefix="myapp_"))
 server.run(transport="stdio")
 ```
 

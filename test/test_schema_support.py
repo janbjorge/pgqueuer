@@ -20,7 +20,7 @@ from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import AnyEvent, Channel, CronExpressionEntrypoint
 from pgqueuer.queries import EntrypointExecutionParameter
 from pgqueuer.types import CronEntrypoint, CronExpression
-from test.helpers import id_data_type, queries_for, simulate_legacy_serial
+from test.helpers import id_data_type, simulate_legacy_serial
 
 SCHEMA = "pgq_iso"
 
@@ -55,7 +55,7 @@ async def test_search_path_install_upgrades_via_db_schema(apgdriver: db.Driver) 
     await queries.Queries(apgdriver).install()
     await apgdriver.execute("SET search_path TO public;")
 
-    q = queries_for(apgdriver, DBSettings(db_schema=SCHEMA))
+    q = queries.Queries(apgdriver, settings=DBSettings(db_schema=SCHEMA))
     assert await q.has_table(q.qbe.settings.queue_table)
     await q.upgrade()
     await q.upgrade()
@@ -67,7 +67,7 @@ async def test_fresh_install_round_trip_in_schema(apgdriver: db.Driver) -> None:
     await queries.Queries(apgdriver).uninstall()
 
     settings = DBSettings(db_schema=SCHEMA, prefix="iso_")
-    q = queries_for(apgdriver, settings)
+    q = queries.Queries(apgdriver, settings=settings)
     await q.install()
 
     assert await table_schemas(apgdriver, settings.queue_table) == {SCHEMA}
@@ -91,7 +91,7 @@ async def test_widen_id_in_schema_with_prefix(apgdriver: db.Driver) -> None:
     await queries.Queries(apgdriver).uninstall()
 
     settings = DBSettings(db_schema=SCHEMA, prefix="iso_")
-    q = queries_for(apgdriver, settings)
+    q = queries.Queries(apgdriver, settings=settings)
     await q.install()
 
     widened = [settings.queue_table, settings.statistics_table, settings.schedules_table]
@@ -110,7 +110,7 @@ async def test_notify_channel_is_not_schema_qualified(apgdriver: db.Driver) -> N
     await queries.Queries(apgdriver).uninstall()
 
     settings = DBSettings(db_schema=SCHEMA)
-    q = queries_for(apgdriver, settings)
+    q = queries.Queries(apgdriver, settings=settings)
     await q.install()
 
     events = list[AnyEvent]()
@@ -130,7 +130,7 @@ async def test_schema_info_respects_db_schema(apgdriver: db.Driver) -> None:
     await queries.Queries(apgdriver).uninstall()
 
     settings = DBSettings(db_schema=SCHEMA)
-    q = queries_for(apgdriver, settings)
+    q = queries.Queries(apgdriver, settings=settings)
     await q.install()
 
     rows = await apgdriver.fetch(q.qbq.build_schema_info_query())
@@ -147,7 +147,7 @@ async def test_install_without_create_schema(apgdriver: db.Driver) -> None:
     await queries.Queries(apgdriver).uninstall()
 
     settings = DBSettings(db_schema=SCHEMA)
-    q = queries_for(apgdriver, settings)
+    q = queries.Queries(apgdriver, settings=settings)
 
     with pytest.raises(asyncpg.InvalidSchemaNameError):
         await q.install(create_schema=False)

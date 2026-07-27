@@ -43,22 +43,38 @@ def is_unique_violation(exc: Exception) -> bool:
 
 @dataclasses.dataclass
 class Queries:
-    """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats."""
+    """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats.
+
+    Usage example::
+
+        settings = DBSettings(prefix="billing_")
+        queries = Queries(driver, settings=settings)
+
+    The one ``settings`` instance names every generated DB object and the
+    NOTIFY/LISTEN channel; query builders derive from it and cannot be
+    injected separately.
+    """
 
     driver: Driver
 
-    qbe: qb.QueryBuilderEnvironment = dataclasses.field(
-        default_factory=qb.QueryBuilderEnvironment,
-    )
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-    qbs: qb.QuerySchedulerBuilder = dataclasses.field(
-        default_factory=qb.QuerySchedulerBuilder,
+    # Single source of truth for every generated object name and the NOTIFY
+    # channel; the query builders below are derived from it and cannot be
+    # injected separately.
+    settings: qb.DBSettings = dataclasses.field(
+        default_factory=qb.DBSettings,
     )
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
+
+    qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+    qbs: qb.QuerySchedulerBuilder = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.qbe = qb.QueryBuilderEnvironment(settings=self.settings)
+        self.qbq = qb.QueryQueueBuilder(settings=self.settings)
+        self.qbs = qb.QuerySchedulerBuilder(settings=self.settings)
 
     @classmethod
     def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
@@ -448,9 +464,9 @@ class Queries:
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """Emit a ``cancellation_event`` NOTIFY carrying *ids*."""
         await self.driver.notify(
-            self.qbq.settings.channel,
+            self.settings.channel,
             models.CancellationEvent(
-                channel=self.qbq.settings.channel,
+                channel=self.settings.channel,
                 ids=ids,
                 sent_at=models.utc_now(),
                 type="cancellation_event",
@@ -460,9 +476,9 @@ class Queries:
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         """Emit a ``health_check_event`` NOTIFY tagged with ``health_check_event_id``."""
         await self.driver.notify(
-            self.qbq.settings.channel,
+            self.settings.channel,
             models.HealthCheckEvent(
-                channel=self.qbq.settings.channel,
+                channel=self.settings.channel,
                 sent_at=models.utc_now(),
                 type="health_check_event",
                 id=health_check_event_id,
@@ -687,12 +703,17 @@ class SyncQueries:
 
     driver: SyncDriver
 
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
+    settings: qb.DBSettings = dataclasses.field(
+        default_factory=qb.DBSettings,
     )
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
+
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+
+    def __post_init__(self) -> None:
+        self.qbq = qb.QueryQueueBuilder(settings=self.settings)
 
     @overload
     def enqueue(

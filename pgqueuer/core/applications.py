@@ -38,6 +38,14 @@ class PgQueuer:
     This class provides a unified interface for job queue management and task scheduling,
     leveraging PostgreSQL for managing job states and distributed processing.
 
+    Usage example::
+
+        pgq = PgQueuer(driver, settings=DBSettings(prefix="billing_"))
+
+    ``settings`` flows into the internally built ``Queries`` and determines
+    the LISTEN channel; pass it instead of pre-building ``Queries`` unless
+    you inject your own repository (the two are mutually exclusive).
+
     Resources:
         resources: Mutable mapping for user‑provided shared objects (DB pools, HTTP
             clients, caches, ML models) created once at startup and injected into
@@ -45,14 +53,15 @@ class PgQueuer:
     """
 
     connection: Driver
-    channel: Channel = dataclasses.field(
-        default=Channel(DBSettings().channel),
-    )
+    # Deprecated; the LISTEN channel derives from the queries' settings so it
+    # always matches the channel NOTIFYs are sent on. None means "derive".
+    channel: Channel | None = None
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
     queries: RepositoryPort | None = dataclasses.field(default=None)
+    settings: DBSettings | None = dataclasses.field(default=None)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -65,13 +74,20 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
+        if self.queries is not None and self.settings is not None:
+            raise ValueError(
+                "settings and queries are mutually exclusive; "
+                "configure settings on the injected queries"
+            )
         if self.queries is None:
-            self.queries = Queries(self.connection)
+            self.queries = Queries(self.connection, settings=self.settings or DBSettings())
+        # QueueManager owns the channel deprecation warning and conflict check.
         self.qm = QueueManager(
             self.queries,
             self.channel,
             resources=self.resources,
         )
+        self.channel = self.qm.channel
         self.sm = SchedulerManager(
             self.queries,
             resources=self.resources,
@@ -85,12 +101,14 @@ class PgQueuer:
         connection: "asyncpg.Connection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -99,12 +117,14 @@ class PgQueuer:
         pool: "asyncpg.Pool",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
             driver=AsyncpgPoolDriver(pool),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -113,12 +133,14 @@ class PgQueuer:
         connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -127,16 +149,21 @@ class PgQueuer:
         driver: Driver,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls(
+            connection=driver,
+            channel=channel,
+            resources=resources or {},
+            settings=settings,
+        )
 
     @classmethod
     def in_memory(
         cls,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Create a PgQueuer backed entirely by in-memory data structures.
 
@@ -144,8 +171,7 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        channel = channel or Channel(DBSettings().channel)
-        inmem = InMemoryQueries(driver=driver)
+        inmem = InMemoryQueries(driver=driver, settings=settings or DBSettings())
         return cls(
             connection=driver,
             channel=channel,

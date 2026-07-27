@@ -6,6 +6,7 @@ import dataclasses
 import random
 import sys
 import uuid
+import warnings
 from collections.abc import MutableMapping
 from contextlib import nullcontext, suppress
 from datetime import timedelta
@@ -23,7 +24,6 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -38,9 +38,9 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    # Deprecated; the LISTEN channel derives from the queries' settings so it
+    # always matches the channel NOTIFYs are sent on. None means "derive".
+    channel: models.Channel | None = None
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -84,6 +84,22 @@ class QueueManager:
         init=False,
         default=timedelta(seconds=0.1),
     )
+
+    def __post_init__(self) -> None:
+        derived = self.queries.settings.channel
+        if self.channel is not None:
+            warnings.warn(
+                "channel= is deprecated; the channel derives from the queries' settings "
+                "(Queries(driver, settings=DBSettings(channel=...)) or PGQUEUER_CHANNEL)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if self.channel != derived:
+                raise ValueError(
+                    f"channel {self.channel!r} conflicts with the queries' settings "
+                    f"channel {derived!r}; configure the channel via DBSettings"
+                )
+        self.channel = derived
 
     async def listener_healthy(
         self,
@@ -246,8 +262,8 @@ class QueueManager:
         """Assert that required tables, columns, indexes, enums, and triggers exist."""
 
         for table in (
-            self.queries.qbe.settings.queue_table,
-            self.queries.qbe.settings.statistics_table,
+            self.queries.settings.queue_table,
+            self.queries.settings.statistics_table,
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
@@ -255,20 +271,20 @@ class QueueManager:
                     f"Please run 'pgq install' to set up the necessary tables."
                 )
 
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
+        if not (await self.queries.has_table(self.queries.settings.queue_table_log)):
             raise RuntimeError(
-                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
+                f"The {self.queries.settings.queue_table_log} table is missing "
                 "please run 'pgq upgrade'"
             )
 
         for table, column in (
-            (self.queries.qbe.settings.queue_table, "updated"),
-            (self.queries.qbe.settings.queue_table, "heartbeat"),
-            (self.queries.qbe.settings.queue_table, "queue_manager_id"),
-            (self.queries.qbe.settings.queue_table, "execute_after"),
-            (self.queries.qbe.settings.queue_table, "headers"),
-            (self.queries.qbe.settings.queue_table, "attempts"),
-            (self.queries.qbe.settings.queue_table_log, "traceback"),
+            (self.queries.settings.queue_table, "updated"),
+            (self.queries.settings.queue_table, "heartbeat"),
+            (self.queries.settings.queue_table, "queue_manager_id"),
+            (self.queries.settings.queue_table, "execute_after"),
+            (self.queries.settings.queue_table, "headers"),
+            (self.queries.settings.queue_table, "attempts"),
+            (self.queries.settings.queue_table_log, "traceback"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
@@ -277,8 +293,8 @@ class QueueManager:
                 )
 
         for key, enum in (
-            ("canceled", self.queries.qbe.settings.queue_status_type),
-            ("failed", self.queries.qbe.settings.queue_status_type),
+            ("canceled", self.queries.settings.queue_status_type),
+            ("failed", self.queries.settings.queue_status_type),
         ):
             if not (await self.queries.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
@@ -287,8 +303,8 @@ class QueueManager:
 
         for table, index in (
             (
-                self.queries.qbe.settings.queue_table_log,
-                f"{self.queries.qbe.settings.queue_table_log}_job_id_status",
+                self.queries.settings.queue_table_log,
+                f"{self.queries.settings.queue_table_log}_job_id_status",
             ),
         ):
             if not (await self.queries.table_has_index(table, index)):
@@ -419,7 +435,7 @@ class QueueManager:
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
-                self.channel,
+                self.queries.settings.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
                     canceled=self.job_context,

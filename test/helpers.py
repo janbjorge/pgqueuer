@@ -12,26 +12,21 @@ import async_timeout
 
 from pgqueuer import db
 from pgqueuer.adapters.persistence import qb
-from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 
-# Tables whose id was int4 SERIAL before #671 and gets widened to BIGINT.
-WIDENED_ID_TABLES = [
-    qb.DBSettings().queue_table,
-    qb.DBSettings().statistics_table,
-    qb.DBSettings().schedules_table,
-]
 
+def widened_id_tables() -> list[str]:
+    """Tables whose id was int4 SERIAL before #671 and gets widened to BIGINT.
 
-def queries_for(driver: db.Driver, settings: qb.DBSettings) -> Queries:
-    """Queries wired to non-default DBSettings across all three builders."""
-    return Queries(
-        driver,
-        qbe=qb.QueryBuilderEnvironment(settings=settings),
-        qbq=qb.QueryQueueBuilder(settings=settings),
-        qbs=qb.QuerySchedulerBuilder(settings=settings),
-    )
+    Built at call time so PGQUEUER_* env vars set by fixtures are honored.
+    """
+    settings = qb.DBSettings()
+    return [
+        settings.queue_table,
+        settings.statistics_table,
+        settings.schedules_table,
+    ]
 
 
 async def id_data_type(driver: db.Driver, table: str, schema: str | None = None) -> str:

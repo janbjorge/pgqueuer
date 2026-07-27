@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pgqueuer import db, queries
-from test.helpers import WIDENED_ID_TABLES, id_data_type, simulate_legacy_serial
+from test.helpers import id_data_type, simulate_legacy_serial, widened_id_tables
 
 INT4_MAX = 2**31 - 1
 
@@ -13,24 +13,24 @@ async def test_upgrade_widens_legacy_int_id_columns(apgdriver: db.Driver) -> Non
     q = queries.Queries(apgdriver)
 
     # Simulate a legacy install whose id columns are still int4 SERIAL.
-    for table in WIDENED_ID_TABLES:
+    for table in widened_id_tables():
         await simulate_legacy_serial(apgdriver, table)
         assert await id_data_type(apgdriver, table) == "integer"
 
     await q.upgrade()
-    for table in WIDENED_ID_TABLES:
+    for table in widened_id_tables():
         assert await id_data_type(apgdriver, table) == "bigint"
 
     # Idempotent: a second upgrade leaves the already-widened columns alone.
     await q.upgrade()
-    for table in WIDENED_ID_TABLES:
+    for table in widened_id_tables():
         assert await id_data_type(apgdriver, table) == "bigint"
 
 
 async def test_upgrade_widens_legacy_serial_sequence(apgdriver: db.Driver) -> None:
     """Widening the column alone is not enough; the SERIAL sequence caps at 2^31-1 too."""
     q = queries.Queries(apgdriver)
-    table = WIDENED_ID_TABLES[0]
+    table = widened_id_tables()[0]
     await simulate_legacy_serial(apgdriver, table)
     await apgdriver.execute(f"SELECT setval('{table}_id_seq', {INT4_MAX - 1});")
 

@@ -195,10 +195,12 @@ Listen to PostgreSQL NOTIFY channels for debugging.
 
 **Options:**
 
-- `--channel`: Channel name to listen on (default: `ch_pgqueuer`).
+- `--channel`: Channel name to listen on. Defaults to the channel from the
+  settings, so `--prefix` and `PGQUEUER_CHANNEL` are honored.
 
 ```bash
 pgq listen
+pgq --prefix billing listen   # listens on billing's channel
 pgq listen --channel my_custom_channel
 ```
 

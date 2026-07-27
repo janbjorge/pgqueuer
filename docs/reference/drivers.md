@@ -167,7 +167,8 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to `Channel(DBSettings().channel)` |
+| `settings` | No | `DBSettings` instance shared by all queries and the listener. Defaults to reading `PGQUEUER_*` env vars |
+| `channel` | No | Deprecated. The channel derives from `settings`; use `DBSettings(channel=...)` or `PGQUEUER_CHANNEL` |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
 
 ## Best Practices

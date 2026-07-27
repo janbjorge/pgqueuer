@@ -154,24 +154,14 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    AsyncpgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(AsyncpgDriver(connection), settings=settings)
             return
         with contextlib.suppress(ImportError):
             from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    PsycopgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(PsycopgDriver(connection), settings=settings)
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
@@ -318,10 +308,10 @@ def verify(
             divergence = list[str]()
 
             required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
+                q.settings.queue_table,
+                q.settings.statistics_table,
+                q.settings.schedules_table,
+                q.settings.queue_table_log,
             ]
 
             for table in required_tables:
@@ -330,15 +320,15 @@ def verify(
                     state = "missing" if expect_present else "unexpected"
                     divergence.append(f"{state} table '{table}'")
 
-            func_exists = await q.has_function(q.qbe.settings.function)
+            func_exists = await q.has_function(q.settings.function)
             if expect_present != func_exists:
                 state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
+                divergence.append(f"{state} function '{q.settings.function}'")
 
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
+            trig_exists = await q.has_trigger(q.settings.trigger)
             if expect_present != trig_exists:
                 state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
+                divergence.append(f"{state} trigger '{q.settings.trigger}'")
 
             if divergence:
                 print("\n".join(divergence))
@@ -456,14 +446,18 @@ def web(
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
 def listen(
     ctx: Context,
-    channel: str = typer.Option(
-        qb.DBSettings().channel,
+    channel: str | None = typer.Option(
+        None,
         "--channel",
+        show_default="channel from settings",
     ),
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await display_pg_channel(q.driver, models.Channel(channel))
+            await display_pg_channel(
+                q.driver,
+                models.Channel(channel) if channel else q.settings.channel,
+            )
 
     asyncio_run(run())
 

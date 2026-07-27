@@ -11,6 +11,7 @@ from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.cache import TTLCache
 from pgqueuer.core.tm import TaskManager
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -169,6 +170,8 @@ async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
     qm: QueueManager
 
     class Stub:
+        settings = DBSettings()
+
         async def aggregate_logs(self) -> None:
             nonlocal calls
             calls += 1
@@ -187,6 +190,8 @@ async def test_periodic_log_aggregation_survives_aggregate_errors() -> None:
     qm: QueueManager
 
     class Stub:
+        settings = DBSettings()
+
         async def aggregate_logs(self) -> None:
             nonlocal calls
             calls += 1

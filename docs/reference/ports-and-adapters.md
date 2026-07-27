@@ -120,10 +120,14 @@ as the first positional parameter. The underlying driver is accessed via
 @dataclasses.dataclass
 class QueueManager:
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    # Deprecated; the LISTEN channel derives from queries.settings.channel.
+    channel: models.Channel | None = None
 ```
+
+`QueueRepositoryPort` carries a `settings: DBSettings` attribute, so every
+consumer (QueueManager, SchedulerManager, CompletionWatcher) derives table
+names and the NOTIFY/LISTEN channel from the queries object it was given —
+one `DBSettings` instance per composition root, no independent defaults.
 
 Callers construct concrete adapters at the composition root:
 

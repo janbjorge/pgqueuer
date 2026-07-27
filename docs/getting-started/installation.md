@@ -186,6 +186,22 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 The two settings are independent: a prefix separates instances that share a
 schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
+To configure names in code instead of env vars, build a `DBSettings` and pass
+it to the composition root — `Queries` and `PgQueuer` both accept `settings=`:
+
+```python
+from pgqueuer import DBSettings, PgQueuer, Queries
+
+settings = DBSettings(prefix="billing_")
+pgq = PgQueuer(driver, settings=settings)
+# or, when wiring Queries yourself:
+queries = Queries(driver, settings=settings)
+```
+
+One `DBSettings` instance flows to every query builder and the NOTIFY/LISTEN
+channel, so table names and notifications can never disagree. `DBSettings` is
+immutable; build a new instance to change a value.
+
 ## Next Steps
 
 - **[Quick Start](quickstart.md)**: build your first consumer and producer

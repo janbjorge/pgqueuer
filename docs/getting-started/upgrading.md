@@ -1,4 +1,23 @@
-# Upgrading from 0.x to 1.0
+# Upgrading
+
+## Upgrading to 2.0: settings plumbing
+
+PgQueuer 2.0 makes one `DBSettings` instance the single source of truth for
+table names and the NOTIFY/LISTEN channel. No database changes are required.
+
+| Change | Migration |
+|---|---|
+| `qbe=`/`qbq=`/`qbs=` removed from `Queries`, `SyncQueries`, `InMemoryQueries` | Pass `Queries(driver, settings=DBSettings(...))`; the builders are built from it and remain readable as attributes |
+| `Queries` second positional argument is now `settings` | Use keywords when constructing with more than a driver |
+| `channel=` on `PgQueuer` / `QueueManager` deprecated | Drop it; the channel derives from the queries' settings. To customize, use `DBSettings(channel=...)` or `PGQUEUER_CHANNEL`. A `channel=` that conflicts with the settings is now an immediate error — that combination silently broke LISTEN/NOTIFY before |
+| `DBSettings` is frozen | Build a new instance instead of mutating; mutation was already unsafe (`qualified` is cached) |
+| Custom `RepositoryPort` implementations need a `settings: DBSettings` attribute | Add the attribute; core components read table names and the channel through it |
+
+Behavior fixes included: `CompletionWatcher` and `pgq --prefix ... listen` now
+listen on the configured channel instead of the default one, and env vars are
+read when objects are constructed rather than at import time.
+
+## Upgrading from 0.x to 1.0
 
 PgQueuer 1.0 is the first stable release. From this point on, the project
 follows [semantic versioning](https://semver.org/) strictly: patch releases

@@ -8,10 +8,9 @@ only proves what we wrote, not what Postgres does with it.
 from __future__ import annotations
 
 from pgqueuer import db, queries
-from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel
-from test.helpers import id_data_type, queries_for, simulate_legacy_serial
+from test.helpers import id_data_type, simulate_legacy_serial
 
 # Object names sharing no substring with the defaults: if any migration
 # statement hardcoded a default name, upgrading this schema would miss its
@@ -50,7 +49,7 @@ async def test_upgrade_targets_configured_names(apgdriver: db.Driver) -> None:
     # than silently hit the template's default-named tables.
     await queries.Queries(apgdriver).uninstall()
 
-    q = queries_for(apgdriver, CUSTOM)
+    q = queries.Queries(apgdriver, settings=CUSTOM)
     await q.install()
     for table in CUSTOM_WIDENED_TABLES:
         await simulate_legacy_serial(apgdriver, table)
@@ -70,7 +69,7 @@ async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None
     await simulate_legacy_serial(apgdriver, table)
 
     no_widen = DBSettings(widen_id=False)
-    q_no_widen = queries.Queries(apgdriver, qbe=qb.QueryBuilderEnvironment(settings=no_widen))
+    q_no_widen = queries.Queries(apgdriver, settings=no_widen)
     await q_no_widen.upgrade()
     assert await id_data_type(apgdriver, table) == "integer"
 
