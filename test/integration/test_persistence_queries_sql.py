@@ -89,7 +89,6 @@ async def test_dedupe_constraint_partial_index(
 ) -> None:
     """Partial unique index: allows duplicates in terminal states."""
     q = Queries(apgdriver)
-    await q.install()
 
     jids1 = await q.enqueue(["ep"], [None], [0], dedupe_key=["k"], on_conflict="raise")
 
@@ -118,7 +117,6 @@ async def test_concurrent_enqueue_dedup_race(
 ) -> None:
     """Concurrent enqueue same dedupe_key: one succeeds, one fails."""
     q = Queries(apgdriver)
-    await q.install()
 
     results: dict[int, list | Exception] = {}
 
@@ -181,7 +179,6 @@ async def test_large_batch_atomicity_10k_jobs(
 ) -> None:
     """Large batch 10k jobs: all inserted or error, never partial."""
     q = Queries(apgdriver)
-    await q.install()
 
     N = 10_000
     eps = ["ep"] * N
@@ -208,7 +205,6 @@ async def test_on_conflict_skip_shape_preservation(
 ) -> None:
     """on_conflict=skip: returned array shape matches input, None at conflicts."""
     q = Queries(apgdriver)
-    await q.install()
 
     await q.enqueue(["ep"], [None], [0], dedupe_key=["b"], on_conflict="raise")
 
@@ -305,7 +301,6 @@ async def test_global_concurrency_limit_hard_cap(
 ) -> None:
     """Global concurrency limit: hard cap enforced across workers."""
     q = Queries(apgdriver)
-    await q.install()
 
     await q.enqueue(["ep"] * 100, [None] * 100, [0] * 100)
 
