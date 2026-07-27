@@ -161,9 +161,10 @@ explicit_package_bases = true
 asyncio_mode = "auto"
 timeout = "20"
 timeout_func_only = true
-# -n 4: modest parallelism; each xdist worker gets its own session-scoped
+# -n 2: modest parallelism; each xdist worker gets its own session-scoped
 # Postgres container, so this scales the suite across a few extra servers.
-addopts = "--durations=15 -n 4"
+# Dropped from 4 after CI instability (see 9d9ce3c).
+addopts = "--durations=15 -n 2"
 
 # ---------------------------------------------------------------------------
 # Import-linter: enforce hexagonal architecture boundaries
