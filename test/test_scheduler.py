@@ -4,7 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from pgqueuer.db import AsyncpgDriver, Driver
+from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.executors import (
     ScheduleExecutor,
@@ -26,14 +27,13 @@ async def inspect_schedule(
 ) -> list[Schedule]:
     if isinstance(scheduler_or_driver, SchedulerManager):
         return await scheduler_or_driver.queries.peek_schedule()
-    else:
-        # Legacy path for integration tests that inspect raw DB
-        query = f"SELECT * FROM {DBSettings().schedules_table} ORDER BY id"
-        return [Schedule.model_validate(dict(x)) for x in await scheduler_or_driver.fetch(query)]
+    # Legacy path for integration tests that inspect raw DB
+    query = f"SELECT * FROM {DBSettings().schedules_table} ORDER BY id"
+    return [Schedule.model_validate(dict(x)) for x in await scheduler_or_driver.fetch(query)]
 
 
 @pytest.fixture
-def scheduler(queries) -> SchedulerManager:
+def scheduler(queries: InMemoryQueries) -> SchedulerManager:
     return SchedulerManager(queries)
 
 

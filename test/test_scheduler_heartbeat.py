@@ -3,11 +3,12 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.sm import SchedulerManager
 
 
-async def test_scheduler_heartbeat_batches(queries) -> None:
+async def test_scheduler_heartbeat_batches(queries: InMemoryQueries) -> None:
     """The heartbeat loop must send batched updates for all active schedule IDs."""
     sm = SchedulerManager(queries)
 
@@ -41,7 +42,7 @@ async def test_scheduler_heartbeat_batches(queries) -> None:
     )
 
 
-async def test_scheduler_heartbeat_skips_when_empty(queries) -> None:
+async def test_scheduler_heartbeat_skips_when_empty(queries: InMemoryQueries) -> None:
     """The heartbeat loop must not call update when no schedules are active."""
     sm = SchedulerManager(queries)
 
