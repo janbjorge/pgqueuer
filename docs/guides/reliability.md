@@ -203,13 +203,25 @@ timer while it processes jobs, so statistics stay current without anyone reading
 await pgq.run(log_aggregation_interval=timedelta(seconds=30))
 ```
 
-- Default interval is 30 seconds. The task runs on every worker, but a Postgres advisory
-  lock lets only one worker aggregate at a time, so counts are never doubled.
+- Default interval is 30 seconds. The task only calls the database when this worker has
+  actually dispatched a job since the last tick; an idle worker never round-trips an
+  aggregation query for nothing.
+- The task runs on every worker, but a Postgres advisory lock lets only one worker
+  aggregate at a time, so counts are never doubled.
 - Pass `timedelta(0)` to disable the background task. Aggregation then happens only
   on-demand, the first time statistics are read (CLI `pgq dashboard`, Prometheus metrics,
   or the MCP server).
 - Aggregation never deletes log rows; it flags them `aggregated = TRUE`. Log retention is
   still your responsibility (see the note above).
+
+!!! warning "Large pre-existing backlog"
+    The aggregation query folds every currently-unaggregated `pgqueuer_log` row in one
+    unbatched transaction; there is no `LIMIT`/chunking yet. If `pgqueuer_log` has built
+    up a large backlog before this runs for the first time (e.g. upgrading onto this
+    feature on a long-running deployment that never read statistics before), the first
+    tick that touches it can be a long-running transaction with matching lock/WAL
+    impact. Check `SELECT count(*) FROM pgqueuer_log WHERE NOT aggregated` before
+    upgrading a high-throughput deployment so this isn't a surprise.
 
 ## Summary
 
