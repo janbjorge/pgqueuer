@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import itertools
 import uuid
 from datetime import timedelta
@@ -176,9 +177,69 @@ async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
                 qm.shutdown.set()
 
     qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
-    async with async_timeout.timeout(5):
-        await qm._run_periodic_log_aggregation(timedelta(seconds=0))
+
+    async def keep_marking_work() -> None:
+        # Stands in for `_dispatch` incrementing `jobs_logged` concurrently;
+        # without a steady stream of "new work" the gate would starve the loop
+        # after the first (post-success) reset.
+        while not qm.shutdown.is_set():
+            qm.jobs_logged = 1
+            await asyncio.sleep(0)
+
+    qm.jobs_logged = 1
+    marker = asyncio.ensure_future(keep_marking_work())
+    try:
+        async with async_timeout.timeout(5):
+            await qm._run_periodic_log_aggregation(timedelta(seconds=0))
+    finally:
+        marker.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await marker
     assert calls == 3
+
+
+async def test_periodic_log_aggregation_skips_when_idle() -> None:
+    """No job logged since the last tick means aggregate_logs is never called."""
+    calls = 0
+    qm: QueueManager
+
+    class Stub:
+        async def aggregate_logs(self) -> None:
+            nonlocal calls
+            calls += 1
+
+    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    task = asyncio.ensure_future(qm._run_periodic_log_aggregation(timedelta(seconds=0)))
+    try:
+        for _ in range(3):
+            await asyncio.sleep(0)
+    finally:
+        qm.shutdown.set()
+        async with async_timeout.timeout(5):
+            await task
+    assert calls == 0
+
+
+async def test_dispatch_increments_jobs_logged_counter(
+    queries: InMemoryQueries,
+) -> None:
+    """`jobs_logged` counts dispatched jobs, the gate the periodic task checks."""
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    await qm.queries.enqueue(["fetch"] * 3, [None] * 3, [0] * 3)
+
+    async with async_timeout.timeout(10):
+        await asyncio.gather(
+            # Aggregation disabled so it doesn't race the counter it gates.
+            qm.run(log_aggregation_interval=timedelta(0)),
+            wait_until_empty_queue(qm.queries, [qm]),
+        )
+
+    assert qm.jobs_logged == 3
 
 
 async def test_periodic_log_aggregation_survives_aggregate_errors() -> None:
@@ -195,6 +256,7 @@ async def test_periodic_log_aggregation_survives_aggregate_errors() -> None:
             raise RuntimeError("boom")
 
     qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    qm.jobs_logged = 1
     async with async_timeout.timeout(5):
         await qm._run_periodic_log_aggregation(timedelta(seconds=0))
     assert calls == 3
