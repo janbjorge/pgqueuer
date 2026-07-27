@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 
 FROM ghcr.io/astral-sh/uv:python3.13-alpine AS builder
+ARG PGQUEUER_VERSION=
 WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --system --no-cache-dir "pgqueuer[web,asyncpg]"
+    uv pip install --system --no-cache-dir "pgqueuer[web,asyncpg]${PGQUEUER_VERSION:+==${PGQUEUER_VERSION}}"
 
 FROM python:3.13-alpine
 ENV PYTHONDONTWRITEBYTECODE=1 \
