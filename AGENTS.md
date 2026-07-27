@@ -28,7 +28,7 @@ All commands use `uv` as the package manager. Install deps first: `uv sync --all
 
 ```bash
 # Run ALL checks (recommended before any PR)
-make check                  # runs: sync + lint + import-lint + typecheck + pytest
+uv sync --all-extras --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest
 
 # Individual checks
 uv run ruff check .         # Lint (ruff)

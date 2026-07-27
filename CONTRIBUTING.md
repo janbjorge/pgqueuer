@@ -23,8 +23,7 @@ Please follow these steps to have your contribution considered by the maintainer
 1. Follow all instructions in the template.
 2. Follow the [style guides](#style-guides) for Python.
 3. After you submit your pull request, verify that all status checks are passing.
-4. Ensure `make check` runs successfully locally. This command executes linting,
-   type checking, dependency checks, and the full test suite.
+4. Ensure the following run successfully locally: `uv sync --all-extras --frozen`, `uv run ruff check .`, `uv run ruff format . --check`, `uv run lint-imports`, `uv run mypy .`, and `uv run pytest`.
 
 While the prerequisites above must be satisfied prior to having your pull request reviewed, the reviewer(s) may ask you to complete additional design work, tests, or other changes before your pull request can be ultimately accepted.
 
@@ -55,9 +54,8 @@ Adhere to the [PEP 8](https://pep8.org/) style guide, using `ruff` for automatic
 
 ### Testing
 
-Before opening a pull request run the full test suite locally. The easiest way
-is to execute `make check`, which sets up the required environment variables and
-runs `ruff`, `mypy`, `uv sync --all-extras --frozen`, and `pytest`.
+Before opening a pull request run the full test suite locally by executing:
+`uv sync --all-extras --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest`
 
 ## Community
 
