@@ -42,30 +42,21 @@ def is_unique_violation(exc: Exception) -> bool:
     return False
 
 
-@dataclasses.dataclass(init=False)
+@dataclasses.dataclass
 class Queries:
     """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats."""
 
     driver: Driver
-    settings: DBSettings
-    qbe: qb.QueryBuilderEnvironment
-    qbq: qb.QueryQueueBuilder
-    qbs: qb.QuerySchedulerBuilder
-    tracer: TracingProtocol | None
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    tracer: TracingProtocol | None = None
+    qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+    qbs: qb.QuerySchedulerBuilder = dataclasses.field(init=False)
 
-    def __init__(
-        self,
-        driver: Driver,
-        settings: DBSettings | None = None,
-        tracer: TracingProtocol | None = None,
-    ) -> None:
-        settings = settings if settings is not None else DBSettings()
-        self.driver = driver
-        self.settings = settings
-        self.qbe = qb.QueryBuilderEnvironment(settings)
-        self.qbq = qb.QueryQueueBuilder(settings)
-        self.qbs = qb.QuerySchedulerBuilder(settings)
-        self.tracer = tracer
+    def __post_init__(self) -> None:
+        self.qbe = qb.QueryBuilderEnvironment(self.settings)
+        self.qbq = qb.QueryQueueBuilder(self.settings)
+        self.qbs = qb.QuerySchedulerBuilder(self.settings)
 
     @classmethod
     def from_asyncpg_connection(
@@ -76,8 +67,9 @@ class Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        settings = settings if settings is not None else DBSettings()
-        return cls(AsyncpgDriver(connection), settings)
+        if settings is None:
+            return cls(AsyncpgDriver(connection))
+        return cls(AsyncpgDriver(connection), settings=settings)
 
     @classmethod
     def from_asyncpg_pool(
@@ -88,8 +80,9 @@ class Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        settings = settings if settings is not None else DBSettings()
-        return cls(AsyncpgPoolDriver(pool), settings)
+        if settings is None:
+            return cls(AsyncpgPoolDriver(pool))
+        return cls(AsyncpgPoolDriver(pool), settings=settings)
 
     @classmethod
     def from_psycopg_connection(
@@ -100,8 +93,9 @@ class Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        settings = settings if settings is not None else DBSettings()
-        return cls(PsycopgDriver(connection), settings)
+        if settings is None:
+            return cls(PsycopgDriver(connection))
+        return cls(PsycopgDriver(connection), settings=settings)
 
     async def install(self, create_schema: bool = True) -> None:
         """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
@@ -703,26 +697,17 @@ class Queries:
         ]
 
 
-@dataclasses.dataclass(init=False)
+@dataclasses.dataclass
 class SyncQueries:
     """Synchronous subset of :class:`Queries` (currently enqueue + queue_size)."""
 
     driver: SyncDriver
-    settings: DBSettings
-    qbq: qb.QueryQueueBuilder
-    tracer: TracingProtocol | None
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    tracer: TracingProtocol | None = None
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
 
-    def __init__(
-        self,
-        driver: SyncDriver,
-        settings: DBSettings | None = None,
-        tracer: TracingProtocol | None = None,
-    ) -> None:
-        settings = settings if settings is not None else DBSettings()
-        self.driver = driver
-        self.settings = settings
-        self.qbq = qb.QueryQueueBuilder(settings)
-        self.tracer = tracer
+    def __post_init__(self) -> None:
+        self.qbq = qb.QueryQueueBuilder(self.settings)
 
     @overload
     def enqueue(

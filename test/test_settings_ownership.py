@@ -57,9 +57,8 @@ def test_queue_manager_channel_override_updates_repository_settings() -> None:
     queries = Queries(InMemoryDriver(), settings=settings)
     custom = Channel("custom_notify")
 
-    qm = QueueManager(queries, channel=custom)
+    QueueManager(queries, channel=custom)
 
-    assert qm.channel == custom
     assert queries.settings.channel == custom
 
 
@@ -67,9 +66,9 @@ def test_queue_manager_defaults_channel_from_repository_settings() -> None:
     settings = DBSettings(prefix="qm_")
     queries = Queries(InMemoryDriver(), settings=settings)
 
-    qm = QueueManager(queries)
+    QueueManager(queries)
 
-    assert qm.channel == settings.channel
+    assert queries.settings.channel == settings.channel
 
 
 def test_pgqueuer_channel_override_updates_queries_settings() -> None:

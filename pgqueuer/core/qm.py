@@ -27,7 +27,7 @@ from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
-@dataclasses.dataclass(init=False)
+@dataclasses.dataclass
 class QueueManager:
     """Dequeue jobs and dispatch them to registered entrypoint executors.
 
@@ -37,7 +37,7 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel
+    channel: dataclasses.InitVar[models.Channel | None] = None
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -87,28 +87,9 @@ class QueueManager:
         default=timedelta(seconds=0.1),
     )
 
-    def __init__(
-        self,
-        queries: RepositoryPort,
-        channel: models.Channel | None = None,
-        resources: MutableMapping | None = None,
-        tracer: tracing.TracingProtocol | None = None,
-    ) -> None:
-        self.queries = queries
-        self.shutdown = asyncio.Event()
-        self.entrypoint_registry = {}
-        self.queue_manager_id = uuid.uuid4()
-        self.resources = resources or {}
-        self.tracer = tracer
-        self.job_context = {}
-        self.pending_health_check = {}
-        self.jobs_logged = 0
-        self.min_dequeue_poll_interval = timedelta(seconds=0.1)
+    def __post_init__(self, channel: models.Channel | None) -> None:
         if channel is not None:
-            queries.settings.channel = channel
-            self.channel = channel
-        else:
-            self.channel = models.Channel(queries.settings.channel)
+            self.queries.settings.channel = channel
 
     async def listener_healthy(
         self,
@@ -450,7 +431,7 @@ class QueueManager:
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
-                self.channel,
+                self.queries.settings.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
                     canceled=self.job_context,

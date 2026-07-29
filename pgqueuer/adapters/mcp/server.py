@@ -475,7 +475,7 @@ def create_mcp_server(
              PGQUEUER_POOL_MAX_SIZE, PGQUEUER_CONNECT_TIMEOUT,
              PGQUEUER_APPLICATION_NAME).
     """
-    resolved_settings = settings if settings is not None else DBSettings()
+    resolved_settings = settings or DBSettings()
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:

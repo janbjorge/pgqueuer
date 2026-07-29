@@ -38,60 +38,44 @@ def percentile_cont(values: list[float], fraction: float) -> float:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
 
 
-@dataclasses.dataclass(init=False)
+@dataclasses.dataclass
 class InMemoryQueries:
     """Drop-in replacement for ``Queries`` backed by pure Python dicts."""
 
     driver: InMemoryDriver
-    settings: DBSettings
-    qbe: qb.QueryBuilderEnvironment
-    qbq: qb.QueryQueueBuilder
-    qbs: qb.QuerySchedulerBuilder
-    tracer: TracingProtocol | None
-    _jobs: dict[int, dict[str, Any]]
-    _log: list[dict[str, Any]]
-    _statistics: list[dict[str, Any]]
-    _schedules: dict[int, dict[str, Any]]
-    _dedupe_index: dict[str, int]
-    _dedupe_key_by_job: dict[int, str]
-    _ready_heaps: dict[str, list[tuple[int, int]]]
-    _deferred_heap: list[tuple[datetime, int, str]]
-    _picked_ids: set[int]
-    _next_job_id: int
-    _next_log_id: int
-    _next_schedule_id: int
-    _next_stats_id: int
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    tracer: TracingProtocol | None = None
+    qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+    qbs: qb.QuerySchedulerBuilder = dataclasses.field(init=False)
 
-    def __init__(
-        self,
-        driver: InMemoryDriver,
-        settings: DBSettings | None = None,
-        tracer: TracingProtocol | None = None,
-    ) -> None:
-        settings = settings if settings is not None else DBSettings()
-        self.driver = driver
-        self.settings = settings
-        self.qbe = qb.QueryBuilderEnvironment(settings)
-        self.qbq = qb.QueryQueueBuilder(settings)
-        self.qbs = qb.QuerySchedulerBuilder(settings)
-        self.tracer = tracer
-        self._jobs = {}
-        self._log = []
-        self._statistics = []
-        self._schedules = {}
-        self._dedupe_index = {}
-        self._dedupe_key_by_job = {}
-        self._ready_heaps = {}
-        self._deferred_heap = []
-        self._picked_ids = set()
-        self._next_job_id = 1
-        self._next_log_id = 1
-        self._next_schedule_id = 1
-        self._next_stats_id = 1
+    _jobs: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
+    _log: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
+    _statistics: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
+    _schedules: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
+    _dedupe_index: dict[str, int] = dataclasses.field(default_factory=dict, init=False)
+    _dedupe_key_by_job: dict[int, str] = dataclasses.field(default_factory=dict, init=False)
 
     # Dequeue indexes. Heap entries are never removed eagerly; validity is
     # re-checked against ``_jobs`` on pop, so entries for jobs that were
     # cancelled, cleared, or re-queued are skipped as tombstones.
+    _ready_heaps: dict[str, list[tuple[int, int]]] = dataclasses.field(
+        default_factory=dict, init=False
+    )
+    _deferred_heap: list[tuple[datetime, int, str]] = dataclasses.field(
+        default_factory=list, init=False
+    )
+    _picked_ids: set[int] = dataclasses.field(default_factory=set, init=False)
+
+    _next_job_id: int = dataclasses.field(default=1, init=False)
+    _next_log_id: int = dataclasses.field(default=1, init=False)
+    _next_schedule_id: int = dataclasses.field(default=1, init=False)
+    _next_stats_id: int = dataclasses.field(default=1, init=False)
+
+    def __post_init__(self) -> None:
+        self.qbe = qb.QueryBuilderEnvironment(self.settings)
+        self.qbq = qb.QueryQueueBuilder(self.settings)
+        self.qbs = qb.QuerySchedulerBuilder(self.settings)
 
     async def install(self) -> None:
         pass

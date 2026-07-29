@@ -65,20 +65,18 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         if self.queries is None:
-            settings = self.settings if self.settings is not None else DBSettings()
-            self.queries = Queries(self.connection, settings)
-        else:
-            if self.settings is not None and self.settings is not self.queries.settings:
-                raise ValueError("settings must be the same object as queries.settings")
-            settings = self.queries.settings
-        self.settings = settings
+            self.queries = Queries(
+                self.connection,
+                settings=self.settings or DBSettings(),
+            )
+        self.settings = self.queries.settings
         if self.channel is not None:
-            settings.channel = self.channel
+            self.settings.channel = self.channel
         else:
-            self.channel = Channel(settings.channel)
+            self.channel = Channel(self.settings.channel)
         self.qm = QueueManager(
             self.queries,
-            self.channel,
+            channel=self.channel,
             resources=self.resources,
         )
         self.sm = SchedulerManager(
@@ -164,14 +162,14 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        resolved_settings = settings if settings is not None else DBSettings()
-        inmem = InMemoryQueries(driver=driver, settings=resolved_settings)
         return cls(
             connection=driver,
             channel=channel,
-            queries=inmem,
+            queries=InMemoryQueries(
+                driver=driver,
+                settings=settings or DBSettings(),
+            ),
             resources=resources or {},
-            settings=resolved_settings,
         )
 
     async def run(
