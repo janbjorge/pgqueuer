@@ -700,21 +700,21 @@ class InMemoryQueries:
 
     async def notify_job_cancellation(self, ids: list[JobId]) -> None:
         event = models.CancellationEvent(
-            channel=self.qbq.settings.channel,
+            channel=self.settings.channel,
             ids=ids,
             sent_at=utc_now(),
             type="cancellation_event",
         )
-        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.settings.channel, event.model_dump_json())
 
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         event = models.HealthCheckEvent(
-            channel=self.qbq.settings.channel,
+            channel=self.settings.channel,
             sent_at=utc_now(),
             type="health_check_event",
             id=health_check_event_id,
         )
-        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.settings.channel, event.model_dump_json())
 
     async def insert_schedule(
         self,
@@ -1011,7 +1011,7 @@ class InMemoryQueries:
         return sum(1 for e in self._log if not e["aggregated"])
 
     async def schema_info(self) -> list[models.TableInfo]:
-        s = self.qbq.settings
+        s = self.settings
         tables = [
             (s.queue_table, len(self._jobs)),
             (s.queue_table_log, len(self._log)),
@@ -1035,10 +1035,10 @@ class InMemoryQueries:
 
     async def emit_table_changed(self, operation: models.OPERATIONS) -> None:
         event = models.TableChangedEvent(
-            channel=self.qbq.settings.channel,
+            channel=self.settings.channel,
             sent_at=utc_now(),
             type="table_changed_event",
             operation=operation,
-            table=self.qbe.settings.queue_table,
+            table=self.settings.queue_table,
         )
-        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
+        await self.driver.notify(self.settings.channel, event.model_dump_json())

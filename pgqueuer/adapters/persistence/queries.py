@@ -67,9 +67,7 @@ class Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        if settings is None:
-            return cls(AsyncpgDriver(connection))
-        return cls(AsyncpgDriver(connection), settings=settings)
+        return cls(AsyncpgDriver(connection), settings=settings or DBSettings())
 
     @classmethod
     def from_asyncpg_pool(
@@ -80,9 +78,7 @@ class Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        if settings is None:
-            return cls(AsyncpgPoolDriver(pool))
-        return cls(AsyncpgPoolDriver(pool), settings=settings)
+        return cls(AsyncpgPoolDriver(pool), settings=settings or DBSettings())
 
     @classmethod
     def from_psycopg_connection(
@@ -93,9 +89,7 @@ class Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        if settings is None:
-            return cls(PsycopgDriver(connection))
-        return cls(PsycopgDriver(connection), settings=settings)
+        return cls(PsycopgDriver(connection), settings=settings or DBSettings())
 
     async def install(self, create_schema: bool = True) -> None:
         """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
@@ -464,9 +458,9 @@ class Queries:
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """Emit a ``cancellation_event`` NOTIFY carrying *ids*."""
         await self.driver.notify(
-            self.qbq.settings.channel,
+            self.settings.channel,
             models.CancellationEvent(
-                channel=self.qbq.settings.channel,
+                channel=self.settings.channel,
                 ids=ids,
                 sent_at=models.utc_now(),
                 type="cancellation_event",
@@ -476,9 +470,9 @@ class Queries:
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
         """Emit a ``health_check_event`` NOTIFY tagged with ``health_check_event_id``."""
         await self.driver.notify(
-            self.qbq.settings.channel,
+            self.settings.channel,
             models.HealthCheckEvent(
-                channel=self.qbq.settings.channel,
+                channel=self.settings.channel,
                 sent_at=models.utc_now(),
                 type="health_check_event",
                 id=health_check_event_id,

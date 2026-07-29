@@ -74,15 +74,8 @@ class PgQueuer:
             self.settings.channel = self.channel
         else:
             self.channel = Channel(self.settings.channel)
-        self.qm = QueueManager(
-            self.queries,
-            channel=self.channel,
-            resources=self.resources,
-        )
-        self.sm = SchedulerManager(
-            self.queries,
-            resources=self.resources,
-        )
+        self.qm = QueueManager(self.queries, resources=self.resources)
+        self.sm = SchedulerManager(self.queries, resources=self.resources)
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown
 

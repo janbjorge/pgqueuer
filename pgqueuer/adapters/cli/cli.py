@@ -353,12 +353,13 @@ def uninstall(
         help="Deprecated: use 'pgq sql uninstall'.",
     ),
 ) -> None:
+    settings = qb.DBSettings()
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(qb.DBSettings()))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(settings))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -695,12 +696,13 @@ def optimize_autovacuum(
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
     """Apply or revert recommended autovacuum settings."""
+    settings = qb.DBSettings()
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(qb.DBSettings(), rollback))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(settings, rollback))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())

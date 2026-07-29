@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import (
     NotificationPort,
@@ -22,8 +21,6 @@ class RepositoryPort(
     Protocol,
 ):
     """Combined repository protocol for drop-in adapter implementations."""
-
-    settings: DBSettings
 
 
 __all__ = [

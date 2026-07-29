@@ -25,7 +25,7 @@ WIDENED_ID_TABLES = [
 
 
 def queries_for(driver: db.Driver, settings: qb.DBSettings) -> Queries:
-    """Queries wired to non-default DBSettings across all three builders."""
+    """Queries bound to a non-default DBSettings instance."""
     return Queries(driver, settings=settings)
 
 
