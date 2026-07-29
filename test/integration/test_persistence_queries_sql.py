@@ -12,11 +12,13 @@ import asyncio
 import uuid
 from datetime import timedelta
 
+import asyncpg
 import pytest
 
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.domain.models import TracebackRecord
+from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
+from pgqueuer.domain.types import CronEntrypoint, CronExpression
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -285,3 +287,82 @@ async def test_traceback_jsonb_roundtrip(
     assert len(exc_logs) == 1
     exc_log = exc_logs[0]
     assert exc_log.traceback is not None
+
+
+async def test_schedule_fetch_skips_row_locked_by_another_picker(
+    apgdriver: AsyncpgDriver,
+    dsn: str,
+) -> None:
+    """A locked due schedule is not returned to another picker."""
+    key = CronExpressionEntrypoint(
+        CronEntrypoint("locked_schedule"),
+        CronExpression("* * * * *"),
+    )
+    await Queries(apgdriver).insert_schedule({key: timedelta(seconds=0)})
+
+    first_connection = await asyncpg.connect(dsn=dsn)
+    second_connection = await asyncpg.connect(dsn=dsn)
+    transaction = first_connection.transaction()
+    await transaction.start()
+    try:
+        first = await Queries.from_asyncpg_connection(first_connection).fetch_schedule(
+            {key: timedelta(minutes=1)}
+        )
+        second = await Queries.from_asyncpg_connection(second_connection).fetch_schedule(
+            {key: timedelta(minutes=1)}
+        )
+
+        assert len(first) == 1
+        assert second == []
+    finally:
+        await transaction.rollback()
+        await first_connection.close()
+        await second_connection.close()
+
+
+async def test_schedule_fetch_reclaims_stale_picked_schedule(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """A picked schedule with an expired heartbeat can be claimed again."""
+    queries = Queries(apgdriver)
+    key = CronExpressionEntrypoint(
+        CronEntrypoint("stale_schedule"),
+        CronExpression("* * * * *"),
+    )
+    await queries.insert_schedule({key: timedelta(seconds=0)})
+    first = await queries.fetch_schedule({key: timedelta(hours=1)})
+    assert len(first) == 1
+
+    await apgdriver.execute(
+        f"UPDATE {queries.qbs.qualified.schedules_table} "
+        "SET heartbeat = NOW() - interval '31 seconds' WHERE id = $1",
+        first[0].id,
+    )
+
+    reclaimed = await queries.fetch_schedule({key: timedelta(hours=1)})
+
+    assert len(reclaimed) == 1
+    assert reclaimed[0].id == first[0].id
+    assert reclaimed[0].heartbeat > first[0].heartbeat
+
+
+async def test_schedule_heartbeat_update_persists_timestamps(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """Schedule heartbeat updates persist heartbeat and updated timestamps."""
+    queries = Queries(apgdriver)
+    key = CronExpressionEntrypoint(
+        CronEntrypoint("heartbeat_schedule"),
+        CronExpression("* * * * *"),
+    )
+    await queries.insert_schedule({key: timedelta(hours=1)})
+    before = await queries.peek_schedule()
+    assert len(before) == 1
+
+    await asyncio.sleep(0.01)
+    await queries.update_schedule_heartbeat({before[0].id})
+    after = await queries.peek_schedule()
+
+    assert len(after) == 1
+    assert after[0].heartbeat > before[0].heartbeat
+    assert after[0].updated > before[0].updated
