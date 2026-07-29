@@ -108,7 +108,7 @@ custom settings:
 
 ```python
 from pgqueuer.adapters.mcp.server import create_mcp_server
-from pgqueuer.adapters.persistence.qb import DBSettings
+from pgqueuer import DBSettings
 
 # reads PGQUEUER_PREFIX / PGQUEUER_SCHEMA
 server = create_mcp_server(settings=DBSettings())

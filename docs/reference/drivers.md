@@ -167,7 +167,8 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to `Channel(DBSettings().channel)` |
+| `channel` | No | Custom `Channel` configuration. Defaults to the repository's `DBSettings.channel` |
+| `settings` | No | Shared `DBSettings` for table names and NOTIFY channel. Defaults to env/`DBSettings()` |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
 
 ## Best Practices

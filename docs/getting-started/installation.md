@@ -186,6 +186,26 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 The two settings are independent: a prefix separates instances that share a
 schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
+## DBSettings ownership
+
+Each `Queries`, `InMemoryQueries`, or `SyncQueries` instance owns one `DBSettings`
+object. Pass it once at construction; every query builder, `QueueManager` LISTEN
+channel, and `CompletionWatcher` listener reads from that same instance:
+
+```python
+from pgqueuer import DBSettings, PgQueuer, Queries
+from pgqueuer.db import AsyncpgDriver
+
+settings = DBSettings(prefix="billing_")
+queries = Queries(connection, settings=settings)
+pgq = PgQueuer.from_asyncpg_connection(connection, settings=settings)
+```
+
+`DBSettings` is also exported from the top-level `pgqueuer` package. Field
+mutations (for example `settings.db_schema = "billing"`) are validated and
+observed by all consumers. Create a new `DBSettings` only at your application
+edge (CLI, web dashboard, MCP server, or test fixture), not inside library code.
+
 ## Next Steps
 
 - **[Quick Start](quickstart.md)**: build your first consumer and producer

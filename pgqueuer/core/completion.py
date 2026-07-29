@@ -9,7 +9,6 @@ from itertools import chain
 
 from pgqueuer.core import tm
 from pgqueuer.domain import models
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import QueueRepositoryPort
 
@@ -70,7 +69,7 @@ class CompletionWatcher:
 
     async def __aenter__(self) -> "CompletionWatcher":
         self.task_manager.add(asyncio.create_task(self._poll_for_change()))
-        await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
+        await self.driver.add_listener(self.queries.settings.channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 

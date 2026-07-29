@@ -45,9 +45,8 @@ class PgQueuer:
     """
 
     connection: Driver
-    channel: Channel = dataclasses.field(
-        default=Channel(DBSettings().channel),
-    )
+    channel: Channel | None = None
+    settings: DBSettings | None = None
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
@@ -66,7 +65,11 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         if self.queries is None:
-            self.queries = Queries(self.connection)
+            self.queries = Queries(self.connection, settings=self.settings or DBSettings())
+        if self.channel is not None:
+            self.queries.settings.channel = self.channel
+        else:
+            self.channel = Channel(self.queries.settings.channel)
         self.qm = QueueManager(
             self.queries,
             self.channel,
@@ -85,12 +88,14 @@ class PgQueuer:
         connection: "asyncpg.Connection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -99,12 +104,14 @@ class PgQueuer:
         pool: "asyncpg.Pool",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
             driver=AsyncpgPoolDriver(pool),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -113,12 +120,14 @@ class PgQueuer:
         connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -127,16 +136,21 @@ class PgQueuer:
         driver: Driver,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls(
+            connection=driver,
+            channel=channel,
+            resources=resources or {},
+            settings=settings,
+        )
 
     @classmethod
     def in_memory(
         cls,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Create a PgQueuer backed entirely by in-memory data structures.
 
@@ -144,13 +158,14 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        channel = channel or Channel(DBSettings().channel)
-        inmem = InMemoryQueries(driver=driver)
+        resolved_settings = settings or DBSettings()
+        inmem = InMemoryQueries(driver=driver, settings=resolved_settings)
         return cls(
             connection=driver,
             channel=channel,
             queries=inmem,
             resources=resources or {},
+            settings=resolved_settings,
         )
 
     async def run(

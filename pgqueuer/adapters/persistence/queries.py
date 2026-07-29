@@ -17,6 +17,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -41,44 +42,69 @@ def is_unique_violation(exc: Exception) -> bool:
     return False
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(init=False)
 class Queries:
     """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats."""
 
     driver: Driver
+    settings: DBSettings
+    qbe: qb.QueryBuilderEnvironment
+    qbq: qb.QueryQueueBuilder
+    qbs: qb.QuerySchedulerBuilder
+    tracer: TracingProtocol | None
 
-    qbe: qb.QueryBuilderEnvironment = dataclasses.field(
-        default_factory=qb.QueryBuilderEnvironment,
-    )
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-    qbs: qb.QuerySchedulerBuilder = dataclasses.field(
-        default_factory=qb.QuerySchedulerBuilder,
-    )
-
-    # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
-    tracer: TracingProtocol | None = None
+    def __init__(
+        self,
+        driver: Driver,
+        settings: DBSettings | None = None,
+        qbe: qb.QueryBuilderEnvironment | None = None,
+        qbq: qb.QueryQueueBuilder | None = None,
+        qbs: qb.QuerySchedulerBuilder | None = None,
+        tracer: TracingProtocol | None = None,
+    ) -> None:
+        self.driver = driver
+        self.tracer = tracer
+        canonical = qb.resolve_canonical_settings(settings or DBSettings(), qbe, qbq, qbs)
+        self.settings = canonical
+        self.qbe, self.qbq, self.qbs = qb.wire_query_builders(canonical)
 
     @classmethod
-    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
+    def from_asyncpg_connection(
+        cls,
+        connection: "asyncpg.Connection",
+        settings: DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
+        if settings is not None:
+            return cls(AsyncpgDriver(connection), settings=settings)
         return cls(AsyncpgDriver(connection))
 
     @classmethod
-    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> "Queries":
+    def from_asyncpg_pool(
+        cls,
+        pool: "asyncpg.Pool",
+        settings: DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
+        if settings is not None:
+            return cls(AsyncpgPoolDriver(pool), settings=settings)
         return cls(AsyncpgPoolDriver(pool))
 
     @classmethod
-    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> "Queries":
+    def from_psycopg_connection(
+        cls,
+        connection: "psycopg.AsyncConnection",
+        settings: DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
+        if settings is not None:
+            return cls(PsycopgDriver(connection), settings=settings)
         return cls(PsycopgDriver(connection))
 
     async def install(self, create_schema: bool = True) -> None:
@@ -681,18 +707,27 @@ class Queries:
         ]
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(init=False)
 class SyncQueries:
     """Synchronous subset of :class:`Queries` (currently enqueue + queue_size)."""
 
     driver: SyncDriver
+    settings: DBSettings
+    qbq: qb.QueryQueueBuilder
+    tracer: TracingProtocol | None
 
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-
-    # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
-    tracer: TracingProtocol | None = None
+    def __init__(
+        self,
+        driver: SyncDriver,
+        settings: DBSettings | None = None,
+        qbq: qb.QueryQueueBuilder | None = None,
+        tracer: TracingProtocol | None = None,
+    ) -> None:
+        self.driver = driver
+        self.tracer = tracer
+        canonical = qbq.settings if qbq is not None else (settings or DBSettings())
+        self.settings = canonical
+        self.qbq = qb.QueryQueueBuilder(settings=canonical)
 
     @overload
     def enqueue(

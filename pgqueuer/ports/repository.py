@@ -29,6 +29,8 @@ class EntrypointExecutionParameter:
 class QueueRepositoryPort(Protocol):
     """Persistence operations for the job queue."""
 
+    settings: DBSettings
+
     async def dequeue(
         self,
         batch_size: int,

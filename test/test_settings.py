@@ -107,9 +107,11 @@ def test_qualified_names_without_schema_are_bare() -> None:
     assert settings.qualify("anything") == "anything"
 
 
-def test_qualified_is_cached() -> None:
+def test_qualified_reflects_assignment() -> None:
     settings = DBSettings(db_schema="billing")
-    assert settings.qualified is settings.qualified
+    assert settings.qualified.queue_table == "billing.pgqueuer"
+    settings.db_schema = None
+    assert settings.qualified.queue_table == "pgqueuer"
 
 
 def test_dotted_name_conflicts_with_db_schema() -> None:

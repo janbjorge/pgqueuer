@@ -61,8 +61,9 @@ def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
     return inspect.cleandoc(qbe.build_install_query(create_schema=create_schema)).strip()
 
 
-def render_uninstall() -> str:
-    return inspect.cleandoc(qb.QueryBuilderEnvironment().build_uninstall_query()).strip()
+def render_uninstall(settings: qb.DBSettings | None = None) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings or qb.DBSettings())
+    return inspect.cleandoc(qbe.build_uninstall_query()).strip()
 
 
 def render_upgrade(settings: qb.DBSettings) -> str:
@@ -79,8 +80,8 @@ def render_durability(settings: qb.DBSettings) -> str:
     )
 
 
-def render_autovac(rollback: bool) -> str:
-    qbe = qb.QueryBuilderEnvironment()
+def render_autovac(settings: qb.DBSettings, rollback: bool) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings)
     query = (
         qbe.build_optimize_autovacuum_rollback_query()
         if rollback
@@ -99,7 +100,7 @@ def install(
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
 def uninstall() -> None:
-    typer.echo(render_uninstall())
+    typer.echo(render_uninstall(qb.DBSettings()))
 
 
 @sql_app.command(help="SQL to migrate an existing installation to the current version.")
@@ -121,4 +122,4 @@ def durability(
 def autovac(
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
-    typer.echo(render_autovac(rollback))
+    typer.echo(render_autovac(qb.DBSettings(), rollback))

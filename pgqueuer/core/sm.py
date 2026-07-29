@@ -91,15 +91,15 @@ class SchedulerManager:
 
     async def run(self) -> None:
         """Poll for due schedules and dispatch them until shutdown."""
-        if not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
+        if not (await self.queries.has_table(self.queries.settings.schedules_table)):
             raise RuntimeError(
-                f"The {self.queries.qbe.settings.schedules_table} table is missing "
+                f"The {self.queries.settings.schedules_table} table is missing "
                 "please run 'pgq upgrade'"
             )
 
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
+        if not (await self.queries.has_table(self.queries.settings.queue_table_log)):
             raise RuntimeError(
-                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
+                f"The {self.queries.settings.queue_table_log} table is missing "
                 "please run 'pgq upgrade'"
             )
 

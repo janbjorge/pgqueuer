@@ -459,7 +459,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
 
 def create_mcp_server(
     dsn: str | None = None,
-    settings: DBSettings = DBSettings(),
+    settings: DBSettings | None = None,
     connection_settings: ConnectionSettings | None = None,
 ) -> FastMCP:
     """Factory that builds a fully-configured PgQueuer MCP server.
@@ -475,11 +475,12 @@ def create_mcp_server(
              PGQUEUER_POOL_MAX_SIZE, PGQUEUER_CONNECT_TIMEOUT,
              PGQUEUER_APPLICATION_NAME).
     """
+    resolved_settings = settings or DBSettings()
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
-            yield PgQueuerDatabase(pool, settings)
+            yield PgQueuerDatabase(pool, resolved_settings)
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)
 

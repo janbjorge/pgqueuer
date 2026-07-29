@@ -154,28 +154,24 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    AsyncpgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(AsyncpgDriver(connection), settings=settings)
             return
         with contextlib.suppress(ImportError):
             from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    PsycopgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(PsycopgDriver(connection), settings=settings)
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
     return factory
+
+
+def settings_from_ctx(ctx: Context) -> qb.DBSettings:
+    """Build DBSettings after AppConfig has applied CLI/env overrides."""
+    del ctx
+    return qb.DBSettings()
 
 
 @contextlib.asynccontextmanager
@@ -313,15 +309,15 @@ def verify(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             expect_present = expect == VerifyMode.PRESENT
             divergence = list[str]()
 
             required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
+                q.settings.queue_table,
+                q.settings.statistics_table,
+                q.settings.schedules_table,
+                q.settings.queue_table_log,
             ]
 
             for table in required_tables:
@@ -330,15 +326,15 @@ def verify(
                     state = "missing" if expect_present else "unexpected"
                     divergence.append(f"{state} table '{table}'")
 
-            func_exists = await q.has_function(q.qbe.settings.function)
+            func_exists = await q.has_function(q.settings.function)
             if expect_present != func_exists:
                 state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
+                divergence.append(f"{state} function '{q.settings.function}'")
 
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
+            trig_exists = await q.has_trigger(q.settings.trigger)
             if expect_present != trig_exists:
                 state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
+                divergence.append(f"{state} trigger '{q.settings.trigger}'")
 
             if divergence:
                 print("\n".join(divergence))
@@ -364,11 +360,11 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall())
+        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(settings_from_ctx(ctx)))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -417,7 +413,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
@@ -456,14 +452,15 @@ def web(
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
 def listen(
     ctx: Context,
-    channel: str = typer.Option(
-        qb.DBSettings().channel,
+    channel: str | None = typer.Option(
+        None,
         "--channel",
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
-            await display_pg_channel(q.driver, models.Channel(channel))
+        settings = settings_from_ctx(ctx)
+        async with yield_queries(ctx, settings) as q:
+            await display_pg_channel(q.driver, models.Channel(channel or settings.channel))
 
     asyncio_run(run())
 
@@ -563,7 +560,7 @@ def schedules(
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             if remove:
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
@@ -598,7 +595,7 @@ def queue(
     async def run_async() -> None:
         # For a single job, skip mode subsumes raise mode: a None result is
         # exactly the duplicate case, so on_conflict only decides the exit.
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -627,7 +624,7 @@ def failed(
     limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if not jobs:
                 print("No failed jobs.")
@@ -659,7 +656,7 @@ def requeue(
     ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
@@ -705,11 +702,11 @@ def optimize_autovacuum(
 ) -> None:
     """Apply or revert recommended autovacuum settings."""
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(rollback))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(settings_from_ctx(ctx), rollback))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())

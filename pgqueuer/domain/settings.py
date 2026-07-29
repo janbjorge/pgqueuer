@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import functools
 import os
 import re
 import warnings
@@ -160,6 +159,7 @@ class DBSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGQUEUER_",
         extra="ignore",
+        validate_assignment=True,
     )
 
     # Prepended to every object name not explicitly overridden; lets multiple
@@ -264,10 +264,7 @@ class DBSettings(BaseSettings):
         """Schema-qualified reference for *name*; bare when no db_schema is set."""
         return f"{self.db_schema}.{name}" if self.db_schema else name
 
-    # cached_property: query builders access this on every SQL render (the
-    # dequeue loop rebuilds its query each iteration). Safe because names are
-    # fixed once validation and apply_prefix have run.
-    @functools.cached_property
+    @property
     def qualified(self) -> QualifiedNames:
         return QualifiedNames(
             queue_table=self.qualify(self.queue_table),

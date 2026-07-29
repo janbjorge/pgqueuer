@@ -23,12 +23,11 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(init=False)
 class QueueManager:
     """Dequeue jobs and dispatch them to registered entrypoint executors.
 
@@ -38,9 +37,7 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    channel: models.Channel
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -89,6 +86,29 @@ class QueueManager:
         init=False,
         default=timedelta(seconds=0.1),
     )
+
+    def __init__(
+        self,
+        queries: RepositoryPort,
+        channel: models.Channel | None = None,
+        resources: MutableMapping | None = None,
+        tracer: tracing.TracingProtocol | None = None,
+    ) -> None:
+        self.queries = queries
+        self.shutdown = asyncio.Event()
+        self.entrypoint_registry = {}
+        self.queue_manager_id = uuid.uuid4()
+        self.resources = resources or {}
+        self.tracer = tracer
+        self.job_context = {}
+        self.pending_health_check = {}
+        self.jobs_logged = 0
+        self.min_dequeue_poll_interval = timedelta(seconds=0.1)
+        if channel is not None:
+            queries.settings.channel = channel
+            self.channel = channel
+        else:
+            self.channel = models.Channel(queries.settings.channel)
 
     async def listener_healthy(
         self,
@@ -257,8 +277,8 @@ class QueueManager:
         """Assert that required tables, columns, indexes, enums, and triggers exist."""
 
         for table in (
-            self.queries.qbe.settings.queue_table,
-            self.queries.qbe.settings.statistics_table,
+            self.queries.settings.queue_table,
+            self.queries.settings.statistics_table,
         ):
             if not (await self.queries.has_table(table)):
                 raise RuntimeError(
@@ -266,20 +286,20 @@ class QueueManager:
                     f"Please run 'pgq install' to set up the necessary tables."
                 )
 
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
+        if not (await self.queries.has_table(self.queries.settings.queue_table_log)):
             raise RuntimeError(
-                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
+                f"The {self.queries.settings.queue_table_log} table is missing "
                 "please run 'pgq upgrade'"
             )
 
         for table, column in (
-            (self.queries.qbe.settings.queue_table, "updated"),
-            (self.queries.qbe.settings.queue_table, "heartbeat"),
-            (self.queries.qbe.settings.queue_table, "queue_manager_id"),
-            (self.queries.qbe.settings.queue_table, "execute_after"),
-            (self.queries.qbe.settings.queue_table, "headers"),
-            (self.queries.qbe.settings.queue_table, "attempts"),
-            (self.queries.qbe.settings.queue_table_log, "traceback"),
+            (self.queries.settings.queue_table, "updated"),
+            (self.queries.settings.queue_table, "heartbeat"),
+            (self.queries.settings.queue_table, "queue_manager_id"),
+            (self.queries.settings.queue_table, "execute_after"),
+            (self.queries.settings.queue_table, "headers"),
+            (self.queries.settings.queue_table, "attempts"),
+            (self.queries.settings.queue_table_log, "traceback"),
         ):
             if not (await self.queries.table_has_column(table, column)):
                 raise RuntimeError(
@@ -288,8 +308,8 @@ class QueueManager:
                 )
 
         for key, enum in (
-            ("canceled", self.queries.qbe.settings.queue_status_type),
-            ("failed", self.queries.qbe.settings.queue_status_type),
+            ("canceled", self.queries.settings.queue_status_type),
+            ("failed", self.queries.settings.queue_status_type),
         ):
             if not (await self.queries.has_user_defined_enum(key, enum)):
                 raise RuntimeError(
@@ -298,8 +318,8 @@ class QueueManager:
 
         for table, index in (
             (
-                self.queries.qbe.settings.queue_table_log,
-                f"{self.queries.qbe.settings.queue_table_log}_job_id_status",
+                self.queries.settings.queue_table_log,
+                f"{self.queries.settings.queue_table_log}_job_id_status",
             ),
         ):
             if not (await self.queries.table_has_index(table, index)):
