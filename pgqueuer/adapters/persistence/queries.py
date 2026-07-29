@@ -57,16 +57,15 @@ class Queries:
         self,
         driver: Driver,
         settings: DBSettings | None = None,
-        qbe: qb.QueryBuilderEnvironment | None = None,
-        qbq: qb.QueryQueueBuilder | None = None,
-        qbs: qb.QuerySchedulerBuilder | None = None,
         tracer: TracingProtocol | None = None,
     ) -> None:
+        settings = settings if settings is not None else DBSettings()
         self.driver = driver
+        self.settings = settings
+        self.qbe = qb.QueryBuilderEnvironment(settings)
+        self.qbq = qb.QueryQueueBuilder(settings)
+        self.qbs = qb.QuerySchedulerBuilder(settings)
         self.tracer = tracer
-        canonical = qb.resolve_canonical_settings(settings or DBSettings(), qbe, qbq, qbs)
-        self.settings = canonical
-        self.qbe, self.qbq, self.qbs = qb.wire_query_builders(canonical)
 
     @classmethod
     def from_asyncpg_connection(
@@ -77,9 +76,8 @@ class Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        if settings is not None:
-            return cls(AsyncpgDriver(connection), settings=settings)
-        return cls(AsyncpgDriver(connection))
+        settings = settings if settings is not None else DBSettings()
+        return cls(AsyncpgDriver(connection), settings)
 
     @classmethod
     def from_asyncpg_pool(
@@ -90,9 +88,8 @@ class Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        if settings is not None:
-            return cls(AsyncpgPoolDriver(pool), settings=settings)
-        return cls(AsyncpgPoolDriver(pool))
+        settings = settings if settings is not None else DBSettings()
+        return cls(AsyncpgPoolDriver(pool), settings)
 
     @classmethod
     def from_psycopg_connection(
@@ -103,9 +100,8 @@ class Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        if settings is not None:
-            return cls(PsycopgDriver(connection), settings=settings)
-        return cls(PsycopgDriver(connection))
+        settings = settings if settings is not None else DBSettings()
+        return cls(PsycopgDriver(connection), settings)
 
     async def install(self, create_schema: bool = True) -> None:
         """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
@@ -720,14 +716,13 @@ class SyncQueries:
         self,
         driver: SyncDriver,
         settings: DBSettings | None = None,
-        qbq: qb.QueryQueueBuilder | None = None,
         tracer: TracingProtocol | None = None,
     ) -> None:
+        settings = settings if settings is not None else DBSettings()
         self.driver = driver
+        self.settings = settings
+        self.qbq = qb.QueryQueueBuilder(settings)
         self.tracer = tracer
-        canonical = qbq.settings if qbq is not None else (settings or DBSettings())
-        self.settings = canonical
-        self.qbq = qb.QueryQueueBuilder(settings=canonical)
 
     @overload
     def enqueue(

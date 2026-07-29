@@ -8,7 +8,6 @@ only proves what we wrote, not what Postgres does with it.
 from __future__ import annotations
 
 from pgqueuer import db, queries
-from pgqueuer.adapters.persistence import qb
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel
 from test.helpers import id_data_type, queries_for, simulate_legacy_serial
@@ -70,7 +69,7 @@ async def test_widen_id_setting_controls_the_widen(apgdriver: db.Driver) -> None
     await simulate_legacy_serial(apgdriver, table)
 
     no_widen = DBSettings(widen_id=False)
-    q_no_widen = queries.Queries(apgdriver, qbe=qb.QueryBuilderEnvironment(settings=no_widen))
+    q_no_widen = queries.Queries(apgdriver, settings=no_widen)
     await q_no_widen.upgrade()
     assert await id_data_type(apgdriver, table) == "integer"
 

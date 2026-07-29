@@ -61,8 +61,8 @@ def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
     return inspect.cleandoc(qbe.build_install_query(create_schema=create_schema)).strip()
 
 
-def render_uninstall(settings: qb.DBSettings | None = None) -> str:
-    qbe = qb.QueryBuilderEnvironment(settings or qb.DBSettings())
+def render_uninstall(settings: qb.DBSettings) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings)
     return inspect.cleandoc(qbe.build_uninstall_query()).strip()
 
 

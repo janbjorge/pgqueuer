@@ -9,6 +9,7 @@ import psycopg
 import pytest
 
 from pgqueuer.adapters.persistence.qb import (
+    DBSettings,
     QueryBuilderEnvironment,
     QueryQueueBuilder,
     QuerySchedulerBuilder,
@@ -129,15 +130,15 @@ async def test_notify(
     "query, name",
     (
         [
-            (getattr(QueryQueueBuilder(), name), name)
+            (getattr(QueryQueueBuilder(DBSettings()), name), name)
             for name in get_user_defined_functions(QueryQueueBuilder)
         ]
         + [
-            (getattr(QueryBuilderEnvironment(), name), name)
+            (getattr(QueryBuilderEnvironment(DBSettings()), name), name)
             for name in get_user_defined_functions(QueryBuilderEnvironment)
         ]
         + [
-            (getattr(QuerySchedulerBuilder(), name), name)
+            (getattr(QuerySchedulerBuilder(DBSettings()), name), name)
             for name in get_user_defined_functions(QuerySchedulerBuilder)
         ]
     ),

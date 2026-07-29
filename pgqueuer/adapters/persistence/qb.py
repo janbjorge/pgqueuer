@@ -22,8 +22,6 @@ __all__ = [
     "QueryBuilderEnvironment",
     "QueryQueueBuilder",
     "QuerySchedulerBuilder",
-    "resolve_canonical_settings",
-    "wire_query_builders",
 ]
 
 
@@ -31,7 +29,7 @@ __all__ = [
 class QueryBuilderEnvironment:
     """DDL/utility query builder bound to a :class:`DBSettings`."""
 
-    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    settings: DBSettings
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -459,7 +457,7 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 
 @dataclasses.dataclass
 class QueryQueueBuilder:
-    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    settings: DBSettings
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -1021,7 +1019,7 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
 
 @dataclasses.dataclass
 class QuerySchedulerBuilder:
-    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
+    settings: DBSettings
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -1083,30 +1081,3 @@ class QuerySchedulerBuilder:
 
     def build_truncate_schedule_query(self) -> str:
         return f"""TRUNCATE {self.qualified.schedules_table}"""
-
-
-def resolve_canonical_settings(
-    settings: DBSettings,
-    qbe: QueryBuilderEnvironment | None = None,
-    qbq: QueryQueueBuilder | None = None,
-    qbs: QuerySchedulerBuilder | None = None,
-) -> DBSettings:
-    """Return the single DBSettings instance implied by settings or legacy builder args."""
-    if qbe is not None:
-        return qbe.settings
-    if qbq is not None:
-        return qbq.settings
-    if qbs is not None:
-        return qbs.settings
-    return settings
-
-
-def wire_query_builders(
-    settings: DBSettings,
-) -> tuple[QueryBuilderEnvironment, QueryQueueBuilder, QuerySchedulerBuilder]:
-    """Bind every query builder to the same DBSettings instance."""
-    return (
-        QueryBuilderEnvironment(settings=settings),
-        QueryQueueBuilder(settings=settings),
-        QuerySchedulerBuilder(settings=settings),
-    )

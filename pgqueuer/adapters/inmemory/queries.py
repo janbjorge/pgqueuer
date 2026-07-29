@@ -66,16 +66,15 @@ class InMemoryQueries:
         self,
         driver: InMemoryDriver,
         settings: DBSettings | None = None,
-        qbe: qb.QueryBuilderEnvironment | None = None,
-        qbq: qb.QueryQueueBuilder | None = None,
-        qbs: qb.QuerySchedulerBuilder | None = None,
         tracer: TracingProtocol | None = None,
     ) -> None:
+        settings = settings if settings is not None else DBSettings()
         self.driver = driver
+        self.settings = settings
+        self.qbe = qb.QueryBuilderEnvironment(settings)
+        self.qbq = qb.QueryQueueBuilder(settings)
+        self.qbs = qb.QuerySchedulerBuilder(settings)
         self.tracer = tracer
-        canonical = qb.resolve_canonical_settings(settings or DBSettings(), qbe, qbq, qbs)
-        self.settings = canonical
-        self.qbe, self.qbq, self.qbs = qb.wire_query_builders(canonical)
         self._jobs = {}
         self._log = []
         self._statistics = []

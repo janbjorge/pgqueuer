@@ -4,7 +4,6 @@ import pytest
 
 from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.queries import Queries, SyncQueries
 from pgqueuer.applications import PgQueuer
 from pgqueuer.core.completion import CompletionWatcher
@@ -19,18 +18,6 @@ def test_queries_shares_one_settings_object() -> None:
 
     assert q.settings is settings
     assert q.qbe.settings is settings
-    assert q.qbq.settings is settings
-    assert q.qbs.settings is settings
-
-
-def test_queries_legacy_builder_injection_uses_builder_settings() -> None:
-    settings = DBSettings(prefix="legacy_")
-    q = Queries(
-        InMemoryDriver(),
-        qbe=qb.QueryBuilderEnvironment(settings=settings),
-    )
-
-    assert q.settings is settings
     assert q.qbq.settings is settings
     assert q.qbs.settings is settings
 
@@ -92,6 +79,18 @@ def test_pgqueuer_channel_override_updates_queries_settings() -> None:
     assert pgq.channel == custom
     assert pgq.queries is not None
     assert pgq.queries.settings.channel == custom
+
+
+def test_pgqueuer_passes_settings_to_the_repository() -> None:
+    settings = DBSettings(prefix="app_")
+    pgq = PgQueuer.in_memory(settings=settings)
+
+    assert pgq.settings is settings
+    assert isinstance(pgq.queries, InMemoryQueries)
+    assert pgq.queries.settings is settings
+    assert pgq.queries.qbe.settings is settings
+    assert pgq.queries.qbq.settings is settings
+    assert pgq.queries.qbs.settings is settings
 
 
 async def test_completion_watcher_listens_on_repository_channel() -> None:

@@ -168,12 +168,6 @@ def create_default_queries_factory(
     return factory
 
 
-def settings_from_ctx(ctx: Context) -> qb.DBSettings:
-    """Build DBSettings after AppConfig has applied CLI/env overrides."""
-    del ctx
-    return qb.DBSettings()
-
-
 @contextlib.asynccontextmanager
 async def yield_queries(
     ctx: Context,
@@ -309,7 +303,7 @@ def verify(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             expect_present = expect == VerifyMode.PRESENT
             divergence = list[str]()
 
@@ -360,11 +354,11 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(settings_from_ctx(ctx)))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(qb.DBSettings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -413,7 +407,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
@@ -458,7 +452,7 @@ def listen(
     ),
 ) -> None:
     async def run() -> None:
-        settings = settings_from_ctx(ctx)
+        settings = qb.DBSettings()
         async with yield_queries(ctx, settings) as q:
             await display_pg_channel(q.driver, models.Channel(channel or settings.channel))
 
@@ -560,7 +554,7 @@ def schedules(
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             if remove:
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
@@ -595,7 +589,7 @@ def queue(
     async def run_async() -> None:
         # For a single job, skip mode subsumes raise mode: a None result is
         # exactly the duplicate case, so on_conflict only decides the exit.
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -624,7 +618,7 @@ def failed(
     limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if not jobs:
                 print("No failed jobs.")
@@ -656,7 +650,7 @@ def requeue(
     ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
@@ -702,11 +696,11 @@ def optimize_autovacuum(
 ) -> None:
     """Apply or revert recommended autovacuum settings."""
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(settings_from_ctx(ctx), rollback))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(qb.DBSettings(), rollback))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings_from_ctx(ctx)) as q:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())

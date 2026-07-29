@@ -46,12 +46,12 @@ class PgQueuer:
 
     connection: Driver
     channel: Channel | None = None
-    settings: DBSettings | None = None
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
     queries: RepositoryPort | None = dataclasses.field(default=None)
+    settings: DBSettings | None = None
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -65,11 +65,17 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         if self.queries is None:
-            self.queries = Queries(self.connection, settings=self.settings or DBSettings())
-        if self.channel is not None:
-            self.queries.settings.channel = self.channel
+            settings = self.settings if self.settings is not None else DBSettings()
+            self.queries = Queries(self.connection, settings)
         else:
-            self.channel = Channel(self.queries.settings.channel)
+            if self.settings is not None and self.settings is not self.queries.settings:
+                raise ValueError("settings must be the same object as queries.settings")
+            settings = self.queries.settings
+        self.settings = settings
+        if self.channel is not None:
+            settings.channel = self.channel
+        else:
+            self.channel = Channel(settings.channel)
         self.qm = QueueManager(
             self.queries,
             self.channel,
@@ -158,7 +164,7 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        resolved_settings = settings or DBSettings()
+        resolved_settings = settings if settings is not None else DBSettings()
         inmem = InMemoryQueries(driver=driver, settings=resolved_settings)
         return cls(
             connection=driver,
