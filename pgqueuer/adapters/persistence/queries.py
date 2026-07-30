@@ -66,12 +66,13 @@ class Queries:
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
 
-    # Canonical DB object names shared by all query builders. When given, it is
-    # bound onto every builder; when omitted, the builders' settings are adopted.
-    settings: qb.DBSettings | None = dataclasses.field(default=None, kw_only=True)
+    # Canonical DB object names; bound onto every query builder.
+    settings: qb.DBSettings = dataclasses.field(default_factory=qb.DBSettings, kw_only=True)
 
     def __post_init__(self) -> None:
-        self.settings = qb.bind_canonical_settings(self.settings, self.qbe, self.qbq, self.qbs)
+        self.qbe.settings = self.settings
+        self.qbq.settings = self.settings
+        self.qbs.settings = self.settings
 
     @classmethod
     def from_asyncpg_connection(
@@ -82,7 +83,10 @@ class Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        return cls(AsyncpgDriver(connection), settings=settings)
+        return cls(
+            AsyncpgDriver(connection),
+            settings=settings if settings is not None else qb.DBSettings(),
+        )
 
     @classmethod
     def from_asyncpg_pool(
@@ -93,7 +97,10 @@ class Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        return cls(AsyncpgPoolDriver(pool), settings=settings)
+        return cls(
+            AsyncpgPoolDriver(pool),
+            settings=settings if settings is not None else qb.DBSettings(),
+        )
 
     @classmethod
     def from_psycopg_connection(
@@ -104,7 +111,10 @@ class Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        return cls(PsycopgDriver(connection), settings=settings)
+        return cls(
+            PsycopgDriver(connection),
+            settings=settings if settings is not None else qb.DBSettings(),
+        )
 
     async def install(self, create_schema: bool = True) -> None:
         """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
@@ -719,11 +729,11 @@ class SyncQueries:
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
 
-    # Canonical DB object names; overrides the builder's settings when given.
-    settings: qb.DBSettings | None = dataclasses.field(default=None, kw_only=True)
+    # Canonical DB object names; bound onto the query builder.
+    settings: qb.DBSettings = dataclasses.field(default_factory=qb.DBSettings, kw_only=True)
 
     def __post_init__(self) -> None:
-        self.settings = qb.bind_canonical_settings(self.settings, self.qbq)
+        self.qbq.settings = self.settings
 
     @overload
     def enqueue(

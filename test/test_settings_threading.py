@@ -33,10 +33,11 @@ def test_queries_uses_given_settings_object() -> None:
     assert q.qbs.settings is settings
 
 
-def test_queries_default_settings_comes_from_first_builder() -> None:
+def test_queries_default_builders_share_queries_settings() -> None:
     q = Queries(InMemoryDriver())
-    assert q.settings is q.qbe.settings
-    assert q.qbe.settings == q.qbq.settings == q.qbs.settings
+    assert q.qbe.settings is q.settings
+    assert q.qbq.settings is q.settings
+    assert q.qbs.settings is q.settings
 
 
 def test_queries_settings_wins_over_injected_builders() -> None:
@@ -51,23 +52,11 @@ def test_queries_settings_wins_over_injected_builders() -> None:
     assert q.qbs.settings is settings
 
 
-def test_queries_adopts_injected_builder_settings() -> None:
-    settings = DBSettings(prefix="acme_")
-    q = Queries(
-        InMemoryDriver(),
-        qbe=qb.QueryBuilderEnvironment(settings),
-        qbq=qb.QueryQueueBuilder(settings),
-        qbs=qb.QuerySchedulerBuilder(settings),
-    )
-    assert q.settings is settings
-
-
-def test_queries_honors_deliberately_divergent_builder() -> None:
-    divergent = DBSettings(prefix="other_")
-    q = Queries(InMemoryDriver(), qbq=qb.QueryQueueBuilder(divergent))
-    assert q.qbq.settings is divergent
-    assert q.settings is q.qbe.settings
-    assert q.qbs.settings == q.qbe.settings
+def test_queries_rebinds_injected_builder_to_its_settings() -> None:
+    q = Queries(InMemoryDriver(), qbq=qb.QueryQueueBuilder(DBSettings(prefix="other_")))
+    assert q.qbq.settings is q.settings
+    assert q.qbe.settings is q.settings
+    assert q.qbs.settings is q.settings
 
 
 def test_sync_queries_uses_given_settings_object() -> None:
@@ -105,11 +94,12 @@ def test_pgqueuer_in_memory_derives_channel_from_settings() -> None:
     assert pgq.qm.channel == Channel("acme_ch_pgqueuer")
 
 
-def test_pgqueuer_rejects_conflicting_queries_and_settings() -> None:
+def test_pgqueuer_adopts_injected_queries_settings() -> None:
     driver = InMemoryDriver()
     queries = InMemoryQueries(driver=driver, settings=DBSettings(prefix="acme_"))
-    with pytest.raises(ValueError, match="conflicts"):
-        PgQueuer(connection=driver, queries=queries, settings=DBSettings(prefix="other_"))
+    pgq = PgQueuer(connection=driver, queries=queries)
+    assert pgq.settings is queries.settings
+    assert pgq.channel == Channel("acme_ch_pgqueuer")
 
 
 async def test_completion_watcher_listens_on_given_channel() -> None:

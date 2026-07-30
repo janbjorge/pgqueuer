@@ -22,20 +22,7 @@ __all__ = [
     "QueryBuilderEnvironment",
     "QueryQueueBuilder",
     "QuerySchedulerBuilder",
-    "bind_canonical_settings",
 ]
-
-
-def bind_canonical_settings(
-    settings: DBSettings | None,
-    *builders: QueryBuilderEnvironment | QueryQueueBuilder | QuerySchedulerBuilder,
-) -> DBSettings:
-    """Bind *settings* onto every builder; when omitted, report the first builder's."""
-    if settings is None:
-        return builders[0].settings
-    for builder in builders:
-        builder.settings = settings
-    return settings
 
 
 @dataclasses.dataclass

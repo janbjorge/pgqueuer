@@ -52,8 +52,8 @@ class PgQueuer:
         default_factory=dict,
     )
     queries: RepositoryPort | None = dataclasses.field(default=None)
-    # Canonical DB object names; used to build the default Queries and channel.
-    settings: DBSettings | None = dataclasses.field(default=None, kw_only=True)
+    # Canonical DB object names; when a prebuilt queries is injected, its settings wins.
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings, kw_only=True)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -66,19 +66,12 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
-        if (
-            self.queries is not None
-            and self.settings is not None
-            and self.queries.qbe.settings != self.settings
-        ):
-            raise ValueError(
-                "settings conflicts with the injected queries' settings; "
-                "pass one or the other, or make them agree"
-            )
         if self.queries is None:
             self.queries = Queries(self.connection, settings=self.settings)
+        else:
+            self.settings = self.queries.qbe.settings
         if self.channel is None:
-            self.channel = self.queries.qbe.settings.channel
+            self.channel = self.settings.channel
         self.qm = QueueManager(
             self.queries,
             self.channel,
@@ -151,7 +144,7 @@ class PgQueuer:
             connection=driver,
             channel=channel,
             resources=resources or {},
-            settings=settings,
+            settings=settings if settings is not None else DBSettings(),
         )
 
     @classmethod
@@ -167,13 +160,14 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        inmem = InMemoryQueries(driver=driver, settings=settings)
+        db_settings = settings if settings is not None else DBSettings()
+        inmem = InMemoryQueries(driver=driver, settings=db_settings)
         return cls(
             connection=driver,
             channel=channel,
             queries=inmem,
             resources=resources or {},
-            settings=settings,
+            settings=db_settings,
         )
 
     async def run(

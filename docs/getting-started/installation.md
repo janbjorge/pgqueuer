@@ -206,9 +206,9 @@ queries = Queries.from_asyncpg_connection(connection, settings=settings)
 
 The same parameter exists on `Queries`, `SyncQueries`, `PgQueuer` (and its
 `from_*`/`in_memory` classmethods), `create_web_app`, and `create_mcp_server`.
-One installation should have one `DBSettings`. If you pass `PgQueuer` both a
-`queries` object and a `settings` that disagree with each other, it raises
-`ValueError` rather than guessing which one you meant.
+One installation should have one `DBSettings`. When you hand `PgQueuer` a
+prebuilt `queries` object, the settings inside that object win; configure them
+on `Queries` and everything above it follows.
 
 ## Next Steps
 
