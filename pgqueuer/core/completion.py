@@ -26,6 +26,8 @@ class CompletionWatcher:
     Usage example::
 
         async with CompletionWatcher(driver,
+                                     queries=queries,
+                                     channel=settings.channel,
                                      refresh_interval=timedelta(seconds=2),
                                      debounce=timedelta(milliseconds=100)) as w:
             status = await w.wait_for(job_id)
@@ -34,6 +36,9 @@ class CompletionWatcher:
 
     driver: Driver
     queries: QueueRepositoryPort = field(kw_only=True)
+    # LISTEN channel; None falls back to the env-derived default. Pass the
+    # channel from your DBSettings whenever you run with a custom prefix.
+    channel: models.Channel | None = field(default=None, kw_only=True)
     refresh_interval: timedelta = field(
         default_factory=lambda: timedelta(seconds=5),
     )
@@ -70,7 +75,8 @@ class CompletionWatcher:
 
     async def __aenter__(self) -> "CompletionWatcher":
         self.task_manager.add(asyncio.create_task(self._poll_for_change()))
-        await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
+        listen_channel = self.channel if self.channel is not None else DBSettings().channel
+        await self.driver.add_listener(listen_channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 

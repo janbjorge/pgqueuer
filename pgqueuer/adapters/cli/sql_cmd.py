@@ -56,13 +56,19 @@ DurabilityArgument = Annotated[
 ]
 
 
+def resolve_settings(ctx: typer.Context) -> qb.DBSettings:
+    """The single DBSettings built by the root callback (``AppConfig``)."""
+    settings: qb.DBSettings = ctx.obj.settings
+    return settings
+
+
 def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
     qbe = qb.QueryBuilderEnvironment(settings)
     return inspect.cleandoc(qbe.build_install_query(create_schema=create_schema)).strip()
 
 
-def render_uninstall() -> str:
-    return inspect.cleandoc(qb.QueryBuilderEnvironment().build_uninstall_query()).strip()
+def render_uninstall(settings: qb.DBSettings) -> str:
+    return inspect.cleandoc(qb.QueryBuilderEnvironment(settings).build_uninstall_query()).strip()
 
 
 def render_upgrade(settings: qb.DBSettings) -> str:
@@ -79,8 +85,8 @@ def render_durability(settings: qb.DBSettings) -> str:
     )
 
 
-def render_autovac(rollback: bool) -> str:
-    qbe = qb.QueryBuilderEnvironment()
+def render_autovac(settings: qb.DBSettings, rollback: bool) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings)
     query = (
         qbe.build_optimize_autovacuum_rollback_query()
         if rollback
@@ -91,34 +97,44 @@ def render_autovac(rollback: bool) -> str:
 
 @sql_app.command(help="SQL to create the PgQueuer schema.")
 def install(
+    ctx: typer.Context,
     durability: DurabilityOption = qb.Durability.durable,
     create_schema: CreateSchemaOption = True,
 ) -> None:
-    typer.echo(render_install(qb.DBSettings(durability=durability), create_schema))
+    settings = resolve_settings(ctx).model_copy(update={"durability": durability})
+    typer.echo(render_install(settings, create_schema))
 
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
-def uninstall() -> None:
-    typer.echo(render_uninstall())
+def uninstall(ctx: typer.Context) -> None:
+    typer.echo(render_uninstall(resolve_settings(ctx)))
 
 
 @sql_app.command(help="SQL to migrate an existing installation to the current version.")
 def upgrade(
+    ctx: typer.Context,
     durability: DurabilityOption = qb.Durability.durable,
     widen_id: WidenIdOption = True,
 ) -> None:
-    typer.echo(render_upgrade(qb.DBSettings(durability=durability, widen_id=widen_id)))
+    settings = resolve_settings(ctx).model_copy(
+        update={"durability": durability, "widen_id": widen_id}
+    )
+    typer.echo(render_upgrade(settings))
 
 
 @sql_app.command(help="SQL to switch table durability without data loss.")
 def durability(
+    ctx: typer.Context,
     durability: DurabilityArgument,
 ) -> None:
-    typer.echo(render_durability(qb.DBSettings(durability=durability)))
+    typer.echo(
+        render_durability(resolve_settings(ctx).model_copy(update={"durability": durability}))
+    )
 
 
 @sql_app.command(help="SQL for recommended autovacuum settings (--rollback to reset).")
 def autovac(
+    ctx: typer.Context,
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
-    typer.echo(render_autovac(rollback))
+    typer.echo(render_autovac(resolve_settings(ctx), rollback))

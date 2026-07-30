@@ -45,14 +45,15 @@ class PgQueuer:
     """
 
     connection: Driver
-    channel: Channel = dataclasses.field(
-        default=Channel(DBSettings().channel),
-    )
+    # None derives the channel from the queries' DBSettings after resolution.
+    channel: Channel | None = None
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
         default_factory=dict,
     )
     queries: RepositoryPort | None = dataclasses.field(default=None)
+    # Canonical DB object names; used to build the default Queries and channel.
+    settings: DBSettings | None = dataclasses.field(default=None, kw_only=True)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -65,8 +66,19 @@ class PgQueuer:
     )
 
     def __post_init__(self) -> None:
+        if (
+            self.queries is not None
+            and self.settings is not None
+            and self.queries.qbe.settings != self.settings
+        ):
+            raise ValueError(
+                "settings conflicts with the injected queries' settings; "
+                "pass one or the other, or make them agree"
+            )
         if self.queries is None:
-            self.queries = Queries(self.connection)
+            self.queries = Queries(self.connection, settings=self.settings)
+        if self.channel is None:
+            self.channel = self.queries.qbe.settings.channel
         self.qm = QueueManager(
             self.queries,
             self.channel,
@@ -85,12 +97,14 @@ class PgQueuer:
         connection: "asyncpg.Connection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -99,12 +113,14 @@ class PgQueuer:
         pool: "asyncpg.Pool",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
             driver=AsyncpgPoolDriver(pool),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -113,12 +129,14 @@ class PgQueuer:
         connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
             channel=channel,
             resources=resources,
+            settings=settings,
         )
 
     @classmethod
@@ -127,16 +145,21 @@ class PgQueuer:
         driver: Driver,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
-        channel = channel or Channel(DBSettings().channel)
-        resources = resources or {}
-        return cls(connection=driver, channel=channel, resources=resources)
+        return cls(
+            connection=driver,
+            channel=channel,
+            resources=resources or {},
+            settings=settings,
+        )
 
     @classmethod
     def in_memory(
         cls,
         channel: Channel | None = None,
         resources: MutableMapping | None = None,
+        settings: DBSettings | None = None,
     ) -> "PgQueuer":
         """Create a PgQueuer backed entirely by in-memory data structures.
 
@@ -144,13 +167,13 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        channel = channel or Channel(DBSettings().channel)
-        inmem = InMemoryQueries(driver=driver)
+        inmem = InMemoryQueries(driver=driver, settings=settings)
         return cls(
             connection=driver,
             channel=channel,
             queries=inmem,
             resources=resources or {},
+            settings=settings,
         )
 
     async def run(

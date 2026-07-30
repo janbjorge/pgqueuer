@@ -55,6 +55,10 @@ class InMemoryQueries:
 
     tracer: TracingProtocol | None = None
 
+    # Canonical DB object names shared by all query builders. When given, it is
+    # bound onto every builder; when omitted, the builders' settings are adopted.
+    settings: qb.DBSettings | None = dataclasses.field(default=None, kw_only=True)
+
     _jobs: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
     _log: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
     _statistics: list[dict[str, Any]] = dataclasses.field(default_factory=list, init=False)
@@ -77,6 +81,9 @@ class InMemoryQueries:
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
     _next_stats_id: int = dataclasses.field(default=1, init=False)
+
+    def __post_init__(self) -> None:
+        self.settings = qb.bind_canonical_settings(self.settings, self.qbe, self.qbq, self.qbs)
 
     async def install(self) -> None:
         pass

@@ -186,6 +186,29 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 The two settings are independent: a prefix separates instances that share a
 schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
+## Passing Settings in Code
+
+Instead of environment variables, build one `DBSettings` at your composition
+root and hand it to the API edge you use. Every internal component (query
+builders, the NOTIFY listen channel, health checks) inherits that exact object:
+
+```python
+from pgqueuer import PgQueuer, Queries
+from pgqueuer.domain.settings import DBSettings
+
+settings = DBSettings(prefix="billing_", db_schema="pgq")
+
+pgq = PgQueuer.from_asyncpg_connection(connection, settings=settings)
+# or, when wiring manually:
+queries = Queries.from_asyncpg_connection(connection, settings=settings)
+```
+
+The same parameter exists on `Queries`, `SyncQueries`, `PgQueuer` (and its
+`from_*`/`in_memory` classmethods), `create_web_app`, and `create_mcp_server`.
+Do not create multiple diverging `DBSettings` instances for one installation;
+`PgQueuer` raises `ValueError` when given both `queries` and a `settings` that
+disagree with it.
+
 ## Next Steps
 
 - **[Quick Start](quickstart.md)**: build your first consumer and producer

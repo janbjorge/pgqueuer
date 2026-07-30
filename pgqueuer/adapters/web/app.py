@@ -21,6 +21,7 @@ from pgqueuer.domain.settings import ConnectionSettings
 def create_web_app(
     dsn: str | None = None,
     connection_settings: ConnectionSettings | None = None,
+    settings: qb.DBSettings | None = None,
 ) -> FastAPI:
     """Standalone dashboard app: asyncpg pool, NOTIFY-driven SSE, optional Basic auth.
 
@@ -34,6 +35,8 @@ def create_web_app(
     When *dsn* is None, the DSN comes from PGQUEUER_DSN/PGDSN, else asyncpg
     reads standard libpq env vars (PGHOST, PGUSER, ...). Pool sizing and
     timeouts come from *connection_settings*, or PGQUEUER_* env vars when None.
+    *settings* names the PgQueuer DB objects (prefix, schema, channel, ...);
+    when None it is read from PGQUEUER_* env vars at startup.
     Auth is enabled only when PGQUEUER_WEB_USER and PGQUEUER_WEB_PASSWORD are set.
     """
 
@@ -42,16 +45,11 @@ def create_web_app(
         from pgqueuer.adapters.connections import create_asyncpg_pool
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        settings = qb.DBSettings()
+        db_settings = settings if settings is not None else qb.DBSettings()
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             driver = AsyncpgPoolDriver(pool)
-            app.state.pgq_queries = queries.Queries(
-                driver,
-                qbe=qb.QueryBuilderEnvironment(settings),
-                qbq=qb.QueryQueueBuilder(settings),
-                qbs=qb.QuerySchedulerBuilder(settings),
-            )
-            broadcaster = Broadcaster(driver=driver, channel=settings.channel)
+            app.state.pgq_queries = queries.Queries(driver, settings=db_settings)
+            broadcaster = Broadcaster(driver=driver, channel=db_settings.channel)
             await broadcaster.start()
             app.state.pgq_broadcaster = broadcaster
             async with driver:

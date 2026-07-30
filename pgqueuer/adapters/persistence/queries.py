@@ -43,7 +43,13 @@ def is_unique_violation(exc: Exception) -> bool:
 
 @dataclasses.dataclass
 class Queries:
-    """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats."""
+    """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats.
+
+    Usage example::
+
+        settings = DBSettings(prefix="acme_")
+        queries = Queries.from_asyncpg_connection(connection, settings=settings)
+    """
 
     driver: Driver
 
@@ -60,26 +66,45 @@ class Queries:
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
 
+    # Canonical DB object names shared by all query builders. When given, it is
+    # bound onto every builder; when omitted, the builders' settings are adopted.
+    settings: qb.DBSettings | None = dataclasses.field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        self.settings = qb.bind_canonical_settings(self.settings, self.qbe, self.qbq, self.qbs)
+
     @classmethod
-    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
+    def from_asyncpg_connection(
+        cls,
+        connection: "asyncpg.Connection",
+        settings: qb.DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        return cls(AsyncpgDriver(connection))
+        return cls(AsyncpgDriver(connection), settings=settings)
 
     @classmethod
-    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> "Queries":
+    def from_asyncpg_pool(
+        cls,
+        pool: "asyncpg.Pool",
+        settings: qb.DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        return cls(AsyncpgPoolDriver(pool))
+        return cls(AsyncpgPoolDriver(pool), settings=settings)
 
     @classmethod
-    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> "Queries":
+    def from_psycopg_connection(
+        cls,
+        connection: "psycopg.AsyncConnection",
+        settings: qb.DBSettings | None = None,
+    ) -> "Queries":
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        return cls(PsycopgDriver(connection))
+        return cls(PsycopgDriver(connection), settings=settings)
 
     async def install(self, create_schema: bool = True) -> None:
         """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
@@ -693,6 +718,12 @@ class SyncQueries:
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
+
+    # Canonical DB object names; overrides the builder's settings when given.
+    settings: qb.DBSettings | None = dataclasses.field(default=None, kw_only=True)
+
+    def __post_init__(self) -> None:
+        self.settings = qb.bind_canonical_settings(self.settings, self.qbq)
 
     @overload
     def enqueue(

@@ -459,7 +459,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
 
 def create_mcp_server(
     dsn: str | None = None,
-    settings: DBSettings = DBSettings(),
+    settings: DBSettings | None = None,
     connection_settings: ConnectionSettings | None = None,
 ) -> FastMCP:
     """Factory that builds a fully-configured PgQueuer MCP server.
@@ -469,17 +469,19 @@ def create_mcp_server(
              PGQUEUER_DSN/PGDSN, else asyncpg reads standard libpq
              environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD,
              PGDATABASE) automatically.
-        settings: PgQueuer DBSettings (table names, channel, etc.).
+        settings: PgQueuer DBSettings (table names, channel, etc.). If None,
+             read from PGQUEUER_* env vars when the server is created.
         connection_settings: Pool sizing/timeouts. If None, read from
              PGQUEUER_* env vars at startup (PGQUEUER_POOL_MIN_SIZE,
              PGQUEUER_POOL_MAX_SIZE, PGQUEUER_CONNECT_TIMEOUT,
              PGQUEUER_APPLICATION_NAME).
     """
+    db_settings = settings if settings is not None else DBSettings()
 
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
-            yield PgQueuerDatabase(pool, settings)
+            yield PgQueuerDatabase(pool, db_settings)
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)
 

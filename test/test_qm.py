@@ -15,7 +15,7 @@ from pgqueuer.core.tm import TaskManager
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
-from pgqueuer.types import QueueExecutionMode
+from pgqueuer.types import Channel, QueueExecutionMode
 from test.helpers import wait_until_empty_queue
 
 
@@ -176,7 +176,7 @@ async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
             if calls >= 3:
                 qm.shutdown.set()
 
-    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    qm = QueueManager(queries=Stub(), channel=Channel("test"))  # type: ignore[arg-type]
 
     async def keep_marking_work() -> None:
         # Stands in for `_dispatch` incrementing `jobs_logged` concurrently;
@@ -208,7 +208,7 @@ async def test_periodic_log_aggregation_skips_when_idle() -> None:
             nonlocal calls
             calls += 1
 
-    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    qm = QueueManager(queries=Stub(), channel=Channel("test"))  # type: ignore[arg-type]
     task = asyncio.ensure_future(qm._run_periodic_log_aggregation(timedelta(seconds=0)))
     try:
         for _ in range(3):
@@ -255,7 +255,7 @@ async def test_periodic_log_aggregation_survives_aggregate_errors() -> None:
                 qm.shutdown.set()
             raise RuntimeError("boom")
 
-    qm = QueueManager(queries=Stub())  # type: ignore[arg-type]
+    qm = QueueManager(queries=Stub(), channel=Channel("test"))  # type: ignore[arg-type]
     qm.jobs_logged = 1
     async with async_timeout.timeout(5):
         await qm._run_periodic_log_aggregation(timedelta(seconds=0))
