@@ -1,7 +1,7 @@
 # Drivers
 
-Drivers act as the bridge between PgQueuer and PostgreSQL, managing connections and
-abstracting database communication.
+Drivers sit between PgQueuer and PostgreSQL. They manage the connection and hide
+the differences between database libraries.
 
 ## Purpose
 
@@ -167,9 +167,9 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to the channel from the effective `DBSettings` |
+| `channel` | No | Custom `Channel` configuration. Defaults to the channel named in the `DBSettings` |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
-| `settings` | No | A `DBSettings` instance (prefix, schema, channel, table names). Created once and shared by every internal component |
+| `settings` | No | A `DBSettings` instance (prefix, schema, channel, table names); PgQueuer passes this one object to every internal component |
 
 ## Best Practices
 

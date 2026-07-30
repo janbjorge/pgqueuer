@@ -188,9 +188,10 @@ schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
 ## Passing Settings in Code
 
-Instead of environment variables, build one `DBSettings` at your composition
-root and hand it to the API edge you use. Every internal component (query
-builders, the NOTIFY listen channel, health checks) inherits that exact object:
+You can skip the environment variables and configure everything in code. Create
+one `DBSettings` at startup and pass it to whichever constructor you use. The
+query builders, the NOTIFY listen channel, and the health checks all read from
+that same object:
 
 ```python
 from pgqueuer import PgQueuer, Queries
@@ -205,9 +206,9 @@ queries = Queries.from_asyncpg_connection(connection, settings=settings)
 
 The same parameter exists on `Queries`, `SyncQueries`, `PgQueuer` (and its
 `from_*`/`in_memory` classmethods), `create_web_app`, and `create_mcp_server`.
-Do not create multiple diverging `DBSettings` instances for one installation;
-`PgQueuer` raises `ValueError` when given both `queries` and a `settings` that
-disagree with it.
+One installation should have one `DBSettings`. If you pass `PgQueuer` both a
+`queries` object and a `settings` that disagree with each other, it raises
+`ValueError` rather than guessing which one you meant.
 
 ## Next Steps
 
