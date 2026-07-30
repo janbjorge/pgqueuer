@@ -33,11 +33,10 @@ def test_queries_uses_given_settings_object() -> None:
     assert q.qbs.settings is settings
 
 
-def test_queries_default_builders_share_one_settings() -> None:
+def test_queries_default_settings_comes_from_first_builder() -> None:
     q = Queries(InMemoryDriver())
     assert q.settings is q.qbe.settings
-    assert q.qbe.settings is q.qbq.settings
-    assert q.qbq.settings is q.qbs.settings
+    assert q.qbe.settings == q.qbq.settings == q.qbs.settings
 
 
 def test_queries_settings_wins_over_injected_builders() -> None:
@@ -68,7 +67,7 @@ def test_queries_honors_deliberately_divergent_builder() -> None:
     q = Queries(InMemoryDriver(), qbq=qb.QueryQueueBuilder(divergent))
     assert q.qbq.settings is divergent
     assert q.settings is q.qbe.settings
-    assert q.qbs.settings is q.qbe.settings
+    assert q.qbs.settings == q.qbe.settings
 
 
 def test_sync_queries_uses_given_settings_object() -> None:

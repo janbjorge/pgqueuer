@@ -30,19 +30,12 @@ def bind_canonical_settings(
     settings: DBSettings | None,
     *builders: QueryBuilderEnvironment | QueryQueueBuilder | QuerySchedulerBuilder,
 ) -> DBSettings:
-    """Resolve one canonical :class:`DBSettings` and share it across *builders*.
-
-    An explicitly given *settings* always wins: it is bound onto every builder,
-    so a user-supplied settings object is honored end to end. When omitted, the
-    first builder's settings is adopted; sibling builders whose settings are
-    value-equal (the untouched defaults) are rebound to that same object, while
-    a deliberately divergent builder is left untouched.
-    """
-    canonical = settings if settings is not None else builders[0].settings
+    """Bind *settings* onto every builder; when omitted, report the first builder's."""
+    if settings is None:
+        return builders[0].settings
     for builder in builders:
-        if settings is not None or builder.settings == canonical:
-            builder.settings = canonical
-    return canonical
+        builder.settings = settings
+    return settings
 
 
 @dataclasses.dataclass
