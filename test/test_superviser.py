@@ -213,6 +213,102 @@ async def test_runit_restart_on_failure(
     assert calls > 1
 
 
+async def test_runit_restarts_when_pgqueuer_inner_run_fails() -> None:
+    """PgQueuer.run's finally must not latch process shutdown and defeat restart.
+
+    Replaces only ``qm.run`` so the real ``PgQueuer.run`` ``finally: shutdown.set()``
+    path executes — the case missed by patching ``PgQueuer.run`` wholesale.
+    """
+    calls = 0
+
+    @asynccontextmanager
+    async def factory():  # type: ignore
+        nonlocal calls
+        calls += 1
+        pgq = PgQueuer.in_memory()
+
+        async def boom(*args: object, **kwargs: object) -> None:
+            raise RuntimeError(f"qm failed on attempt {calls}")
+
+        pgq.qm.run = boom  # type: ignore[method-assign]
+        yield pgq
+
+    shutdown = asyncio.Event()
+    runit_task = asyncio.create_task(
+        supervisor.runit(
+            factory=factory,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            restart_delay=timedelta(seconds=0.05),
+            restart_on_failure=True,
+            shutdown=shutdown,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
+        )
+    )
+
+    await asyncio.sleep(0.3)
+    assert not runit_task.done(), "supervisor exited instead of restarting"
+    assert not shutdown.is_set(), "PgQueuer.finally latched the process shutdown event"
+    assert calls > 1, f"expected multiple restart attempts, got {calls}"
+
+    shutdown.set()
+    async with async_timeout.timeout(2):
+        await runit_task
+
+
+async def test_runit_pgqueuer_failure_without_restart_still_raises() -> None:
+    """Without restart_on_failure, a real PgQueuer.run failure must propagate."""
+
+    @asynccontextmanager
+    async def factory():  # type: ignore
+        pgq = PgQueuer.in_memory()
+
+        async def boom(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("qm failed")
+
+        pgq.qm.run = boom  # type: ignore[method-assign]
+        yield pgq
+
+    with pytest.raises(RuntimeError, match="qm failed"):
+        await supervisor.runit(
+            factory=factory,
+            dequeue_timeout=timedelta(seconds=1),
+            batch_size=10,
+            restart_delay=timedelta(seconds=0.05),
+            restart_on_failure=False,
+            shutdown=asyncio.Event(),
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=None,
+            shutdown_on_listener_failure=False,
+        )
+
+
+async def test_runit_drain_exits_once_with_restart_on_failure() -> None:
+    """Successful drain must not loop just because restart_on_failure is enabled."""
+    calls = 0
+
+    @asynccontextmanager
+    async def factory():  # type: ignore
+        nonlocal calls
+        calls += 1
+        yield PgQueuer.in_memory()
+
+    await supervisor.runit(
+        factory=factory,
+        dequeue_timeout=timedelta(seconds=0.1),
+        batch_size=10,
+        restart_delay=timedelta(seconds=0.05),
+        restart_on_failure=True,
+        shutdown=asyncio.Event(),
+        mode=QueueExecutionMode.drain,
+        max_concurrent_tasks=None,
+        shutdown_on_listener_failure=False,
+    )
+    assert calls == 1
+
+
 async def test_runit_no_restart_on_failure(
     pg_queuer: PgQueuer,
     shutdown_event: asyncio.Event,
