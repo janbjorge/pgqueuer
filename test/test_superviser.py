@@ -230,7 +230,7 @@ async def test_runit_restarts_when_pgqueuer_inner_run_fails() -> None:
         async def boom(*args: object, **kwargs: object) -> None:
             raise RuntimeError(f"qm failed on attempt {calls}")
 
-        pgq.qm.run = boom  # type: ignore[method-assign]
+        pgq.qm.run = boom
         yield pgq
 
     shutdown = asyncio.Event()
@@ -268,7 +268,7 @@ async def test_runit_pgqueuer_failure_without_restart_still_raises() -> None:
         async def boom(*args: object, **kwargs: object) -> None:
             raise RuntimeError("qm failed")
 
-        pgq.qm.run = boom  # type: ignore[method-assign]
+        pgq.qm.run = boom
         yield pgq
 
     with pytest.raises(RuntimeError, match="qm failed"):
