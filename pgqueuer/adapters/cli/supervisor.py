@@ -8,6 +8,7 @@ from typing import Callable, TypeAlias
 
 from pgqueuer.adapters.cli import factories
 from pgqueuer.core import applications, logconfig, qm, sm
+from pgqueuer.core.tm import cancel_on_exit
 from pgqueuer.domain import types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
@@ -83,35 +84,30 @@ async def runit(
 
     while not shutdown.is_set():
         cycle_shutdown = asyncio.Event()
-        forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
-        failed = False
-        try:
-            async with factories.validate_factory_result(factory()) as manager:
-                setup_shutdown_handlers(manager, cycle_shutdown)
-                await run_manager(
-                    manager,
-                    dequeue_timeout,
-                    batch_size,
-                    mode,
-                    max_concurrent_tasks,
-                    shutdown_on_listener_failure,
-                    heartbeat_timeout,
+        async with cancel_on_exit(asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))):
+            try:
+                async with factories.validate_factory_result(factory()) as manager:
+                    setup_shutdown_handlers(manager, cycle_shutdown)
+                    await run_manager(
+                        manager,
+                        dequeue_timeout,
+                        batch_size,
+                        mode,
+                        max_concurrent_tasks,
+                        shutdown_on_listener_failure,
+                        heartbeat_timeout,
+                    )
+            except Exception as exc:
+                if not restart_on_failure:
+                    raise
+                logconfig.logger.exception(
+                    "Error during instance execution.",
+                    exc_info=exc,
                 )
-        except Exception as exc:
-            if not restart_on_failure:
-                raise
-            failed = True
-            logconfig.logger.exception(
-                "Error during instance execution.",
-                exc_info=exc,
-            )
-        finally:
-            forward_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await forward_task
+            else:
+                break
 
-        # Clean completion (drain / signal) ends the supervisor; only failures restart.
-        if shutdown.is_set() or not failed:
+        if shutdown.is_set():
             break
 
         await await_shutdown_or_timeout(shutdown, restart_delay)

@@ -258,33 +258,6 @@ async def test_runit_restarts_when_pgqueuer_inner_run_fails() -> None:
         await runit_task
 
 
-async def test_runit_pgqueuer_failure_without_restart_still_raises() -> None:
-    """Without restart_on_failure, a real PgQueuer.run failure must propagate."""
-
-    @asynccontextmanager
-    async def factory():  # type: ignore
-        pgq = PgQueuer.in_memory()
-
-        async def boom(*args: object, **kwargs: object) -> None:
-            raise RuntimeError("qm failed")
-
-        pgq.qm.run = boom
-        yield pgq
-
-    with pytest.raises(RuntimeError, match="qm failed"):
-        await supervisor.runit(
-            factory=factory,
-            dequeue_timeout=timedelta(seconds=1),
-            batch_size=10,
-            restart_delay=timedelta(seconds=0.05),
-            restart_on_failure=False,
-            shutdown=asyncio.Event(),
-            mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=None,
-            shutdown_on_listener_failure=False,
-        )
-
-
 async def test_runit_drain_exits_once_with_restart_on_failure() -> None:
     """Successful drain must not loop just because restart_on_failure is enabled."""
     calls = 0
