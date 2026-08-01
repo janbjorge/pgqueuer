@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Generator
+from typing import Generator, TypeAlias
 
 from typing_extensions import assert_never
 
@@ -22,6 +22,8 @@ __all__ = [
     "QueryBuilderEnvironment",
     "QueryQueueBuilder",
     "QuerySchedulerBuilder",
+    "bind_repository_builders",
+    "resolve_settings",
 ]
 
 
@@ -1081,3 +1083,44 @@ class QuerySchedulerBuilder:
 
     def build_truncate_schedule_query(self) -> str:
         return f"""TRUNCATE {self.qualified.schedules_table}"""
+
+
+QueryBuilder: TypeAlias = QueryBuilderEnvironment | QueryQueueBuilder | QuerySchedulerBuilder
+
+
+def resolve_settings(
+    settings: DBSettings | None,
+    *builders: QueryBuilder,
+) -> DBSettings:
+    """Resolve one settings instance and bind it onto every provided builder."""
+    if settings is not None:
+        for builder in builders:
+            builder.settings = settings
+        return settings
+
+    if not builders:
+        return DBSettings()
+
+    resolved = builders[0].settings
+    for builder in builders[1:]:
+        if builder.settings != resolved:
+            raise ValueError("Query builders must use equivalent DBSettings.")
+        builder.settings = resolved
+    return resolved
+
+
+def bind_repository_builders(
+    settings: DBSettings | None = None,
+    qbe: QueryBuilderEnvironment | None = None,
+    qbq: QueryQueueBuilder | None = None,
+    qbs: QuerySchedulerBuilder | None = None,
+) -> tuple[DBSettings, QueryBuilderEnvironment, QueryQueueBuilder, QuerySchedulerBuilder]:
+    """Return builders that all share one resolved DBSettings instance."""
+    present = tuple(builder for builder in (qbe, qbq, qbs) if builder is not None)
+    resolved = resolve_settings(settings, *present)
+    return (
+        resolved,
+        qbe or QueryBuilderEnvironment(resolved),
+        qbq or QueryQueueBuilder(resolved),
+        qbs or QuerySchedulerBuilder(resolved),
+    )

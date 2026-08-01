@@ -37,22 +37,14 @@ def percentile_cont(values: list[float], fraction: float) -> float:
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(init=False)
 class InMemoryQueries:
     """Drop-in replacement for ``Queries`` backed by pure Python dicts."""
 
     driver: InMemoryDriver
-
-    qbe: qb.QueryBuilderEnvironment = dataclasses.field(
-        default_factory=qb.QueryBuilderEnvironment,
-    )
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-    qbs: qb.QuerySchedulerBuilder = dataclasses.field(
-        default_factory=qb.QuerySchedulerBuilder,
-    )
-
+    qbe: qb.QueryBuilderEnvironment
+    qbq: qb.QueryQueueBuilder
+    qbs: qb.QuerySchedulerBuilder
     tracer: TracingProtocol | None = None
 
     _jobs: dict[int, dict[str, Any]] = dataclasses.field(default_factory=dict, init=False)
@@ -77,6 +69,39 @@ class InMemoryQueries:
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
     _next_stats_id: int = dataclasses.field(default=1, init=False)
+
+    def __init__(
+        self,
+        driver: InMemoryDriver,
+        qbe: qb.QueryBuilderEnvironment | None = None,
+        qbq: qb.QueryQueueBuilder | None = None,
+        qbs: qb.QuerySchedulerBuilder | None = None,
+        tracer: TracingProtocol | None = None,
+        *,
+        settings: qb.DBSettings | None = None,
+    ) -> None:
+        _, self.qbe, self.qbq, self.qbs = qb.bind_repository_builders(
+            settings, qbe=qbe, qbq=qbq, qbs=qbs
+        )
+        self.driver = driver
+        self.tracer = tracer
+        self._jobs = {}
+        self._log = []
+        self._statistics = []
+        self._schedules = {}
+        self._dedupe_index = {}
+        self._dedupe_key_by_job = {}
+        self._ready_heaps = {}
+        self._deferred_heap = []
+        self._picked_ids = set()
+        self._next_job_id = 1
+        self._next_log_id = 1
+        self._next_schedule_id = 1
+        self._next_stats_id = 1
+
+    @property
+    def settings(self) -> qb.DBSettings:
+        return self.qbe.settings
 
     async def install(self) -> None:
         pass

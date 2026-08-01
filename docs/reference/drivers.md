@@ -122,10 +122,11 @@ PgQueuer provides classmethods that handle driver instantiation automatically:
 
 ```python
 import asyncpg
-from pgqueuer import PgQueuer
+from pgqueuer import DBSettings, PgQueuer
 
 connection = await asyncpg.connect(dsn)
-pgq = PgQueuer.from_asyncpg_connection(connection)
+settings = DBSettings(prefix="billing_", db_schema="jobs")
+pgq = PgQueuer.from_asyncpg_connection(connection, settings=settings)
 
 # With optional shared resources
 pgq = PgQueuer.from_asyncpg_connection(
@@ -167,8 +168,9 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to `Channel(DBSettings().channel)` |
+| `channel` | No | Custom `Channel`; defaults to the canonical settings channel |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
+| `settings` | No | A `DBSettings` instance shared by the repository, query builders, and managers |
 
 ## Best Practices
 

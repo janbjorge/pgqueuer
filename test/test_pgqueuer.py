@@ -12,6 +12,16 @@ from pgqueuer.models import CronExpressionEntrypoint, Job, Schedule
 from test.helpers import wait_until_empty_queue
 
 
+def test_pgqueuer_reuses_settings_for_repository_and_channel() -> None:
+    settings = DBSettings(prefix="custom_")
+    pgq = PgQueuer.in_memory(settings=settings)
+
+    assert pgq.queries is not None
+    assert pgq.queries.qbe.settings is settings
+    assert pgq.channel == settings.channel
+    assert pgq.qm.channel == settings.channel
+
+
 async def test_pgqueuer_delegates_to_queue_manager(apgdriver: db.Driver) -> None:
     """Smoke test: PgQueuer wiring delegates entrypoint registration and job
     processing to the underlying QueueManager correctly."""

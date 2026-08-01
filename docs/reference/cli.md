@@ -407,6 +407,9 @@ All commands accept the following connection options:
 | `--prefix` | `PGQUEUER_PREFIX` | Prefix for PgQueuer database objects |
 | `--schema` | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects |
 
+Each invocation resolves these options into one `DBSettings` instance and
+reuses it for every query builder and notification channel used by the command.
+
 When `--pg-dsn` is omitted, the database drivers (asyncpg / psycopg) read standard
 libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
 `PGDATABASE`.

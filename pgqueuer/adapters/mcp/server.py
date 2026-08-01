@@ -17,6 +17,7 @@ from pgqueuer.adapters.persistence.qb import (
     DBSettings,
     QueryQueueBuilder,
     QuerySchedulerBuilder,
+    resolve_settings,
 )
 from pgqueuer.domain.settings import ConnectionSettings
 
@@ -459,7 +460,7 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
 
 def create_mcp_server(
     dsn: str | None = None,
-    settings: DBSettings = DBSettings(),
+    settings: DBSettings | None = None,
     connection_settings: ConnectionSettings | None = None,
 ) -> FastMCP:
     """Factory that builds a fully-configured PgQueuer MCP server.
@@ -476,10 +477,12 @@ def create_mcp_server(
              PGQUEUER_APPLICATION_NAME).
     """
 
+    database_settings = resolve_settings(settings)
+
     @asynccontextmanager
     async def app_lifespan(server: FastMCP) -> AsyncIterator[PgQueuerDatabase]:
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
-            yield PgQueuerDatabase(pool, settings)
+            yield PgQueuerDatabase(pool, database_settings)
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)
 

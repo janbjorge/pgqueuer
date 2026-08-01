@@ -978,6 +978,16 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.log_jobs([(jobs[0], "successful", None)])
 
 
+async def test_queries_share_injected_settings_across_builders(apgdriver: db.Driver) -> None:
+    settings = DBSettings(prefix="shared_")
+    q = queries.Queries(apgdriver, settings=settings)
+
+    assert q.settings is settings
+    assert q.qbe.settings is settings
+    assert q.qbq.settings is settings
+    assert q.qbs.settings is settings
+
+
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:
     """Test creating Queries from an asyncpg connection."""
     connection = await asyncpg.connect(dsn=dsn)

@@ -94,12 +94,28 @@ class AppConfig:
     schema: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
+    settings: qb.DBSettings | None = None
 
     def setup_env(self) -> None:
         if self.prefix:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
+
+    def get_settings(
+        self,
+        *,
+        durability: qb.Durability | None = None,
+        widen_id: bool | None = None,
+    ) -> qb.DBSettings:
+        """Return this CLI invocation's database settings."""
+        if self.settings is None:
+            self.settings = qb.DBSettings()
+        if durability is not None:
+            self.settings.durability = durability
+        if widen_id is not None:
+            self.settings.widen_id = widen_id
+        return self.settings
 
 
 @app.callback()
@@ -143,9 +159,9 @@ def main(
 
 def create_default_queries_factory(
     config: AppConfig,
-    settings: qb.DBSettings,
 ) -> Callable[..., contextlib.AbstractAsyncContextManager[queries.Queries]]:
     """Default Queries factory: try asyncpg, fall back to psycopg."""
+    database_settings = config.get_settings()
 
     @contextlib.asynccontextmanager
     async def factory() -> AsyncGenerator[queries.Queries, None]:
@@ -156,9 +172,7 @@ def create_default_queries_factory(
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
                 yield queries.Queries(
                     AsyncpgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
+                    settings=database_settings,
                 )
             return
         with contextlib.suppress(ImportError):
@@ -168,9 +182,7 @@ def create_default_queries_factory(
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
                 yield queries.Queries(
                     PsycopgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
+                    settings=database_settings,
                 )
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
@@ -181,14 +193,13 @@ def create_default_queries_factory(
 @contextlib.asynccontextmanager
 async def yield_queries(
     ctx: Context,
-    settings: qb.DBSettings,
 ) -> AsyncGenerator[queries.Queries, None]:
     """Yield Queries from the user-supplied factory or the built-in default."""
     config: AppConfig = ctx.obj
     if config.factory_fn_ref:
         factory_fn = factories.load_factory(config.factory_fn_ref)
     else:
-        factory_fn = create_default_queries_factory(config, settings)
+        factory_fn = create_default_queries_factory(config)
     async with factories.validate_factory_result(factory_fn()) as q:
         yield q
 
@@ -291,13 +302,14 @@ def install(
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     create_schema: sql_cmd.CreateSchemaOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability)
+    config: AppConfig = ctx.obj
+    config.get_settings(durability=durability)
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_install(settings, create_schema))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_install(config.get_settings(), create_schema))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings) as q:
+        async with yield_queries(ctx) as q:
             await q.install(create_schema=create_schema)
 
     asyncio_run(run())
@@ -313,7 +325,7 @@ def verify(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             expect_present = expect == VerifyMode.PRESENT
             divergence = list[str]()
 
@@ -364,11 +376,11 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall())
+        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(ctx.obj.get_settings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -387,13 +399,14 @@ def upgrade(
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability, widen_id=widen_id)
+    config: AppConfig = ctx.obj
+    config.get_settings(durability=durability, widen_id=widen_id)
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(config.get_settings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings) as q:
+        async with yield_queries(ctx) as q:
             await q.upgrade()
 
     asyncio_run(run())
@@ -417,7 +430,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
@@ -450,20 +463,27 @@ def web(
 
     logconfig.setup_fancy_logger(logconfig.LogLevel.INFO)
     config: AppConfig = ctx.obj
-    uvicorn.run(create_web_app(config.pg_dsn or None), host=host, port=port)
+    uvicorn.run(
+        create_web_app(config.pg_dsn or None, settings=config.get_settings()),
+        host=host,
+        port=port,
+    )
 
 
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")
 def listen(
     ctx: Context,
-    channel: str = typer.Option(
-        qb.DBSettings().channel,
+    channel: str | None = typer.Option(
+        None,
         "--channel",
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
-            await display_pg_channel(q.driver, models.Channel(channel))
+        async with yield_queries(ctx) as q:
+            await display_pg_channel(
+                q.driver,
+                models.Channel(channel or q.settings.channel),
+            )
 
     asyncio_run(run())
 
@@ -563,7 +583,7 @@ def schedules(
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             if remove:
                 schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
@@ -598,7 +618,7 @@ def queue(
     async def run_async() -> None:
         # For a single job, skip mode subsumes raise mode: a None result is
         # exactly the duplicate case, so on_conflict only decides the exit.
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -627,7 +647,7 @@ def failed(
     limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if not jobs:
                 print("No failed jobs.")
@@ -659,7 +679,7 @@ def requeue(
     ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
@@ -679,13 +699,14 @@ def durability(
     ),
 ) -> None:
     """Switch durability level of PgQueuer tables without data loss."""
-    settings = qb.DBSettings(durability=durability)
+    config: AppConfig = ctx.obj
+    config.get_settings(durability=durability)
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_durability(settings))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_durability(config.get_settings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings) as q:
+        async with yield_queries(ctx) as q:
             await q.alter_durability()
 
     asyncio_run(run())
@@ -705,11 +726,11 @@ def optimize_autovacuum(
 ) -> None:
     """Apply or revert recommended autovacuum settings."""
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(rollback))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(rollback, ctx.obj.get_settings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())

@@ -9,6 +9,7 @@ from pgqueuer.ports.repository import (
     QueueRepositoryPort,
     ScheduleRepositoryPort,
     SchemaManagementPort,
+    SettingsRepositoryPort,
 )
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -31,6 +32,7 @@ __all__ = [
     "RepositoryPort",
     "ScheduleRepositoryPort",
     "SchemaManagementPort",
+    "SettingsRepositoryPort",
     "SyncDriver",
     "TracingProtocol",
 ]
