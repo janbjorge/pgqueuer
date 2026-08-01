@@ -31,6 +31,17 @@ failure rates, a browsable job table with per-job detail, held failures with
 bulk requeue, workers, schedules, and system health. Orchestrators can hit
 `/healthz` for liveness.
 
+When creating the standalone app from Python, pass the same settings used by
+your workers so its queries and live-update channel stay aligned:
+
+```python
+from pgqueuer import DBSettings
+from pgqueuer.web import create_web_app
+
+settings = DBSettings(prefix="billing_", db_schema="jobs")
+app = create_web_app(settings=settings)
+```
+
 Live updates ride the `LISTEN/NOTIFY` channel PgQueuer already installs:
 queue-table changes push a debounced server-sent event and the affected
 screens re-render. Statistics-derived views (throughput, durations) refresh on

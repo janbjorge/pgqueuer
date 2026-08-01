@@ -23,7 +23,6 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -38,9 +37,7 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
-    )
+    channel: models.Channel | None = None
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -89,6 +86,10 @@ class QueueManager:
         init=False,
         default=timedelta(seconds=0.1),
     )
+
+    def __post_init__(self) -> None:
+        if self.channel is None:
+            self.channel = models.Channel(self.queries.qbe.settings.channel)
 
     async def listener_healthy(
         self,
@@ -397,6 +398,9 @@ class QueueManager:
         if max_concurrent_tasks < 2 * batch_size:
             raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
+        assert self.channel is not None
+        channel = self.channel
+
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
@@ -430,7 +434,7 @@ class QueueManager:
             notice_event_listener = listeners.PGNoticeEventListener()
             await listeners.initialize_notice_event_listener(
                 self.queries.driver,
-                self.channel,
+                channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
                     canceled=self.job_context,

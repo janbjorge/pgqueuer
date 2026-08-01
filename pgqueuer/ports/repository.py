@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import Literal, Protocol, overload
+from typing import Literal, Protocol, overload, runtime_checkable
 
 from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
@@ -17,6 +17,14 @@ class QueryBuilderEnvironmentPort(Protocol):
     """Protocol for query builder environment used in schema operations."""
 
     settings: DBSettings
+
+
+@runtime_checkable
+class SettingsRepositoryPort(Protocol):
+    """Repository exposing its canonical database settings."""
+
+    @property
+    def settings(self) -> DBSettings: ...
 
 
 @dataclasses.dataclass

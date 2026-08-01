@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import defaultdict
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from datetime import timedelta
 from itertools import chain
 
@@ -11,7 +11,7 @@ from pgqueuer.core import tm
 from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
-from pgqueuer.ports.repository import QueueRepositoryPort
+from pgqueuer.ports.repository import QueueRepositoryPort, SettingsRepositoryPort
 
 
 @dataclass
@@ -34,6 +34,8 @@ class CompletionWatcher:
 
     driver: Driver
     queries: QueueRepositoryPort = field(kw_only=True)
+    settings: InitVar[DBSettings | None] = field(default=None, kw_only=True)
+    channel: models.Channel | None = field(default=None, kw_only=True)
     refresh_interval: timedelta = field(
         default_factory=lambda: timedelta(seconds=5),
     )
@@ -68,9 +70,19 @@ class CompletionWatcher:
         repr=False,
     )
 
+    def __post_init__(self, settings: DBSettings | None) -> None:
+        if self.channel is not None:
+            return
+        if settings is None and isinstance(self.queries, SettingsRepositoryPort):
+            settings = self.queries.settings
+        if settings is None:
+            settings = DBSettings()
+        self.channel = models.Channel(settings.channel)
+
     async def __aenter__(self) -> "CompletionWatcher":
+        assert self.channel is not None
         self.task_manager.add(asyncio.create_task(self._poll_for_change()))
-        await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
+        await self.driver.add_listener(self.channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 

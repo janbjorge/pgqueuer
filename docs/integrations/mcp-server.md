@@ -107,11 +107,12 @@ If you use `PGQUEUER_PREFIX` or `PGQUEUER_SCHEMA` to namespace your tables, pass
 custom settings:
 
 ```python
+from pgqueuer import DBSettings
 from pgqueuer.adapters.mcp.server import create_mcp_server
-from pgqueuer.adapters.persistence.qb import DBSettings
 
 # reads PGQUEUER_PREFIX / PGQUEUER_SCHEMA
-server = create_mcp_server(settings=DBSettings())
+settings = DBSettings()
+server = create_mcp_server(settings=settings)
 server.run(transport="stdio")
 ```
 

@@ -54,6 +54,23 @@ def test_sql_commands_are_deterministic() -> None:
     assert first == second
 
 
+def test_sql_command_creates_one_settings_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings_type = cli.qb.DBSettings
+    created = list[object]()
+
+    def create_settings() -> object:
+        settings = settings_type()
+        created.append(settings)
+        return settings
+
+    monkeypatch.setattr(cli.qb, "DBSettings", create_settings)
+
+    result = CliRunner().invoke(app, ["sql", "upgrade"])
+
+    assert result.exit_code == 0, result.output
+    assert len(created) == 1
+
+
 def test_sql_install_respects_prefix_and_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     # AppConfig.setup_env writes PGQUEUER_* into os.environ. Clear them for a
     # clean starting state; the autouse _restore_pgqueuer_env fixture in

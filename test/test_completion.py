@@ -7,11 +7,23 @@ from datetime import timedelta
 import pytest
 
 from pgqueuer import db
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.completion import CompletionWatcher
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
+
+
+def test_completion_watcher_derives_channel_from_repository_settings() -> None:
+    settings = DBSettings(prefix="completion_")
+    driver = InMemoryDriver()
+    queries = InMemoryQueries(driver, settings=settings)
+
+    watcher = CompletionWatcher(driver, queries=queries)
+
+    assert watcher.channel == settings.channel
 
 
 async def test_completion_successful(apgdriver: db.Driver) -> None:

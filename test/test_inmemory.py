@@ -11,11 +11,24 @@ import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
 # Enqueue
 # ---------------------------------------------------------------------------
+
+
+def test_settings_are_shared_and_scoped_per_repository() -> None:
+    first_settings = DBSettings(prefix="first_")
+    second_settings = DBSettings(prefix="second_")
+    first = InMemoryQueries(InMemoryDriver(), settings=first_settings)
+    second = InMemoryQueries(InMemoryDriver(), settings=second_settings)
+
+    assert first.settings is first.qbe.settings is first.qbq.settings is first.qbs.settings
+    assert first.settings is first_settings
+    assert second.settings is second_settings
+    assert first.settings is not second.settings
 
 
 async def test_enqueue_single(queries: InMemoryQueries) -> None:

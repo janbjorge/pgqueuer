@@ -2,6 +2,24 @@
 
 This page explains the key abstractions in PgQueuer.
 
+## Database settings
+
+`DBSettings` defines PgQueuer's table names, schema, prefix, durability, and
+notification channel. Create one instance for each logical queue and pass it to
+every PgQueuer object in that application graph:
+
+```python
+from pgqueuer import DBSettings, PgQueuer, Queries
+
+settings = DBSettings(prefix="billing_", db_schema="jobs")
+queries = Queries(driver, settings=settings)
+pgq = PgQueuer(driver, queries=queries, settings=settings)
+```
+
+When `settings` is omitted, `Queries` or `PgQueuer` creates one instance and
+reuses it across all query builders, managers, and default channels. Separate
+application graphs can use different settings in the same process.
+
 ---
 
 ## Jobs
