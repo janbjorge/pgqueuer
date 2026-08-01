@@ -237,12 +237,15 @@ async def test_shutdown_injected_into_pgqueuer() -> None:
         )
     )
     await asyncio.sleep(0.1)
-    assert pgq.shutdown is shutdown
-    assert pgq.qm.shutdown is shutdown
-    assert pgq.sm.shutdown is shutdown
+    # Process shutdown is forwarded into a per-cycle event (not identity-shared),
+    # so PgQueuer.run's finally cannot latch the supervisor loop.
+    assert not pgq.shutdown.is_set()
     shutdown.set()
     async with async_timeout.timeout(2):
+        await pgq.shutdown.wait()
         await task
+    assert pgq.qm.shutdown.is_set()
+    assert pgq.sm.shutdown.is_set()
 
 
 async def test_shutdown_injected_into_queue_manager() -> None:
@@ -267,9 +270,10 @@ async def test_shutdown_injected_into_queue_manager() -> None:
         )
     )
     await asyncio.sleep(0.1)
-    assert qm.shutdown is shutdown
+    assert not qm.shutdown.is_set()
     shutdown.set()
     async with async_timeout.timeout(2):
+        await qm.shutdown.wait()
         await task
 
 
@@ -295,9 +299,10 @@ async def test_shutdown_injected_into_scheduler_manager() -> None:
         )
     )
     await asyncio.sleep(0.1)
-    assert sm.shutdown is shutdown
+    assert not sm.shutdown.is_set()
     shutdown.set()
     async with async_timeout.timeout(2):
+        await sm.shutdown.wait()
         await task
 
 
