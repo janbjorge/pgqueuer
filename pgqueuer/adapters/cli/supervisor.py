@@ -49,6 +49,12 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
         )
 
 
+async def forward_shutdown(source: asyncio.Event, target: asyncio.Event) -> None:
+    """Set *target* once *source* is set so a process signal stops the current cycle."""
+    await source.wait()
+    target.set()
+
+
 async def runit(
     factory: ManagerFactory,
     dequeue_timeout: timedelta,
@@ -63,6 +69,11 @@ async def runit(
 ) -> None:
     """Supervise a manager lifecycle; optionally restart after *restart_delay* on failure.
 
+    Each cycle gets its own shutdown event so a manager that sets ``shutdown`` on
+    exit (e.g. ``PgQueuer.run``'s ``finally``) cannot latch the process-level
+    event and defeat ``restart_on_failure``. Process signals still stop the
+    current cycle via :func:`forward_shutdown`.
+
     Raises ValueError when ``restart_delay`` is negative.
     """
     if restart_delay < timedelta(0):
@@ -71,9 +82,12 @@ async def runit(
     setup_signal_handlers(shutdown)
 
     while not shutdown.is_set():
+        cycle_shutdown = asyncio.Event()
+        forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
+        failed = False
         try:
             async with factories.validate_factory_result(factory()) as manager:
-                setup_shutdown_handlers(manager, shutdown)
+                setup_shutdown_handlers(manager, cycle_shutdown)
                 await run_manager(
                     manager,
                     dequeue_timeout,
@@ -86,13 +100,21 @@ async def runit(
         except Exception as exc:
             if not restart_on_failure:
                 raise
+            failed = True
             logconfig.logger.exception(
                 "Error during instance execution.",
                 exc_info=exc,
             )
+        finally:
+            forward_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await forward_task
 
-        if not shutdown.is_set():
-            await await_shutdown_or_timeout(shutdown, restart_delay)
+        # Clean completion (drain / signal) ends the supervisor; only failures restart.
+        if shutdown.is_set() or not failed:
+            break
+
+        await await_shutdown_or_timeout(shutdown, restart_delay)
 
 
 async def run_manager(
