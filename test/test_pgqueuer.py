@@ -6,7 +6,7 @@ import pytest
 
 from pgqueuer import db
 from pgqueuer.applications import PgQueuer
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsycopgDriver
+from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, Driver, PsqlpyDriver, PsycopgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.models import CronExpressionEntrypoint, Job, Schedule
 from test.helpers import wait_until_empty_queue
@@ -335,6 +335,41 @@ async def test_pgqueuer_from_psycopg_connection(dsn: str) -> None:
         assert seen == list(range(3))
     finally:
         await connection.close()
+
+
+async def test_pgqueuer_from_psqlpy_pool(dsn: str) -> None:
+    """Test creating PgQueuer from a psqlpy connection pool."""
+    import psqlpy
+
+    pool = psqlpy.ConnectionPool(dsn=dsn, max_db_pool_size=5)
+    try:
+        custom_resources = {"request_count": 0}
+        pgq = PgQueuer.from_psqlpy_pool(pool, resources=custom_resources)
+
+        assert isinstance(pgq.connection, PsqlpyDriver)
+        assert pgq.resources is custom_resources
+
+        seen = list[int]()
+
+        @pgq.entrypoint("psqlpy_job")
+        async def psqlpy_job(job: Job) -> None:
+            assert job.payload is not None
+            seen.append(int(job.payload))
+
+        await pgq.qm.queries.enqueue(
+            ["psqlpy_job"] * 3,
+            [f"{n}".encode() for n in range(3)],
+            [0] * 3,
+        )
+
+        await asyncio.gather(
+            pgq.run(),
+            wait_until_empty_queue(pgq.qm.queries, [pgq]),
+        )
+
+        assert seen == list(range(3))
+    finally:
+        pool.close()
 
 
 async def test_pgqueuer_from_psycopg_connection_with_resources(dsn: str) -> None:

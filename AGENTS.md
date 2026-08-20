@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PgQueuer is a Python library that turns PostgreSQL into a job queue using `LISTEN/NOTIFY` for instant notifications and `FOR UPDATE SKIP LOCKED` for worker coordination. Supports async (asyncpg, psycopg) and sync (psycopg) drivers, with an in-memory adapter for testing. Python >=3.10, async-first, MIT-licensed.
+PgQueuer is a Python library that turns PostgreSQL into a job queue using `LISTEN/NOTIFY` for instant notifications and `FOR UPDATE SKIP LOCKED` for worker coordination. Supports async (asyncpg, psycopg, psqlpy) and sync (psycopg) drivers, with an in-memory adapter for testing. Python >=3.10, async-first, MIT-licensed.
 
 ## Project Structure
 
@@ -100,7 +100,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `tm.py` — `TaskManager` for background task lifecycle
   - `heartbeat.py`, `cache.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
-  - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
+  - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver), `psqlpy.py` (PsqlpyDriver)
   - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`
   - `inmemory/` — In-memory driver and queries for testing without Postgres
   - `tracing/` — Logfire, Sentry, OpenTelemetry integrations

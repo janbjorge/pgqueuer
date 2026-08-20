@@ -11,6 +11,8 @@ For any driver:
 1. **Autocommit mode**: The connection must operate in autocommit mode.
    - For `psycopg`, explicitly set `connection.autocommit = True`.
    - For `asyncpg`, autocommit is the default unless a transaction is explicitly started.
+   - For `psqlpy`, autocommit is the default; transactions are opt-in via
+     `connection.transaction()`.
 
 2. **PostgreSQL compatibility**: The driver must support PostgreSQL-specific features
    used by PgQueuer.
@@ -21,15 +23,16 @@ For any driver:
 ## Driver protocol
 
 Every driver implements `pgqueuer.ports.driver.Driver`. Built-ins:
-`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and
-the in-memory driver. Custom drivers work anywhere a `Driver` is expected.
+`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `PsqlpyDriver`,
+`SyncPsycopgDriver`, and the in-memory driver. Custom drivers work anywhere a
+`Driver` is expected.
 
 Key methods:
 
 | Method | Purpose |
 |--------|---------|
 | `fetch(query, *args)` | Run a SELECT and return rows |
-| `execute(query, *args)` | Run a statement and return a status string |
+| `execute(query, *args)` | Run a statement and return its command status tag, or `""` when the driver exposes none |
 | `add_listener(channel, callback)` | Subscribe to `LISTEN` notifications |
 | `notify(channel, payload)` | Send `NOTIFY` on a channel |
 
@@ -73,6 +76,37 @@ conn = await psycopg.AsyncConnection.connect(dsn)
 conn.autocommit = True
 driver = PsycopgDriver(conn)
 ```
+
+### `PsqlpyDriver`
+
+Wraps a [psqlpy](https://github.com/psqlpy-python/psqlpy) `ConnectionPool`. psqlpy
+is a Rust driver whose listener can only be built from a pool, so this driver takes
+a pool rather than a single connection. Mark it experimental: psqlpy is pre-1.0.
+
+```python
+from psqlpy import ConnectionPool
+from pgqueuer.db import PsqlpyDriver
+
+pool = ConnectionPool(dsn=dsn, max_db_pool_size=5)
+async with PsqlpyDriver(pool) as driver:
+    ...
+```
+
+Behavior worth knowing:
+
+- The pool needs at least two connections. The listener holds one for as long as
+  the driver is listening.
+- `execute()` returns an empty string. psqlpy's `QueryResult` carries no command
+  status tag, so there is nothing to report.
+- Statements without arguments run over the simple query protocol
+  (`execute_batch`), which is what makes multi-statement SQL such as
+  `pgq install` work. psqlpy's prepared-statement path rejects more than one
+  command per query.
+- Callbacks registered through `add_listener` rebuild the listener, because psqlpy
+  ignores channels added after listening has started. Registering channels at
+  startup avoids the churn.
+- Payloads pass through `psqlpy.extra_types.CustomType`; psqlpy misreads bare
+  `bytes` inside a list as a nested array.
 
 !!! note "Windows event loop"
     psycopg's async driver is not compatible with Python's default
@@ -149,6 +183,18 @@ from pgqueuer import PgQueuer
 
 connection = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
 pgq = PgQueuer.from_psycopg_connection(connection)
+
+await pgq.run()
+```
+
+### From psqlpy pool
+
+```python
+from psqlpy import ConnectionPool
+from pgqueuer import PgQueuer
+
+pool = ConnectionPool(dsn=dsn, max_db_pool_size=5)
+pgq = PgQueuer.from_psqlpy_pool(pool)
 
 await pgq.run()
 ```

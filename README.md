@@ -139,7 +139,7 @@ The in-memory adapter has no durability or multi-process coordination, so use th
 | [Completion tracking](docs/guides/completion-tracking.md) | Wait for jobs to finish with `CompletionWatcher` |
 | [Shared resources](docs/guides/shared-resources.md) | Inject DB pools, HTTP clients, and models into handlers |
 | [Custom executors](docs/guides/custom-executors.md) | Retry strategies and exponential backoff |
-| [Drivers](docs/reference/drivers.md) | asyncpg, psycopg async/sync: choosing and configuring |
+| [Drivers](docs/reference/drivers.md) | asyncpg, psycopg async/sync, psqlpy: choosing and configuring |
 | [Architecture](docs/reference/architecture.md) | Ports & adapters, `SKIP LOCKED`, design decisions |
 | [Observability](docs/integrations/prometheus.md) | Prometheus metrics, [tracing](docs/integrations/tracing.md), and the dashboard |
 | [Framework integration](examples/) | FastAPI ([example](examples/fastapi_usage.py)) and Flask ([example](examples/flask_sync_usage.py)) |

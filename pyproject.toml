@@ -64,6 +64,7 @@ pgq = "pgqueuer.__main__:main"
 
 [project.optional-dependencies]
 asyncpg = ["asyncpg>=0.30.0"]
+psqlpy = ["psqlpy>=0.12.1"]
 psycopg = ["psycopg>=3.2.0", "psycopg-pool>=3.2"]
 logfire = ["logfire>=3.0.0"]
 sentry = ["sentry-sdk>=2.0.0"]
@@ -85,6 +86,7 @@ dev = [
     "jinja2>=3.1",
     "mypy",
     "mypy-extensions",
+    "psqlpy>=0.12.1",
     "psycopg>=3.2.0",
     "psycopg-pool>=3.2",
     "pytest",
@@ -177,7 +179,7 @@ addopts = "--durations=15 -n 2"
 #   metrics → domain, ports  (presentation layer, no core or adapter deps)
 #
 # The sole exception is core.applications — the composition root that wires
-# concrete adapters into the core.  All 4 allowed imports are listed below.
+# concrete adapters into the core.  All allowed imports are listed below.
 # ---------------------------------------------------------------------------
 [tool.importlinter]
 root_packages = ["pgqueuer"]
@@ -202,6 +204,7 @@ forbidden_modules = ["pgqueuer.adapters", "pgqueuer.metrics"]
 ignore_imports = [
     # applications.py is the composition root — it wires concrete adapters.
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.asyncpg",
+    "pgqueuer.core.applications -> pgqueuer.adapters.drivers.psqlpy",
     "pgqueuer.core.applications -> pgqueuer.adapters.drivers.psycopg",
     "pgqueuer.core.applications -> pgqueuer.adapters.persistence.queries",
     "pgqueuer.core.applications -> pgqueuer.adapters.inmemory",

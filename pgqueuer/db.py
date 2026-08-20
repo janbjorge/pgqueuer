@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.psqlpy import PsqlpyDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver, SyncPsycopgDriver
 from pgqueuer.ports.driver import Driver, SyncDriver
 
@@ -10,6 +11,7 @@ __all__ = [
     "AsyncpgDriver",
     "AsyncpgPoolDriver",
     "Driver",
+    "PsqlpyDriver",
     "PsycopgDriver",
     "SyncDriver",
     "SyncPsycopgDriver",

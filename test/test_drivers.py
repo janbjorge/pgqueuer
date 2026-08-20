@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import AsyncContextManager, AsyncGenerator, Callable
 
 import asyncpg
+import psqlpy
+import psqlpy.exceptions
 import psycopg
 import pytest
 
@@ -22,6 +24,7 @@ from pgqueuer.db import (
     AsyncpgDriver,
     AsyncpgPoolDriver,
     Driver,
+    PsqlpyDriver,
     PsycopgDriver,
     SyncDriver,
     SyncPsycopgDriver,
@@ -77,11 +80,22 @@ async def psydriver(dsn: str) -> AsyncGenerator[PsycopgDriver, None]:
         yield x
 
 
+@asynccontextmanager
+async def psqlpydriver(dsn: str) -> AsyncGenerator[PsqlpyDriver, None]:
+    pool = psqlpy.ConnectionPool(dsn=dsn, max_db_pool_size=5)
+    try:
+        async with PsqlpyDriver(pool) as x:
+            yield x
+    finally:
+        pool.close()
+
+
 def drivers() -> tuple[Callable[..., AsyncContextManager[Driver]], ...]:
     return (
         apgdriver,
         psydriver,
         apgpooldriver,
+        psqlpydriver,
     )
 
 
@@ -162,16 +176,17 @@ async def test_valid_query_syntax(
     def rolledback(sql: str) -> str:
         return f"BEGIN; {sql}; ROLLBACK;"
 
-    async with driver(dsn) as d:
-        if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
-            with suppress(asyncpg.exceptions.UndefinedParameterError):
-                await d.execute(rolledback(sql))
+    # Builders that reference placeholders raise once the parameters are
+    # missing; each driver spells that error differently.
+    undefined_parameter = (
+        asyncpg.exceptions.UndefinedParameterError,
+        psycopg.errors.UndefinedParameter,
+        psqlpy.exceptions.DatabaseError,
+    )
 
-        elif isinstance(d, PsycopgDriver):
-            with suppress(psycopg.errors.UndefinedParameter):
-                await d.execute(rolledback(sql))
-        else:
-            raise NotADirectoryError(d)
+    async with driver(dsn) as d:
+        with suppress(*undefined_parameter):
+            await d.execute(rolledback(sql))
 
 
 @pytest.mark.parametrize("driver", drivers())
@@ -235,6 +250,59 @@ async def test_recovery_after_failed_sql_sync(
 
     result = pgdriver.fetch("SELECT 1 as one")
     assert result == [{"one": 1}]
+
+
+async def test_psqlpy_pool_too_small_raises(dsn: str) -> None:
+    # psqlpy rejects max_db_pool_size=1 in the constructor, so shrink after.
+    pool = psqlpy.ConnectionPool(dsn=dsn, max_db_pool_size=2)
+    pool.resize(1)
+    try:
+        with pytest.raises(RuntimeError):
+            PsqlpyDriver(pool)
+    finally:
+        pool.close()
+
+
+async def test_psqlpy_invalid_channel_raises(dsn: str) -> None:
+    async with psqlpydriver(dsn) as d:
+        with pytest.raises(ValueError):
+            await d.add_listener("not an identifier", lambda _: None)
+
+
+async def test_psqlpy_listener_serves_channels_added_after_start(dsn: str) -> None:
+    """Registering a second channel rebuilds the listener without losing the first."""
+    first = asyncio.Future[str | bytearray | bytes]()
+    second = asyncio.Future[str | bytearray | bytes]()
+
+    async with psqlpydriver(dsn) as d:
+        await d.add_listener("psqlpy_chan_first", first.set_result)
+        await d.add_listener("psqlpy_chan_second", second.set_result)
+
+        async with psqlpydriver(dsn) as notifier:
+            await notifier.notify("psqlpy_chan_first", "one")
+            await notifier.notify("psqlpy_chan_second", "two")
+
+        assert await asyncio.wait_for(first, timeout=5) == "one"
+        assert await asyncio.wait_for(second, timeout=5) == "two"
+
+
+async def test_psqlpy_listener_survives_callback_exception(dsn: str) -> None:
+    """A raising callback must not take down psqlpy's listen task."""
+    delivered = asyncio.Future[str | bytearray | bytes]()
+
+    def explode(payload: str | bytes | bytearray) -> None:
+        raise RuntimeError("callback failure")
+
+    async with psqlpydriver(dsn) as d:
+        await d.add_listener("psqlpy_chan_boom", explode)
+        await d.add_listener("psqlpy_chan_alive", delivered.set_result)
+
+        async with psqlpydriver(dsn) as notifier:
+            await notifier.notify("psqlpy_chan_boom", "boom")
+            await asyncio.sleep(0.1)
+            await notifier.notify("psqlpy_chan_alive", "still here")
+
+        assert await asyncio.wait_for(delivered, timeout=5) == "still here"
 
 
 async def test_no_autocommit_raises(dsn: str) -> None:

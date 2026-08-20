@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Callable, MutableMapping
 
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.psqlpy import PsqlpyDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.queries import Queries
@@ -27,6 +28,7 @@ from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
     import asyncpg
+    import psqlpy
     import psycopg
 
 
@@ -117,6 +119,20 @@ class PgQueuer:
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
+            channel=channel,
+            resources=resources,
+        )
+
+    @classmethod
+    def from_psqlpy_pool(
+        cls,
+        pool: "psqlpy.ConnectionPool",
+        channel: Channel | None = None,
+        resources: MutableMapping | None = None,
+    ) -> "PgQueuer":
+        """Build PgQueuer over a psqlpy pool (max size must be at least 2)."""
+        return cls._from_driver(
+            driver=PsqlpyDriver(pool),
             channel=channel,
             resources=resources,
         )

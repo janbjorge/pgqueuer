@@ -630,7 +630,9 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
                 priority, entrypoint, payload, execute_after, dedupe_key, headers, ord
             FROM UNNEST(
                 $1::int[], $2::text[], $3::bytea[],
-                $4::interval[], $5::text[], $6::jsonb[]
+                -- headers are bound as pre-serialized JSON text, so $6 is
+                -- declared text[] and cast to jsonb[] here.
+                $4::interval[], $5::text[], $6::text[]::jsonb[]
             ) WITH ORDINALITY AS
                 t(priority, entrypoint, payload, execute_after, dedupe_key, headers, ord)
         ),

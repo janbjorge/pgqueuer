@@ -2,7 +2,7 @@
 
 ## Install the package
 
-PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
+PgQueuer supports three PostgreSQL drivers. Choose the one that fits your stack:
 
 === "asyncpg (Recommended)"
 
@@ -23,6 +23,15 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     connections. Use this if you need to enqueue jobs from sync code (e.g. Flask, Django)
     or already use psycopg elsewhere in your application.
 
+=== "psqlpy"
+
+    ```bash
+    pip install pgqueuer[psqlpy]
+    ```
+
+    [psqlpy](https://github.com/psqlpy-python/psqlpy) is an async driver written in
+    Rust. It is a young 0.x project, so treat this driver as experimental.
+
 === "uv"
 
     ```bash
@@ -37,6 +46,7 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     |-------|---------|
     | `asyncpg` | asyncpg async driver |
     | `psycopg` | psycopg async + sync driver |
+    | `psqlpy` | psqlpy async driver (experimental) |
     | `logfire` | [Logfire](https://logfire.pydantic.dev/) distributed tracing |
     | `sentry` | [Sentry](https://sentry.io/) distributed tracing |
     | `opentelemetry` | [OpenTelemetry](../integrations/tracing.md) distributed tracing |

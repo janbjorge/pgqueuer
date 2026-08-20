@@ -37,6 +37,10 @@ class Driver(Protocol):
         query: str,
         *args: Any,
     ) -> str:
+        """Run a statement, returning the command status tag.
+
+        Drivers that expose no status tag return an empty string.
+        """
         raise NotImplementedError
 
     async def add_listener(
