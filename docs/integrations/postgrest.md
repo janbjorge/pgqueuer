@@ -73,7 +73,7 @@ END;
 $$ LANGUAGE plpgsql;
 ```
 
-## Required Grants
+## Required grants
 
 You must explicitly grant:
 
@@ -92,7 +92,7 @@ GRANT EXECUTE ON FUNCTION fn_pgqueuer_enqueue(
 
 Grant to `PUBLIC` only if you fully understand the exposure surface (usually avoid).
 
-## PostgREST Configuration
+## PostgREST configuration
 
 ```ini
 db-uri = "postgres://pgqapi:<password>@localhost:5432/pgqdb"
