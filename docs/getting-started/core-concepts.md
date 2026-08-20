@@ -1,7 +1,5 @@
 # Core Concepts
 
-This page explains the key abstractions in PgQueuer.
-
 ---
 
 ## Jobs
@@ -50,7 +48,7 @@ When a job with `entrypoint="send_email"` is dequeued, PgQueuer calls this funct
         await asyncio.to_thread(cpu_bound_resize, job.payload)
     ```
 
-### Entrypoint Parameters
+### Entrypoint parameters
 
 The `@entrypoint()` decorator accepts several parameters that control how jobs are processed:
 
@@ -64,7 +62,7 @@ The `@entrypoint()` decorator accepts several parameters that control how jobs a
 
 ---
 
-## Job Status Lifecycle
+## Job status lifecycle
 
 Every job transitions through a series of states. The status is stored as the
 `pgqueuer_status` PostgreSQL enum with seven values:
@@ -184,7 +182,7 @@ asyncio event loop.
 
 ---
 
-## Database Tables
+## Database tables
 
 PgQueuer creates four tables:
 
@@ -200,9 +198,7 @@ See [Database Setup](../reference/database-setup.md) for full schema details and
 
 ---
 
-## Next Steps
-
-Now that you understand the building blocks:
+## Next steps
 
 - **[Row Locking & SKIP LOCKED](../reference/skip-locked.md)**: how workers claim jobs without colliding
 - **[Scheduling](../guides/scheduling.md)**: set up cron-style recurring tasks

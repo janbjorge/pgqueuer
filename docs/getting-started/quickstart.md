@@ -8,7 +8,7 @@ if you haven't done that yet.
 
 ---
 
-## 1. Define a Consumer
+## 1. Define a consumer
 
 Create a file called `myapp.py`. PgQueuer uses a factory pattern: you write an
 `@asynccontextmanager` function that yields a configured `PgQueuer` instance.
@@ -120,7 +120,7 @@ Create a file called `myapp.py`. PgQueuer uses a factory pattern: you write an
 
 ---
 
-## 2. Run the Consumer
+## 2. Run the consumer
 
 ```bash
 pgq run myapp:main
@@ -136,7 +136,7 @@ The `run` command:
 
 ---
 
-## 3. Enqueue Jobs
+## 3. Enqueue jobs
 
 From another process or script, push jobs into the queue:
 
@@ -198,7 +198,7 @@ This refreshes every 5 seconds and shows jobs per entrypoint, status counts, and
 
 ---
 
-## What's Next?
+## What's next?
 
 You now have a working PgQueuer setup. Here's where to go from here:
 

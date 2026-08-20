@@ -1,6 +1,6 @@
 # Installation
 
-## Install the Package
+## Install the package
 
 PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
 
@@ -49,7 +49,7 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     pip install pgqueuer[asyncpg,logfire]
     ```
 
-## Set Up the Database Schema
+## Set up the database schema
 
 PgQueuer stores jobs, schedules, and logs in PostgreSQL tables. Create them with the CLI:
 
@@ -78,7 +78,7 @@ This creates the following objects in your database:
     pgq sql install | psql -v ON_ERROR_STOP=1
     ```
 
-## Verify the Installation
+## Verify the installation
 
 Confirm all PgQueuer objects are present:
 
@@ -88,7 +88,7 @@ pgq verify --expect present
 
 This exits with code 0 if the schema is correctly installed, or code 1 if anything is missing.
 
-## Connection Configuration
+## Connection configuration
 
 PgQueuer is bring-your-own-connection: your application opens the connection
 or pool with asyncpg/psycopg directly and wraps it in a driver. PgQueuer never
@@ -106,7 +106,7 @@ The drivers read the standard PostgreSQL environment variables:
 | `PGPASSWORD` | Database password | (none) |
 | `PGDATABASE` | Database name | same as user |
 
-### Pool and Connection Tuning
+### Pool and connection tuning
 
 When the `pgq` CLI and the MCP server open their own connection, they read
 `PGQUEUER_*` variables. Passing your own factory (`pgq --factory`) skips
@@ -136,7 +136,7 @@ async with create_asyncpg_pool(settings=ConnectionSettings(pool_max_size=10)) as
     ...
 ```
 
-### libpq Environment Variable Support
+### libpq environment variable support
 
 psycopg links the real libpq, so every libpq variable works there. asyncpg
 reimplements the parsing and supports a subset:
@@ -156,7 +156,7 @@ On the asyncpg path PgQueuer fills the `PGCONNECT_TIMEOUT` gap itself:
 `PGQUEUER_CONNECT_TIMEOUT` takes precedence, then `PGCONNECT_TIMEOUT`, then
 the driver default.
 
-## Custom Schema
+## Custom schema
 
 To keep PgQueuer objects out of `public`, install into a dedicated Postgres schema:
 
@@ -172,7 +172,7 @@ through that schema, so the setting works regardless of the connection's
 `search_path`. The NOTIFY channel is unaffected: channels are global to the
 database, not schema-scoped.
 
-## Table Prefix
+## Table prefix
 
 To run multiple isolated PgQueuer instances in the same database (or the same
 schema), set a custom prefix:
@@ -186,7 +186,7 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 The two settings are independent: a prefix separates instances that share a
 schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 
-## Next Steps
+## Next steps
 
 - **[Quick Start](quickstart.md)**: build your first consumer and producer
 - **[Core Concepts](core-concepts.md)**: understand the mental model behind PgQueuer

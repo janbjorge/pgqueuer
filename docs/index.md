@@ -23,9 +23,9 @@ That gives you:
 - **One fewer service** to provision, monitor, and keep available
 - **Transactional enqueuing**: commit a job in the same transaction as your application data
 - **Consistent state**: your queue and your data always agree because they share the same database
-- **Lower latency**: jobs stay local, no round-trip to an external broker
+- **Lower latency**: jobs stay in the database instead of round-tripping to an external broker
 
-## How PgQueuer Works
+## How PgQueuer works
 
 PgQueuer builds on standard PostgreSQL primitives to deliver jobs safely and fast:
 
@@ -48,7 +48,7 @@ PgQueuer builds on standard PostgreSQL primitives to deliver jobs safely and fas
                               └────────────────────────────────┘
 ```
 
-## A Taste of PgQueuer
+## A taste of PgQueuer
 
 Define a consumer, register job handlers, and run:
 
@@ -75,13 +75,13 @@ pgq install          # create the schema
 pgq run myapp:main   # start processing
 ```
 
-That's it. Just PostgreSQL and your application code.
+That is the whole setup: PostgreSQL and your application code.
 
 [Full Quick Start Guide](getting-started/quickstart.md){ .md-button }
 
 ---
 
-## Key Features
+## Key features
 
 <div class="grid cards" markdown>
 
@@ -90,8 +90,8 @@ That's it. Just PostgreSQL and your application code.
     ---
 
     PostgreSQL `LISTEN/NOTIFY` pushes jobs to workers instantly.
-    A trigger on the queue table fires `pg_notify()` on every insert --
-    workers wake up immediately without polling.
+    A trigger on the queue table fires `pg_notify()` on every insert, so
+    workers wake up immediately instead of polling.
 
 -   **Concurrency Control**
 
@@ -168,7 +168,7 @@ That's it. Just PostgreSQL and your application code.
 
 ---
 
-## PgQueuer vs Celery at a Glance
+## PgQueuer vs Celery at a glance
 
 | Concern | PgQueuer | Celery |
 |---------|----------|--------|
@@ -187,7 +187,7 @@ are backed by PostgreSQL and you want a simpler operational footprint.
 
 ---
 
-## Next Steps
+## Next steps
 
 - **[Installation](getting-started/installation.md)**: install PgQueuer and set up the database schema
 - **[Quick Start](getting-started/quickstart.md)**: build your first consumer and producer in 5 minutes
