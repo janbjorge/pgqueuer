@@ -113,7 +113,11 @@ nav:
       - Distributed Tracing: integrations/tracing.md
       - PostgREST: integrations/postgrest.md
   - Comparisons:
+      - comparisons/index.md
       - PgQueuer vs Celery: comparisons/celery-comparison.md
+      - PgQueuer vs Procrastinate: comparisons/procrastinate-comparison.md
+      - PgQueuer vs Dramatiq: comparisons/dramatiq-comparison.md
+      - PgQueuer vs arq: comparisons/arq-comparison.md
       - Benchmarks: comparisons/benchmarks.md
   - Development:
       - Contributing: development/development.md
