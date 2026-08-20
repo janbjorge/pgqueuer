@@ -20,7 +20,7 @@ All queries are predefined; the server does not accept arbitrary SQL.
 
 This pulls in `mcp>=1.0` and `asyncpg>=0.30.0`.
 
-## Quick Start
+## Quick start
 
 The server connects to PostgreSQL using the same
 [libpq environment variables](../getting-started/installation.md#connection-configuration)
@@ -101,7 +101,7 @@ server = create_mcp_server(dsn="postgresql://user:pass@host:5432/mydb")
 server.run(transport="stdio")
 ```
 
-### Custom Table Prefix or Schema
+### Custom table prefix or schema
 
 If you use `PGQUEUER_PREFIX` or `PGQUEUER_SCHEMA` to namespace your tables, pass
 custom settings:
@@ -115,32 +115,32 @@ server = create_mcp_server(settings=DBSettings())
 server.run(transport="stdio")
 ```
 
-## Available Tools
+## Available tools
 
 All tools are **read-only** and use predefined static SQL queries.
 They cannot modify queue data.
 
-### Queue Overview
+### Queue overview
 
 | Tool | Description |
 |------|-------------|
 | `queue_size` | Current job counts grouped by entrypoint, status, and priority. Start here for a quick health check. |
 | `queue_table_info` | Browse raw queue rows with pagination. Shows payloads, headers, worker assignments, and timestamps. |
 
-### Throughput & Statistics
+### Throughput & statistics
 
 | Tool | Description |
 |------|-------------|
 | `queue_stats` | Per-second time-series of job state transitions. Supports a time-window filter (`period`). |
 | `throughput_summary` | High-level totals per entrypoint and status. Easier to read than `queue_stats` when you just want aggregate counts. |
 
-### Failure Investigation
+### Failure investigation
 
 | Tool | Description |
 |------|-------------|
 | `failed_jobs` | Recent jobs that ended with an exception, including full Python tracebacks as JSON. |
 
-### Worker Health
+### Worker health
 
 | Tool | Description |
 |------|-------------|
@@ -154,14 +154,14 @@ They cannot modify queue data.
 |------|-------------|
 | `schedules` | All cron-based recurring task definitions with next/last run times and status. |
 
-### Audit & Schema
+### Audit & schema
 
 | Tool | Description |
 |------|-------------|
 | `queue_log` | Full event log of every job state transition (enqueue, pick, complete, fail, cancel). |
 | `schema_info` | PgQueuer table metadata: existence, LOGGED/UNLOGGED durability, disk size, estimated row counts. |
 
-## Programmatic Usage
+## Programmatic usage
 
 The `create_mcp_server` factory returns a `FastMCP` instance with no module-level
 globals, so you can create multiple servers or embed one in a larger application:

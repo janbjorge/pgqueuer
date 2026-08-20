@@ -1,10 +1,10 @@
 # Driver Troubleshooting
 
-Use this checklist when PgQueuer starts misbehaving before diving into the codebase. It
-highlights the most common rough edges in PostgreSQL drivers (`asyncpg`, `psycopg`) and
-the questions that quickly separate configuration issues from bugs.
+Work through this checklist before you go reading PgQueuer internals. It covers the rough
+edges people actually hit in `asyncpg` and `psycopg`, and the questions that separate a
+configuration problem from a bug.
 
-## 1. Connection Basics
+## 1. Connection basics
 
 - **Autocommit drift**: psycopg defaults to transactional mode while asyncpg autocommits.
   Verify `connection.autocommit` (or pool init hooks) so enqueued jobs become visible
@@ -15,7 +15,7 @@ the questions that quickly separate configuration issues from bugs.
   certificates, or mismatched DSNs. Cross-check the exact DSN with `psql`, check
   `pg_hba.conf`, and ensure SSL parameters match the server.
 
-## 2. Query Flow and Transactions
+## 2. Query flow and transactions
 
 - **Locked rows**: Long-lived transactions block `SELECT … FOR UPDATE SKIP LOCKED`. Inspect
   `pg_locks` + `pg_stat_activity` for blockers and keep DDL or maintenance outside hot paths.
@@ -25,7 +25,7 @@ the questions that quickly separate configuration issues from bugs.
 - **Type adapters**: Binary payloads must match table encoding. Confirm `pgqueuer` table
   column types and ensure custom adapters/serializers are registered before enqueueing.
 
-## 3. Driver Quirks
+## 3. Driver quirks
 
 **asyncpg:**
 
@@ -44,7 +44,7 @@ the questions that quickly separate configuration issues from bugs.
   3.12+). The `pgq` CLI does this for you; embedded use must opt in. See
   [drivers reference](../reference/drivers.md#psycopgdriver) for full snippets.
 
-## 4. PgQueuer Expectations
+## 4. PgQueuer expectations
 
 - Health checks may raise exceptions from `pgqueuer.errors` (e.g. `FailingListenerError`);
   capture them during service startup.
@@ -52,7 +52,7 @@ the questions that quickly separate configuration issues from bugs.
   `pg_notify` privileges starve queues; monitor `pg_notification_queue_usage()`.
 - Payloads are stored as `bytea`; producers and consumers must agree on encoding.
 
-## 5. Rapid Triage Questions
+## 5. Rapid triage questions
 
 1. Can a fresh `psql` session connect with the same DSN?
 2. Are autocommit and transaction status clean before returning pooled connections?
@@ -62,5 +62,5 @@ the questions that quickly separate configuration issues from bugs.
 6. Are payloads serialized consistently across services?
 7. Did a driver upgrade land without matching PgQueuer expectations?
 
-Capture answers with relevant logs before escalating; the pattern usually reveals itself
-within this checklist.
+Write the answers down alongside the relevant logs before escalating. Most reports that
+reach the issue tracker turn out to be one of the items above.

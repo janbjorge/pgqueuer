@@ -6,7 +6,7 @@ and [OpenTelemetry](https://opentelemetry.io/).
 These tools allow you to visualize job execution and measure performance across
 producer and consumer boundaries.
 
-## Installing Optional Dependencies
+## Installing optional dependencies
 
 ```bash
 pip install pgqueuer[logfire]
@@ -81,7 +81,7 @@ The adapter follows OTel
 TraceContext and Baggage propagation through job headers. Compatible with
 Jaeger, Datadog, and any OTel-compatible backend.
 
-## Switching Tracers
+## Switching tracers
 
 Only one tracer can be active at a time. Call `set_tracing_class()` from
 `pgqueuer.ports.tracing` with the desired tracer implementation before starting

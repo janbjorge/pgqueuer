@@ -13,7 +13,7 @@ from pgqueuer.metrics.prometheus import collect_metrics
 content = await collect_metrics(queries)
 ```
 
-## FastAPI Integration
+## FastAPI integration
 
 Install the optional extra:
 
@@ -31,7 +31,7 @@ app.include_router(create_metrics_router(queries))
 
 The `/metrics` endpoint will be available for Prometheus to scrape.
 
-## Other Frameworks
+## Other frameworks
 
 Use `collect_metrics` directly and return the result as plain text with content type
 `text/plain; version=0.0.4`:
@@ -41,18 +41,18 @@ content = await collect_metrics(queries)
 return Response(content=content, media_type="text/plain; version=0.0.4")
 ```
 
-## Standalone Metrics Service
+## Standalone metrics service
 
 A Docker-based standalone metrics service is available in `tools/prometheus`. This
 service uses its own implementation, separate from the `pgqueuer.metrics` library module.
 
-### Building the Image
+### Building the image
 
 ```bash
 docker build -t pgq-prometheus-service -f tools/prometheus/Dockerfile .
 ```
 
-### Running the Service
+### Running the service
 
 ```bash
 docker run -p 8000:8000 \
