@@ -1,7 +1,5 @@
 # In-Memory Adapter
 
-## Overview
-
 The in-memory adapter is a drop-in replacement for the PostgreSQL backend, so PgQueuer
 can run entirely without a database connection. Located in `pgqueuer.adapters.inmemory`, it
 provides `InMemoryDriver` and `InMemoryQueries` classes that satisfy the same
@@ -24,7 +22,7 @@ Or import the classes directly:
 from pgqueuer import InMemoryDriver, InMemoryQueries
 ```
 
-## Quick Start
+## Quick start
 
 ```python
 import asyncio
@@ -56,26 +54,23 @@ async def main():
 asyncio.run(main())
 ```
 
-## When to Use the In-Memory Adapter
+## When to use the in-memory adapter
 
-**Recommended for:**
+Reach for it when the queue only has to live as long as one process:
 
-- **Unit and integration tests**: no PostgreSQL instance or Docker container required
-- **CI/CD pipelines**: resource-constrained environments (GitHub Actions, lightweight containers)
-- **Local development**: prototype queue logic without infrastructure setup
-- **Short-lived batch containers**: process a fixed job set and discard (ETL, one-time cleanup)
-- **Proof-of-concept**: quickly demonstrate queue logic
+- Unit and integration tests, with no PostgreSQL instance or Docker container to start
+- CI pipelines on resource-constrained runners (GitHub Actions, lightweight containers)
+- Local development and prototyping, before you set up infrastructure
+- Short-lived batch containers that process a fixed job set and exit (ETL, one-time cleanup)
 
-**Not suitable for:**
+Avoid it when any of the following matter:
 
-- **Production workloads requiring durability**: any restart loses all queued and in-flight jobs
-- **Multi-process workers**: no visibility across processes
-- **Multi-node / distributed deployments**: no shared state between machines
-- **Long-running services**: process restarts lose data
-- **ACID transaction guarantees**: no rollback or atomic retry semantics
-- **Monitoring and observability**: no external store for post-exit inspection
+- Durability. A restart loses every queued and in-flight job, so nothing survives a crash.
+- More than one process or machine. Jobs are invisible outside the process that enqueued them.
+- Transactions. There is no rollback and no atomic retry.
+- Post-mortem inspection. Once the process exits, the job history is gone.
 
-## Limitations Reference
+## Limitations reference
 
 | Capability | PostgreSQL adapter | In-memory adapter |
 |---|---|---|
@@ -87,27 +82,27 @@ asyncio.run(main())
 | **Schema operations** | DDL executed | No-ops (always return True) |
 | **Performance** | Bounded by network I/O | CPU-bound; O(n) dequeue scan |
 
-## Implementation Notes
+## Implementation notes
 
 ### `driver.fetch()` and `driver.execute()`
 
 Both methods raise `NotImplementedError` by design. `InMemoryQueries` operates directly on
 in-memory dictionaries and never executes SQL.
 
-### Event Loop Yielding
+### Event loop yielding
 
 The `dequeue()` method includes an explicit `await asyncio.sleep(0)` to yield control to
 the event loop. This is critical: without it, `QueueManager.fetch_jobs` would starve signal
 handlers, timers, and concurrent jobs. The PostgreSQL adapter naturally yields during real
 I/O; the in-memory adapter must do so explicitly.
 
-### Schema Management
+### Schema management
 
 - `install()`, `upgrade()`: no-ops
 - `uninstall()`: clears all internal dictionaries, resetting queue state
 - Schema inspection methods always return `True`
 
-### Job State
+### Job state
 
 The adapter maintains job state using plain Python dictionaries:
 

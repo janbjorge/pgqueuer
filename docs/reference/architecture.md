@@ -1,10 +1,10 @@
 # Architecture
 
-This overview explains how data flows from a producer to a consumer in PgQueuer.
-It highlights how entrypoints route jobs and how PostgreSQL notifications keep
-consumers up to date.
+A job travels from producer to consumer through PostgreSQL: the producer inserts a
+row, a trigger fires a notification, and a consumer claims the row and runs the
+matching entrypoint.
 
-## Job Flow Diagram
+## Job flow diagram
 
 ```
 Producer ──enqueue──▶ PostgreSQL ──NOTIFY──▶ EventRouter
@@ -21,14 +21,14 @@ Producer ──enqueue──▶ PostgreSQL ──NOTIFY──▶ EventRouter
 1. **Producer** inserts a job using `Queries.enqueue()`.
 2. A trigger emits a `table_changed_event` via **NOTIFY** on the configured channel.
 3. The **EventRouter** places the event in a `PGNoticeEventListener` queue.
-4. The **QueueManager** waits for events, fetches ready jobs with `FOR UPDATE SKIP LOCKED` (see [Row Locking & SKIP LOCKED](skip-locked.md) for a deep dive), and dispatches them to registered entrypoints.
+4. The **QueueManager** waits for events, fetches ready jobs with `FOR UPDATE SKIP LOCKED` (see [Row Locking & SKIP LOCKED](skip-locked.md) for the mechanics), and dispatches them to registered entrypoints.
 5. After execution, the **Consumer** updates job status back in PostgreSQL.
 
-Endpoint routing is handled by `EventRouter` which maps notification types to
-functions registered via `@pgq.entrypoint`. Notifications delivered through
-`LISTEN/NOTIFY` ensure consumers promptly react to new work.
+`EventRouter` maps notification types to the functions registered via
+`@pgq.entrypoint`. Because the notification arrives over `LISTEN/NOTIFY`, a
+consumer picks up new work without waiting for its next poll.
 
-## QueueManager Processing Loop
+## QueueManager processing loop
 
 ```
               ┌──────────────────┐
@@ -53,7 +53,7 @@ functions registered via `@pgq.entrypoint`. Notifications delivered through
               └──────────────┴──────────────────────────┘
 ```
 
-## Job Status Lifecycle
+## Job status lifecycle
 
 PgQueuer tracks each job's progress using a dedicated PostgreSQL ENUM type,
 `pgqueuer_status` by default:
@@ -85,7 +85,7 @@ The lifecycle of a job flows through these statuses:
 - **`deleted`**: Used when jobs are removed from the queue without running, such as during
   manual cleanup operations.
 
-### Status Transition Diagram
+### Status transition diagram
 
 ```
                   ┌────────┐

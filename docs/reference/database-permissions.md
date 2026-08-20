@@ -3,7 +3,7 @@
 This page lists every PostgreSQL object PgQueuer creates, the privileges needed to install
 the schema, and the minimal runtime privileges for the application user.
 
-## Objects Created by `pgq install`
+## Objects created by `pgq install`
 
 | Object | Name | Type |
 |--------|------|------|
@@ -19,7 +19,7 @@ the schema, and the minimal runtime privileges for the application user.
 The trigger calls `pg_notify()` to emit a `table_changed_event` on the configured channel
 (`ch_pgqueuer` by default) whenever the queue table changes.
 
-## Installation Privileges
+## Installation privileges
 
 The database role that runs `pgq install` needs:
 
@@ -42,7 +42,7 @@ GRANT CREATE ON SCHEMA pgqueuer_schema TO pgqueuer_installer;
     grant minimal runtime privileges to the application role separately. The installer role
     does not need to be the role your application runs as.
 
-## Runtime Privileges
+## Runtime privileges
 
 The role your application uses at runtime needs significantly fewer permissions:
 
@@ -77,7 +77,7 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO pgqueuer_app;
     invoker. The application also needs to issue `LISTEN ch_pgqueuer`, which requires no
     special privilege beyond a database connection.
 
-## Recommended: Dedicated Schema
+## Recommended: dedicated schema
 
 For stronger isolation, install PgQueuer into its own schema:
 
@@ -104,7 +104,7 @@ privileges above). This separates PgQueuer objects from application tables and
 makes privilege management cleaner: you can grant or revoke schema-level access
 as a single operation.
 
-## Verifying Permissions
+## Verifying permissions
 
 Use `pgq verify` to confirm the schema is correctly installed:
 

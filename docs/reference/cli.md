@@ -1,7 +1,7 @@
 # CLI Reference
 
-The `pgq` CLI provides a command-line interface for managing all aspects of PgQueuer.
-It can be invoked as `pgq` or `python3 -m pgqueuer`.
+The `pgq` CLI installs, inspects, and runs PgQueuer. Invoke it as `pgq` or
+`python3 -m pgqueuer`.
 
 ## Commands
 
@@ -275,7 +275,7 @@ pgq run my_module:my_factory --max-concurrent-tasks 5
 pgq run my_module:my_factory --mode drain
 ```
 
-#### Execution Modes
+#### Execution modes
 
 - **continuous** *(default)*: Keeps processing jobs indefinitely, waiting for new ones.
 - **drain**: Processes all available jobs and shuts down once the queue is empty.
@@ -284,10 +284,10 @@ Use **continuous** for long-running workers and **drain** for batch processing.
 
 ---
 
-## Durability Levels Explained
+## Durability levels
 
-Durability controls the logging behavior of PgQueuer tables, affecting performance and
-crash recovery.
+Durability controls whether PgQueuer tables are WAL-logged, which trades write speed
+against crash recovery.
 
 ### Volatile
 
@@ -310,12 +310,12 @@ crash recovery.
 
 ---
 
-## Factory Pattern (`run` command)
+## Factory pattern (`run` command)
 
 The `run` command uses a factory pattern. Your factory function creates and configures the
 manager instance; the CLI loads it, calls it, and runs the returned manager until shutdown.
 
-### Execution Flow
+### Execution flow
 
 ```
 pgq run my_module:factory
@@ -344,7 +344,7 @@ pgq run my_module:factory
       SHUTDOWN        (if --restart-on-failure)
 ```
 
-### Factory Contract
+### Factory contract
 
 The factory **must** return an `AsyncContextManager` (typically via `@asynccontextmanager`).
 Bare awaitables and sync context managers are **not** accepted; passing one raises
@@ -384,20 +384,20 @@ async def create_pgqueuer(args: list[str]):
     yield pgq
 ```
 
-### Key Points
+### Things worth knowing
 
-- **Factory runs on each restart**: With `--restart-on-failure`, the factory executes again
-  after failures, creating fresh connections and state.
-- **Async context manager is required**: Use `@asynccontextmanager` with `yield`.
-- **Extra args via `--`**: Arguments after `--` are passed as `list[str]` to the factory.
-  Factories that don't need args omit the parameter.
-- **Shutdown is graceful**: In-flight jobs complete before teardown runs.
+- With `--restart-on-failure`, the factory runs again after each failure, so every restart
+  gets fresh connections and state.
+- The factory must be an `@asynccontextmanager` that yields; nothing else is accepted.
+- Arguments after `--` reach the factory as `list[str]`. Factories that don't need them
+  omit the parameter.
+- Shutdown is graceful: in-flight jobs complete before teardown runs.
 
 See `examples/consumer.py` in the repository for a working example.
 
 ---
 
-## Global Options
+## Global options
 
 All commands accept the following connection options:
 

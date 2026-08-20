@@ -1,15 +1,8 @@
 # Drivers
 
-Drivers act as the bridge between PgQueuer and PostgreSQL, managing connections and
-abstracting database communication.
-
-## Purpose
-
-Drivers:
-
-- Manage database connections and enforce required configuration (e.g., autocommit).
-- Abstract the PostgreSQL-specific features that queue operations rely on.
-- Provide a consistent interface for executing queries.
+A driver wraps a PostgreSQL connection and gives PgQueuer one interface for running
+queries and receiving notifications, whichever underlying library you use. It also
+enforces the configuration queue operations depend on, autocommit in particular.
 
 ## Requirements
 
@@ -25,7 +18,7 @@ For any driver:
 3. **Default isolation level**: Connections should maintain the default PostgreSQL
    isolation level unless explicitly modified.
 
-## Driver Protocol
+## Driver protocol
 
 Every driver implements `pgqueuer.ports.driver.Driver`. Built-ins:
 `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and
@@ -58,7 +51,7 @@ async def notify(self, channel: str, payload: str) -> None:
     await self.execute("SELECT pg_notify($1, $2)", channel, payload)
 ```
 
-## Asynchronous Drivers
+## Asynchronous drivers
 
 ### `AsyncpgDriver`
 
@@ -96,7 +89,7 @@ driver = PsycopgDriver(conn)
     The `pgq` CLI handles this automatically. See the
     [psycopg async docs](https://www.psycopg.org/psycopg3/docs/advanced/async.html).
 
-## Synchronous Driver
+## Synchronous driver
 
 ### `SyncPsycopgDriver`
 
@@ -114,7 +107,7 @@ queries = SyncQueries(driver)
 queries.enqueue("fetch", b"payload")
 ```
 
-## Creating PgQueuer Instances with Classmethods
+## Creating PgQueuer instances with classmethods
 
 PgQueuer provides classmethods that handle driver instantiation automatically:
 
@@ -160,7 +153,7 @@ pgq = PgQueuer.from_psycopg_connection(connection)
 await pgq.run()
 ```
 
-## Classmethod Parameters
+## Classmethod parameters
 
 All classmethods accept:
 
@@ -170,13 +163,12 @@ All classmethods accept:
 | `channel` | No | Custom `Channel` configuration. Defaults to `Channel(DBSettings().channel)` |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
 
-## Best Practices
+## Recommendations
 
 - Prefer an async driver when your project already runs on asyncio.
 - Use the sync driver only to enqueue jobs from short-lived scripts or WSGI applications.
-- Reuse connections or pools; keep autocommit enabled.
-- Use the PgQueuer classmethods for simplified setup.
-- When using psycopg, always ensure autocommit is enabled before passing the connection.
+- Reuse connections or pools rather than opening one per enqueue.
+- With psycopg, set autocommit before you hand the connection to a driver.
 
 ## Troubleshooting
 
