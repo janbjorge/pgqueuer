@@ -10,7 +10,7 @@ job is updated to `status='failed'` and stays in the queue table with its payloa
 all metadata intact. The dequeue query skips `failed` jobs, so they won't be picked up by
 workers until explicitly re-queued.
 
-## How It Works
+## How it works
 
 1. A job handler raises an unhandled exception.
 2. PgQueuer checks the entrypoint's `on_failure` setting.
@@ -21,7 +21,7 @@ workers until explicitly re-queued.
 The hold operation flows through the same batched buffer as normal job completions; there is
 no performance penalty in the common (non-failure) path.
 
-## Use Cases
+## Use cases
 
 ### One-shot jobs with manual review
 
@@ -81,7 +81,7 @@ async def deliver_webhook(job: Job) -> None:
 Rate limits trigger an automatic database-level retry. Other HTTP errors (400, 500, etc.) raise
 an exception and the job is held for inspection.
 
-## Inspecting Failed Jobs
+## Inspecting failed jobs
 
 ### CLI
 
@@ -115,7 +115,7 @@ ORDER BY created DESC
 LIMIT 1;
 ```
 
-## Re-queuing Failed Jobs
+## Re-queuing failed jobs
 
 ### CLI
 
@@ -139,7 +139,7 @@ await queries.requeue_jobs([JobId(42), JobId(43)])
 - If `DatabaseRetryEntrypointExecutor` is configured, the job gets a full new set of retry
   attempts.
 
-## Behavior Summary
+## Behavior summary
 
 | Scenario | `on_failure="delete"` (default) | `on_failure="hold"` |
 |----------|--------------------------------|---------------------|

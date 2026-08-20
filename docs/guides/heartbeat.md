@@ -3,18 +3,17 @@
 PgQueuer updates a heartbeat timestamp on every active job so that stalled or
 crashed workers can be detected.
 
-## How It Works
+## How it works
 
-While a job is in the `picked` state, the `QueueManager` periodically updates a `heartbeat`
-timestamp on the job record. This signals that the job is still actively being processed.
+While a job is in the `picked` state, the `QueueManager` refreshes a `heartbeat`
+timestamp on the job row at a configurable interval. A timestamp that stops moving is
+the signal that the worker holding the job died or hung.
 
-- **Periodic updates**: The heartbeat timestamp is refreshed at a configurable interval.
-- **Stall detection**: External monitoring can compare `heartbeat` against `NOW()` to
-  identify stalled or hung jobs.
-- **Resource management**: Unresponsive jobs do not hold locks indefinitely, and
-  external supervisors can detect and handle stuck workers.
+Anything with database access can act on that: PgQueuer itself re-picks jobs whose
+heartbeat is older than `heartbeat_timeout`, and your own monitoring can compare
+`heartbeat` against `NOW()` to alert on stuck workers.
 
-## Stall Detection Pattern
+## Stall detection pattern
 
 You can query for stalled jobs directly in PostgreSQL:
 
@@ -26,12 +25,13 @@ WHERE status = 'picked'
   AND heartbeat < NOW() - INTERVAL '5 minutes';
 ```
 
-## Heartbeat Timeout
+## Heartbeat timeout
 
 The `heartbeat_timeout` parameter on `pgq.run()` / `QueueManager.run()` sets the
 duration after which a picked job with a stale heartbeat becomes eligible for
 re-pickup by any available worker. Heartbeats are sent automatically at half
-this interval. This enables automatic recovery from crashed or stalled workers:
+this interval, so a crashed or stalled worker's jobs recover without operator
+action:
 
 ```python
 from datetime import timedelta

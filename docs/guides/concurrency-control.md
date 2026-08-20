@@ -5,7 +5,7 @@ Concurrency limits are enforced **globally** at the database
 level via the dequeue SQL query, not per-worker. If you set `concurrency_limit=5`,
 at most 5 jobs run across your entire fleet.
 
-## Concurrency Limiting
+## Concurrency limiting
 
 Limit the number of jobs of a given type that run simultaneously:
 
@@ -18,7 +18,7 @@ async def process_data(job: Job) -> None:
 This is useful for protecting external services with connection pool limits or
 memory-intensive operations.
 
-## Serialized Processing
+## Serialized processing
 
 Ensure jobs of the same type are processed strictly one at a time:
 
@@ -31,7 +31,7 @@ async def process_shared_resource(job: Job) -> None:
 Setting `concurrency_limit=1` guarantees that only one job of this entrypoint runs
 at a time across all workers.
 
-## Global Concurrency Limit
+## Global concurrency limit
 
 You can also cap the total number of concurrently running tasks across **all** entrypoints
 at the worker level using the CLI flag:
@@ -42,7 +42,7 @@ pgq run myapp:main --max-concurrent-tasks 20
 
 This limits the total across all entrypoints regardless of individual entrypoint settings.
 
-## Combining Controls
+## Combining controls
 
 You can combine concurrency limits with other entrypoint options:
 
@@ -56,7 +56,7 @@ async def call_external_api(job: Job) -> None:
     pass
 ```
 
-## Configuring Timeouts
+## Configuring timeouts
 
 Two parameters on `pgq.run()` control job processing timing:
 

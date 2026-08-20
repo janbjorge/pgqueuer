@@ -3,7 +3,7 @@
 PgQueuer includes a built-in scheduler for managing recurring tasks using cron-like expressions.
 No separate process (like `celery-beat`) is required.
 
-## Basic Usage
+## Basic usage
 
 ```python
 from pgqueuer.models import Schedule
@@ -21,14 +21,14 @@ async def heartbeat(schedule: Schedule) -> None:
     await send_heartbeat()
 ```
 
-## How It Works
+## How it works
 
-- **Registration**: Define tasks using the `@schedule` decorator with a name and a cron expression.
-- **Execution**: The scheduler runs tasks at defined intervals and tracks execution state.
-- **Database Integration**: Schedules are stored in PostgreSQL and survive process
-  restarts.
+The `@schedule` decorator registers a name and a cron expression as a row in
+`pgqueuer_schedules`. The scheduler polls that table, runs the tasks whose expressions
+are due, and records the run. Because the state lives in PostgreSQL, schedules survive
+process restarts and only one worker runs each due task.
 
-### Scheduler Flow Diagram
+### Scheduler flow diagram
 
 ```
 @pgq.schedule ──▶ Schedule in DB ──▶ Poll loop ──cron ready──▶ Execute task
@@ -36,7 +36,7 @@ async def heartbeat(schedule: Schedule) -> None:
                                         └──────────────────────────┘
 ```
 
-## Cron Expression Format
+## Cron expression format
 
 PgQueuer supports both standard 5-field cron expressions and 6-field expressions with seconds
 in the final position.
@@ -94,7 +94,7 @@ Examples:
 Use trailing seconds, not leading seconds. For example, `*/3 * * * * *` is **not** "every 3
 seconds"; use `* * * * * */3` instead.
 
-## Accessing Shared Resources
+## Accessing shared resources
 
 Scheduled tasks can access shared resources (HTTP clients, database pools, etc.) by annotating a
 parameter as `ScheduleContext`. PgQueuer auto-detects it and injects the context, whose
@@ -111,7 +111,7 @@ async def sync_data(schedule: Schedule, ctx: ScheduleContext) -> None:
 
 See [Shared Resources](shared-resources.md) for full details.
 
-## Cleaning Up Old Schedules
+## Cleaning up old schedules
 
 When `clean_old=True`, PgQueuer deletes any **existing** database schedules whose entrypoint
 matches this decorator's entrypoint before re-registering it. This is useful when you change
@@ -125,7 +125,7 @@ async def fetch_db(schedule: Schedule) -> None:
 
 By default, `clean_old=False`: old schedules are retained.
 
-## Managing Schedules via CLI
+## Managing schedules via CLI
 
 List all schedules:
 
@@ -139,7 +139,7 @@ Remove a schedule by name:
 pgq schedules --remove fetch_db
 ```
 
-## Example: Full Setup with Scheduling
+## Example: full setup with scheduling
 
 ```python
 from contextlib import asynccontextmanager

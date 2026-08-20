@@ -3,7 +3,7 @@
 PgQueuer requires no message broker, Redis instance, or additional infrastructure, just
 PostgreSQL. This page covers how to run workers in production.
 
-## Single Worker Process
+## Single worker process
 
 The simplest deployment: one process, one `QueueManager`.
 
@@ -35,7 +35,7 @@ pgq run myapp:main
 This is sufficient for most workloads. A single `QueueManager` handles multiple entrypoints
 concurrently via asyncio.
 
-## Horizontal Scaling
+## Horizontal scaling
 
 Run multiple worker processes against the same PostgreSQL database. PgQueuer uses
 `FOR UPDATE SKIP LOCKED` in every dequeue query, so workers never claim the same job:
@@ -73,7 +73,7 @@ pgq run myapp:main &
 pgq run myapp:main
 ```
 
-## One Process per CPU Core
+## One process per CPU core
 
 For CPU-bound workloads, run one worker per core to avoid GIL contention in Python:
 
@@ -88,7 +88,7 @@ wait
 For IO-bound workloads (HTTP calls, database queries), a single asyncio process typically
 saturates a database connection before needing additional processes.
 
-## Process Supervision
+## Process supervision
 
 Use a supervisor to restart workers on crash.
 
@@ -146,7 +146,7 @@ LISTEN connection causes a clean restart rather than silent degradation:
   worker = "pgq run myapp:main --shutdown-on-listener-failure"
 ```
 
-## Graceful Shutdown
+## Graceful shutdown
 
 `pgq run` handles `SIGTERM` and `SIGINT`. On receiving a signal:
 
@@ -162,7 +162,7 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
     Set `terminationGracePeriodSeconds` to at least the 95th-percentile runtime of your
     longest job plus a 30-second buffer.
 
-## Schema Migrations on Deploy
+## Schema migrations on deploy
 
 Run `pgq upgrade` before deploying new application code. It is safe to run against a live
 database. Migrations are additive and non-destructive:
@@ -175,7 +175,7 @@ pgq upgrade          # apply schema changes
 
 `pgq upgrade` is idempotent: running it multiple times produces no side effects.
 
-## Environment Configuration
+## Environment configuration
 
 The database drivers read standard PostgreSQL environment variables:
 
@@ -204,7 +204,7 @@ PGQUEUER_SCHEMA=pgq pgq install
 PGQUEUER_SCHEMA=pgq pgq run my_app:main
 ```
 
-## Deployment Checklist
+## Deployment checklist
 
 - [ ] `pgq install` run once against the target database
 - [ ] `pgq autovac` applied after installation
