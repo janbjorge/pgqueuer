@@ -33,7 +33,7 @@ Migrate PgQueuer to a Ports & Adapters structure using Python `Protocol` classes
 definitions and dependency injection to wire adapters. The migration is incremental
 (strangler fig) and must not break the public API.
 
-### Constraint: Zero Unnecessary Breaking Changes
+### Constraint: zero unnecessary breaking changes
 
 The following imports must continue to work throughout all phases:
 
@@ -47,7 +47,7 @@ from pgqueuer import (
 The decorator APIs `.entrypoint()` and `.schedule()` must remain stable. When modules move
 to new paths, thin re-export shims preserve the old import locations.
 
-### Port Definitions
+### Port definitions
 
 Ports are `Protocol` classes living in `pgqueuer/ports/`. They capture what the core needs
 without specifying how.
@@ -101,7 +101,7 @@ class SchemaManagementPort(Protocol):
 The existing `Queries` class satisfies all four ports via structural subtyping. No
 inheritance or registration required.
 
-### Existing Ports (Already In Place)
+### Existing ports (already in place)
 
 - **`Driver`** (`pgqueuer.ports.driver`): database execution abstraction.
   Methods: `fetch`, `execute`, `add_listener`, `notify`. Adapters:
@@ -110,7 +110,7 @@ inheritance or registration required.
 - **`TracingProtocol`** (`pgqueuer.ports.tracing`): distributed tracing.
   Adapters: `LogfireTracing`, `SentryTracing`, `OpenTelemetryTracing`.
 
-### Dependency Injection Pattern
+### Dependency injection pattern
 
 `QueueManager` and `SchedulerManager` accept a `queries` argument (a `RepositoryPort`)
 as the first positional parameter. The underlying driver is accessed via
@@ -136,7 +136,7 @@ qm = QueueManager(Queries(driver))
 when a caller passes a `Driver` directly, so `PgQueuer(driver)` still works.
 `QueueManager` and `SchedulerManager` no longer build adapters themselves.
 
-### Target Directory Layout
+### Target directory layout
 
 ```
 pgqueuer/
@@ -193,7 +193,7 @@ removed; import from the canonical location under `pgqueuer.core.*`,
 `pgqueuer.adapters.*`, or `pgqueuer.ports.*` instead. See breaking change #11
 in the v1.0.0 release notes for the full mapping.
 
-### Migration Phases
+### Migration phases
 
 **Phase 0**: ~~Deprecate unused infrastructure fields in executor parameters.~~ Done; deprecated fields removed.
 
@@ -231,7 +231,7 @@ Phase 3 ──┘
 - Developers must learn the directory conventions and respect import boundaries.
 - Protocol definitions add surface area that must stay in sync with `Queries`.
 
-### Risks and Mitigations
+### Risks and mitigations
 
 | Risk | Mitigation |
 |------|-----------|

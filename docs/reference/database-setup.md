@@ -3,7 +3,7 @@
 PgQueuer requires initial setup in your PostgreSQL database: tables, triggers, and functions
 for job queuing and processing.
 
-## Table Structure
+## Table structure
 
 PgQueuer uses four primary tables:
 
@@ -64,7 +64,7 @@ pgq verify --expect absent
 
 The command exits with code `1` if any mismatches are detected.
 
-## Adjusting Durability
+## Adjusting durability
 
 PgQueuer tables are installed with **durable** settings by default. You can select a
 different durability level at install time:
@@ -81,7 +81,7 @@ pgq durability volatile
 
 See [CLI Reference](cli.md) for full details on `volatile`, `balanced`, and `durable` modes.
 
-## Autovacuum Optimization
+## Autovacuum optimization
 
 After installation, tune PostgreSQL autovacuum settings for PgQueuer tables:
 
