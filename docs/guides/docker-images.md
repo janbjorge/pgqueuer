@@ -11,7 +11,7 @@ Registry on every release, tagged to match the PyPI version:
 
 Pin to a version tag in production; `latest` tracks the newest non-prerelease.
 
-## Web Dashboard
+## Web dashboard
 
 ```bash
 docker run -p 8080:8080 \
@@ -35,7 +35,7 @@ Without them the dashboard runs unauthenticated. It can cancel and requeue
 jobs, so never publish it without setting both. See
 [Web Dashboard → Authentication](../integrations/web-dashboard.md#authentication).
 
-## Prometheus Exporter
+## Prometheus exporter
 
 ```bash
 docker run -p 8000:8000 \

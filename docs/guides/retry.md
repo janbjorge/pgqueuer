@@ -5,7 +5,7 @@ job stays in the queue table and is re-queued for another attempt. The job row i
 in-place (not deleted and re-inserted), so the `id`, `payload`, `headers`, and all metadata
 are preserved across retries.
 
-## How It Works
+## How it works
 
 1. Your handler raises `RetryRequested` with an optional delay and reason.
 2. PgQueuer catches the exception and atomically:
@@ -20,7 +20,7 @@ Because the job row is **updated** (not deleted), the same `job.id` is stable ac
 retry attempts. This makes it straightforward to trace the full retry graph by querying the
 log table.
 
-## Basic Usage
+## Basic usage
 
 Raise `RetryRequested` from your handler when you detect a transient failure:
 
@@ -49,7 +49,7 @@ async def call_api(job: Job) -> None:
 | `delay` | `timedelta` | `timedelta(0)` | Time to wait before the next attempt |
 | `reason` | `str \| None` | `None` | Human-readable explanation (stored in the log) |
 
-## Reading the Attempt Counter
+## Reading the attempt counter
 
 The `job.attempts` field tells you how many previous attempts have been made. On the first
 execution it is `0`, after one retry it is `1`, and so on:
@@ -70,7 +70,7 @@ async def resilient_task(job: Job) -> None:
         )
 ```
 
-## Automatic Retry with DatabaseRetryEntrypointExecutor
+## Automatic retry with DatabaseRetryEntrypointExecutor
 
 For cases where you want **any** unhandled exception to trigger a retry (not just explicit
 `RetryRequested` raises), use `DatabaseRetryEntrypointExecutor`. It wraps your handler and
@@ -112,7 +112,7 @@ the executor only converts non-retry exceptions.
 | `max_delay` | `timedelta` | `5m` | Cap on exponential backoff |
 | `backoff_multiplier` | `float` | `2.0` | Multiplier applied to delay after each attempt |
 
-### Backoff Schedule Example
+### Backoff schedule example
 
 With `initial_delay=1s`, `backoff_multiplier=2.0`, `max_delay=60s`:
 
@@ -130,7 +130,7 @@ The table shows the delay *formula* independent of `max_attempts`. With the defa
 `max_attempts=5`, only attempts 0-4 are retried (delays 1s-16s); the 5th failure is terminal,
 so the 32s/60s rows never apply unless you raise `max_attempts`.
 
-## Retry vs. Heartbeat Recovery
+## Retry vs. heartbeat recovery
 
 PgQueuer has two complementary retry mechanisms:
 
@@ -172,7 +172,7 @@ WHERE job_id = 42
 ORDER BY created;
 ```
 
-## Behavior Summary
+## Behavior summary
 
 | Scenario | What happens |
 |----------|-------------|

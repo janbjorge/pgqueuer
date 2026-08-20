@@ -1,18 +1,14 @@
 # Shared Resources (`Context.resources`)
 
-PgQueuer lets you provide a single shared resources container that is injected into every job
-execution context. This makes it easy to initialize heavyweight or shared components (database
-pools, HTTP clients, caches, ML models, etc.) once at process startup and reuse them across
-all jobs.
+PgQueuer injects a single shared resources container into every job execution context.
+Create the expensive things once at process startup (database pools, HTTP clients, caches,
+ML models) and every job reuses them.
 
-## Why Use Shared Resources?
+That saves the per-job cost of rebuilding an HTTP session pool or reloading model weights,
+keeps the lifecycle in one place (created at startup, closed at shutdown), and gives jobs a
+way to share mutable state such as in-memory counters or feature flags.
 
-- Avoid re-initializing expensive objects per job (e.g. HTTP session pools, model weights)
-- Centralize lifecycle (create at startup, optionally close at shutdown)
-- Enable coordinated state (e.g. in‑memory counters, feature flags)
-- Provide a structured place for integrations (tracing, metrics, external APIs)
-
-## Providing Resources
+## Providing resources
 
 You pass a mutable mapping when constructing `PgQueuer` (or `QueueManager` directly):
 
@@ -50,7 +46,7 @@ async def build_pgqueuer():
 Internally this mapping is passed into each `Context` as `context.resources`. All jobs receive
 the **same object** (it is not copied), so mutations are visible across jobs.
 
-## Access Inside Custom Executors
+## Access inside custom executors
 
 If you implement a custom executor (`AbstractEntrypointExecutor`), the `execute(self, job, context)`
 method receives the `Context`:
@@ -67,7 +63,7 @@ class LoggingExecutor(AbstractEntrypointExecutor):
         # Call wrapped function (if delegating) or implement logic directly
 ```
 
-## Mutating Resources
+## Mutating resources
 
 Because `resources` is a shared mutable mapping:
 
@@ -79,7 +75,7 @@ context.resources["metrics"]["processed"] += 1
 If you need stricter control (immutability, lifecycle hooks), you can replace the mapping with
 a custom registry class; the public contract is simply "object with mapping semantics."
 
-## Enabling Context Injection
+## Enabling context injection
 
 Context injection is **auto-detected from the handler signature**. Annotate a parameter as
 `Context` and PgQueuer passes the runtime `Context`:
@@ -110,7 +106,7 @@ async def forced(job: Job, ctx: Context) -> None:
     ...
 ```
 
-## Scheduled Tasks
+## Scheduled tasks
 
 Scheduled tasks follow the same rule: annotate a parameter as `ScheduleContext` and it is
 injected automatically.
@@ -132,7 +128,7 @@ async def simple_task(schedule: Schedule) -> None:
     await perform_task()
 ```
 
-## Testing With Resources
+## Testing with resources
 
 ```python
 from pgqueuer.queries import Queries

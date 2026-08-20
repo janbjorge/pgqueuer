@@ -2,7 +2,7 @@
 
 This page covers the knobs available for tuning PgQueuer throughput and latency in production.
 
-## Batch Size
+## Batch size
 
 `batch_size` controls how many jobs are fetched from the database in a single `FOR UPDATE SKIP LOCKED` query. Per the PostgreSQL manual, the `LIMIT` this maps to also bounds how many rows the statement locks per round-trip; see [Row Locking & SKIP LOCKED](../reference/skip-locked.md) for the mechanics.
 
@@ -22,7 +22,7 @@ await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))
 - Decrease it when jobs are long-running and you want finer concurrency control.
 - `max_concurrent_tasks` must be at least `2 × batch_size`; PgQueuer enforces this.
 
-## Concurrency Limits
+## Concurrency limits
 
 Limit concurrent execution globally or per-entrypoint:
 
@@ -41,7 +41,7 @@ async def resize_image(job: Job) -> None:
 share a scarce external resource (e.g., an API with rate limits). `max_concurrent_tasks`, by
 contrast, is a per-process safety ceiling on total asyncio tasks.
 
-## Connection Pooling
+## Connection pooling
 
 For high-throughput deployments, use a connection pool driver instead of a single connection:
 
@@ -60,7 +60,7 @@ pgq = PgQueuer(driver)
 - Start with `max_size = 2 × expected_concurrent_jobs` and adjust based on `pg_stat_activity`.
 - Avoid pools larger than your PostgreSQL `max_connections` allows.
 
-## Durability vs. Throughput
+## Durability vs. throughput
 
 Choose the durability level that matches your risk tolerance:
 
@@ -81,7 +81,7 @@ pgq durability balanced
     Use only for jobs that are safe to drop and re-enqueue (e.g., cache-warming, fire-and-forget
     analytics).
 
-## Autovacuum Tuning
+## Autovacuum tuning
 
 The `pgqueuer` table is high-churn: rows are inserted and then deleted rapidly. Without tuned
 autovacuum, dead tuple bloat accumulates and slows down index scans.
@@ -110,7 +110,7 @@ Revert to system defaults:
 pgq autovac --rollback
 ```
 
-## NOTIFY Channel and Polling Fallback
+## NOTIFY channel and polling fallback
 
 PgQueuer uses `LISTEN/NOTIFY` for low-latency job pickup. A trigger fires on every insert
 into `pgqueuer` and sends a notification on the `ch_pgqueuer` channel.
@@ -149,7 +149,7 @@ These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not 
 (`pgq upgrade` additionally adds a `heartbeat`-based picked index on databases created by
 older versions.)
 
-## Quick-Reference Checklist
+## Quick-reference checklist
 
 - [ ] Run `pgq autovac` after installation
 - [ ] Choose a `durability` level appropriate for your crash recovery requirements

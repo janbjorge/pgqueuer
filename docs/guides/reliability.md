@@ -3,7 +3,7 @@
 This page explains how PgQueuer handles failures, ensures jobs are not lost, supports
 idempotent enqueuing, and provides an audit trail of every completed job.
 
-## Failure Handling
+## Failure handling
 
 When a job raises an unhandled exception, PgQueuer:
 
@@ -26,7 +26,7 @@ ORDER BY created DESC
 LIMIT 20;
 ```
 
-## Retry Strategies
+## Retry strategies
 
 PgQueuer provides three complementary retry mechanisms.
 
@@ -155,7 +155,7 @@ enqueued and every later occurrence is treated as a conflict. Under `on_conflict
 later positions come back as `None`; under the default they fail the call. Order your inputs
 so the payload you want kept comes first.
 
-## Poison Jobs
+## Poison jobs
 
 A "poison job" is one that consistently causes worker crashes or hangs without updating its
 heartbeat. PgQueuer does not include a built-in dead-letter queue, but you can detect and
@@ -174,7 +174,7 @@ ORDER BY heartbeat ASC;
 **Recommended pattern:** route these to a separate monitoring alert or move them to a
 dedicated "quarantine" entrypoint by updating their entrypoint column and re-queuing.
 
-## Audit Trail
+## Audit trail
 
 Every job that leaves the active queue is written to `pgqueuer_log`:
 
@@ -193,7 +193,7 @@ or use `pgq dashboard` from the CLI.
     PgQueuer does not automatically prune `pgqueuer_log`. Add a periodic `DELETE` job or
     PostgreSQL table partition policy to manage log growth in high-throughput systems.
 
-## Statistics Aggregation
+## Statistics aggregation
 
 Rows in `pgqueuer_log` are rolled up into per-second counts in `pgqueuer_statistics`
 (grouped by entrypoint, priority, and status). `QueueManager` runs this aggregation on a

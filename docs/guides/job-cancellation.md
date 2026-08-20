@@ -3,7 +3,7 @@
 PgQueuer supports canceling queued or in-progress jobs programmatically via PostgreSQL's
 NOTIFY system. Cancellations are best-effort and may not halt a job already underway.
 
-## Enqueueing Jobs
+## Enqueueing jobs
 
 ```python
 from pgqueuer.queries import Queries
@@ -21,7 +21,7 @@ queries = SyncQueries(sync_db_driver)
 job_ids = queries.enqueue("task_entrypoint", b"Job data", priority=5)
 ```
 
-## Cancelling Jobs
+## Cancelling jobs
 
 ```python
 await queries.mark_job_as_cancelled(job_ids)
@@ -30,7 +30,7 @@ await queries.mark_job_as_cancelled(job_ids)
 `mark_job_as_cancelled` accepts a list of job IDs. Jobs that have already completed are
 unaffected.
 
-## Handling Cancellation in Job Code
+## Handling cancellation in job code
 
 Use the job's cancellation scope to stop processing when a cancel request arrives:
 
@@ -45,7 +45,7 @@ async def process_job(job: Job, ctx: Context) -> None:
         await perform_task(job.payload)
 ```
 
-## Job Status After Cancellation
+## Job status after cancellation
 
 Cancelled jobs transition to the `canceled` status and are logged in the statistics table.
 See [Architecture](../reference/architecture.md) for the full status lifecycle.
