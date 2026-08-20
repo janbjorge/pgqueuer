@@ -179,9 +179,9 @@ That is the whole setup: PostgreSQL and your application code.
 | Recurring tasks | Built-in `@schedule` decorator | Separate `celery-beat` process |
 | Complex workflows | Basic job queue | Chains, chords, groups, canvas |
 
-Celery is a mature, battle-tested project that excels at complex multi-step workflows,
-canvas primitives, and multi-broker topologies. PgQueuer is a good fit when your jobs
-are backed by PostgreSQL and you want a simpler operational footprint.
+Celery is a mature project with strong support for multi-step workflows, canvas
+primitives, and multi-broker topologies. PgQueuer is a good fit when your jobs are
+backed by PostgreSQL and you want a simpler operational footprint.
 
 [Detailed Comparison](comparisons/celery-comparison.md){ .md-button }
 
