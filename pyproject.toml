@@ -16,12 +16,13 @@ write_to= "pgqueuer/_version.py"
 
 [project]
 name = "pgqueuer"
-description = "Pgqueuer is a Python library leveraging PostgreSQL for efficient job queuing."
+description = "PostgreSQL-backed background job and task queue for Python."
 authors = [{name = "JeyBee"}]
 license = {text = "MIT License"}
 dynamic = ["version"]
 requires-python = ">=3.10"
 readme = "README.md"
+keywords = ["postgresql", "task-queue", "job-queue", "background-jobs", "asyncio"]
 
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -54,7 +55,7 @@ dependencies = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/janbjorge/pgqueuer/wiki"
+Documentation = "https://janbjorge.github.io/pgqueuer/"
 Homepage = "https://github.com/janbjorge/pgqueuer/"
 Issues = "https://github.com/janbjorge/pgqueuer/issues"
 Repository = "https://github.com/janbjorge/pgqueuer/"
