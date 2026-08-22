@@ -20,6 +20,7 @@ from pgqueuer.core import (
     heartbeat,
     listeners,
     logconfig,
+    schema_check,
     tm,
 )
 from pgqueuer.domain import errors, models, types
@@ -255,58 +256,7 @@ class QueueManager:
 
     async def verify_structure(self) -> None:
         """Assert that required tables, columns, indexes, enums, and triggers exist."""
-
-        for table in (
-            self.queries.qbe.settings.queue_table,
-            self.queries.qbe.settings.statistics_table,
-        ):
-            if not (await self.queries.has_table(table)):
-                raise RuntimeError(
-                    f"The required table '{table}' is missing. "
-                    f"Please run 'pgq install' to set up the necessary tables."
-                )
-
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
-            raise RuntimeError(
-                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
-                "please run 'pgq upgrade'"
-            )
-
-        for table, column in (
-            (self.queries.qbe.settings.queue_table, "updated"),
-            (self.queries.qbe.settings.queue_table, "heartbeat"),
-            (self.queries.qbe.settings.queue_table, "queue_manager_id"),
-            (self.queries.qbe.settings.queue_table, "execute_after"),
-            (self.queries.qbe.settings.queue_table, "headers"),
-            (self.queries.qbe.settings.queue_table, "attempts"),
-            (self.queries.qbe.settings.queue_table_log, "traceback"),
-        ):
-            if not (await self.queries.table_has_column(table, column)):
-                raise RuntimeError(
-                    f"The required column '{column}' is missing in the '{table}' table. "
-                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
-                )
-
-        for key, enum in (
-            ("canceled", self.queries.qbe.settings.queue_status_type),
-            ("failed", self.queries.qbe.settings.queue_status_type),
-        ):
-            if not (await self.queries.has_user_defined_enum(key, enum)):
-                raise RuntimeError(
-                    f"The {enum} is missing the '{key}' type, please run 'pgq upgrade'"
-                )
-
-        for table, index in (
-            (
-                self.queries.qbe.settings.queue_table_log,
-                f"{self.queries.qbe.settings.queue_table_log}_job_id_status",
-            ),
-        ):
-            if not (await self.queries.table_has_index(table, index)):
-                raise RuntimeError(
-                    f"The required index '{index}' is missing in the '{table}' table. "
-                    f"Please run 'pgq upgrade' to ensure all schema changes are applied."
-                )
+        await schema_check.assert_schema_usable(self.queries)
 
     async def _maybe_drain_shutdown(
         self,

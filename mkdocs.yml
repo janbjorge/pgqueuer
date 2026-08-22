@@ -105,6 +105,7 @@ nav:
       - Row Locking & SKIP LOCKED: reference/skip-locked.md
       - Drivers: reference/drivers.md
       - Database Setup: reference/database-setup.md
+      - Schema Revision Markers: reference/schema-revision.md
       - Database Permissions: reference/database-permissions.md
       - In-Memory Adapter: reference/in-memory.md
   - Integrations:
