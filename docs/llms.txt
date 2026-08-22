@@ -1,0 +1,41 @@
+# PgQueuer
+
+> PgQueuer is a PostgreSQL-backed background job and task queue for Python. It uses
+> `LISTEN/NOTIFY` for wakeups and `FOR UPDATE SKIP LOCKED` for worker coordination.
+
+PgQueuer workers and entrypoint handlers are asynchronous. Synchronous applications
+can enqueue jobs through psycopg. Applications own payload serialization and pass
+`bytes` to the queue. PgQueuer does not provide DAG or workflow orchestration.
+
+## Start here
+
+- [When to use PgQueuer](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/when-to-use.md): Fit, requirements, and boundaries
+- [Installation](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/installation.md): Package extras, schema setup, and connections
+- [Quick start](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/quickstart.md): Producer, consumer, and worker example
+- [Core concepts](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/core-concepts.md): Jobs, entrypoints, statuses, and schedules
+
+## Reliability and operations
+
+- [Reliability model](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/guides/reliability.md): Retries, crash recovery, deduplication, and audit logs
+- [Deployment](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/guides/deployment.md): Worker processes, scaling, shutdown, and schema upgrades
+- [Performance tuning](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/guides/performance-tuning.md): Batching, connections, durability, and vacuum
+- [Job cancellation](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/guides/job-cancellation.md): Queued and in-progress cancellation
+
+## Integrations
+
+- [Web dashboard](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/web-dashboard.md): Queue and worker operations
+- [Prometheus metrics](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/prometheus.md): Metrics endpoint and FastAPI router
+- [Distributed tracing](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/tracing.md): Logfire, Sentry, and OpenTelemetry
+- [MCP server](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/mcp-server.md): Read-only queue inspection tools for agents
+
+## Reference
+
+- [Architecture](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/reference/architecture.md): Components, data flow, and database objects
+- [Drivers](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/reference/drivers.md): asyncpg and psycopg connection adapters
+- [CLI](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/reference/cli.md): Schema, worker, dashboard, and administration commands
+- [Database permissions](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/reference/database-permissions.md): Runtime and schema-management privileges
+
+## Optional
+
+- [Repository](https://github.com/janbjorge/pgqueuer): Source code, examples, issues, and releases
+- [PyPI package](https://pypi.org/project/pgqueuer/): Published versions and package metadata
