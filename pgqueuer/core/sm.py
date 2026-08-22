@@ -9,7 +9,7 @@ from typing import Callable
 
 import croniter
 
-from pgqueuer.core import executors, logconfig, tm
+from pgqueuer.core import executors, logconfig, schema_check, tm
 from pgqueuer.domain import models
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
@@ -91,17 +91,7 @@ class SchedulerManager:
 
     async def run(self) -> None:
         """Poll for due schedules and dispatch them until shutdown."""
-        if not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
-            raise RuntimeError(
-                f"The {self.queries.qbe.settings.schedules_table} table is missing "
-                "please run 'pgq upgrade'"
-            )
-
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
-            raise RuntimeError(
-                f"The {self.queries.qbe.settings.queue_table_log} table is missing "
-                "please run 'pgq upgrade'"
-            )
+        await schema_check.assert_schema_usable(self.queries)
 
         if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
             await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)

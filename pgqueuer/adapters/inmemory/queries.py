@@ -18,7 +18,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
-from pgqueuer.domain import errors, models
+from pgqueuer.domain import errors, models, schema_revision
 from pgqueuer.domain.models import utc_now
 from pgqueuer.domain.types import CronEntrypoint, JobId, OnConflict, ScheduleId, SortOrder
 from pgqueuer.ports import tracing
@@ -94,6 +94,9 @@ class InMemoryQueries:
         self._ready_heaps.clear()
         self._deferred_heap.clear()
         self._picked_ids.clear()
+
+    async def schema_check(self) -> schema_revision.SchemaCheck:
+        return schema_revision.SchemaUsable()
 
     async def has_table(self, table: str) -> bool:
         return True
