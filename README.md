@@ -1,4 +1,4 @@
-# 🚀 PgQueuer: PostgreSQL-powered job queues for Python
+# 🚀 PgQueuer: PostgreSQL-backed background job and task queue for Python
 
 [![CI](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml/badge.svg)](https://github.com/janbjorge/pgqueuer/actions/workflows/ci.yml?query=branch%3Amain) [![pypi](https://img.shields.io/pypi/v/pgqueuer.svg)](https://pypi.python.org/pypi/pgqueuer) [![downloads](https://static.pepy.tech/badge/pgqueuer/month)](https://pepy.tech/project/pgqueuer) [![stars](https://img.shields.io/github/stars/janbjorge/pgqueuer?style=flat)](https://github.com/janbjorge/pgqueuer/stargazers) [![versions](https://img.shields.io/pypi/pyversions/pgqueuer.svg)](https://github.com/janbjorge/pgqueuer)
 
