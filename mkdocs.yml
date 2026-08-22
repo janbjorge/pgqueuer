@@ -79,6 +79,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Core Concepts: getting-started/core-concepts.md
+      - When to Use PgQueuer: getting-started/when-to-use.md
       - Upgrading from 0.x: getting-started/upgrading.md
   - Guides:
       - Job Processing:

@@ -192,5 +192,6 @@ are backed by PostgreSQL and you want a simpler operational footprint.
 - **[Installation](getting-started/installation.md)**: install PgQueuer and set up the database schema
 - **[Quick Start](getting-started/quickstart.md)**: build your first consumer and producer in 5 minutes
 - **[Core Concepts](getting-started/core-concepts.md)**: understand jobs, entrypoints, and the status lifecycle
+- **[When to Use PgQueuer](getting-started/when-to-use.md)**: check whether its worker model and PostgreSQL architecture fit your application
 - **[Architecture](reference/architecture.md)**: how data flows from producer to consumer
 - **[Upgrading from 0.x](getting-started/upgrading.md)**: migration guide for users coming from pre-1.0 releases
