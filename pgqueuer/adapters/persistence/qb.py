@@ -5,6 +5,8 @@ from typing import Generator
 
 from typing_extensions import assert_never
 
+from pgqueuer.domain import schema_revision
+from pgqueuer.domain.schema_revision import SchemaObject
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
@@ -45,6 +47,7 @@ class QueryBuilderEnvironment:
             if create_schema and s.db_schema
             else ""
         )
+        markers = "\n    ".join(self.build_schema_marker_statements())
 
         return f"""{create_schema_stmt}CREATE TYPE {qn.queue_status_type} AS ENUM ('queued', 'picked', 'successful', 'exception', 'canceled', 'deleted', 'failed');
     CREATE {durability_policy.queue_table} TABLE {qn.queue_table} (
@@ -65,6 +68,8 @@ class QueryBuilderEnvironment:
     CREATE INDEX {s.queue_table}_priority_id_id1_idx ON {qn.queue_table} (priority ASC, id DESC)
         INCLUDE (id) WHERE status = 'queued';
     CREATE INDEX {s.queue_table}_updated_id_id1_idx ON {qn.queue_table} (updated ASC, id DESC)
+        INCLUDE (id) WHERE status = 'picked';
+    CREATE INDEX {s.queue_table}_heartbeat_id_id1_idx ON {qn.queue_table} (heartbeat ASC, id DESC)
         INCLUDE (id) WHERE status = 'picked';
     CREATE INDEX {s.queue_table}_queue_manager_id_idx ON {qn.queue_table} (queue_manager_id)
         WHERE queue_manager_id IS NOT NULL;
@@ -162,6 +167,8 @@ class QueryBuilderEnvironment:
     CREATE TRIGGER {s.trigger}
     AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {qn.queue_table}
     EXECUTE FUNCTION {qn.function}();
+
+    {markers}
         """  # noqa: E501
 
     def build_uninstall_query(self) -> str:
@@ -288,6 +295,13 @@ class QueryBuilderEnvironment:
                 yield self.build_widen_id_column_query(table)
                 yield self.build_widen_id_sequence_query(table)
 
+        # Last: stamping an object that an earlier statement in this same run
+        # created (or, for the aggregation index above, dropped and recreated)
+        # has to happen after it exists. Re-stamping is idempotent, which is
+        # also what heals a pre-1.4 install that needed no DDL at all. One
+        # batched statement -- 55 separate round-trips is a slow no-op.
+        yield "\n".join(self.build_schema_marker_statements())
+
     def build_widen_id_column_query(self, table: str) -> str:
         """DO-guard on data_type keeps re-runs a no-op. *table* is a bare name."""
         return f"""DO $$
@@ -315,6 +329,100 @@ class QueryBuilderEnvironment:
             EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
         END IF;
     END $$;"""
+
+    def schema_manifest(self) -> tuple[SchemaObject, ...]:
+        """Objects the running code requires, bound to this environment's names."""
+        return schema_revision.manifest(self.settings)
+
+    def build_schema_marker_statements(self) -> Generator[str, None, None]:
+        """COMMENT ON statements stamping every manifest object with its revision.
+
+        Plain declarative SQL so `pgq sql install` emits exactly what `Queries`
+        executes. Enum values are skipped: pg_enum rows cannot carry comments.
+        """
+        s = self.settings
+        for obj in self.schema_manifest():
+            literal = self.render_marker_literal(obj.revision)
+            if obj.kind == "table":
+                yield f"COMMENT ON TABLE {s.qualify(obj.name)} IS {literal};"
+            elif obj.kind == "column":
+                assert obj.parent is not None
+                yield f"COMMENT ON COLUMN {s.qualify(obj.parent)}.{obj.name} IS {literal};"
+            elif obj.kind == "index":
+                yield f"COMMENT ON INDEX {s.qualify(obj.name)} IS {literal};"
+            elif obj.kind == "type":
+                yield f"COMMENT ON TYPE {s.qualify(obj.name)} IS {literal};"
+            elif obj.kind == "function":
+                yield f"COMMENT ON FUNCTION {s.qualify(obj.name)}() IS {literal};"
+            elif obj.kind == "trigger":
+                assert obj.parent is not None
+                yield f"COMMENT ON TRIGGER {obj.name} ON {s.qualify(obj.parent)} IS {literal};"
+            elif obj.kind == "enum_value":
+                continue
+            else:
+                assert_never(obj.kind)
+
+    def render_marker_literal(self, revision: int) -> str:
+        """The marker as a SQL string literal.
+
+        The payload is machine-generated JSON over an int, so it cannot contain
+        a quote, backslash, or newline -- asserted rather than assumed, since a
+        surprise here would be a SQL injection rather than a broken comment.
+        """
+        payload = schema_revision.SchemaMarker(schema_revision=revision).render()
+        if any(character in payload for character in "'\\\n\r"):
+            raise ValueError(f"refusing to emit unquotable schema marker: {payload!r}")
+        return f"'{payload}'"
+
+    def build_schema_markers_query(self) -> str:
+        """Every manifest-relevant object in the schema, with its raw comment.
+
+        One round-trip for the whole startup check. Filtered by the manifest's
+        own names ($1 tables, $2 indexes, $3 types, $4 functions) so a PgQueuer
+        install sharing `public` with an application does not drag every table
+        in the database back over the wire.
+        """
+        return f"""WITH ns AS (
+            SELECT oid FROM pg_namespace WHERE nspname = {self.settings.schema_expr}
+        )
+        SELECT 'table' AS kind, c.relname AS name, NULL::name AS parent,
+               obj_description(c.oid, 'pg_class') AS description
+        FROM pg_class c
+        JOIN ns ON c.relnamespace = ns.oid
+        WHERE c.relkind IN ('r', 'p') AND c.relname = ANY ($1)
+        UNION ALL
+        SELECT 'column', a.attname, c.relname, col_description(c.oid, a.attnum)
+        FROM pg_class c
+        JOIN ns ON c.relnamespace = ns.oid
+        JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+        WHERE c.relkind IN ('r', 'p') AND c.relname = ANY ($1)
+        UNION ALL
+        SELECT 'index', c.relname, NULL, obj_description(c.oid, 'pg_class')
+        FROM pg_class c
+        JOIN ns ON c.relnamespace = ns.oid
+        WHERE c.relkind = 'i' AND c.relname = ANY ($2)
+        UNION ALL
+        SELECT 'type', t.typname, NULL, obj_description(t.oid, 'pg_type')
+        FROM pg_type t
+        JOIN ns ON t.typnamespace = ns.oid
+        WHERE t.typname = ANY ($3)
+        UNION ALL
+        SELECT 'enum_value', e.enumlabel, t.typname, NULL
+        FROM pg_enum e
+        JOIN pg_type t ON t.oid = e.enumtypid
+        JOIN ns ON t.typnamespace = ns.oid
+        WHERE t.typname = ANY ($3)
+        UNION ALL
+        SELECT 'function', p.proname, NULL, obj_description(p.oid, 'pg_proc')
+        FROM pg_proc p
+        JOIN ns ON p.pronamespace = ns.oid
+        WHERE p.proname = ANY ($4)
+        UNION ALL
+        SELECT 'trigger', g.tgname, c.relname, obj_description(g.oid, 'pg_trigger')
+        FROM pg_trigger g
+        JOIN pg_class c ON c.oid = g.tgrelid
+        JOIN ns ON c.relnamespace = ns.oid
+        WHERE NOT g.tgisinternal AND c.relname = ANY ($1);"""
 
     def build_table_has_column_query(self) -> str:
         return f"""SELECT EXISTS (

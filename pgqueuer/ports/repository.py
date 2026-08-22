@@ -7,7 +7,7 @@ import uuid
 from datetime import timedelta
 from typing import Literal, Protocol, overload
 
-from pgqueuer.domain import models
+from pgqueuer.domain import models, schema_revision
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint, OnConflict, SortOrder
 from pgqueuer.ports.driver import Driver
@@ -279,6 +279,8 @@ class SchemaManagementPort(Protocol):
     async def uninstall(self) -> None: ...
 
     async def upgrade(self) -> None: ...
+
+    async def schema_check(self) -> schema_revision.SchemaCheck: ...
 
     async def has_table(self, table: str) -> bool: ...
 

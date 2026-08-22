@@ -18,7 +18,7 @@ from typing_extensions import AsyncGenerator, assert_never
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
-from pgqueuer.domain import models, types
+from pgqueuer.domain import models, schema_revision, types
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -304,6 +304,43 @@ def install(
     typer.secho(f"Installed PgQueuer schema (durability={durability.value}).", err=True)
 
 
+async def report_schema_state(q: queries.Queries) -> int:
+    """Print the installed schema's revision state. Returns a process exit code."""
+    settings = q.qbe.settings
+    manifest = q.qbe.schema_manifest()
+    result = await q.schema_check()
+
+    print(f"schema:           {settings.db_schema or '(search_path)'}")
+    print(f"prefix:           {settings.prefix or '(none)'}")
+    print(f"library revision: {schema_revision.SCHEMA_REVISION}")
+    print(f"required objects: {len(manifest)}")
+
+    if isinstance(result, schema_revision.SchemaNotInstalled):
+        print(f"missing table '{result.queue_table}' -- PgQueuer is not installed.")
+        return 1
+
+    if isinstance(result, schema_revision.SchemaIncomplete):
+        print(f"missing {len(result.missing)} required object(s):")
+        for entry in result.missing:
+            print(f"  {entry.label}")
+        return 1
+
+    if isinstance(result, schema_revision.SchemaUsable):
+        for table, revision in result.table_revisions:
+            print(f"  table '{table}' revision: {'(unstamped)' if revision is None else revision}")
+        if result.unstamped:
+            print(
+                f"{result.unstamped} object(s) carry no revision marker; "
+                "run 'pgq upgrade' to record them."
+            )
+        if result.ahead:
+            print(f"installed by a newer library: {', '.join(result.ahead)}")
+        print("All required PgQueuer database objects are present.")
+        return 0
+
+    assert_never(result)
+
+
 @app.command(help="Verify PgQueuer database objects.")
 def verify(
     ctx: Context,
@@ -314,40 +351,24 @@ def verify(
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            expect_present = expect == VerifyMode.PRESENT
+            if expect == VerifyMode.PRESENT:
+                raise typer.Exit(code=await report_schema_state(q))
+
             divergence = list[str]()
 
-            required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
-            ]
+            tables = [e.name for e in q.qbe.schema_manifest() if e.kind == "table"]
 
-            for table in required_tables:
-                exists = await q.has_table(table)
-                if expect_present != exists:
-                    state = "missing" if expect_present else "unexpected"
-                    divergence.append(f"{state} table '{table}'")
+            for table in tables:
+                if await q.has_table(table):
+                    divergence.append(f"unexpected table '{table}'")
 
-            func_exists = await q.has_function(q.qbe.settings.function)
-            if expect_present != func_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
+            if await q.has_function(q.qbe.settings.function):
+                divergence.append(f"unexpected function '{q.qbe.settings.function}'")
 
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
-            if expect_present != trig_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
+            if await q.has_trigger(q.qbe.settings.trigger):
+                divergence.append(f"unexpected trigger '{q.qbe.settings.trigger}'")
 
-            if divergence:
-                print("\n".join(divergence))
-            else:
-                if expect == VerifyMode.PRESENT:
-                    print("All required PgQueuer database objects are present.")
-                else:
-                    print("No PgQueuer database objects found")
-
+            print("\n".join(divergence) if divergence else "No PgQueuer database objects found")
             raise typer.Exit(code=1 if divergence else 0)
 
     asyncio_run(run())
