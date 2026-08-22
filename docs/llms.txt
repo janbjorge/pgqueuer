@@ -9,7 +9,7 @@ can enqueue jobs through psycopg. Applications own payload serialization and pas
 
 ## Start here
 
-- [When to use PgQueuer](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/when-to-use.md): Fit, requirements, and boundaries
+- [When to use PgQueuer](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/when-to-use.md): Fit criteria and design limits
 - [Installation](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/installation.md): Package extras, schema setup, and connections
 - [Quick start](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/quickstart.md): Producer, consumer, and worker example
 - [Core concepts](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/getting-started/core-concepts.md): Jobs, entrypoints, statuses, and schedules
