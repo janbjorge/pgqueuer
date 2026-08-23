@@ -1,4 +1,4 @@
-# PgQueuer — System Design
+# PgQueuer system design
 
 This document is the top-level model of PgQueuer. It names the
 participants, the use cases, the domain objects, and the state machines, and
@@ -8,13 +8,13 @@ document and this one keeps the summary plus a link.
 
 Related documents:
 
-- [Architecture Decision Records](../adr/README.md) — *why* the system is
-  shaped this way. This document describes *what is*; every "why" belongs in
-  an ADR.
-- [Architecture reference](../reference/architecture.md) — job flow and the
-  job status state machine in end-user terms.
-- [Ports & Adapters](../reference/ports-and-adapters.md) — the layering that
-  implements this model.
+- [Architecture Decision Records](../adr/README.md) cover *why* the system
+  is shaped this way. This document describes *what is*; every "why" belongs
+  in an ADR.
+- The [architecture reference](../reference/architecture.md) shows the job
+  flow and the job status state machine in end-user terms.
+- [Ports & Adapters](../reference/ports-and-adapters.md) describes the
+  layering that implements this model.
 
 ## Overview
 
@@ -22,15 +22,18 @@ PgQueuer turns a PostgreSQL database the user already operates into a job
 queue. There is no broker process and no coordinator. The system has four
 participants:
 
-- **Producer** (user application code) — enqueues jobs and schedules. Passive
-  after the insert; it may optionally await completion.
-- **PostgreSQL** — the passive hub: source of truth for all state *and* the
-  signal bus (`LISTEN`/`NOTIFY`). It never calls anyone; everyone calls it.
-- **Worker process** (`pgqueuer/core/`) — the active party. Runs the
-  `QueueManager` and `SchedulerManager` loops: listens, claims, executes,
-  records. Scaling unit is the process; run more of them for more throughput.
-- **Operator** (human) — installs and upgrades the schema, starts workers,
-  and observes via CLI, dashboard, or MCP server.
+- The **producer** is the user's application code. It enqueues jobs and
+  schedules, and is passive after the insert; it may optionally await
+  completion.
+- **PostgreSQL** is the passive hub: source of truth for all state *and*
+  the signal bus (`LISTEN`/`NOTIFY`). It never calls anyone; everyone calls
+  it.
+- The **worker process** (`pgqueuer/core/`) is the active party. It runs
+  the `QueueManager` and `SchedulerManager` loops: listen, claim, execute,
+  record. The scaling unit is the process; run more of them for more
+  throughput.
+- The **operator** is a human. They install and upgrade the schema, start
+  workers, and observe via CLI, dashboard, or MCP server.
 
 ## Architecture
 
@@ -125,8 +128,8 @@ Steps:
 1. Route the job to its registered entrypoint by name.
 2. Run the async entrypoint with a `Context` (cancellation scope, shared
    resources); buffer heartbeats while it runs.
-3. Classify the outcome: `successful`, `exception`, `canceled`, or —
-   depending on retry and `on_failure` policy — re-queue or `failed`.
+3. Classify the outcome: `successful`, `exception`, `canceled`, or,
+   depending on retry and `on_failure` policy, re-queue or `failed`.
 
 ### UC2b: Run schedules (subfunction level)
 
@@ -146,17 +149,19 @@ Steps:
 
 Happy path for one job:
 
-1. **Producer** inserts a row: `Queries.enqueue()` — transactional with the
-   producer's own business data (ADR-0001).
+1. The **producer** inserts a row with `Queries.enqueue()`, optionally in
+   the same transaction as its own business writes (ADR-0001).
 2. A trigger emits a `table_changed_event` on the NOTIFY channel.
-3. **EventRouter** in each listening worker turns the notification into an
-   in-process signal; workers that miss it are covered by the poll safety
-   net (ADR-0003).
-4. **QueueManager** claims the job (`queued` → `picked`), stamping its
+3. The **EventRouter** in each listening worker turns the notification into
+   an in-process signal; the poll safety net covers workers that miss it
+   (ADR-0003).
+4. The **QueueManager** claims the job (`queued` → `picked`) and stamps its
    `queue_manager_id` and heartbeat.
-5. The executor runs the entrypoint; heartbeats are batched while it runs.
-6. Outcome is recorded: status update plus an append-only **Log** entry.
-   Statistics are aggregated from the log later (ADR-0008).
+5. The executor runs the entrypoint; a buffer batches heartbeats while it
+   runs.
+6. The worker records the outcome: a status update plus an append-only
+   **Log** entry. Statistics are derived from the log by later aggregation
+   (ADR-0008).
 
 ```
 Producer            PostgreSQL              Worker
@@ -243,7 +248,7 @@ Arrows denote dependency, not communication flow.
 
 ### Job status
 
-Canonical diagram lives in the
+The canonical diagram lives in the
 [architecture reference](../reference/architecture.md#job-status-lifecycle).
 Summary: `queued` → `picked` → one of `successful / exception / canceled /
 failed`; `deleted` for removal without running; retry re-queues with
@@ -270,12 +275,12 @@ persisted attempt state (ADR-0007).
 
 Key design points:
 
-- **Event-driven with a poll safety net**: NOTIFY wakes the loop early;
-  the poll bound guarantees progress if signals are lost (ADR-0003).
-- **No coordinator**: eligibility is decided per claim by the database
-  query — locks, concurrency gates, and stale-heartbeat re-pick all live in
-  the claim SQL (ADR-0002, ADR-0005, ADR-0006).
-- **Graceful drain**: `drain` mode runs the same loop but exits on empty.
+- The loop is event-driven with a poll safety net: NOTIFY wakes it early,
+  and the poll bound guarantees progress if signals are lost (ADR-0003).
+- There is no coordinator. The claim query decides eligibility; locks,
+  concurrency gates, and stale-heartbeat re-pick all live in the claim SQL
+  (ADR-0002, ADR-0005, ADR-0006).
+- `drain` mode runs the same loop but exits when the queue is empty.
 
 ### Schedule lifecycle
 
@@ -285,21 +290,21 @@ claim plus heartbeat-based staleness recovery (ADR-0022).
 
 ## Design decisions
 
-This document intentionally contains no rationale. Every fork — why
-PostgreSQL as the broker, why at-least-once, why polling plus NOTIFY, why
-opaque payloads — is recorded in the
-[ADR index](../adr/README.md). When editing this document adds a new "why",
-stop and write the ADR instead.
+This document intentionally contains no rationale. The forks (why
+PostgreSQL as the broker, why at-least-once delivery, why polling plus
+NOTIFY, why opaque payloads) are recorded in the
+[ADR index](../adr/README.md). When an edit to this document introduces a
+new "why", stop and write the ADR instead.
 
 ## Sub-models
 
 Planned split-outs once a section outgrows this document; each keeps a
 summary here:
 
-- **Job lifecycle model** — statuses, retries, cancellation, completion
+- Job lifecycle model: statuses, retries, cancellation, and completion
   tracking in one place.
-- **Scheduling model** — schedule ownership, cadence, cron semantics.
-- **Schema & namespace model** — installation objects, durability policies,
-  migration stream.
-- **Observability model** — log/statistics pipeline, dashboard, metrics,
-  MCP read surface.
+- Scheduling model: schedule ownership, cadence, and cron semantics.
+- Schema & namespace model: installation objects, durability policies, and
+  the migration stream.
+- Observability model: the log/statistics pipeline, dashboard, metrics,
+  and the MCP read surface.
