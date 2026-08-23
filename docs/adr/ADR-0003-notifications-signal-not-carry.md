@@ -8,11 +8,12 @@ Accepted (retroactive: documents existing behavior)
 
 With workers claiming jobs by lock contention (ADR-0002), something has
 to tell an idle worker that new work exists. PostgreSQL's LISTEN/NOTIFY
-can deliver that signal, and it is tempting to put the job itself in the
-payload so the worker can start immediately. But NOTIFY is not a
-delivery mechanism: payloads are capped at about 8 kB, notifications
-sent in a rolled-back transaction vanish, and a worker that connects a
-moment too late misses everything sent before it listened.
+can deliver that signal, and putting the job itself in the payload looks
+attractive because the worker could start immediately. NOTIFY makes a
+poor delivery channel, though: payloads are capped at about 8 kB,
+notifications sent in a rolled-back transaction vanish, and a worker
+that connects a moment too late misses everything sent before it
+listened.
 
 ## Decision
 

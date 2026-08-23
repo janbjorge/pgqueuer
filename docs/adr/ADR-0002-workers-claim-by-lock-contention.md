@@ -28,7 +28,8 @@ workers.
 
 - Workers are homogeneous and stateless; adding or removing one
   involves no registration step.
-- There is no coordinator to operate, and none to lose to a crash.
+- No coordinator process exists, so there is nothing extra to operate
+  or fail over.
 - PostgreSQL's row locking arbitrates every claim, so correctness does
   not depend on workers cooperating with each other.
 
