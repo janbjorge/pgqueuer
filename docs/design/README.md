@@ -10,7 +10,8 @@ Related documents:
 
 - [Architecture Decision Records](../adr/README.md) cover *why* the system
   is shaped this way. This document describes *what is*; every "why" belongs
-  in an ADR.
+  in an ADR. When an edit here introduces a new "why", stop and write the
+  ADR instead.
 - The [architecture reference](../reference/architecture.md) shows the job
   flow and the job status state machine in end-user terms.
 - [Ports & Adapters](../reference/ports-and-adapters.md) describes the
@@ -73,13 +74,12 @@ there is no assignment (ADR-0002).
 
 ## Use cases
 
-Three nested use cases, top-down:
+Three nested use cases run top-down; a fourth, `Run schedules` (UC2b), sits
+beside `Process jobs` inside the same worker process.
 
 ```
 Operate installation ──includes──► Process jobs ──includes──► Execute job
 ```
-
-`Run schedules` sits beside `Process jobs` inside the same worker process.
 
 ### UC1: Operate installation (user-goal level)
 
@@ -93,7 +93,8 @@ Steps:
 
 1. Install schema (`pgq install`), choosing durability and namespace.
 2. Start one or more worker processes (`pgq run <factory>`).
-3. Observe via dashboard, MCP, Prometheus, or CLI.
+3. Observe queue depth, throughput, failures, and worker liveness via
+   dashboard, MCP, Prometheus, or CLI.
 4. Upgrade schema on library upgrades (`pgq upgrade`).
 
 ### UC2: Process jobs (subfunction level)
@@ -107,7 +108,8 @@ Steps:
 Steps:
 
 1. Wait for a NOTIFY event or poll timeout.
-2. Claim a batch of eligible jobs (`FOR UPDATE SKIP LOCKED`), respecting
+2. Claim a batch of eligible jobs
+   ([`FOR UPDATE SKIP LOCKED`](../reference/skip-locked.md)), respecting
    global concurrency limits (ADR-0006) and stale-job re-pick (ADR-0005).
 3. Execute each job (UC3).
 4. Record outcome to the log; repeat from step 1.
@@ -147,7 +149,9 @@ Steps:
 
 ## Runtime flow
 
-Happy path for one job:
+Happy path for one job (drawn as the
+[job flow diagram](../reference/architecture.md#job-flow-diagram) in the
+architecture reference):
 
 1. The **producer** inserts a row with `Queries.enqueue()`, optionally in
    the same transaction as its own business writes (ADR-0001).
@@ -157,31 +161,10 @@ Happy path for one job:
    (ADR-0003).
 4. The **QueueManager** claims the job (`queued` → `picked`) and stamps its
    `queue_manager_id` and heartbeat.
-5. The executor runs the entrypoint; a buffer batches heartbeats while it
-   runs.
+5. The executor runs the entrypoint; heartbeats continue while it runs.
 6. The worker records the outcome: a status update plus an append-only
    **Log** entry. Statistics are derived from the log by later aggregation
    (ADR-0008).
-
-```
-Producer            PostgreSQL              Worker
-  │                     │                      │
-  │  INSERT (enqueue)   │                      │
-  │────────────────────►│                      │
-  │                     │  NOTIFY (signal)     │
-  │                     │─────────────────────►│
-  │                     │                      │
-  │                     │  claim batch         │
-  │                     │  (SKIP LOCKED)       │
-  │                     │◄─────────────────────│
-  │                     │  jobs                │
-  │                     │─────────────────────►│
-  │                     │                      │ execute
-  │                     │  heartbeats (batch)  │ entrypoint
-  │                     │◄─────────────────────│
-  │                     │  status + log entry  │
-  │                     │◄─────────────────────│
-```
 
 Delivery is at-least-once: a crash between claim and completion re-delivers,
 so entrypoints must be idempotent (ADR-0004).
@@ -198,9 +181,9 @@ Arrows denote dependency, not communication flow.
 │ Installation │      ┌───────────┐            ├──► Entrypoint name
 │ (namespace)  │─────►│ Schedules │            ├──► Payload (opaque bytes)
 │              │ 1    └─────┬─────┘            ├──► Priority, execute_after
-│              │            │ 0..*             └──► Headers (tracing)
-│              │            ▼
-│              │      ┌───────────┐
+│              │            │ 0..*             ├──► Attempts (retry state)
+│              │            ▼                  ├──► Heartbeat (liveness)
+│              │      ┌───────────┐            └──► Headers (tracing)
 │              │      │ Schedule  │──► CronExpression
 │              │      └───────────┘
 │              │
@@ -214,7 +197,7 @@ Arrows denote dependency, not communication flow.
 | Component    | Type   | Description                                          |
 |--------------|--------|------------------------------------------------------|
 | Installation | Entity | One namespaced set of DB objects; several may share a database (ADR-0017) |
-| Job          | Entity | Unit of work; identity `JobId` (`domain/models.py`)  |
+| Job          | Entity | Unit of work; identity `JobId` (`domain/types.py`)   |
 | Schedule     | Entity | Recurring cron-driven task; identity `ScheduleId`    |
 | Log entry    | Entity | Append-only record of one status transition          |
 
@@ -223,15 +206,17 @@ Arrows denote dependency, not communication flow.
 | Component        | Type         | Description                                    |
 |------------------|--------------|------------------------------------------------|
 | JobId, ScheduleId| Value Object | `NewType` identities (`domain/types.py`)       |
+| Entrypoint       | Value Object | Name binding a job to its registered handler; schedules use the `CronEntrypoint` variant |
 | Payload          | Value Object | Opaque `bytes`; the library ships no serializer (ADR-0009) |
 | Headers          | Value Object | Side-channel dict for tracing propagation      |
-| JOB_STATUS       | Value Object | `queued / picked / successful / exception / canceled / deleted / failed` |
+| Job status       | Value Object | `queued / picked / successful / exception / canceled / deleted / failed` |
 | CronExpression   | Value Object | When a Schedule fires                          |
 | Event            | Value Object | NOTIFY payload: table-changed, cancellation, or health-check; signal only, never job data |
 | Durability       | Value Object | Install-time crash-safety level (ADR-0010)     |
 | OnConflict       | Value Object | Dedupe policy on enqueue (ADR-0011)            |
 | OnFailure        | Value Object | `delete` or `hold` disposition after final failure |
 | TracebackRecord  | Value Object | Captured exception detail on a Log entry       |
+| Statistics       | Read model   | Aggregates derived from the Log, not maintained inline (ADR-0008) |
 
 ### Services
 
@@ -241,8 +226,7 @@ Arrows denote dependency, not communication flow.
 | SchedulerManager | Service | Due-schedule dispatch loop (`core/sm.py`)        |
 | EventRouter      | Service | Routes NOTIFY events to waiters (`core/listeners.py`) |
 | Executors        | Service | Run user entrypoints; retry variants (`core/executors.py`) |
-| Buffers          | Service | Batch heartbeats and status logs (`core/buffers.py`) |
-| Queries          | Service | Repository adapter satisfying the persistence ports (`adapters/persistence/`) |
+| Persistence ports| Port    | `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPort`, `SchemaManagementPort` (`ports/`); satisfied by the `Queries` adapter |
 
 ## State machines
 
@@ -256,45 +240,20 @@ persisted attempt state (ADR-0007).
 
 ### QueueManager loop
 
-```
-            NOTIFY or poll timeout
-┌────────┐            ┌────────┐  batch empty   ┌────────┐
-│  wait  │───────────►│ claim  │───────────────►│  wait  │ (continuous)
-└────────┘            └───┬────┘                └────────┘
-    ▲                     │ jobs                or exit (drain)
-    │                     ▼
-    │                ┌──────────┐
-    │                │ dispatch │  per job: execute + heartbeat
-    │                └────┬─────┘
-    │                     │ outcome
-    │                     ▼
-    │                ┌──────────┐
-    └────────────────│  record  │  status + log entry (buffered)
-                     └──────────┘
-```
+The canonical diagram lives in the
+[architecture reference](../reference/architecture.md#queuemanager-processing-loop).
+Summary: wait → claim → dispatch → record, back to wait; `drain` mode exits
+when the queue is empty instead.
 
-Key design points:
-
-- The loop is event-driven with a poll safety net: NOTIFY wakes it early,
-  and the poll bound guarantees progress if signals are lost (ADR-0003).
-- There is no coordinator. The claim query decides eligibility; locks,
-  concurrency gates, and stale-heartbeat re-pick all live in the claim SQL
-  (ADR-0002, ADR-0005, ADR-0006).
-- `drain` mode runs the same loop but exits when the queue is empty.
+Invariant: there is no coordinator. The claim query decides eligibility;
+locks, concurrency gates, and stale-heartbeat re-pick all live in the claim
+SQL (ADR-0002, ADR-0005, ADR-0006).
 
 ### Schedule lifecycle
 
-A `Schedule` row carries `next_run`, `last_run`, and a heartbeat. Runners
-compete for due schedules the same way workers compete for jobs: row-lock
-claim plus heartbeat-based staleness recovery (ADR-0022).
-
-## Design decisions
-
-This document intentionally contains no rationale. The forks (why
-PostgreSQL as the broker, why at-least-once delivery, why polling plus
-NOTIFY, why opaque payloads) are recorded in the
-[ADR index](../adr/README.md). When an edit to this document introduces a
-new "why", stop and write the ADR instead.
+A schedule cycles due → claimed → executed → rescheduled (`next_run`
+recomputed). Runners compete for due schedules the same way workers compete
+for jobs: row-lock claim plus heartbeat-based staleness recovery (ADR-0022).
 
 ## Sub-models
 
