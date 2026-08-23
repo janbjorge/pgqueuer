@@ -22,6 +22,7 @@ Conventions:
 - [ADR-0001: Job state lives in PostgreSQL](ADR-0001-job-state-lives-in-postgresql.md)
 - [ADR-0002: Workers claim jobs by row-level lock contention, not assignment](ADR-0002-workers-claim-by-lock-contention.md)
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
+- [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 
 ## Backlog
 
@@ -64,7 +65,7 @@ leaves open.
     watching in `pgqueuer/core/completion.py` builds on this.
   - Not covered: channel naming, debounce/poll intervals, event JSON shape.
 
-- [ ] **ADR-0004: Delivery is at-least-once**
+- [x] **ADR-0004: Delivery is at-least-once**
   - Decision: a job may run more than once; exactly-once is not attempted.
     User contract: entrypoints must be idempotent.
   - Fork: at-least-once vs. exactly-once machinery (fencing tokens,
