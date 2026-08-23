@@ -101,6 +101,7 @@ nav:
           - Docker Images: guides/docker-images.md
   - Reference:
       - CLI: reference/cli.md
+      - System Design: design/README.md
       - Architecture: reference/architecture.md
       - Row Locking & SKIP LOCKED: reference/skip-locked.md
       - Drivers: reference/drivers.md
@@ -118,5 +119,6 @@ nav:
       - Benchmarks: comparisons/benchmarks.md
   - Development:
       - Contributing: development/development.md
+      - Architecture Decision Records: adr/README.md
       - Ports & Adapters: reference/ports-and-adapters.md
       - Driver Troubleshooting: development/troubleshooting.md
