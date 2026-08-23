@@ -14,6 +14,8 @@ Conventions:
   deleted) and a **Not covered by this ADR** section listing the mechanisms
   it deliberately leaves free to change.
 - Existing behavior is recorded with status `Accepted (retroactive)`.
+- Records cite only merged ADRs. A decision still in the backlog is named
+  in prose; add the number once its record merges.
 
 ## Index
 
@@ -278,8 +280,8 @@ leaves open.
   - Decision: queue semantics are verified against real Postgres, not
     mocks or fakes of the DB.
   - Fork: real DB in CI vs. mocked driver responses.
-  - Consequences: locking, notify, and constraint behavior is actually
-    exercised; contributors need Docker; the suite is slower. The in-memory
+  - Consequences: locking, notify, and constraint behavior is exercised
+    for real; contributors need Docker; the suite is slower. The in-memory
     adapter exists for users' tests, not as PgQueuer's own verification
     target.
   - Not covered: testcontainers, per-test database templating, xdist.

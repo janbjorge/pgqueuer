@@ -24,15 +24,16 @@ workers.
 
 ## Consequences
 
-### Positive Consequences
+### Positive consequences
 
-- Workers are homogeneous and stateless. Adding one needs no
-  registration; removing one leaves nothing to deregister.
-- No coordinator to elect, operate, or lose.
-- Claim safety is delegated to PostgreSQL's row locking; correctness
-  does not depend on workers cooperating with each other.
+- Workers are homogeneous and stateless; adding or removing one
+  involves no registration step.
+- No coordinator process exists, so there is nothing extra to operate
+  or fail over.
+- PostgreSQL's row locking arbitrates every claim, so correctness does
+  not depend on workers cooperating with each other.
 
-### Negative Consequences
+### Negative consequences
 
 - No fairness guarantee between workers: a fast worker close to the
   database may win a disproportionate share of jobs.
@@ -41,7 +42,7 @@ workers.
 - Job-to-worker affinity (routing a job to one specific machine) is not
   expressible in the claim model; entrypoint naming is the workaround.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Coordinator assigning work to named workers
 
@@ -60,14 +61,14 @@ throughput collapses as soon as a second worker starts.
 
 The same contention model, but ownership would live in session state and
 vanish on disconnect or through a pooler. Rejected in favor of locking
-the job rows themselves; liveness is tracked as data instead
-(ADR-0005).
+the job rows themselves; liveness is tracked as data instead (worker
+liveness has its own backlog entry).
 
 ## Not covered by this ADR
 
 The claim query's shape (single-statement CTE, batching, priority
-ordering), how concurrency limits gate claiming (ADR-0006), how stale
-jobs are detected and re-claimed (ADR-0005).
+ordering), how concurrency limits gate claiming, and how stale jobs are
+detected and re-claimed (the last two have their own backlog entries).
 
 ## References
 

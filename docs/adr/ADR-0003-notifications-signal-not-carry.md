@@ -8,11 +8,12 @@ Accepted (retroactive: documents existing behavior)
 
 With workers claiming jobs by lock contention (ADR-0002), something has
 to tell an idle worker that new work exists. PostgreSQL's LISTEN/NOTIFY
-can deliver that signal, and it is tempting to put the job itself in the
-payload so the worker can start immediately. But NOTIFY is not a
-delivery mechanism: payloads are capped at about 8 kB, notifications
-sent in a rolled-back transaction vanish, and a worker that connects a
-moment too late misses everything sent before it listened.
+can deliver that signal, and putting the job itself in the payload looks
+attractive because the worker could start immediately. NOTIFY makes a
+poor delivery channel, though: payloads are capped at about 8 kB,
+notifications sent in a rolled-back transaction vanish, and a worker
+that connects a moment too late misses everything sent before it
+listened.
 
 ## Decision
 
@@ -25,15 +26,15 @@ so a worker that never hears a notification still finds the work.
 
 ## Consequences
 
-### Positive Consequences
+### Positive consequences
 
 - Lost, duplicated, or reordered notifications are harmless: the queue
   table is the source of truth, and the poll safety net covers gaps.
 - The 8 kB NOTIFY payload limit is irrelevant to job size.
-- Latency stays low in the common case (a notification arrives and the
-  worker queries immediately) without correctness depending on it.
+- Latency stays low when a notification does arrive, and nothing breaks
+  when one does not.
 
-### Negative Consequences
+### Negative consequences
 
 - Every wake-up costs an extra round-trip: the notification arrives,
   then the worker queries for the actual work.
@@ -42,7 +43,7 @@ so a worker that never hears a notification still finds the work.
 - A burst of enqueues produces a burst of notifications that all trigger
   the same query; debouncing is needed to avoid redundant round-trips.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Push job payloads through NOTIFY
 
@@ -53,13 +54,13 @@ push plus poll) must then agree with each other.
 
 ### No notifications, poll only
 
-Simpler, one mechanism. Rejected: pickup latency becomes the poll
-interval for every job, and shortening the interval trades latency for
-constant idle query load.
+This would be simpler, with one mechanism instead of two. Rejected:
+pickup latency becomes the poll interval for every job, and shortening
+the interval trades latency for constant idle query load.
 
 ## Not covered by this ADR
 
-Channel naming (ADR-0017 namespacing applies), poll and debounce
+Channel naming (the backlogged namespacing record applies), poll and debounce
 intervals, the JSON shape of the event envelope, completion watching
 built on the same signal (consequence of this record).
 
