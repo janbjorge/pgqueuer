@@ -23,6 +23,7 @@ Conventions:
 - [ADR-0002: Workers claim jobs by row-level lock contention, not assignment](ADR-0002-workers-claim-by-lock-contention.md)
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
+- [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
 
 ## Backlog
 
@@ -76,7 +77,7 @@ leaves open.
     to failed jobs (the `on_failure` disposition is a consequence, not a
     decision).
 
-- [ ] **ADR-0005: Worker liveness is an application-level signal, not DB session state**
+- [x] **ADR-0005: Worker liveness is an application-level signal, not DB session state**
   - Decision: workers periodically prove liveness in data (heartbeat
     timestamps); job ownership does not die with the DB connection.
   - Fork: application heartbeat vs. session-scoped locks or connection
