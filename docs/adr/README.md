@@ -14,6 +14,8 @@ Conventions:
   deleted) and a **Not covered by this ADR** section listing the mechanisms
   it deliberately leaves free to change.
 - Existing behavior is recorded with status `Accepted (retroactive)`.
+- Records cite only merged ADRs. A decision still in the backlog is named
+  in prose; add the number once its record merges.
 
 ## Index
 

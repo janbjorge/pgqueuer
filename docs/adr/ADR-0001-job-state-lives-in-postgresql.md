@@ -53,8 +53,8 @@ Rejected; PgQueuer is Postgres-only.
 
 ## Not covered by this ADR
 
-Table layout and SQL, client-library choice (ADR-0014), how workers claim
-jobs (ADR-0002), what notifications carry (ADR-0003).
+Table layout and SQL, client-library choice (still in the backlog), how
+workers claim jobs (ADR-0002), what notifications carry (ADR-0003).
 
 ## References
 

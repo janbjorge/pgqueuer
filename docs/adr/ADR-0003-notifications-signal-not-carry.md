@@ -59,7 +59,7 @@ the interval trades latency for constant idle query load.
 
 ## Not covered by this ADR
 
-Channel naming (ADR-0017 namespacing applies), poll and debounce
+Channel naming (the backlogged namespacing record applies), poll and debounce
 intervals, the JSON shape of the event envelope, completion watching
 built on the same signal (consequence of this record).
 

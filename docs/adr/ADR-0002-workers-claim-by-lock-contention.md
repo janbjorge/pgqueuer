@@ -60,14 +60,14 @@ throughput collapses as soon as a second worker starts.
 
 The same contention model, but ownership would live in session state and
 vanish on disconnect or through a pooler. Rejected in favor of locking
-the job rows themselves; liveness is tracked as data instead
-(ADR-0005).
+the job rows themselves; liveness is tracked as data instead (worker
+liveness has its own backlog entry).
 
 ## Not covered by this ADR
 
 The claim query's shape (single-statement CTE, batching, priority
-ordering), how concurrency limits gate claiming (ADR-0006), how stale
-jobs are detected and re-claimed (ADR-0005).
+ordering), how concurrency limits gate claiming, and how stale jobs are
+detected and re-claimed (the last two have their own backlog entries).
 
 ## References
 
