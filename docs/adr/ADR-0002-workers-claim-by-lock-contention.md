@@ -24,15 +24,15 @@ workers.
 
 ## Consequences
 
-### Positive Consequences
+### Positive consequences
 
-- Workers are homogeneous and stateless. Adding one needs no
-  registration; removing one leaves nothing to deregister.
-- No coordinator to elect, operate, or lose.
-- Claim safety is delegated to PostgreSQL's row locking; correctness
-  does not depend on workers cooperating with each other.
+- Workers are homogeneous and stateless; adding or removing one
+  involves no registration step.
+- There is no coordinator to operate, and none to lose to a crash.
+- PostgreSQL's row locking arbitrates every claim, so correctness does
+  not depend on workers cooperating with each other.
 
-### Negative Consequences
+### Negative consequences
 
 - No fairness guarantee between workers: a fast worker close to the
   database may win a disproportionate share of jobs.
@@ -41,7 +41,7 @@ workers.
 - Job-to-worker affinity (routing a job to one specific machine) is not
   expressible in the claim model; entrypoint naming is the workaround.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Coordinator assigning work to named workers
 
