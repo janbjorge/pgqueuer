@@ -39,8 +39,10 @@ requirement wherever job execution is described.
 - Idempotency becomes the user's problem, and a non-idempotent
   entrypoint fails in ways that only show up when a crash or timeout
   triggers re-delivery.
-- Duplicate runs are invisible to the entrypoint; there is no built-in
-  "this is attempt two of the same job" signal at execution time.
+- A crash re-delivery is indistinguishable from a first delivery. The
+  job's `attempts` counter tracks explicit database retries (ADR-0007);
+  re-picking a stale job does not touch it, so the duplicate run
+  carries no marker.
 - The documentation has to repeat the idempotency requirement loudly,
   because nothing in the API forces it.
 
