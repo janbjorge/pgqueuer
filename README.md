@@ -38,7 +38,7 @@ If you already run PostgreSQL, it can do double duty as your job queue. That mea
 
 ## Installation
 
-PgQueuer targets Python 3.10+ and PostgreSQL 12+:
+PgQueuer targets Python 3.10+ and PostgreSQL 13+:
 
 ```bash
 pip install pgqueuer
