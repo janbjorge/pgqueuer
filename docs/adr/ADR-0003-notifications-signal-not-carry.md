@@ -25,15 +25,15 @@ so a worker that never hears a notification still finds the work.
 
 ## Consequences
 
-### Positive Consequences
+### Positive consequences
 
 - Lost, duplicated, or reordered notifications are harmless: the queue
   table is the source of truth, and the poll safety net covers gaps.
 - The 8 kB NOTIFY payload limit is irrelevant to job size.
-- Latency stays low in the common case (a notification arrives and the
-  worker queries immediately) without correctness depending on it.
+- Latency stays low when a notification does arrive, and nothing breaks
+  when one does not.
 
-### Negative Consequences
+### Negative consequences
 
 - Every wake-up costs an extra round-trip: the notification arrives,
   then the worker queries for the actual work.
@@ -42,7 +42,7 @@ so a worker that never hears a notification still finds the work.
 - A burst of enqueues produces a burst of notifications that all trigger
   the same query; debouncing is needed to avoid redundant round-trips.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Push job payloads through NOTIFY
 
@@ -53,9 +53,9 @@ push plus poll) must then agree with each other.
 
 ### No notifications, poll only
 
-Simpler, one mechanism. Rejected: pickup latency becomes the poll
-interval for every job, and shortening the interval trades latency for
-constant idle query load.
+This would be simpler, with one mechanism instead of two. Rejected:
+pickup latency becomes the poll interval for every job, and shortening
+the interval trades latency for constant idle query load.
 
 ## Not covered by this ADR
 

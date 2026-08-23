@@ -20,7 +20,7 @@ process and no service of its own.
 
 ## Consequences
 
-### Positive Consequences
+### Positive consequences
 
 - Enqueue can share a transaction with business writes: the job exists
   exactly when the commit succeeded.
@@ -28,7 +28,7 @@ process and no service of its own.
   monitoring are already in place.
 - One less system to secure and keep on-call for.
 
-### Negative Consequences
+### Negative consequences
 
 - The throughput ceiling is Postgres itself. Workloads beyond that need a
   dedicated broker and are out of scope.
@@ -37,13 +37,13 @@ process and no service of its own.
 - Every downstream decision (claiming, notifications, delivery
   guarantees) is constrained to what PostgreSQL offers.
 
-## Alternatives Considered
+## Alternatives considered
 
 ### Dedicated broker (Redis, RabbitMQ, SQS)
 
 Higher raw throughput and purpose-built queue features. Rejected because
 it adds new infrastructure and gives up transactional enqueue alongside
-business data, which is the core value proposition.
+business data, which is the main reason to pick PgQueuer at all.
 
 ### Database-agnostic SQL
 
