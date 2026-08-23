@@ -40,7 +40,7 @@ requirement wherever job execution is described.
   entrypoint fails in ways that only show up when a crash or timeout
   triggers re-delivery.
 - A crash re-delivery is indistinguishable from a first delivery. The
-  job's `attempts` counter tracks explicit database retries (ADR-0007);
+  job's `attempts` counter tracks explicit database retries;
   re-picking a stale job does not touch it, so the duplicate run
   carries no marker.
 - The documentation has to repeat the idempotency requirement loudly,
@@ -65,9 +65,11 @@ in the entrypoint.
 
 ## Not covered by this ADR
 
-How a crashed worker is detected (ADR-0005), what happens to jobs that
-fail rather than crash (the `on_failure` disposition is a consequence
-of this record and ADR-0008), retry counting and backoff (ADR-0007).
+How a crashed worker is detected (worker liveness has its own backlog
+entry), what happens to jobs that fail rather than crash (the
+`on_failure` disposition is a consequence of this record and of the
+planned outcome-log record), retry counting and backoff (durable
+retries, still in the backlog).
 
 ## References
 
