@@ -59,12 +59,7 @@ participants:
               │ log status  ▼
 ┌─────────────────────────────────────────────────────────┐
 │  Worker process (one event loop; N processes to scale)  │
-│                                                         │
-│  • QueueManager      — claim/dispatch loop              │
-│  • SchedulerManager  — due-schedule dispatch loop       │
-│  • EventRouter       — NOTIFY → in-process signals      │
-│  • Executors         — run user entrypoints             │
-│  • Buffers           — batched heartbeats + status logs │
+│  QueueManager + SchedulerManager                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -149,22 +144,12 @@ Steps:
 
 ## Runtime flow
 
-Happy path for one job (drawn as the
-[job flow diagram](../reference/architecture.md#job-flow-diagram) in the
-architecture reference):
-
-1. The **producer** inserts a row with `Queries.enqueue()`, optionally in
-   the same transaction as its own business writes (ADR-0001).
-2. A trigger emits a `table_changed_event` on the NOTIFY channel.
-3. The **EventRouter** in each listening worker turns the notification into
-   an in-process signal; the poll safety net covers workers that miss it
-   (ADR-0003).
-4. The **QueueManager** claims the job (`queued` → `picked`) and stamps its
-   `queue_manager_id` and heartbeat.
-5. The executor runs the entrypoint; heartbeats continue while it runs.
-6. The worker records the outcome: a status update plus an append-only
-   **Log** entry. Statistics are derived from the log by later aggregation
-   (ADR-0008).
+The [job flow diagram](../reference/architecture.md#job-flow-diagram) in
+the architecture reference draws the path from enqueue to completion. At
+model level, three facts matter: enqueue can share a transaction with the
+producer's business writes (ADR-0001); a poll safety net covers missed or
+lost notifications (ADR-0003); and outcomes append to the **Log**, from
+which statistics are derived by later aggregation (ADR-0008).
 
 Delivery is at-least-once: a crash between claim and completion re-delivers,
 so entrypoints must be idempotent (ADR-0004).
