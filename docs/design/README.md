@@ -1,6 +1,6 @@
 # PgQueuer — System Design
 
-This document is the top-level ("god") model of PgQueuer. It names the
+This document is the top-level model of PgQueuer. It names the
 participants, the use cases, the domain objects, and the state machines, and
 it links out to the records and reference pages that own the details. When a
 sub-area grows past what a section here can hold, it gets its own model
