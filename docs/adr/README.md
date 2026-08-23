@@ -17,8 +17,8 @@ Conventions:
 
 ## Index
 
-(None merged yet. Check an item off in the backlog and list the merged
-record here.)
+- [ADR-0001: Job state lives in PostgreSQL](ADR-0001-job-state-lives-in-postgresql.md)
+- [ADR-0002: Workers claim jobs by row-level lock contention, not assignment](ADR-0002-workers-claim-by-lock-contention.md)
 
 ## Backlog
 
@@ -29,7 +29,7 @@ leaves open.
 
 ### Core model
 
-- [ ] **ADR-0001: Job state lives in PostgreSQL**
+- [x] **ADR-0001: Job state lives in PostgreSQL**
   - Decision: the queue's source of truth is a PostgreSQL database the user
     already operates; PgQueuer introduces no broker process.
   - Fork: dedicated broker (Redis/RabbitMQ/SQS) vs. the relational DB
@@ -39,7 +39,7 @@ leaves open.
     Everything downstream (0002 through 0011) inherits this.
   - Not covered: table layout, SQL, driver choice.
 
-- [ ] **ADR-0002: Workers claim jobs by row-level lock contention, not assignment**
+- [x] **ADR-0002: Workers claim jobs by row-level lock contention, not assignment**
   - Decision: any worker may claim any eligible job by winning a row lock.
     There is no coordinator and no assignment of partitions or shards to
     particular workers.
