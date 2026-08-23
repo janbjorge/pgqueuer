@@ -30,9 +30,9 @@ requirement wherever job execution is described.
 - The queue core stays simple: no fencing tokens, no consumer-side
   transaction protocol, no coordination with the entrypoint's side
   effects.
-- The contract is honest. Systems that claim exactly-once still degrade
-  to at-least-once when side effects leave the database; PgQueuer names
-  the guarantee users actually get.
+- Systems that claim exactly-once still degrade to at-least-once when
+  side effects leave the database; PgQueuer's stated guarantee matches
+  what users get in practice.
 
 ### Negative consequences
 
