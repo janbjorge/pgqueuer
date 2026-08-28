@@ -59,9 +59,12 @@ class SqlComposer:
         if not kept:
             return ""
         # Right-align the joiner in the width of WHERE so every condition starts
-        # in the same column: "WHERE a", "  AND b", "   OR c".
+        # in the same column: "WHERE a", "  AND b", "   OR c". A condition that
+        # spans lines keeps its own shape, shifted into that same column.
+        margin = " " * len("WHERE ")
+        aligned = [textwrap.indent(condition, margin).lstrip() for condition in kept]
         continuation = f"\n{joiner:>{len('WHERE')}} "
-        return "WHERE " + continuation.join(kept)
+        return "WHERE " + continuation.join(aligned)
 
     @staticmethod
     def nest(header: str, *body: str, footer: str = "") -> str:

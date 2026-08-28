@@ -251,3 +251,53 @@ async def test_concurrency_limit_holds_across_concurrent_dequeues(
     # A's claim is committed and visible; capacity is exhausted either way.
     visible = await asyncio.wait_for(dequeue(queries_b), timeout=30)
     assert visible == []
+
+
+async def test_concurrency_limit_holds_against_higher_priority_arrival(
+    connect: Callable[[], Awaitable[asyncpg.Connection]],
+) -> None:
+    """Regression test for #761, the snapshot-window hole.
+
+    Worker A claims the only queued job inside an open transaction. A higher
+    priority job then arrives and commits, so worker B's snapshot counts zero
+    picked jobs AND ranks the new job first: no candidate-window shape can
+    connect the two claims, because B's window no longer contains A's row.
+    B must still claim nothing. The capacity-slot unique index provides that:
+    B's claim takes the same slot as A's uncommitted one, waits on A in the
+    btree uniqueness check, aborts with a unique violation once A commits,
+    and B reports an empty batch.
+    """
+    conn_a = await connect()
+    conn_b = await connect()
+    conn_monitor = await connect()
+
+    queries_a = Queries(AsyncpgDriver(conn_a))
+    queries_b = Queries(AsyncpgDriver(conn_b))
+    queries_monitor = Queries(AsyncpgDriver(conn_monitor))
+
+    await queries_monitor.enqueue("fetch", b"low", priority=0)
+
+    def dequeue(q: Queries) -> asyncio.Task[list[Job]]:
+        return asyncio.ensure_future(
+            q.dequeue(
+                batch_size=1,
+                entrypoints={"fetch": EntrypointExecutionParameter(concurrency_limit=1)},
+                queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=None,
+                heartbeat_timeout=timedelta(minutes=10),
+            )
+        )
+
+    transaction_a = conn_a.transaction()
+    await transaction_a.start()
+    first = await dequeue(queries_a)
+    assert len(first) == 1
+
+    await queries_monitor.enqueue("fetch", b"high", priority=10)
+
+    task_b = dequeue(queries_b)
+    await _wait_until_done_or_lock_blocked(conn_monitor, task_b, conn_b.get_server_pid())
+    await transaction_a.commit()
+
+    overlap = await asyncio.wait_for(task_b, timeout=30)
+    assert overlap == [], f"picked {len(first) + len(overlap)} jobs, limit 1"

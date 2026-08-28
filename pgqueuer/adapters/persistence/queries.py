@@ -19,7 +19,7 @@ from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports import tracing
-from pgqueuer.ports.driver import Driver, SyncDriver
+from pgqueuer.ports.driver import Driver, SqlStateError, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -189,7 +189,20 @@ class Queries:
             global_concurrency_limit=global_concurrency_limit,
             heartbeat_timeout=heartbeat_timeout,
         )
-        rows = await self.driver.fetch(query.sql, *query.args)
+        # Claims on limited entrypoints take a capacity slot guarded by a
+        # partial unique index; losing a slot race to a concurrent worker
+        # aborts the statement with a unique violation (or, with several
+        # limited entrypoints per batch, a deadlock between the racing
+        # dequeues). Losing that race means the capacity went to another
+        # worker, which is the same outcome as finding nothing claimable:
+        # report an empty batch and let the poll loop try again — the
+        # winner's commit fires the table-changed notification that wakes it.
+        try:
+            rows = await self.driver.fetch(query.sql, *query.args)
+        except Exception as exc:
+            if isinstance(exc, SqlStateError) and exc.sqlstate in ("23505", "40P01"):
+                return []
+            raise
         return [models.Job.model_validate(row) for row in rows]
 
     @overload

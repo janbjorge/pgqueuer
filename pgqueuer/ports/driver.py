@@ -3,9 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from typing_extensions import Self
+
+
+@runtime_checkable
+class SqlStateError(Protocol):
+    """Driver exception carrying a PostgreSQL SQLSTATE code.
+
+    Both asyncpg and psycopg errors expose ``sqlstate``; matching on the
+    shape keeps the persistence layer free of driver imports.
+    """
+
+    @property
+    def sqlstate(self) -> str | None: ...
 
 
 class TaskManagerPort(Protocol):
