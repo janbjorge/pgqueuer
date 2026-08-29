@@ -743,22 +743,20 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
         window = ""
         if last is not None:
             bound_last = composer.bind(last)
-            window = f"\n    WHERE created > NOW() - {bound_last}::interval"
+            window = f"WHERE created > NOW() - {bound_last}::interval"
 
         cap = ""
         if limit is not None:
             bound_limit = composer.bind(limit)
-            cap = f"\n    LIMIT {bound_limit}"
+            cap = f"LIMIT {bound_limit}"
 
-        statement = f"""SELECT
-        count,
-        created,
-        entrypoint,
-        priority,
-        status
-    FROM {self.qualified.statistics_table}{window}
-    ORDER BY id DESC{cap}
-    """
+        statement = composer.clauses(
+            "SELECT count, created, entrypoint, priority, status",
+            f"FROM {self.qualified.statistics_table}",
+            window,
+            "ORDER BY id DESC",
+            cap,
+        )
         return composer.render(statement)
 
     def build_update_heartbeat_query(self) -> str:

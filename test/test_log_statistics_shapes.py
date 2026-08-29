@@ -44,17 +44,11 @@ def test_log_statistics_shape_follows_filters(
 
 
 def test_log_statistics_full_shape() -> None:
-    expected = """SELECT
-        count,
-        created,
-        entrypoint,
-        priority,
-        status
-    FROM pgqueuer_statistics
-    WHERE created > NOW() - $1::interval
-    ORDER BY id DESC
-    LIMIT $2
-    """
+    expected = """SELECT count, created, entrypoint, priority, status
+FROM pgqueuer_statistics
+WHERE created > NOW() - $1::interval
+ORDER BY id DESC
+LIMIT $2"""
     query = compose(10, timedelta(hours=1))
     assert query.sql == expected
     assert query.args == (timedelta(hours=1), 10)

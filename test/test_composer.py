@@ -15,6 +15,20 @@ def test_bind_numbers_placeholders_in_order() -> None:
     assert composer.values == [10, ["a"], None]
 
 
+def test_clauses_puts_each_part_on_its_own_line() -> None:
+    assert SqlComposer.clauses("SELECT 1", "FROM jobs") == "SELECT 1\nFROM jobs"
+
+
+def test_clauses_drops_empty_parts() -> None:
+    # An unset filter contributes "" and must leave no blank line behind: the
+    # caller never has to own the newline that would otherwise precede it.
+    assert SqlComposer.clauses("SELECT 1", "", "FROM jobs", "") == "SELECT 1\nFROM jobs"
+
+
+def test_clauses_keeps_a_multi_line_part_intact() -> None:
+    assert SqlComposer.clauses("SELECT\n    id", "FROM jobs") == "SELECT\n    id\nFROM jobs"
+
+
 def test_render_pairs_sql_with_bound_args() -> None:
     composer = SqlComposer()
     limit = composer.bind(10)
