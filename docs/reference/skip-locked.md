@@ -146,7 +146,7 @@ next_queued AS (        -- fresh work
 ),
 next_stale AS (         -- jobs from a crashed worker
     SELECT q.id FROM pgqueuer q
-    WHERE q.status='picked' AND q.heartbeat < NOW() - $6::interval
+    WHERE q.status='picked' AND q.heartbeat < NOW() - $4::interval
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED LIMIT $1
 ),
@@ -158,7 +158,7 @@ eligible AS (           -- merge, cap to batch size
 ),
 claimed AS (            -- atomic claim
     UPDATE pgqueuer SET status='picked', updated=NOW(), heartbeat=NOW(),
-        queue_manager_id=$4
+        queue_manager_id=$3
     WHERE id IN (SELECT id FROM eligible) RETURNING *
 )
 SELECT * FROM claimed ORDER BY priority DESC, id ASC;

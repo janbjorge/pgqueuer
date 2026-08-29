@@ -6,6 +6,8 @@ import json
 import uuid
 from datetime import timedelta
 
+import pytest
+
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 
@@ -95,19 +97,34 @@ def _scan_summary(nodes: list[dict]) -> list[tuple]:
     ]
 
 
-async def test_dequeue_uses_entrypoint_priority_index(apgdriver: db.Driver) -> None:
-    """Dequeue's LATERAL reads the (entrypoint, priority, id) index, not a Seq Scan (#667)."""
+# Every dequeue shape: capacity-gated shapes render `LIMIT LEAST($n, remaining)`
+# in the LATERAL, ungated ones a plain `LIMIT $n` — the planner must stay on the
+# partial index for both variants.
+DEQUEUE_SHAPES = [
+    pytest.param(0, None, id="no_gates"),
+    pytest.param(1000, None, id="entrypoint_gate"),
+    pytest.param(0, 1000, id="global_gate"),
+    pytest.param(1000, 1000, id="both_gates"),
+]
+
+
+@pytest.mark.parametrize(("concurrency_limit", "global_limit"), DEQUEUE_SHAPES)
+async def test_dequeue_uses_entrypoint_priority_index(
+    apgdriver: db.Driver,
+    concurrency_limit: int,
+    global_limit: int | None,
+) -> None:
+    """Each shape's LATERAL reads the (entrypoint, priority, id) index, not a Seq Scan (#667)."""
     q = await _seed(apgdriver)
-    nodes = await _plan_nodes(
-        apgdriver,
-        q.qbq.build_dequeue_query(),
-        10,
-        ENTRYPOINTS,
-        [0] * len(ENTRYPOINTS),
-        uuid.uuid4(),
-        1000,
-        timedelta(seconds=30),
+    query = q.qbq.build_dequeue_query(
+        batch_size=10,
+        entrypoints=ENTRYPOINTS,
+        concurrency_limits=[concurrency_limit] * len(ENTRYPOINTS),
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
     )
+    nodes = await _plan_nodes(apgdriver, query.sql, *query.args)
     used = [
         n
         for n in nodes
@@ -147,21 +164,29 @@ async def test_has_queued_work_is_existence_probe(apgdriver: db.Driver) -> None:
     )
 
 
-async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) -> None:
-    """Dequeue scans O(entrypoints*batch) rows, not the whole backlog (#668)."""
+@pytest.mark.parametrize(("concurrency_limit", "global_limit"), DEQUEUE_SHAPES)
+async def test_dequeue_plan_scans_proportional_to_batch(
+    apgdriver: db.Driver,
+    concurrency_limit: int,
+    global_limit: int | None,
+) -> None:
+    """Each dequeue shape scans O(entrypoints*batch) rows, not the whole backlog (#668).
+
+    The gated shapes matter most: their worker_load/picked probes must stay on
+    index scans, or every production dequeue walks the backlog.
+    """
     await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)
     q = queries.Queries(apgdriver)
     eps = [f"ep_{i}" for i in range(BULK_EPS)]
-    nodes = await _analyze_nodes(
-        apgdriver,
-        q.qbq.build_dequeue_query(),
-        BATCH,
-        eps,
-        [0] * BULK_EPS,
-        uuid.uuid4(),
-        None,
-        timedelta(seconds=30),
+    query = q.qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=eps,
+        concurrency_limits=[concurrency_limit] * BULK_EPS,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
     )
+    nodes = await _analyze_nodes(apgdriver, query.sql, *query.args)
 
     # Matches "Seq Scan" and "Parallel Seq Scan" — any full-table walk.
     seq = [n for n in _queue_scans(nodes) if (n.get("Node Type") or "").endswith("Seq Scan")]
@@ -178,7 +203,11 @@ async def test_dequeue_plan_scans_proportional_to_batch(apgdriver: db.Driver) ->
     )
 
 
-async def test_dequeue_gate_skips_saturated_entrypoints(apgdriver: db.Driver) -> None:
+@pytest.mark.parametrize("global_limit", [None, 1000], ids=["entrypoint_gate", "both_gates"])
+async def test_dequeue_gate_skips_saturated_entrypoints(
+    apgdriver: db.Driver,
+    global_limit: int | None,
+) -> None:
     """Saturated entrypoints are gated out by the CTE, not by scanning their queued rows (#668)."""
     await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)
     # One picked job per entrypoint puts each at concurrency_limit=1, so the
@@ -196,16 +225,15 @@ async def test_dequeue_gate_skips_saturated_entrypoints(apgdriver: db.Driver) ->
 
     q = queries.Queries(apgdriver)
     eps = [f"ep_{i}" for i in range(BULK_EPS)]
-    nodes = await _analyze_nodes(
-        apgdriver,
-        q.qbq.build_dequeue_query(),
-        BATCH,
-        eps,
-        [1] * BULK_EPS,
-        uuid.uuid4(),
-        None,
-        timedelta(seconds=30),
+    query = q.qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=eps,
+        concurrency_limits=[1] * BULK_EPS,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
     )
+    nodes = await _analyze_nodes(apgdriver, query.sql, *query.args)
 
     # Only the picked aggregate and stale probe touch the table (~BULK_EPS rows each);
     # the queued LATERAL must read nothing because every entrypoint is gated out.

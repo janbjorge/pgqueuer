@@ -181,15 +181,15 @@ class Queries:
         if batch_size < 1:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
-        rows = await self.driver.fetch(
-            self.qbq.build_dequeue_query(),
-            batch_size,
-            list(entrypoints.keys()),
-            [x.concurrency_limit for x in entrypoints.values()],
-            queue_manager_id,
-            global_concurrency_limit,
-            heartbeat_timeout,
+        query = self.qbq.build_dequeue_query(
+            batch_size=batch_size,
+            entrypoints=list(entrypoints.keys()),
+            concurrency_limits=[x.concurrency_limit for x in entrypoints.values()],
+            queue_manager_id=queue_manager_id,
+            global_concurrency_limit=global_concurrency_limit,
+            heartbeat_timeout=heartbeat_timeout,
         )
+        rows = await self.driver.fetch(query.sql, *query.args)
         return [models.Job.model_validate(row) for row in rows]
 
     @overload
