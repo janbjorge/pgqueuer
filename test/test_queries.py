@@ -887,7 +887,8 @@ async def test_aggregate_logs_populates_statistics_without_read(apgdriver: db.Dr
     await q.aggregate_logs()
 
     assert await _unaggregated_count(q) == 0
-    stats = await q.driver.fetch(q.qbq.build_log_statistics_query(), None, None)
+    stats_query = q.qbq.build_log_statistics_query(limit=None, last=None)
+    stats = await q.driver.fetch(stats_query.sql, *stats_query.args)
     assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
 
 
@@ -956,7 +957,8 @@ async def test_upgrade_from_legacy_composite_index_still_aggregates(
     assert await _unaggregated_count(q) > 0
     await q.aggregate_logs()
     assert await _unaggregated_count(q) == 0
-    stats = await q.driver.fetch(q.qbq.build_log_statistics_query(), None, None)
+    stats_query = q.qbq.build_log_statistics_query(limit=None, last=None)
+    stats = await q.driver.fetch(stats_query.sql, *stats_query.args)
     assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
 
 

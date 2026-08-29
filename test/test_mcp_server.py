@@ -148,7 +148,8 @@ class TestMcpToolsIntegration:
         await q.enqueue("stats_ep", b"x", priority=0)
 
         await mcpdb.fetch(mcpdb.qbq.build_aggregate_log_data_to_statistics_query())
-        rows = await mcpdb.fetch(mcpdb.qbq.build_log_statistics_query(), 50, None)
+        stats_query = mcpdb.qbq.build_log_statistics_query(limit=50, last=None)
+        rows = await mcpdb.fetch(stats_query.sql, *stats_query.args)
         assert len(rows) >= 1
 
     async def test_stale_jobs_none_when_fresh(

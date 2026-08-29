@@ -187,7 +187,8 @@ def _register_tools(mcp: FastMCP) -> None:  # noqa: C901
         d = _db(ctx)
         await d.fetch(d.qbq.build_aggregate_log_data_to_statistics_query())
         interval = _parse_interval(period)
-        return await d.fetch(d.qbq.build_log_statistics_query(), limit, interval)
+        query = d.qbq.build_log_statistics_query(limit=limit, last=interval)
+        return await d.fetch(query.sql, *query.args)
 
     @mcp.tool()
     async def throughput_summary(

@@ -23,15 +23,16 @@ class SqlComposer:
     statement caches see one entry per query shape.
 
     CTE bodies are embedded verbatim — never rewritten — so SQL string
-    literals pass through untouched. Optional lines are the caller's job:
-    interpolate them (including their leading newline) only when present.
+    literals pass through untouched. ``clauses`` assembles a statement from
+    one clause per argument, so an optional clause is an empty string rather
+    than a newline the caller has to splice in by hand.
 
     Usage example::
 
-        c = SqlComposer()
-        limit = c.bind(10)
-        c.cte("ready", f"SELECT id FROM jobs LIMIT {limit}")
-        query = c.render("SELECT * FROM ready")
+        composer = SqlComposer()
+        limit = composer.bind(10)
+        composer.cte("ready", f"SELECT id FROM jobs LIMIT {limit}")
+        query = composer.render("SELECT * FROM ready")
         await driver.fetch(query.sql, *query.args)
     """
 
@@ -41,6 +42,11 @@ class SqlComposer:
     def bind(self, value: object) -> str:
         self.values.append(value)
         return f"${len(self.values)}"
+
+    @staticmethod
+    def clauses(*parts: str) -> str:
+        """Join clauses onto their own lines, dropping the ones left empty."""
+        return "\n".join(part for part in parts if part)
 
     def cte(self, name: str, body: str, comment: str = "") -> None:
         # Dedent + strip lets callers pass indented triple-quoted comment blocks.

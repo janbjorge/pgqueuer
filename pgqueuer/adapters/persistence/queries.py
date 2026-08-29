@@ -436,14 +436,9 @@ class Queries:
         await self.driver.execute(
             self.qbq.build_aggregate_log_data_to_statistics_query(advisory_lock=False)
         )
-        return [
-            models.LogStatistics.model_validate(x)
-            for x in await self.driver.fetch(
-                self.qbq.build_log_statistics_query(),
-                limit,
-                last,
-            )
-        ]
+        query = self.qbq.build_log_statistics_query(limit=limit, last=last)
+        rows = await self.driver.fetch(query.sql, *query.args)
+        return [models.LogStatistics.model_validate(row) for row in rows]
 
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
         """Emit a ``cancellation_event`` NOTIFY carrying *ids*."""
