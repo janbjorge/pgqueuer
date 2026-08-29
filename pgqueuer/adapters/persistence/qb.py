@@ -519,56 +519,44 @@ class QueryQueueBuilder:
         queue_table = self.qualified.queue_table
 
         if capacity_gated:
-            unpacked_params = composer.nest(
-                "SELECT",
-                f"UNNEST({eps}::text[]) AS entrypoint,",
-                f"UNNEST({limits}::bigint[]) AS concurrency_limit",
-            )
             composer.cte(
                 "params",
-                unpacked_params,
+                f"""
+                    SELECT
+                        UNNEST({eps}::text[]) AS entrypoint,
+                        UNNEST({limits}::bigint[]) AS concurrency_limit
+                """,
                 comment="Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.",
-            )
-
-            picked_where = composer.where(
-                "queue_manager_id IS NOT NULL",
-                f"entrypoint = ANY({eps})",
             )
             composer.cte(
                 "picked",
-                "SELECT entrypoint, COUNT(*) AS total",
-                f"FROM {queue_table}",
-                picked_where,
-                "GROUP BY entrypoint",
+                f"""
+                    SELECT entrypoint, COUNT(*) AS total
+                    FROM {queue_table}
+                    WHERE queue_manager_id IS NOT NULL
+                      AND entrypoint = ANY({eps})
+                    GROUP BY entrypoint
+                """,
                 comment="Per-entrypoint count of picked jobs (global, all workers).",
             )
-
             # Applying the gate here rather than per row keeps a saturated entrypoint
             # from scanning its queued backlog at all. remaining is NULL for unlimited
             # entrypoints; otherwise it caps how many rows one dequeue may pick, so a
             # single statement cannot exceed the entrypoint's concurrency_limit.
-            remaining_capacity = composer.nest(
-                "CASE",
-                "WHEN params.concurrency_limit <= 0 THEN NULL",
-                "ELSE params.concurrency_limit - COALESCE(picked.total, 0)",
-                footer="END AS remaining",
-            )
-            available_columns = composer.nest(
-                "SELECT",
-                "params.entrypoint,",
-                remaining_capacity,
-            )
-            available_where = composer.where(
-                "params.concurrency_limit <= 0",
-                "COALESCE(picked.total, 0) < params.concurrency_limit",
-                joiner="OR",
-            )
             composer.cte(
                 "available",
-                available_columns,
-                "FROM params",
-                "LEFT JOIN picked ON picked.entrypoint = params.entrypoint",
-                available_where,
+                """
+                    SELECT
+                        params.entrypoint,
+                        CASE
+                            WHEN params.concurrency_limit <= 0 THEN NULL
+                            ELSE params.concurrency_limit - COALESCE(picked.total, 0)
+                        END AS remaining
+                    FROM params
+                    LEFT JOIN picked ON picked.entrypoint = params.entrypoint
+                    WHERE params.concurrency_limit <= 0
+                       OR COALESCE(picked.total, 0) < params.concurrency_limit
+                """,
                 comment="Entrypoints with free capacity; remaining caps a single dequeue.",
             )
             # LEAST(batch, NULL) = batch, so unlimited entrypoints keep the full batch.
@@ -581,21 +569,24 @@ class QueryQueueBuilder:
             )
             lateral_limit = batch
 
-        budget_condition = ""
+        # Both gate lines drop out of their block when the budget is unlimited.
+        budget_where = ""
+        budget_and = ""
         eligible_limit = batch
         if budget_gated:
-            worker_load_where = composer.where(
-                f"queue_manager_id = {queue_manager}",
-                f"entrypoint = ANY({eps})",
-            )
             composer.cte(
                 "worker_load",
-                "SELECT COUNT(*) AS total",
-                f"FROM {queue_table}",
-                worker_load_where,
+                f"""
+                    SELECT COUNT(*) AS total
+                    FROM {queue_table}
+                    WHERE queue_manager_id = {queue_manager}
+                      AND entrypoint = ANY({eps})
+                """,
                 comment="This worker's total picked jobs (scalar, for max_concurrent_tasks).",
             )
-            budget_condition = f"(SELECT total FROM worker_load) < {global_limit}"
+            under_budget = f"(SELECT total FROM worker_load) < {global_limit}"
+            budget_where = f"WHERE {under_budget}"
+            budget_and = f"AND {under_budget}"
             # The eligible LIMIT hard-caps this worker's total picked rows: the binary
             # worker_load condition only stops a dequeue from starting once over budget,
             # it does not stop one batch from overshooting it.
@@ -603,30 +594,25 @@ class QueryQueueBuilder:
                 f"GREATEST(LEAST({batch}, {global_limit} - (SELECT total FROM worker_load)), 0)"
             )
 
-        candidate_where = composer.where(
-            "candidate.entrypoint = available.entrypoint",
-            "candidate.status = 'queued'",
-            "candidate.execute_after < NOW()",
-        )
-        candidate_lookup = composer.nest(
-            "CROSS JOIN LATERAL (",
-            "SELECT candidate.id, candidate.priority",
-            f"FROM {queue_table} candidate",
-            candidate_where,
-            "ORDER BY candidate.priority DESC, candidate.id ASC",
-            f"LIMIT {lateral_limit}",
-            "FOR UPDATE SKIP LOCKED",
-            footer=") job",
-        )
-        queued_gate = composer.where(budget_condition)
         composer.cte(
             "next_queued",
-            "SELECT job.id, job.priority",
-            "FROM available",
-            candidate_lookup,
-            queued_gate,
-            "ORDER BY job.priority DESC, job.id ASC",
-            f"LIMIT {batch}",
+            f"""
+                SELECT job.id, job.priority
+                FROM available
+                CROSS JOIN LATERAL (
+                    SELECT candidate.id, candidate.priority
+                    FROM {queue_table} candidate
+                    WHERE candidate.entrypoint = available.entrypoint
+                      AND candidate.status = 'queued'
+                      AND candidate.execute_after < NOW()
+                    ORDER BY candidate.priority DESC, candidate.id ASC
+                    LIMIT {lateral_limit}
+                    FOR UPDATE SKIP LOCKED
+                ) job
+                {budget_where}
+                ORDER BY job.priority DESC, job.id ASC
+                LIMIT {batch}
+            """,
             comment="New queued jobs; LATERAL hits the (entrypoint, priority, id) index.",
         )
 
@@ -634,57 +620,56 @@ class QueryQueueBuilder:
         # stale job only transfers ownership of a row already counted in `picked`, so
         # net live execution is unchanged. Applying the gate would deadlock recovery
         # once leaked rows fill the slot.
-        stale_gate = composer.where(
-            "stale.status = 'picked'",
-            f"stale.entrypoint = ANY({eps})",
-            f"stale.heartbeat < NOW() - {heartbeat}::interval",
-            "stale.execute_after < NOW()",
-            budget_condition,
-        )
         composer.cte(
             "next_stale",
-            "SELECT stale.id, stale.priority",
-            f"FROM {queue_table} stale",
-            stale_gate,
-            "ORDER BY stale.priority DESC, stale.id ASC",
-            "FOR UPDATE SKIP LOCKED",
-            f"LIMIT {batch}",
+            f"""
+                SELECT stale.id, stale.priority
+                FROM {queue_table} stale
+                WHERE stale.status = 'picked'
+                  AND stale.entrypoint = ANY({eps})
+                  AND stale.heartbeat < NOW() - {heartbeat}::interval
+                  AND stale.execute_after < NOW()
+                  {budget_and}
+                ORDER BY stale.priority DESC, stale.id ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT {batch}
+            """,
             comment="Stale picked jobs whose heartbeat timed out.",
         )
 
-        merged_candidates = composer.nest(
-            "SELECT id FROM (",
-            "SELECT id, priority FROM next_queued",
-            "UNION ALL",
-            "SELECT id, priority FROM next_stale",
-            footer=") combined",
-        )
         composer.cte(
             "eligible",
-            merged_candidates,
-            "ORDER BY priority DESC, id ASC",
-            f"LIMIT {eligible_limit}",
+            f"""
+                SELECT id FROM (
+                    SELECT id, priority FROM next_queued
+                    UNION ALL
+                    SELECT id, priority FROM next_stale
+                ) combined
+                ORDER BY priority DESC, id ASC
+                LIMIT {eligible_limit}
+            """,
             comment="Merge both sets into one priority order so stale competes with fresh.",
         )
 
-        claim_assignments = composer.nest(
-            "SET status = 'picked',",
-            "updated   = NOW(),",
-            "heartbeat = NOW(),",
-            f"queue_manager_id = {queue_manager}",
-        )
         composer.cte(
             "claimed",
-            f"UPDATE {queue_table}",
-            claim_assignments,
-            "WHERE id IN (SELECT id FROM eligible)",
-            "RETURNING *",
+            f"""
+                UPDATE {queue_table}
+                SET status = 'picked',
+                    updated   = NOW(),
+                    heartbeat = NOW(),
+                    queue_manager_id = {queue_manager}
+                WHERE id IN (SELECT id FROM eligible)
+                RETURNING *
+            """,
             comment="Atomically claim the jobs and log the pick event.",
         )
         composer.cte(
             "log_pick",
-            f"INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)",
-            "SELECT id, status, entrypoint, priority FROM claimed",
+            f"""
+                INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)
+                SELECT id, status, entrypoint, priority FROM claimed
+            """,
         )
         query = composer.render("SELECT * FROM claimed ORDER BY priority DESC, id ASC;")
         self.dequeue_sql_cache[shape] = query.sql
@@ -859,14 +844,15 @@ class QueryQueueBuilder:
             bound_limit = composer.bind(limit)
             cap = f"LIMIT {bound_limit}"
 
-        statement = composer.clauses(
-            "SELECT count, created, entrypoint, priority, status",
-            f"FROM {self.qualified.statistics_table}",
-            window,
-            "ORDER BY id DESC",
-            cap,
+        return composer.render(
+            f"""
+                SELECT count, created, entrypoint, priority, status
+                FROM {self.qualified.statistics_table}
+                {window}
+                ORDER BY id DESC
+                {cap}
+            """
         )
-        return composer.render(statement)
 
     def build_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.qualified.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::bigint[])"""  # noqa: E501

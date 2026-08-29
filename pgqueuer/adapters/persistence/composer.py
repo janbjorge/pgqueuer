@@ -22,14 +22,12 @@ class SqlComposer:
     text is deterministic for a given fragment set, so driver-side prepared
     statement caches see one entry per query shape.
 
-    The composer owns every bit of whitespace, so no SQL literal carries
-    indentation. ``cte`` takes one clause per argument and strips each before
-    indenting the block; an optional clause is an empty string rather than a
-    newline spliced in by hand. ``where`` renders a condition list under one
-    keyword, and ``nest`` indents a body under a header, so nesting depth is
-    declared by the call structure instead of typed into a literal. Because
-    each clause is normalised on its own, a multi-line SQL string literal
-    cannot span two clauses.
+    A CTE body is one SQL block, written at whatever indentation the
+    surrounding Python happens to sit at: the composer dedents it and applies
+    the single level a body needs. A clause that only some query shapes carry
+    is interpolated on a line of its own and renders as the empty string when
+    it does not apply, so the line goes with it. A body therefore reads as the
+    SQL it becomes, and carries no blank lines of its own.
 
     Usage example::
 
@@ -48,30 +46,15 @@ class SqlComposer:
         return f"${len(self.values)}"
 
     @staticmethod
-    def clauses(*parts: str) -> str:
-        """Join clauses onto their own lines, dropping the ones left empty."""
-        return "\n".join(part for part in parts if part)
+    def block(sql: str) -> str:
+        """Dedent a SQL block and drop the lines an inapplicable clause left empty."""
+        # dedent ignores whitespace-only lines when measuring the common prefix, so
+        # the line an elided clause leaves behind cannot drag the whole block left.
+        lines = textwrap.dedent(sql).splitlines()
+        return "\n".join(line for line in lines if line.strip())
 
-    @staticmethod
-    def where(*conditions: str, joiner: str = "AND") -> str:
-        """Render a WHERE from conditions, dropping empty ones; no conditions renders nothing."""
-        kept = [condition for condition in conditions if condition]
-        if not kept:
-            return ""
-        # Right-align the joiner in the width of WHERE so every condition starts
-        # in the same column: "WHERE a", "  AND b", "   OR c".
-        continuation = f"\n{joiner:>{len('WHERE')}} "
-        return "WHERE " + continuation.join(kept)
-
-    @staticmethod
-    def nest(header: str, *body: str, footer: str = "") -> str:
-        """Indent body one level under header, so nesting is declared rather than typed."""
-        kept = [part for part in body if part]
-        indented = textwrap.indent("\n".join(kept), "    ")
-        return "\n".join(part for part in (header, indented, footer) if part)
-
-    def cte(self, name: str, *clauses: str, comment: str = "") -> None:
-        """Append a named CTE built from one clause per argument.
+    def cte(self, name: str, body: str, *, comment: str = "") -> None:
+        """Append a named CTE built from one SQL block.
 
         A comment must be a single line: it orients whoever reads the
         statement in a Postgres log, while the reasoning behind a clause
@@ -80,11 +63,10 @@ class SqlComposer:
         if "\n" in comment:
             raise ValueError("A CTE comment must be a single line")
 
-        dedented = [textwrap.dedent(clause).strip() for clause in clauses]
-        body = textwrap.indent("\n".join(part for part in dedented if part), "    ")
         header = f"-- {comment}\n" if comment else ""
-        self.fragments.append(f"{header}{name} AS (\n{body}\n)")
+        indented = textwrap.indent(self.block(body), "    ")
+        self.fragments.append(f"{header}{name} AS (\n{indented}\n)")
 
     def render(self, final: str) -> ComposedQuery:
         with_clause = "WITH\n" + ",\n\n".join(self.fragments) + "\n" if self.fragments else ""
-        return ComposedQuery(sql=f"{with_clause}{final}", args=tuple(self.values))
+        return ComposedQuery(sql=f"{with_clause}{self.block(final)}", args=tuple(self.values))
