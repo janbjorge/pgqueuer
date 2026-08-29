@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import dataclasses
 import random
-import sys
 import uuid
 from collections.abc import MutableMapping
 from contextlib import nullcontext, suppress
@@ -392,9 +391,11 @@ class QueueManager:
         """
         await self.verify_structure()
 
-        max_concurrent_tasks = max_concurrent_tasks or sys.maxsize
+        # 0 has always meant unlimited; keep unlimited as None all the way to
+        # the dequeue query so it composes without the worker-budget CTEs.
+        max_concurrent_tasks = max_concurrent_tasks or None
 
-        if max_concurrent_tasks < 2 * batch_size:
+        if max_concurrent_tasks is not None and max_concurrent_tasks < 2 * batch_size:
             raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
         async with (

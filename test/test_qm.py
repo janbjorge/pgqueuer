@@ -164,6 +164,36 @@ async def test_drain_mode(
     assert len(jobs) == N
 
 
+@pytest.mark.parametrize("max_concurrent_tasks", (None, 0))
+async def test_run_unlimited_budget_reaches_dequeue_as_none(
+    apgdriver: db.Driver,
+    max_concurrent_tasks: int | None,
+) -> None:
+    """run() forwards unlimited max_concurrent_tasks (None or legacy 0) to dequeue as None."""
+    q = Queries(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
+    seen = list[int | None]()
+
+    original = qm.queries.dequeue
+
+    async def spying_dequeue(*args: Any, **kwargs: Any) -> Any:
+        seen.append(kwargs["global_concurrency_limit"])
+        return await original(*args, **kwargs)
+
+    qm.queries.dequeue = spying_dequeue  # type: ignore[method-assign]
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None: ...
+
+    await q.enqueue("fetch", None, 0)
+
+    async with async_timeout.timeout(10):
+        await qm.run(mode=QueueExecutionMode.drain, max_concurrent_tasks=max_concurrent_tasks)
+
+    assert seen
+    assert set(seen) == {None}
+
+
 async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
     """The periodic task calls aggregate_logs repeatedly and stops on shutdown."""
     calls = 0
