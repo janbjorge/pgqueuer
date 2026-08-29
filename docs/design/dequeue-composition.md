@@ -2,8 +2,8 @@
 
 This document models how the claim statement is assembled from the
 concurrency gates in use. The dequeue statement is the first adopter of
-the composer policy; it describes *what is*, and the *why* lives in
-[ADR-0024](../adr/ADR-0024-sql-is-assembled-by-the-composer.md).
+the composer policy. This document describes *what is*; the *why* lives
+in [ADR-0024](../adr/ADR-0024-sql-is-assembled-by-the-composer.md).
 It is a sub-model of the [system design](README.md); the participants
 and the claim-time invariants named there apply unchanged.
 
@@ -75,19 +75,19 @@ fragment that is left out never leaves a gap.
   are re-bound on every call and never shared between calls.
 - Entrypoint names and their limits are parallel lists of equal length;
   the builder rejects a mismatch.
-- Every `$N` placeholder maps onto exactly one bound argument — no
-  gaps, no extras (asserted per shape in `test/test_dequeue_shapes.py`).
+- Every `$N` placeholder maps onto exactly one bound argument, with no
+  gaps and no extras (asserted per shape in `test/test_dequeue_shapes.py`).
 - The stale-job re-pick deliberately skips the capacity gate:
   re-picking transfers ownership of an already-counted row, and gating
   it would deadlock recovery (comment in the `next_stale` CTE).
 
 ## Guards
 
-- `test/test_composer.py` — composer behavior: bind numbering, verbatim
-  bodies, comment rendering, immutability.
-- `test/test_dequeue_shapes.py` — snapshot per shape, placeholder
-  accounting, per-shape caching, argument isolation, gate semantics
-  against a real database.
-- `test/test_query_plan_regression.py` — EXPLAIN guards that every
+- `test/test_composer.py` covers composer behavior: bind numbering,
+  verbatim bodies, comment rendering, immutability.
+- `test/test_dequeue_shapes.py` covers the snapshot per shape,
+  placeholder accounting, per-shape caching, argument isolation, and
+  gate semantics against a real database.
+- `test/test_query_plan_regression.py` holds the EXPLAIN guards: every
   shape stays on the entrypoint-leading indexes and scans
   O(entrypoints × batch) rows.

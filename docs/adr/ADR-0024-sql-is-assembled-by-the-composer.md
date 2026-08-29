@@ -35,7 +35,7 @@ each reachable shape is a reviewable, snapshot-testable SQL artifact.
 Two corollaries:
 
 - "Not configured" is expressed as absence (`None`) at every boundary,
-  never as a sentinel value — a sentinel reads as configuration and
+  never as a sentinel value. A sentinel reads as configuration and
   silently re-enables the fragment it means to disable.
 - The composer stays transparent: fragment bodies are embedded
   verbatim, never rewritten, so what the author wrote is what Postgres
