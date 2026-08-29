@@ -259,8 +259,13 @@ Only add a comment when the **why** is non-obvious:
 - Task or issue refs in inline comments — link them in the PR description instead. Exception: regression tests may reference the issue ID in their docstring or `xfail` reason, because the issue is the test's reason to exist.
 - Banner section headers (`# ----- Layer 2 -----`) — let function names and module structure do the work
 - TODOs without an owner and a tracking link
+- Step-by-step narration of a block — a comment per step retells the code in prose. Annotate only the step that would surprise a reader.
 
 When a comment explains a non-obvious workaround, keep it short and put it adjacent to the line it explains. Prefer one line.
+
+**Two lines is the cap.** Not a target to fill — a ceiling. A comment that wants a third line is a comment that has stopped explaining a surprise and started teaching a subject; the subject belongs in an ADR (`docs/adr/`) or the PR description, and the comment cites it in one line. This applies hardest above a SQL literal or a long function, where an essay is easy to write and rarely read.
+
+If the comment prose in a function is a noticeable fraction of its code, that is a defect regardless of whether any single comment obeys the cap. Cut until each surviving line earns its place.
 
 ### Guiding Principles
 
