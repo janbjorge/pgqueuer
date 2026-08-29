@@ -243,14 +243,15 @@ leaves open.
 
 - [x] **ADR-0024: SQL statements are assembled by the composer**
   - Decision: statements are built from conditional fragments, binds
-    auto-numbered, text and args emerging as one pair; unconfigured is
-    `None`, never a sentinel. Adoption is incremental; dequeue is first.
-  - Fork: composer vs. hand-numbered f-strings vs. an external query
-    builder.
+    auto-numbered, text and arguments emerging as one pair; unconfigured
+    is absence, never a sentinel. Adoption is incremental; dequeue is
+    first.
+  - Fork: composer vs. hand-numbered text per statement vs. an external
+    query builder.
   - Consequences: numbering cannot drift; unused gates render nothing;
     two styles coexist until migration completes.
-  - Pointers: `SqlComposer` in `pgqueuer/adapters/persistence/composer.py`;
-    first adopter `QueryQueueBuilder.build_dequeue_query` in `qb.py`.
+  - Pointers: composer and query builder in
+    `pgqueuer/adapters/persistence/`.
   - Not covered: migration order and mechanics (see the dequeue
     composition model).
 
