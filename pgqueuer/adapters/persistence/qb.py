@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
+from datetime import timedelta
 from typing import Generator
 
 from typing_extensions import assert_never
 
+from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
@@ -729,18 +731,35 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
     def build_delete_from_log_statistics_query(self) -> str:
         return f"""DELETE FROM {self.qualified.statistics_table} WHERE entrypoint = ANY($1)"""
 
-    def build_log_statistics_query(self) -> str:
-        return f"""SELECT
+    def build_log_statistics_query(
+        self,
+        *,
+        limit: int | None,
+        last: timedelta | None,
+    ) -> ComposedQuery:
+        """Read recent statistics rows; an unset limit/last elides its clause."""
+        composer = SqlComposer()
+
+        window = ""
+        if last is not None:
+            bound_last = composer.bind(last)
+            window = f"\n    WHERE created > NOW() - {bound_last}::interval"
+
+        cap = ""
+        if limit is not None:
+            bound_limit = composer.bind(limit)
+            cap = f"\n    LIMIT {bound_limit}"
+
+        statement = f"""SELECT
         count,
         created,
         entrypoint,
         priority,
         status
-    FROM {self.qualified.statistics_table}
-    WHERE ($2::interval IS NULL OR created > NOW() - $2)
-    ORDER BY id DESC
-    LIMIT $1
+    FROM {self.qualified.statistics_table}{window}
+    ORDER BY id DESC{cap}
     """
+        return composer.render(statement)
 
     def build_update_heartbeat_query(self) -> str:
         return f"""UPDATE {self.qualified.queue_table} SET heartbeat = NOW() WHERE id = ANY($1::bigint[])"""  # noqa: E501
