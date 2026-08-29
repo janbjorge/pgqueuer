@@ -1,11 +1,9 @@
 # Dequeue composition model
 
-This document models how the claim statement is assembled from the
-concurrency gates in use. The dequeue statement is the first adopter of
-the composer policy. This document describes *what is*; the *why* lives
-in [ADR-0024](../adr/ADR-0024-sql-is-assembled-by-the-composer.md).
-It is a sub-model of the [system design](README.md); the participants
-and the claim-time invariants named there apply unchanged.
+How the claim statement is assembled from the concurrency gates in
+use. This document describes *what is*; the *why* lives in
+[ADR-0024](../adr/ADR-0024-sql-is-assembled-by-the-composer.md). It is
+a sub-model of the [system design](README.md).
 
 ## Flow
 
@@ -45,8 +43,7 @@ regenerate an intended change with `PGQUEUER_UPDATE_SNAPSHOTS=1`.
 
 ## Bind order
 
-Fixed per shape; the composer numbers placeholders in bind order, so a
-fragment that is left out never leaves a gap.
+Fixed per shape; a fragment that is left out never leaves a gap.
 
 | Placeholder | Value                          | Present         |
 |-------------|--------------------------------|-----------------|
@@ -59,35 +56,30 @@ fragment that is left out never leaves a gap.
 
 ## Components
 
-| Component         | Type         | Description                                            |
-|-------------------|--------------|--------------------------------------------------------|
-| SqlComposer       | Service      | Chains CTE fragments, auto-numbers binds; embeds bodies verbatim (`adapters/persistence/composer.py`) |
-| ComposedQuery     | Value Object | Immutable pairing of rendered SQL and its argument tuple |
-| QueryQueueBuilder | Service      | Selects gates, composes the shape, caches rendered text per shape (`adapters/persistence/qb.py`) |
+| Component         | Type         | Description                                       |
+|-------------------|--------------|---------------------------------------------------|
+| SqlComposer       | Service      | Chains CTE fragments, auto-numbers binds, embeds bodies verbatim |
+| ComposedQuery     | Value Object | Immutable pairing of rendered SQL and its arguments |
+| QueryQueueBuilder | Service      | Selects gates, composes the shape, caches text per shape |
 | Gate shape        | Value Object | The `(capacity-gated, budget-gated)` pair; cache key and test axis |
 
 ## Invariants
 
-- Unlimited is `None` at every boundary. `QueueManager.run` normalizes
-  its legacy `0` to `None`; no sentinel integer reaches the builder.
-- SQL text is a function of the gate shape and table names only.
-  Rendered text is cached per shape on the builder instance; arguments
+- Unlimited is `None` at every boundary; `QueueManager.run` normalizes
+  its legacy `0` to `None`.
+- Rendered text is cached per shape on the builder instance; arguments
   are re-bound on every call and never shared between calls.
-- Entrypoint names and their limits are parallel lists of equal length;
-  the builder rejects a mismatch.
-- Every `$N` placeholder maps onto exactly one bound argument, with no
-  gaps and no extras (asserted per shape in `test/test_dequeue_shapes.py`).
-- The stale-job re-pick deliberately skips the capacity gate:
-  re-picking transfers ownership of an already-counted row, and gating
-  it would deadlock recovery (comment in the `next_stale` CTE).
+- Entrypoint names and limits are parallel lists of equal length; the
+  builder rejects a mismatch.
+- Every `$N` maps onto exactly one bound argument.
+- The stale-job re-pick skips the capacity gate on purpose: re-picking
+  transfers ownership of an already-counted row, and gating it would
+  deadlock recovery.
 
 ## Guards
 
-- `test/test_composer.py` covers composer behavior: bind numbering,
-  verbatim bodies, comment rendering, immutability.
-- `test/test_dequeue_shapes.py` covers the snapshot per shape,
-  placeholder accounting, per-shape caching, argument isolation, and
-  gate semantics against a real database.
-- `test/test_query_plan_regression.py` holds the EXPLAIN guards: every
-  shape stays on the entrypoint-leading indexes and scans
-  O(entrypoints × batch) rows.
+- `test/test_composer.py`: composer behavior.
+- `test/test_dequeue_shapes.py`: snapshots, placeholder accounting,
+  caching, argument isolation, gate semantics.
+- `test/test_query_plan_regression.py`: every shape stays on the
+  entrypoint-leading indexes and scans O(entrypoints × batch) rows.

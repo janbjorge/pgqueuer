@@ -242,21 +242,17 @@ leaves open.
     context, degradation mechanics.
 
 - [x] **ADR-0024: SQL statements are assembled by the composer**
-  - Decision: statements are built from conditional fragments with every
-    bind coupled to its auto-numbered placeholder; text and argument
-    tuple emerge as one pair. Unconfigured features are absence (`None`),
-    never sentinel values. Adoption is incremental; dequeue is first.
-  - Fork: composer vs. hand-numbered f-strings per statement vs. an
-    external query-builder dependency.
-  - Consequences: placeholder numbering cannot drift; optional gates
-    render only where configured; two styles coexist until migration
-    completes; every composed shape needs snapshot and plan coverage.
-  - Pointers: `SqlComposer`/`ComposedQuery` in
-    `pgqueuer/adapters/persistence/composer.py`; first adopter
-    `QueryQueueBuilder.build_dequeue_query` in `qb.py`; shapes in
-    `test/query_shapes/`.
-  - Not covered: migration order, per-statement CTE mechanics, text
-    caching, snapshot workflow (see the dequeue composition model).
+  - Decision: statements are built from conditional fragments, binds
+    auto-numbered, text and args emerging as one pair; unconfigured is
+    `None`, never a sentinel. Adoption is incremental; dequeue is first.
+  - Fork: composer vs. hand-numbered f-strings vs. an external query
+    builder.
+  - Consequences: numbering cannot drift; unused gates render nothing;
+    two styles coexist until migration completes.
+  - Pointers: `SqlComposer` in `pgqueuer/adapters/persistence/composer.py`;
+    first adopter `QueryQueueBuilder.build_dequeue_query` in `qb.py`.
+  - Not covered: migration order and mechanics (see the dequeue
+    composition model).
 
 ### Runtime & process
 
