@@ -178,6 +178,34 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 **No leading-underscore prefixes.** Python has no real public/private distinction. Use plain `snake_case` for all methods and attributes — pick a descriptive name instead of hiding it behind a prefix.
 
+### String Literals
+
+**Multi-line string content uses triple quotes.** Never build it from implicitly concatenated adjacent literals or `+`-joined pieces with embedded `\n` escapes.
+
+```python
+# Bad
+comment=(
+    "Entrypoints with free capacity; remaining is NULL for\n"
+    "unlimited entrypoints."
+)
+
+# Good
+comment="""
+    Entrypoints with free capacity; remaining is NULL for
+    unlimited entrypoints.
+"""
+```
+
+When surrounding indentation would leak into the string, normalize with `textwrap.dedent` (or accept dedent at the consuming end, as `SqlComposer.cte` does for its `comment` parameter). Joining *dynamic* parts (`", ".join(items)`) is fine — the rule is about literals.
+
+### SQL Style
+
+**No single-letter table or CTE aliases** (`q`, `a`, `p`, `pk`). The SQL here is dense enough already — use the full table/CTE name, or a descriptive alias (`candidate`, `stale`, `job`) when the name is parameterized or shadowed.
+
+### `__all__`
+
+`__all__` belongs only in re-export modules: package `__init__.py` files and the top-level backward-compatibility shims. Internal modules do not declare it — everything is importable, per the no-underscore rule above.
+
 ### Module-Level State
 
 **No globals. Ever.** Globals are banned outright — mutable *and* immutable data structures alike. No module-level registries, lookup tables, caches, collections, config objects, or singletons that hold program data. Runtime state and data live on an instance and are passed explicitly; if something must be shared, thread it through a constructor or method argument, never a module attribute.
