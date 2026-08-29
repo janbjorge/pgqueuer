@@ -24,6 +24,7 @@ Conventions:
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 - [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
+- [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
 
 ## Backlog
 
@@ -240,6 +241,20 @@ leaves open.
   - Not covered: the integration list, header namespacing for trace
     context, degradation mechanics.
 
+- [x] **ADR-0024: SQL statements are assembled by the composer**
+  - Decision: statements are built from conditional fragments, binds
+    auto-numbered, text and arguments emerging as one pair; unconfigured
+    is absence, never a sentinel. Adoption is incremental; dequeue is
+    first.
+  - Fork: composer vs. hand-numbered text per statement vs. an external
+    query builder.
+  - Consequences: numbering cannot drift; unused gates render nothing;
+    two styles coexist until migration completes.
+  - Pointers: composer and query builder in
+    `pgqueuer/adapters/persistence/`.
+  - Not covered: migration order and mechanics (see the dequeue
+    composition model).
+
 ### Runtime & process
 
 - [ ] **ADR-0019: The scaling unit is the process; the runner supervises one manager**
@@ -304,7 +319,8 @@ leaves open.
 Implementation detail; documented in AGENTS.md or reference docs and free to
 change without touching a record:
 
-- The single-statement claim query shape, index definitions, query-plan tests
+- The claim query's CTE mechanics, index definitions, query-plan tests
+  (the composition *policy* is ADR-0024; the rendered shapes stay detail)
 - Advisory locking in statistics aggregation; batching, jitter, debounce
 - Tool picks: import-linter, testcontainers, pydantic-settings, htmx
 - The in-memory adapter (consequence of 0014 + 0021)

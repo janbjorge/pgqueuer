@@ -102,6 +102,7 @@ nav:
   - Reference:
       - CLI: reference/cli.md
       - System Design: design/README.md
+      - Dequeue Composition: design/dequeue-composition.md
       - Architecture: reference/architecture.md
       - Row Locking & SKIP LOCKED: reference/skip-locked.md
       - Drivers: reference/drivers.md
