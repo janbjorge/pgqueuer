@@ -7,13 +7,34 @@ a sub-model of the [system design](README.md).
 
 ## Flow
 
-The queue manager passes the batch size, the per-entrypoint limits,
-and the worker budget to the repository. The query builder derives two
-gate predicates from them (is any entrypoint limit configured, is a
-worker budget configured) and the composer assembles the statement
-those gates need, pairing the text with its arguments for the driver.
+```
+┌───────────────┐
+│ Queue manager │ batch size, entrypoint limits, worker budget
+└───────┬───────┘
+        │
+        ▼
+┌───────────────┐  derives the gate shape from what is configured
+│ Query builder │  and picks the fragments that shape needs
+└───────┬───────┘
+        │ fragments and values, in a fixed order
+        ▼
+┌───────────────┐  couples each value to its placeholder as it is
+│   Composer    │  bound; chains the fragments into one statement
+└───────┬───────┘
+        │
+        ▼
+┌────────────────┐
+│ Composed query │ immutable pair: rendered text + arguments
+└───────┬────────┘
+        │
+        ▼
+┌───────────────┐
+│    Driver     │ sends the pair to PostgreSQL
+└───────────────┘
+```
 
-The two predicates select one of four shapes. The rendered text
+The two gate predicates (is any entrypoint limit configured, is a
+worker budget configured) select one of four shapes. The rendered text
 depends only on the shape and the installation's table names; every
 runtime value travels as a bound argument.
 
