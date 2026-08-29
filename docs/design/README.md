@@ -242,6 +242,10 @@ for jobs: row-lock claim plus heartbeat-based staleness recovery (ADR-0022).
 
 ## Sub-models
 
+- [Dequeue composition model](dequeue-composition.md): how the claim
+  statement is assembled from the concurrency gates in use — shapes,
+  bind order, invariants, and the tests that guard them (ADR-0024).
+
 Planned split-outs once a section outgrows this document; each keeps a
 summary here:
 

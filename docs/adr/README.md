@@ -24,6 +24,7 @@ Conventions:
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 - [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
+- [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
 
 ## Backlog
 
@@ -240,6 +241,23 @@ leaves open.
   - Not covered: the integration list, header namespacing for trace
     context, degradation mechanics.
 
+- [x] **ADR-0024: SQL statements are assembled by the composer**
+  - Decision: statements are built from conditional fragments with every
+    bind coupled to its auto-numbered placeholder; text and argument
+    tuple emerge as one pair. Unconfigured features are absence (`None`),
+    never sentinel values. Adoption is incremental; dequeue is first.
+  - Fork: composer vs. hand-numbered f-strings per statement vs. an
+    external query-builder dependency.
+  - Consequences: placeholder numbering cannot drift; optional gates
+    render only where configured; two styles coexist until migration
+    completes; every composed shape needs snapshot and plan coverage.
+  - Pointers: `SqlComposer`/`ComposedQuery` in
+    `pgqueuer/adapters/persistence/composer.py`; first adopter
+    `QueryQueueBuilder.build_dequeue_query` in `qb.py`; shapes in
+    `test/query_shapes/`.
+  - Not covered: migration order, per-statement CTE mechanics, text
+    caching, snapshot workflow (see the dequeue composition model).
+
 ### Runtime & process
 
 - [ ] **ADR-0019: The scaling unit is the process; the runner supervises one manager**
@@ -304,7 +322,8 @@ leaves open.
 Implementation detail; documented in AGENTS.md or reference docs and free to
 change without touching a record:
 
-- The single-statement claim query shape, index definitions, query-plan tests
+- The claim query's CTE mechanics, index definitions, query-plan tests
+  (the composition *policy* is ADR-0024; the rendered shapes stay detail)
 - Advisory locking in statistics aggregation; batching, jitter, debounce
 - Tool picks: import-linter, testcontainers, pydantic-settings, htmx
 - The in-memory adapter (consequence of 0014 + 0021)
