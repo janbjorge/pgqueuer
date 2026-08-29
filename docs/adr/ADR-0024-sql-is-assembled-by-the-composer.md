@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (adoption is incremental; dequeue is the first adopter)
+Accepted (adoption is incremental; dequeue migrates first)
 
 ## Context
 
@@ -27,10 +27,10 @@ configuration always renders identical text. "Not configured" is
 expressed as absence, never as a sentinel value, and the composer
 never rewrites fragment text.
 
-Adoption is incremental: dequeue is composed today, the remaining
-builders migrate when next touched, and a statement that gains a
-conditional fragment migrates at that moment. Static, argument-free
-DDL migrates last, if ever.
+Adoption is incremental and has not started yet: dequeue migrates
+first, the remaining builders follow when next touched, and a
+statement that gains a conditional fragment migrates at that moment.
+Static, argument-free DDL migrates last, if ever.
 
 ## Consequences
 

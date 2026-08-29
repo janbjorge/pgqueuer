@@ -1,7 +1,8 @@
 # Dequeue composition model
 
 How the claim statement is assembled from the concurrency gates in
-use. This document describes *what is*; the *why* lives in
+use. This document describes the target design; the *why* and the
+adoption status live in
 [ADR-0024](../adr/ADR-0024-sql-is-assembled-by-the-composer.md). It is
 a sub-model of the [system design](README.md).
 
