@@ -62,36 +62,111 @@ def test_ctes_are_chained_in_insertion_order() -> None:
     )
 
 
-def test_cte_bodies_are_embedded_verbatim() -> None:
-    # The composer must never rewrite a body: a blank line or a unicode line
-    # separator inside a SQL string literal is part of the literal's value.
+def test_cte_indents_a_body_written_at_python_indentation() -> None:
+    # The caller writes SQL wherever the surrounding Python sits; the composer
+    # strips that indentation and applies the one level a CTE body needs.
     composer = SqlComposer()
-    composer.cte("greeting", "    SELECT 'a\n\nb' AS blank, 'c\u2028d' AS separator")
-    query = composer.render("SELECT * FROM greeting")
-    assert "'a\n\nb'" in query.sql
-    assert "'c\u2028d'" in query.sql
+    composer.cte(
+        "ready",
+        """
+            SELECT id
+            FROM jobs
+        """,
+    )
+    query = composer.render("SELECT * FROM ready")
+    assert query.sql == "WITH\nready AS (\n    SELECT id\n    FROM jobs\n)\nSELECT * FROM ready"
+
+
+def test_cte_keeps_indentation_relative_within_a_clause() -> None:
+    composer = SqlComposer()
+    composer.cte(
+        "ready",
+        """
+            SELECT id FROM (
+                SELECT id FROM jobs
+            ) inner_jobs
+        """,
+    )
+    body = "    SELECT id FROM (\n        SELECT id FROM jobs\n    ) inner_jobs"
+    assert composer.render("SELECT * FROM ready").sql == (
+        f"WITH\nready AS (\n{body}\n)\nSELECT * FROM ready"
+    )
+
+
+def test_cte_joins_clauses_and_drops_empty_ones() -> None:
+    composer = SqlComposer()
+    composer.cte("ready", "SELECT id", "", "FROM jobs")
+    query = composer.render("SELECT * FROM ready")
+    assert query.sql == "WITH\nready AS (\n    SELECT id\n    FROM jobs\n)\nSELECT * FROM ready"
 
 
 def test_cte_without_comment_has_no_header() -> None:
     composer = SqlComposer()
-    composer.cte("ready", "    SELECT 1")
+    composer.cte("ready", "SELECT 1")
     assert composer.render("SELECT * FROM ready").sql.startswith("WITH\nready AS (")
 
 
-def test_cte_comment_renders_as_line_comments() -> None:
+def test_cte_comment_renders_as_a_line_comment() -> None:
     composer = SqlComposer()
-    composer.cte(
-        "ready",
-        "    SELECT 1",
-        comment="""
-            First line.
-            Second line.
-        """,
-    )
+    composer.cte("ready", "SELECT 1", comment="Jobs ready to run.")
     query = composer.render("SELECT * FROM ready")
     assert query.sql == (
-        "WITH\n-- First line.\n-- Second line.\nready AS (\n    SELECT 1\n)\nSELECT * FROM ready"
+        "WITH\n-- Jobs ready to run.\nready AS (\n    SELECT 1\n)\nSELECT * FROM ready"
     )
+
+
+def test_cte_rejects_a_multi_line_comment() -> None:
+    # A comment orients whoever reads the statement in a Postgres log. Rationale
+    # that needs a paragraph belongs in a Python comment, not in the rendered SQL.
+    composer = SqlComposer()
+    with pytest.raises(ValueError, match="single line"):
+        composer.cte("ready", "SELECT 1", comment="First line.\nSecond line.")
+
+
+def test_where_chains_conditions_under_one_keyword() -> None:
+    assert SqlComposer.where("a = 1", "b = 2") == "WHERE a = 1\n  AND b = 2"
+
+
+def test_where_drops_empty_conditions() -> None:
+    # An inactive gate contributes "" and must not leave a dangling AND behind.
+    assert SqlComposer.where("a = 1", "", "b = 2") == "WHERE a = 1\n  AND b = 2"
+
+
+def test_where_without_conditions_renders_nothing() -> None:
+    assert SqlComposer.where("") == ""
+    assert SqlComposer.where() == ""
+
+
+def test_where_aligns_every_condition_under_the_keyword() -> None:
+    # AND and OR are different widths; both must leave the conditions in one
+    # column so the caller never counts spaces to line them up.
+    conjunction = SqlComposer.where("a = 1", "b = 2")
+    disjunction = SqlComposer.where("a = 1", "b = 2", joiner="OR")
+    assert conjunction == "WHERE a = 1\n  AND b = 2"
+    assert disjunction == "WHERE a = 1\n   OR b = 2"
+    starts = {line.index("a = 1" if "a" in line else "b = 2") for line in conjunction.splitlines()}
+    assert starts == {len("WHERE ")}
+
+
+def test_nest_indents_the_body_under_the_header() -> None:
+    assert SqlComposer.nest("SELECT", "id,", "priority") == "SELECT\n    id,\n    priority"
+
+
+def test_nest_closes_with_a_footer() -> None:
+    nested = SqlComposer.nest("EXISTS (", "SELECT 1 FROM jobs", footer=") AS any_job")
+    assert nested == "EXISTS (\n    SELECT 1 FROM jobs\n) AS any_job"
+
+
+def test_nest_drops_empty_body_parts() -> None:
+    assert SqlComposer.nest("SELECT", "id", "") == "SELECT\n    id"
+
+
+def test_nest_deepens_indentation_when_composed() -> None:
+    # Nesting depth comes from the call structure, so an inner block indents
+    # relative to its parent without the caller typing either level.
+    inner = SqlComposer.nest("CASE", "WHEN a THEN 1", footer="END")
+    outer = SqlComposer.nest("SELECT", inner)
+    assert outer == "SELECT\n    CASE\n        WHEN a THEN 1\n    END"
 
 
 def test_composed_query_is_immutable() -> None:

@@ -22,10 +22,14 @@ class SqlComposer:
     text is deterministic for a given fragment set, so driver-side prepared
     statement caches see one entry per query shape.
 
-    CTE bodies are embedded verbatim — never rewritten — so SQL string
-    literals pass through untouched. ``clauses`` assembles a statement from
-    one clause per argument, so an optional clause is an empty string rather
-    than a newline the caller has to splice in by hand.
+    The composer owns every bit of whitespace, so no SQL literal carries
+    indentation. ``cte`` takes one clause per argument and strips each before
+    indenting the block; an optional clause is an empty string rather than a
+    newline spliced in by hand. ``where`` renders a condition list under one
+    keyword, and ``nest`` indents a body under a header, so nesting depth is
+    declared by the call structure instead of typed into a literal. Because
+    each clause is normalised on its own, a multi-line SQL string literal
+    cannot span two clauses.
 
     Usage example::
 
@@ -48,10 +52,37 @@ class SqlComposer:
         """Join clauses onto their own lines, dropping the ones left empty."""
         return "\n".join(part for part in parts if part)
 
-    def cte(self, name: str, body: str, comment: str = "") -> None:
-        # Dedent + strip lets callers pass indented triple-quoted comment blocks.
-        comment_text = textwrap.dedent(comment).strip()
-        header = "".join(f"-- {line}\n" for line in comment_text.splitlines())
+    @staticmethod
+    def where(*conditions: str, joiner: str = "AND") -> str:
+        """Render a WHERE from conditions, dropping empty ones; no conditions renders nothing."""
+        kept = [condition for condition in conditions if condition]
+        if not kept:
+            return ""
+        # Right-align the joiner in the width of WHERE so every condition starts
+        # in the same column: "WHERE a", "  AND b", "   OR c".
+        continuation = f"\n{joiner:>{len('WHERE')}} "
+        return "WHERE " + continuation.join(kept)
+
+    @staticmethod
+    def nest(header: str, *body: str, footer: str = "") -> str:
+        """Indent body one level under header, so nesting is declared rather than typed."""
+        kept = [part for part in body if part]
+        indented = textwrap.indent("\n".join(kept), "    ")
+        return "\n".join(part for part in (header, indented, footer) if part)
+
+    def cte(self, name: str, *clauses: str, comment: str = "") -> None:
+        """Append a named CTE built from one clause per argument.
+
+        A comment must be a single line: it orients whoever reads the
+        statement in a Postgres log, while the reasoning behind a clause
+        belongs in a Python comment next to the code that decides it.
+        """
+        if "\n" in comment:
+            raise ValueError("A CTE comment must be a single line")
+
+        dedented = [textwrap.dedent(clause).strip() for clause in clauses]
+        body = textwrap.indent("\n".join(part for part in dedented if part), "    ")
+        header = f"-- {comment}\n" if comment else ""
         self.fragments.append(f"{header}{name} AS (\n{body}\n)")
 
     def render(self, final: str) -> ComposedQuery:
