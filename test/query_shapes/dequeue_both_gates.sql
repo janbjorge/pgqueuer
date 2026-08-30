@@ -29,57 +29,69 @@ available AS (
        OR COALESCE(picked.total, 0) < params.concurrency_limit
 ),
 
--- This worker's total picked jobs (scalar, for max_concurrent_tasks).
+-- This worker's picked jobs, and how many more this batch may claim.
 worker_load AS (
-    SELECT COUNT(*) AS total
+    SELECT
+        COUNT(*) AS total,
+        GREATEST(LEAST($1, $6 - COUNT(*)), 0) AS headroom
     FROM pgqueuer
     WHERE queue_manager_id = $3
       AND entrypoint = ANY($2)
 ),
 
--- New queued jobs; LATERAL hits the (entrypoint, priority, id) index.
-next_queued AS (
+-- Claims for entrypoints without a limit; lock straight down the backlog.
+unlimited_claims AS (
     SELECT job.id, job.priority
-    FROM (
-        SELECT job.id, job.priority
-        FROM available
-        CROSS JOIN LATERAL (
-            SELECT candidate.id, candidate.priority
+    FROM available
+    CROSS JOIN LATERAL (
+        SELECT candidate.id, candidate.priority
+        FROM pgqueuer candidate
+        WHERE candidate.entrypoint = available.entrypoint
+          AND candidate.status = 'queued'
+          AND candidate.execute_after < NOW()
+        ORDER BY candidate.priority DESC, candidate.id ASC
+        LIMIT $1
+        FOR UPDATE SKIP LOCKED
+    ) job
+    WHERE available.remaining IS NULL
+),
+
+-- Claims for limited entrypoints; the window is fixed before the lock.
+limited_claims AS (
+    SELECT job.id, job.priority
+    FROM available
+    CROSS JOIN LATERAL (
+        SELECT locked.id, locked.priority
+        FROM (
+            SELECT candidate.id
             FROM pgqueuer candidate
             WHERE candidate.entrypoint = available.entrypoint
               AND candidate.status = 'queued'
               AND candidate.execute_after < NOW()
             ORDER BY candidate.priority DESC, candidate.id ASC
-            LIMIT $1
-            FOR UPDATE SKIP LOCKED
-        ) job
-        WHERE available.remaining IS NULL
-        UNION ALL
-        SELECT job.id, job.priority
-        FROM available
-        CROSS JOIN LATERAL (
-            SELECT locked.id, locked.priority
-            FROM (
-                SELECT candidate.id
-                FROM pgqueuer candidate
-                WHERE candidate.entrypoint = available.entrypoint
-                  AND candidate.status = 'queued'
-                  AND candidate.execute_after < NOW()
-                ORDER BY candidate.priority DESC, candidate.id ASC
-                LIMIT LEAST($1, available.remaining)
-            ) capped
-            CROSS JOIN LATERAL (
-                SELECT target.id, target.priority
-                FROM pgqueuer target
-                WHERE target.id = capped.id
-                  AND target.status = 'queued'
-                  AND target.execute_after < NOW()
-                FOR UPDATE OF target SKIP LOCKED
-            ) locked
-            ORDER BY locked.priority DESC, locked.id ASC
             LIMIT LEAST($1, available.remaining)
-        ) job
-        WHERE available.remaining IS NOT NULL
+        ) capped
+        CROSS JOIN LATERAL (
+            SELECT target.id, target.priority
+            FROM pgqueuer target
+            WHERE target.id = capped.id
+              AND target.status = 'queued'
+              AND target.execute_after < NOW()
+            FOR UPDATE OF target SKIP LOCKED
+        ) locked
+        ORDER BY locked.priority DESC, locked.id ASC
+        LIMIT LEAST($1, available.remaining)
+    ) job
+    WHERE available.remaining IS NOT NULL
+),
+
+-- Both claim sets merged into one priority order.
+next_queued AS (
+    SELECT job.id, job.priority
+    FROM (
+        SELECT id, priority FROM unlimited_claims
+        UNION ALL
+        SELECT id, priority FROM limited_claims
     ) job
     WHERE (SELECT total FROM worker_load) < $6
     ORDER BY job.priority DESC, job.id ASC
@@ -108,10 +120,10 @@ eligible AS (
         SELECT id, priority FROM next_stale
     ) combined
     ORDER BY priority DESC, id ASC
-    LIMIT GREATEST(LEAST($1, $6 - (SELECT total FROM worker_load)), 0)
+    LIMIT (SELECT headroom FROM worker_load)
 ),
 
--- Atomically claim the jobs and log the pick event.
+-- Claim every eligible job in one atomic UPDATE.
 claimed AS (
     UPDATE pgqueuer
     SET status = 'picked',
@@ -122,6 +134,7 @@ claimed AS (
     RETURNING *
 ),
 
+-- Record the pick in the log table.
 log_pick AS (
     INSERT INTO pgqueuer_log (job_id, status, entrypoint, priority)
     SELECT id, status, entrypoint, priority FROM claimed
