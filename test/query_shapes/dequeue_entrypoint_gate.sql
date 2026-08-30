@@ -111,7 +111,7 @@ eligible AS (
     LIMIT $1
 ),
 
--- Atomically claim the jobs and log the pick event.
+-- Claim every eligible job in one atomic UPDATE.
 claimed AS (
     UPDATE pgqueuer
     SET status = 'picked',
@@ -122,6 +122,7 @@ claimed AS (
     RETURNING *
 ),
 
+-- Record the pick in the log table.
 log_pick AS (
     INSERT INTO pgqueuer_log (job_id, status, entrypoint, priority)
     SELECT id, status, entrypoint, priority FROM claimed

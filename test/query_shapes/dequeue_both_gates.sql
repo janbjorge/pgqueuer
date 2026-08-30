@@ -29,9 +29,11 @@ available AS (
        OR COALESCE(picked.total, 0) < params.concurrency_limit
 ),
 
--- This worker's total picked jobs (scalar, for max_concurrent_tasks).
+-- This worker's picked jobs, and how many more this batch may claim.
 worker_load AS (
-    SELECT COUNT(*) AS total
+    SELECT
+        COUNT(*) AS total,
+        GREATEST(LEAST($1, $6 - COUNT(*)), 0) AS headroom
     FROM pgqueuer
     WHERE queue_manager_id = $3
       AND entrypoint = ANY($2)
@@ -118,10 +120,10 @@ eligible AS (
         SELECT id, priority FROM next_stale
     ) combined
     ORDER BY priority DESC, id ASC
-    LIMIT GREATEST(LEAST($1, $6 - (SELECT total FROM worker_load)), 0)
+    LIMIT (SELECT headroom FROM worker_load)
 ),
 
--- Atomically claim the jobs and log the pick event.
+-- Claim every eligible job in one atomic UPDATE.
 claimed AS (
     UPDATE pgqueuer
     SET status = 'picked',
@@ -132,6 +134,7 @@ claimed AS (
     RETURNING *
 ),
 
+-- Record the pick in the log table.
 log_pick AS (
     INSERT INTO pgqueuer_log (job_id, status, entrypoint, priority)
     SELECT id, status, entrypoint, priority FROM claimed
