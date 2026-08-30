@@ -606,7 +606,7 @@ class QueryQueueBuilder:
             composer.cte(
                 "unlimited_claims",
                 f"""
-                    SELECT job.id, job.priority
+                    SELECT job.id, job.priority, available.entrypoint
                     FROM available
                     CROSS JOIN LATERAL (
                         SELECT candidate.id, candidate.priority
@@ -627,7 +627,7 @@ class QueryQueueBuilder:
             composer.cte(
                 "limited_claims",
                 f"""
-                    SELECT job.id, job.priority
+                    SELECT job.id, job.priority, available.entrypoint
                     FROM available
                     CROSS JOIN LATERAL (
                         SELECT locked.id, locked.priority
@@ -657,11 +657,11 @@ class QueryQueueBuilder:
             )
             queued_comment = "Both claim sets merged into one priority order."
             queued_body = f"""
-                SELECT job.id, job.priority
+                SELECT job.id, job.priority, job.entrypoint
                 FROM (
-                    SELECT id, priority FROM unlimited_claims
+                    SELECT id, priority, entrypoint FROM unlimited_claims
                     UNION ALL
-                    SELECT id, priority FROM limited_claims
+                    SELECT id, priority, entrypoint FROM limited_claims
                 ) job
                 {budget_where}
                 ORDER BY job.priority DESC, job.id ASC
@@ -688,6 +688,10 @@ class QueryQueueBuilder:
             """
         composer.cte("next_queued", queued_body, comment=queued_comment)
 
+        stale_entrypoint = ""
+        if capacity_gated:
+            stale_entrypoint = ", stale.entrypoint"
+
         # The entrypoint concurrency gate is intentionally omitted here: re-picking a
         # stale job only transfers ownership of a row already counted in `picked`, so
         # net live execution is unchanged. Applying the gate would deadlock recovery
@@ -695,7 +699,7 @@ class QueryQueueBuilder:
         composer.cte(
             "next_stale",
             f"""
-                SELECT stale.id, stale.priority
+                SELECT stale.id, stale.priority{stale_entrypoint}
                 FROM {queue_table} stale
                 WHERE stale.status = 'picked'
                   AND stale.entrypoint = ANY({eps})
@@ -709,9 +713,19 @@ class QueryQueueBuilder:
             comment="Stale picked jobs whose heartbeat timed out.",
         )
 
-        composer.cte(
-            "eligible",
-            f"""
+        if capacity_gated:
+            # A stale re-pick keeps the slot it already holds; only fresh claims need one.
+            eligible_body = f"""
+                SELECT id, priority, entrypoint, fresh FROM (
+                    SELECT id, priority, entrypoint, TRUE AS fresh FROM next_queued
+                    UNION ALL
+                    SELECT id, priority, entrypoint, FALSE AS fresh FROM next_stale
+                ) combined
+                ORDER BY priority DESC, id ASC
+                LIMIT {eligible_limit}
+            """
+        else:
+            eligible_body = f"""
                 SELECT id FROM (
                     SELECT id, priority FROM next_queued
                     UNION ALL
@@ -719,13 +733,83 @@ class QueryQueueBuilder:
                 ) combined
                 ORDER BY priority DESC, id ASC
                 LIMIT {eligible_limit}
-            """,
+            """
+        composer.cte(
+            "eligible",
+            eligible_body,
             comment="Merge both sets into one priority order so stale competes with fresh.",
         )
 
-        composer.cte(
-            "claimed",
-            f"""
+        if capacity_gated:
+            # The partial unique index on (entrypoint, slot) enforces the limit across
+            # snapshots: a uniqueness check sees uncommitted tuples, so the loser of a
+            # slot race fails with 23505 and retries rather than overshooting (#761).
+            # Generating held+batch seats finds the lowest free ones a dequeue can use:
+            # at most `held` seats inside that range are taken.
+            composer.cte(
+                "free_slots",
+                f"""
+                    SELECT
+                        available.entrypoint,
+                        slots.slot,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY available.entrypoint ORDER BY slots.slot
+                        ) AS slot_rank
+                    FROM available
+                    JOIN params ON params.entrypoint = available.entrypoint
+                    CROSS JOIN LATERAL GENERATE_SERIES(
+                        0,
+                        params.concurrency_limit - available.remaining
+                            + LEAST({batch}, available.remaining) - 1
+                    ) AS slots(slot)
+                    WHERE available.remaining IS NOT NULL
+                      AND NOT EXISTS (
+                          SELECT FROM {queue_table} holder
+                          WHERE holder.entrypoint = available.entrypoint
+                            AND holder.status = 'picked'
+                            AND holder.slot = slots.slot
+                      )
+                """,
+                comment="Free capacity slots, ranked; only as many seats as one dequeue uses.",
+            )
+            composer.cte(
+                "slot_assignments",
+                """
+                    SELECT ranked.id, free_slots.slot
+                    FROM (
+                        SELECT
+                            id,
+                            entrypoint,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY entrypoint ORDER BY priority DESC, id ASC
+                            ) AS slot_rank
+                        FROM eligible
+                        WHERE fresh
+                    ) ranked
+                    JOIN free_slots
+                        ON free_slots.entrypoint = ranked.entrypoint
+                        AND free_slots.slot_rank = ranked.slot_rank
+                """,
+                comment="Pair each fresh claim with a free slot by rank; unpaired ones drop.",
+            )
+            claim_body = f"""
+                UPDATE {queue_table} job
+                SET status = 'picked',
+                    updated   = NOW(),
+                    heartbeat = NOW(),
+                    queue_manager_id = {queue_manager},
+                    slot = CASE WHEN eligible.fresh THEN slot_assignments.slot ELSE job.slot END
+                FROM eligible
+                LEFT JOIN slot_assignments ON slot_assignments.id = eligible.id
+                LEFT JOIN params ON params.entrypoint = eligible.entrypoint
+                WHERE job.id = eligible.id
+                  AND (NOT eligible.fresh
+                       OR params.concurrency_limit <= 0
+                       OR slot_assignments.slot IS NOT NULL)
+                RETURNING job.*
+            """
+        else:
+            claim_body = f"""
                 UPDATE {queue_table}
                 SET status = 'picked',
                     updated   = NOW(),
@@ -733,7 +817,10 @@ class QueryQueueBuilder:
                     queue_manager_id = {queue_manager}
                 WHERE id IN (SELECT id FROM eligible)
                 RETURNING *
-            """,
+            """
+        composer.cte(
+            "claimed",
+            claim_body,
             comment="Claim every eligible job in one atomic UPDATE.",
         )
         composer.cte(

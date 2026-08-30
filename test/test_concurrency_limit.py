@@ -251,3 +251,51 @@ async def test_concurrency_limit_holds_across_concurrent_dequeues(
     # A's claim is committed and visible; capacity is exhausted either way.
     visible = await asyncio.wait_for(dequeue(queries_b), timeout=30)
     assert visible == []
+
+
+async def test_concurrency_limit_holds_when_priority_arrives_mid_claim(
+    connect: Callable[[], Awaitable[asyncpg.Connection]],
+) -> None:
+    """A higher-priority arrival must not let a second worker exceed the limit.
+
+    Workers agree on a candidate window only while the queue ordering is
+    stable. A higher-priority job arriving inside another worker's in-flight
+    claim changes that ordering, so worker B windows a row worker A never
+    locked. Only the capacity slot stops the claim.
+    """
+    limit = 2
+    conn_a = await connect()
+    conn_b = await connect()
+    conn_monitor = await connect()
+
+    queries_a = Queries(AsyncpgDriver(conn_a))
+    queries_b = Queries(AsyncpgDriver(conn_b))
+    queries_monitor = Queries(AsyncpgDriver(conn_monitor))
+
+    await queries_monitor.enqueue(["fetch"] * limit, [b"low"] * limit, [0] * limit)
+
+    def dequeue(q: Queries) -> asyncio.Task[list[Job]]:
+        return asyncio.ensure_future(
+            q.dequeue(
+                batch_size=limit,
+                entrypoints={"fetch": EntrypointExecutionParameter(limit)},
+                queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=None,
+                heartbeat_timeout=timedelta(minutes=10),
+            )
+        )
+
+    transaction_a = conn_a.transaction()
+    await transaction_a.start()
+    first = await dequeue(queries_a)
+    assert len(first) == limit
+
+    await queries_monitor.enqueue(["fetch"], [b"high"], [10])
+
+    task_b = dequeue(queries_b)
+    await _wait_until_done_or_lock_blocked(conn_monitor, task_b, conn_b.get_server_pid())
+    await transaction_a.commit()
+
+    overlap = await asyncio.wait_for(task_b, timeout=30)
+    total = len(first) + len(overlap)
+    assert total <= limit, f"picked {total} jobs, limit {limit}"

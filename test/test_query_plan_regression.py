@@ -244,3 +244,36 @@ async def test_dequeue_gate_skips_saturated_entrypoints(
         f"the concurrency gate should exclude every entrypoint before the LATERAL fires. "
         f"nodes={_scan_summary(nodes)}"
     )
+
+
+@pytest.mark.parametrize("concurrency_limit", [10, 5000], ids=["small", "huge"])
+async def test_dequeue_plan_is_independent_of_concurrency_limit(
+    apgdriver: db.Driver,
+    concurrency_limit: int,
+) -> None:
+    """Slot bookkeeping costs the same at any concurrency_limit (#761).
+
+    A naive free-slot search materializes one row per configured seat, which
+    makes every poll O(concurrency_limit). The row bound here is what catches
+    that: _rows_scanned counts only queue-table scans, so it stays flat while
+    generated rows explode.
+    """
+    await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)
+    q = queries.Queries(apgdriver)
+    eps = [f"ep_{i}" for i in range(BULK_EPS)]
+    query = q.qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=eps,
+        concurrency_limits=[concurrency_limit] * BULK_EPS,
+        queue_manager_id=uuid.uuid4(),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    nodes = await _analyze_nodes(apgdriver, query.sql, *query.args)
+    produced = sum(round((n.get("Actual Rows") or 0) * (n.get("Actual Loops") or 1)) for n in nodes)
+    bound = BULK_EPS * BATCH * 40
+    assert produced <= bound, (
+        f"dequeue produced {produced} rows at concurrency_limit={concurrency_limit} "
+        f"(bound {bound}); slot bookkeeping is scaling with the limit rather than "
+        f"the batch. nodes={_scan_summary(nodes)}"
+    )
