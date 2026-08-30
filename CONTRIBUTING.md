@@ -42,6 +42,42 @@ This project uses [Conventional Commits](https://www.conventionalcommits.org/en/
 * Append `!` after type/scope for breaking changes (e.g. `feat!:`).
 * Reference the PR number at the end: `(#123)`.
 
+### Changing the database schema
+
+Every object PgQueuer creates carries a revision marker in its Postgres comment,
+and `pgqueuer/domain/schema_revision.py` holds both the current `SCHEMA_REVISION`
+and the manifest of objects the library requires. Workers compare the two at
+startup. Nothing in the code can check the rules below; they are on you.
+
+1. **A `SCHEMA_REVISION` bump may only add objects or widen types.** Never drop
+   or narrow one within a major version. This is what lets a worker treat
+   "schema newer than me" as a warning rather than an error, which is what makes
+   rolling deploys possible. Break it silently and the check waves through a
+   worker that is about to fail.
+2. **A shipped object's stamp is immutable.** Stamp an object with the revision
+   its current shape dates from and leave it there. Re-stamp only when the
+   object is genuinely dropped and recreated.
+3. **Adding a value to the job-status enum is a breaking change.** `pg_enum`
+   rows cannot carry comments, so the marker scheme cannot cover enum values,
+   and `JOB_STATUS` in `pgqueuer/domain/types.py` is a `Literal` that downstream
+   code may dispatch over exhaustively. A worker running older code will fail to
+   deserialize a status it does not know, and no startup check can catch it.
+   Ship enum additions in a major release.
+
+4. **`pgq upgrade` has to be able to create what the check demands.** The
+   startup error tells the operator to run it; if the upgrade path cannot
+   produce the object, that advice is a dead end. Either add the DDL to
+   `build_upgrade_queries` or mark the object `severity="advisory"`, which
+   downgrades its absence to a warning.
+
+Add new objects to the manifest in the same commit as the DDL, and pass the
+`revision` the object dates from explicitly — there is no default, so a bump
+cannot silently re-stamp objects that shipped earlier.
+`test_install_stamps_every_manifest_object` fails when the manifest names an
+object the DDL does not create, `test_install_creates_nothing_outside_manifest`
+fails in the other direction, and `test_manifest_only_ever_grows` fails if a
+bump drops an object that a shipped revision required.
+
 ### Python Styleguide
 
 Adhere to the [PEP 8](https://pep8.org/) style guide, using `ruff` for automatic formatting. Ensure that your submissions are clean by running `ruff` before submitting a pull request. This will help maintain code consistency and readability across the project.

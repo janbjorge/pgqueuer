@@ -80,8 +80,8 @@ def test_sql_install_durability_option() -> None:
 def test_sql_upgrade_widen_id_option() -> None:
     with_widen = CliRunner().invoke(app, ["sql", "upgrade"]).output
     without_widen = CliRunner().invoke(app, ["sql", "upgrade", "--no-widen-id"]).output
-    assert "DO $$" in with_widen
-    assert "DO $$" not in without_widen
+    assert "ALTER COLUMN id TYPE BIGINT" in with_widen
+    assert "ALTER COLUMN id TYPE BIGINT" not in without_widen
 
 
 def test_sql_autovac_rollback_option() -> None:

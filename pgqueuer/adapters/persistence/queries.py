@@ -16,7 +16,7 @@ from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
-from pgqueuer.domain import errors, models, types
+from pgqueuer.domain import errors, models, schema_revision, types
 from pgqueuer.domain.types import CronEntrypoint
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -107,6 +107,37 @@ class Queries:
         """Revert autovacuum settings."""
         query = self.qbe.build_optimize_autovacuum_rollback_query()
         await self.driver.execute(query)
+
+    async def schema_check(self) -> schema_revision.SchemaCheck:
+        """Compare the code's object manifest against the installed schema.
+
+        One round-trip; the comparison itself is pure and lives in the domain.
+        """
+        manifest = self.qbe.schema_manifest()
+
+        def names(kind: schema_revision.SchemaObjectKind) -> list[str]:
+            return [entry.name for entry in manifest if entry.kind == kind]
+
+        rows = await self.driver.fetch(
+            self.qbe.build_schema_markers_query(),
+            names("table"),
+            names("index"),
+            names("type"),
+            names("function"),
+        )
+        return schema_revision.evaluate(
+            manifest,
+            tuple(
+                schema_revision.ObservedObject(
+                    kind=row["kind"],
+                    name=row["name"],
+                    parent=row["parent"],
+                    comment=row["description"],
+                )
+                for row in rows
+            ),
+            self.qbe.settings.queue_table,
+        )
 
     async def table_has_column(self, table: str, column: str) -> bool:
         """Return True if *column* exists on *table*."""
