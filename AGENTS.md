@@ -166,6 +166,33 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - **Generic constructors over type-annotated assignments** for typed stdlib objects: `fut = asyncio.Future[MyType]()` not `fut: asyncio.Future[MyType] = asyncio.Future()`.
 - **No `# type: ignore` in production code.** `type: ignore` comments are forbidden in `pgqueuer/`. Fix the underlying type issue instead (use `dataclasses.KW_ONLY`, protocols, generics, overloads, etc.). `# type: ignore` is acceptable in test code only.
 
+### Dynamic Attribute Access
+
+**`getattr`, `setattr`, `hasattr`, and `delattr` are banned in `pgqueuer/`.** They defeat the type checker: mypy cannot verify a name passed as a string, so every use is an untyped hole in an otherwise strict codebase, and a typo becomes a runtime `None` instead of an error.
+
+The common temptation is probing an object for an attribute to decide what it is. Declare a `runtime_checkable` `Protocol` in `pgqueuer/ports/` and use `isinstance` — the shape gets a name, a docstring, and a type mypy narrows on:
+
+```python
+# Bad — the type checker learns nothing, and "sqlstate" is unverifiable
+code = getattr(exc, "sqlstate", None)
+
+# Good — the shape is declared once and checked structurally
+@runtime_checkable
+class SqlStateError(Protocol):
+    """Driver exception carrying a PostgreSQL SQLSTATE code."""
+
+    @property
+    def sqlstate(self) -> str | None: ...
+
+
+if isinstance(exc, SqlStateError) and isinstance(exc.sqlstate, str):
+    return exc.sqlstate
+```
+
+Two grandfathered call sites remain: `domain/settings.py` iterating declared dataclass fields, and `core/executors.py` probing `__call__`. Add no more; replace them when the code is next touched.
+
+Test code may use reflection where the test is *about* reflection. `monkeypatch.setattr` is pytest's API, not the builtin, and is unaffected.
+
 ### Naming Conventions
 
 | Element             | Convention        | Example                          |
