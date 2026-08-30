@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any
+from typing import Any, AsyncGenerator, Awaitable, Callable
 
 import async_timeout
+import asyncpg
 import pytest
+import pytest_asyncio
 
-from pgqueuer.db import Driver
+from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import Queries
+from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 
 @dataclass
@@ -151,3 +155,99 @@ async def test_tight_entrypoint_does_not_throttle_unlimited_entrypoint(
 
     assert dequeue_batches
     assert set(dequeue_batches) == {batch_size}
+
+
+@pytest_asyncio.fixture
+async def connect(dsn: str) -> AsyncGenerator[Callable[[], Awaitable[asyncpg.Connection]], None]:
+    """Hand out connections to the per-test database; close them on teardown."""
+    async with contextlib.AsyncExitStack() as stack:
+
+        async def _connect() -> asyncpg.Connection:
+            connection = await asyncpg.connect(dsn=dsn)
+            stack.push_async_callback(connection.close)
+            return connection
+
+        yield _connect
+
+
+async def _wait_until_done_or_lock_blocked(
+    monitor: asyncpg.Connection,
+    task: asyncio.Task[list[Job]],
+    backend_pid: int,
+) -> None:
+    """Poll until *task* finished or its backend is waiting on a heavyweight lock.
+
+    Distinguishes "statement completed" (task done) from "statement blocked on
+    worker A's uncommitted claim" (wait_event_type = 'Lock'), so the test never
+    relies on a fixed sleep for the interleaving.
+    """
+    async with async_timeout.timeout(30):
+        while not task.done():
+            wait_event_type = await monitor.fetchval(
+                "SELECT wait_event_type FROM pg_stat_activity WHERE pid = $1",
+                backend_pid,
+            )
+            if wait_event_type == "Lock":
+                return
+            await asyncio.sleep(0.01)
+
+
+@pytest.mark.parametrize("concurrency_limit", (1, 2))
+async def test_concurrency_limit_holds_across_concurrent_dequeues(
+    connect: Callable[[], Awaitable[asyncpg.Connection]],
+    concurrency_limit: int,
+) -> None:
+    """Regression test for #761: concurrency_limit must hold across workers.
+
+    Two workers dequeue over separate connections. Worker A claims a full
+    batch inside an open transaction, freezing the in-flight instant where
+    its picked rows are neither visible to worker B's snapshot (the capacity
+    count reads zero) nor released (SKIP LOCKED slides past them onto the
+    remaining queued rows). Worker B must claim nothing; any claim here
+    exceeds the entrypoint's global concurrency limit.
+
+    Worker B runs as a task and worker A commits once B has either finished
+    or provably blocked on A's transaction, so the test stays deterministic
+    regardless of whether the dequeue implementation skips, waits, or retries.
+    """
+    conn_a = await connect()
+    conn_b = await connect()
+    conn_monitor = await connect()
+
+    queries_a = Queries(AsyncpgDriver(conn_a))
+    queries_b = Queries(AsyncpgDriver(conn_b))
+
+    n_jobs = 2 * concurrency_limit
+    await queries_a.enqueue(
+        ["fetch"] * n_jobs,
+        [f"{n}".encode() for n in range(n_jobs)],
+        [0] * n_jobs,
+    )
+
+    def dequeue(q: Queries) -> asyncio.Task[list[Job]]:
+        return asyncio.ensure_future(
+            q.dequeue(
+                batch_size=concurrency_limit,
+                entrypoints={"fetch": EntrypointExecutionParameter(concurrency_limit)},
+                queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=None,
+                heartbeat_timeout=timedelta(minutes=10),
+            )
+        )
+
+    transaction_a = conn_a.transaction()
+    await transaction_a.start()
+    first = await dequeue(queries_a)
+    assert len(first) == concurrency_limit
+
+    # Worker A's claim is now in flight: uncommitted, row locks held.
+    task_b = dequeue(queries_b)
+    await _wait_until_done_or_lock_blocked(conn_monitor, task_b, conn_b.get_server_pid())
+    await transaction_a.commit()
+
+    overlap = await asyncio.wait_for(task_b, timeout=30)
+    assert overlap == [], f"picked {len(first) + len(overlap)} jobs, limit {concurrency_limit}"
+
+    # A's claim is committed and visible; capacity is exhausted either way.
+    visible = await asyncio.wait_for(dequeue(queries_b), timeout=30)
+    assert visible == []

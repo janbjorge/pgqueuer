@@ -40,16 +40,46 @@ worker_load AS (
 -- New queued jobs; LATERAL hits the (entrypoint, priority, id) index.
 next_queued AS (
     SELECT job.id, job.priority
-    FROM available
-    CROSS JOIN LATERAL (
-        SELECT candidate.id, candidate.priority
-        FROM pgqueuer candidate
-        WHERE candidate.entrypoint = available.entrypoint
-          AND candidate.status = 'queued'
-          AND candidate.execute_after < NOW()
-        ORDER BY candidate.priority DESC, candidate.id ASC
-        LIMIT LEAST($1, available.remaining)
-        FOR UPDATE SKIP LOCKED
+    FROM (
+        SELECT job.id, job.priority
+        FROM available
+        CROSS JOIN LATERAL (
+            SELECT candidate.id, candidate.priority
+            FROM pgqueuer candidate
+            WHERE candidate.entrypoint = available.entrypoint
+              AND candidate.status = 'queued'
+              AND candidate.execute_after < NOW()
+            ORDER BY candidate.priority DESC, candidate.id ASC
+            LIMIT $1
+            FOR UPDATE SKIP LOCKED
+        ) job
+        WHERE available.remaining IS NULL
+        UNION ALL
+        SELECT job.id, job.priority
+        FROM available
+        CROSS JOIN LATERAL (
+            SELECT locked.id, locked.priority
+            FROM (
+                SELECT candidate.id
+                FROM pgqueuer candidate
+                WHERE candidate.entrypoint = available.entrypoint
+                  AND candidate.status = 'queued'
+                  AND candidate.execute_after < NOW()
+                ORDER BY candidate.priority DESC, candidate.id ASC
+                LIMIT LEAST($1, available.remaining)
+            ) capped
+            CROSS JOIN LATERAL (
+                SELECT target.id, target.priority
+                FROM pgqueuer target
+                WHERE target.id = capped.id
+                  AND target.status = 'queued'
+                  AND target.execute_after < NOW()
+                FOR UPDATE OF target SKIP LOCKED
+            ) locked
+            ORDER BY locked.priority DESC, locked.id ASC
+            LIMIT LEAST($1, available.remaining)
+        ) job
+        WHERE available.remaining IS NOT NULL
     ) job
     WHERE (SELECT total FROM worker_load) < $6
     ORDER BY job.priority DESC, job.id ASC
