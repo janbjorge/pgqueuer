@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import uuid
-from contextlib import suppress
 from datetime import timedelta
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -14,7 +13,7 @@ if TYPE_CHECKING:
 from pydantic_core import to_json
 from typing_extensions import assert_never
 
-from pgqueuer.adapters.persistence import qb, query_helpers
+from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint
@@ -25,20 +24,17 @@ from pgqueuer.ports.tracing import TracingProtocol
 
 
 def is_unique_violation(exc: Exception) -> bool:
-    """Return True if *exc* is a unique-constraint violation from asyncpg or psycopg."""
-    with suppress(ImportError):
-        import asyncpg
+    """Return True if *exc* is a unique-constraint violation from the driver."""
+    return sqlstate.is_unique_violation(exc)
 
-        if isinstance(exc, asyncpg.UniqueViolationError):
-            return True
 
-    with suppress(ImportError):
-        import psycopg
+def lost_capacity_slot_race(exc: Exception) -> bool:
+    """Return True if a concurrent dequeue took the capacity slot this claim wanted.
 
-        if isinstance(exc, psycopg.errors.UniqueViolation):
-            return True
-
-    return False
+    The loser sees the unique violation directly, or a deadlock when several
+    limited entrypoints in one batch make two dequeues cross each other.
+    """
+    return sqlstate.is_unique_violation(exc) or sqlstate.is_deadlock_detected(exc)
 
 
 @dataclasses.dataclass
@@ -189,7 +185,15 @@ class Queries:
             global_concurrency_limit=global_concurrency_limit,
             heartbeat_timeout=heartbeat_timeout,
         )
-        rows = await self.driver.fetch(query.sql, *query.args)
+        # Losing the slot race means the capacity went to another worker, which
+        # is the same outcome as finding nothing claimable: report an empty
+        # batch and let the poll loop try again.
+        try:
+            rows = await self.driver.fetch(query.sql, *query.args)
+        except Exception as exc:
+            if lost_capacity_slot_race(exc):
+                return []
+            raise
         return [models.Job.model_validate(row) for row in rows]
 
     @overload

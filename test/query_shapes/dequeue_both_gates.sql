@@ -41,7 +41,7 @@ worker_load AS (
 
 -- Claims for entrypoints without a limit; lock straight down the backlog.
 unlimited_claims AS (
-    SELECT job.id, job.priority
+    SELECT job.id, job.priority, available.entrypoint
     FROM available
     CROSS JOIN LATERAL (
         SELECT candidate.id, candidate.priority
@@ -58,7 +58,7 @@ unlimited_claims AS (
 
 -- Claims for limited entrypoints; the window is fixed before the lock.
 limited_claims AS (
-    SELECT job.id, job.priority
+    SELECT job.id, job.priority, available.entrypoint
     FROM available
     CROSS JOIN LATERAL (
         SELECT locked.id, locked.priority
@@ -87,11 +87,11 @@ limited_claims AS (
 
 -- Both claim sets merged into one priority order.
 next_queued AS (
-    SELECT job.id, job.priority
+    SELECT job.id, job.priority, job.entrypoint
     FROM (
-        SELECT id, priority FROM unlimited_claims
+        SELECT id, priority, entrypoint FROM unlimited_claims
         UNION ALL
-        SELECT id, priority FROM limited_claims
+        SELECT id, priority, entrypoint FROM limited_claims
     ) job
     WHERE (SELECT total FROM worker_load) < $6
     ORDER BY job.priority DESC, job.id ASC
@@ -100,7 +100,7 @@ next_queued AS (
 
 -- Stale picked jobs whose heartbeat timed out.
 next_stale AS (
-    SELECT stale.id, stale.priority
+    SELECT stale.id, stale.priority, stale.entrypoint
     FROM pgqueuer stale
     WHERE stale.status = 'picked'
       AND stale.entrypoint = ANY($2)
@@ -114,24 +114,73 @@ next_stale AS (
 
 -- Merge both sets into one priority order so stale competes with fresh.
 eligible AS (
-    SELECT id FROM (
-        SELECT id, priority FROM next_queued
+    SELECT id, priority, entrypoint, fresh FROM (
+        SELECT id, priority, entrypoint, TRUE AS fresh FROM next_queued
         UNION ALL
-        SELECT id, priority FROM next_stale
+        SELECT id, priority, entrypoint, FALSE AS fresh FROM next_stale
     ) combined
     ORDER BY priority DESC, id ASC
     LIMIT (SELECT headroom FROM worker_load)
 ),
 
+-- Free capacity slots, ranked; only as many seats as one dequeue uses.
+free_slots AS (
+    SELECT
+        available.entrypoint,
+        slots.slot,
+        ROW_NUMBER() OVER (
+            PARTITION BY available.entrypoint ORDER BY slots.slot
+        ) AS slot_rank
+    FROM available
+    JOIN params ON params.entrypoint = available.entrypoint
+    CROSS JOIN LATERAL GENERATE_SERIES(
+        0,
+        params.concurrency_limit - available.remaining
+            + LEAST($1, available.remaining) - 1
+    ) AS slots(slot)
+    WHERE available.remaining IS NOT NULL
+      AND NOT EXISTS (
+          SELECT FROM pgqueuer holder
+          WHERE holder.entrypoint = available.entrypoint
+            AND holder.status = 'picked'
+            AND holder.slot = slots.slot
+      )
+),
+
+-- Pair each fresh claim with a free slot by rank; unpaired ones drop.
+slot_assignments AS (
+    SELECT ranked.id, free_slots.slot
+    FROM (
+        SELECT
+            id,
+            entrypoint,
+            ROW_NUMBER() OVER (
+                PARTITION BY entrypoint ORDER BY priority DESC, id ASC
+            ) AS slot_rank
+        FROM eligible
+        WHERE fresh
+    ) ranked
+    JOIN free_slots
+        ON free_slots.entrypoint = ranked.entrypoint
+        AND free_slots.slot_rank = ranked.slot_rank
+),
+
 -- Claim every eligible job in one atomic UPDATE.
 claimed AS (
-    UPDATE pgqueuer
+    UPDATE pgqueuer job
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $3
-    WHERE id IN (SELECT id FROM eligible)
-    RETURNING *
+        queue_manager_id = $3,
+        slot = CASE WHEN eligible.fresh THEN slot_assignments.slot ELSE job.slot END
+    FROM eligible
+    LEFT JOIN slot_assignments ON slot_assignments.id = eligible.id
+    LEFT JOIN params ON params.entrypoint = eligible.entrypoint
+    WHERE job.id = eligible.id
+      AND (NOT eligible.fresh
+           OR params.concurrency_limit <= 0
+           OR slot_assignments.slot IS NOT NULL)
+    RETURNING job.*
 ),
 
 -- Record the pick in the log table.
