@@ -64,10 +64,19 @@ startup. Nothing in the code can check the rules below; they are on you.
    deserialize a status it does not know, and no startup check can catch it.
    Ship enum additions in a major release.
 
-Add new objects to the manifest in the same commit as the DDL.
-`test_install_stamps_every_manifest_object` fails if the two drift apart, and
-`test_manifest_only_ever_grows` fails if a bump drops an object that a shipped
-revision required.
+4. **`pgq upgrade` has to be able to create what the check demands.** The
+   startup error tells the operator to run it; if the upgrade path cannot
+   produce the object, that advice is a dead end. Either add the DDL to
+   `build_upgrade_queries` or mark the object `severity="advisory"`, which
+   downgrades its absence to a warning.
+
+Add new objects to the manifest in the same commit as the DDL, and pass the
+`revision` the object dates from explicitly — there is no default, so a bump
+cannot silently re-stamp objects that shipped earlier.
+`test_install_stamps_every_manifest_object` fails when the manifest names an
+object the DDL does not create, `test_install_creates_nothing_outside_manifest`
+fails in the other direction, and `test_manifest_only_ever_grows` fails if a
+bump drops an object that a shipped revision required.
 
 ### Python Styleguide
 

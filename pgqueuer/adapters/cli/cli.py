@@ -328,6 +328,11 @@ async def report_schema_state(q: queries.Queries) -> int:
     if isinstance(result, schema_revision.SchemaUsable):
         for table, revision in result.table_revisions:
             print(f"  table '{table}' revision: {'(unstamped)' if revision is None else revision}")
+        if result.degraded:
+            print(f"missing {len(result.degraded)} performance object(s):")
+            for entry in result.degraded:
+                print(f"  {entry.label}")
+            print("run 'pgq upgrade' to create them.")
         if result.unstamped:
             print(
                 f"{result.unstamped} object(s) carry no revision marker; "
@@ -339,6 +344,24 @@ async def report_schema_state(q: queries.Queries) -> int:
         return 0
 
     assert_never(result)
+
+
+async def report_leftover_objects(q: queries.Queries) -> int:
+    """Print PgQueuer objects still present. Returns a process exit code."""
+    divergence = list[str]()
+
+    for entry in q.qbe.schema_manifest():
+        if entry.kind == "table" and await q.has_table(entry.name):
+            divergence.append(f"unexpected table '{entry.name}'")
+
+    if await q.has_function(q.qbe.settings.function):
+        divergence.append(f"unexpected function '{q.qbe.settings.function}'")
+
+    if await q.has_trigger(q.qbe.settings.trigger):
+        divergence.append(f"unexpected trigger '{q.qbe.settings.trigger}'")
+
+    print("\n".join(divergence) if divergence else "No PgQueuer database objects found")
+    return 1 if divergence else 0
 
 
 @app.command(help="Verify PgQueuer database objects.")
@@ -353,23 +376,9 @@ def verify(
         async with yield_queries(ctx, qb.DBSettings()) as q:
             if expect == VerifyMode.PRESENT:
                 raise typer.Exit(code=await report_schema_state(q))
-
-            divergence = list[str]()
-
-            tables = [e.name for e in q.qbe.schema_manifest() if e.kind == "table"]
-
-            for table in tables:
-                if await q.has_table(table):
-                    divergence.append(f"unexpected table '{table}'")
-
-            if await q.has_function(q.qbe.settings.function):
-                divergence.append(f"unexpected function '{q.qbe.settings.function}'")
-
-            if await q.has_trigger(q.qbe.settings.trigger):
-                divergence.append(f"unexpected trigger '{q.qbe.settings.trigger}'")
-
-            print("\n".join(divergence) if divergence else "No PgQueuer database objects found")
-            raise typer.Exit(code=1 if divergence else 0)
+            if expect == VerifyMode.ABSENT:
+                raise typer.Exit(code=await report_leftover_objects(q))
+            assert_never(expect)
 
     asyncio_run(run())
 

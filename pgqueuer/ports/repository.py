@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import uuid
 from datetime import timedelta
-from typing import Literal, Protocol, overload
+from typing import Literal, Protocol, overload, runtime_checkable
 
 from pgqueuer.domain import models, schema_revision
 from pgqueuer.domain.settings import DBSettings
@@ -266,6 +266,17 @@ class NotificationPort(Protocol):
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None: ...
 
     async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None: ...
+
+
+@runtime_checkable
+class SupportsSchemaCheck(Protocol):
+    """The one member of ``SchemaManagementPort`` that postdates 1.x adapters.
+
+    Structural typing hides the addition from adapters that predate it, so the
+    startup gate tests for it at runtime rather than dying on an AttributeError.
+    """
+
+    async def schema_check(self) -> schema_revision.SchemaCheck: ...
 
 
 class SchemaManagementPort(Protocol):

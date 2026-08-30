@@ -13,8 +13,10 @@ COMMENT ON TABLE pgqueuer IS '{"pgqueuer":{"schema_revision":1}}';
 ```
 
 Markers go on tables, columns, indexes, the status enum type, the notify
-function, and the trigger. They cost no extra database objects, are written in
-the same transaction as the DDL that creates them, and survive `pg_dump`.
+function, and the trigger. They cost no extra database objects and survive
+`pg_dump`. `pgq install` emits them as part of its single DDL script; `pgq
+upgrade` applies each statement on its own and stamps last, so an upgrade that
+fails partway leaves the objects it did create unstamped until the next run.
 
 ## What happens at startup
 
@@ -25,9 +27,17 @@ requires against what the database actually has, in a single query:
 |---|---|
 | The queue table is missing | Startup fails: run `pgq install` |
 | A required object is missing | Startup fails, naming the object: run `pgq upgrade` |
+| Only a performance index is missing | Warns, starts — run `pgq upgrade` |
 | Everything is present | Starts |
 | Everything is present but unmarked | Warns, starts — see below |
 | An object is marked newer than the library | Warns, starts |
+
+Indexes that exist only to make a query faster are advisory: the code runs
+correctly without them, so a schema installed by an older release that never
+gained one keeps starting. The two unique indexes are not advisory — they
+arbitrate `ON CONFLICT` clauses, so enqueueing fails outright without them.
+`SchedulerManager` is held only to the tables it uses, not to the queue-side
+objects it never touches.
 
 The last row is deliberate. During a rolling deploy the schema is upgraded
 first and workers roll over afterwards, so a worker that finds a newer schema
@@ -81,3 +91,10 @@ tell a partial upgrade from a wrong `--schema`/`--prefix`.
   unreadable comment is treated as "no marker": it warns, it never fails.
 - Job status enum values cannot carry comments, so they are outside this scheme.
   Adding a status value is a breaking change and ships in a major release.
+
+## See also
+
+- [ADR-0025](../adr/ADR-0025-the-schema-contract-is-a-declared-manifest.md)
+  — why the schema is verified against a declaration rather than probed.
+- [Schema manifest model](../design/schema-manifest.md) — the objects an
+  installation declares and how they depend on each other.

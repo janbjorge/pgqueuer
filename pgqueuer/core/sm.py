@@ -91,7 +91,11 @@ class SchedulerManager:
 
     async def run(self) -> None:
         """Poll for due schedules and dispatch them until shutdown."""
-        await schema_check.assert_schema_usable(self.queries)
+        settings = self.queries.qbe.settings
+        await schema_check.assert_schema_usable(
+            self.queries,
+            tables=frozenset({settings.schedules_table, settings.queue_table_log}),
+        )
 
         if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
             await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)
