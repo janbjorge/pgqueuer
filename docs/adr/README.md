@@ -25,6 +25,7 @@ Conventions:
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 - [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
 - [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
+- [ADR-0025: The schema contract is a declared manifest](ADR-0025-the-schema-contract-is-a-declared-manifest.md)
 
 ## Backlog
 
@@ -254,6 +255,20 @@ leaves open.
     `pgqueuer/adapters/persistence/`.
   - Not covered: migration order and mechanics (see the dequeue
     composition model).
+
+- [x] **ADR-0025: The schema contract is a declared manifest**
+  - Decision: the objects the library requires are declared, and startup
+    verifies the installed schema against that declaration instead of
+    probing for the shapes the code happens to use.
+  - Fork: declared contract vs. accumulated probes vs. a recorded schema
+    version number.
+  - Consequences: drift is reported as named objects rather than as the
+    first query to fail; the declaration must be maintained alongside the
+    DDL; requiring an object commits the upgrade path to creating it.
+  - Pointers: manifest and verdict in `pgqueuer/domain/`; the startup gate
+    in `pgqueuer/core/`.
+  - Not covered: how the declaration is expressed, how per-object versions
+    are recorded, the severity vocabulary (see the schema manifest model).
 
 ### Runtime & process
 

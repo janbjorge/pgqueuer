@@ -245,6 +245,9 @@ for jobs: row-lock claim plus heartbeat-based staleness recovery (ADR-0022).
 - [Dequeue composition model](dequeue-composition.md): how the claim
   statement is assembled from the concurrency gates in use, with the
   shapes, bind order, invariants, and guarding tests (ADR-0024).
+- [Schema manifest model](schema-manifest.md): the objects an
+  installation declares, how they depend on each other, and how a worker
+  turns that declaration into a startup verdict (ADR-0025).
 
 Planned split-outs once a section outgrows this document; each keeps a
 summary here:
@@ -252,7 +255,8 @@ summary here:
 - Job lifecycle model: statuses, retries, cancellation, and completion
   tracking in one place.
 - Scheduling model: schedule ownership, cadence, and cron semantics.
-- Schema & namespace model: installation objects, durability policies, and
-  the migration stream.
+- Namespace & migration model: durability policies and the migration
+  stream (the installed objects themselves are covered by the
+  [schema manifest model](schema-manifest.md)).
 - Observability model: the log/statistics pipeline, dashboard, metrics,
   and the MCP read surface.
