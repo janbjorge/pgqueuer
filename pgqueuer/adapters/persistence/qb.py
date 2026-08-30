@@ -519,6 +519,9 @@ class QueryQueueBuilder:
         queue_table = self.qualified.queue_table
 
         if capacity_gated:
+            # The limit comes from the dequeuing worker's own registration, so the
+            # fleet has to agree on it. Workers declaring different limits for one
+            # entrypoint is unsupported; the highest one wins.
             composer.cte(
                 "params",
                 f"""

@@ -18,6 +18,12 @@ async def process_data(job: Job) -> None:
 This is useful for protecting external services with connection pool limits or
 memory-intensive operations.
 
+Every worker that registers an entrypoint must declare the same
+`concurrency_limit` for it. The limit is passed to the dequeue query by the
+worker doing the dequeue, so a fleet where workers disagree has no single
+value to enforce and the highest one wins. Mixed limits for one entrypoint
+are not supported.
+
 ## Serialized processing
 
 Ensure jobs of the same type are processed strictly one at a time:
