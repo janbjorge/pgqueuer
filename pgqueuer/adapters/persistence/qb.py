@@ -559,15 +559,12 @@ class QueryQueueBuilder:
                 """,
                 comment="Entrypoints with free capacity; remaining caps a single dequeue.",
             )
-            # LEAST(batch, NULL) = batch, so unlimited entrypoints keep the full batch.
-            lateral_limit = f"LEAST({batch}, available.remaining)"
         else:
             composer.cte(
                 "available",
                 f"SELECT UNNEST({eps}::text[]) AS entrypoint",
                 comment="No entrypoint carries a concurrency limit; all are available.",
             )
-            lateral_limit = batch
 
         # Both gate lines drop out of their block when the budget is unlimited.
         budget_where = ""
@@ -594,9 +591,58 @@ class QueryQueueBuilder:
                 f"GREATEST(LEAST({batch}, {global_limit} - (SELECT total FROM worker_load)), 0)"
             )
 
-        composer.cte(
-            "next_queued",
-            f"""
+        if capacity_gated:
+            # Windowing before the lock keeps the lock node out from under a LIMIT,
+            # where SKIP LOCKED slides down the backlog and past the cap (#761).
+            queued_body = f"""
+                SELECT job.id, job.priority
+                FROM (
+                    SELECT job.id, job.priority
+                    FROM available
+                    CROSS JOIN LATERAL (
+                        SELECT candidate.id, candidate.priority
+                        FROM {queue_table} candidate
+                        WHERE candidate.entrypoint = available.entrypoint
+                          AND candidate.status = 'queued'
+                          AND candidate.execute_after < NOW()
+                        ORDER BY candidate.priority DESC, candidate.id ASC
+                        LIMIT {batch}
+                        FOR UPDATE SKIP LOCKED
+                    ) job
+                    WHERE available.remaining IS NULL
+                    UNION ALL
+                    SELECT job.id, job.priority
+                    FROM available
+                    CROSS JOIN LATERAL (
+                        SELECT locked.id, locked.priority
+                        FROM (
+                            SELECT candidate.id
+                            FROM {queue_table} candidate
+                            WHERE candidate.entrypoint = available.entrypoint
+                              AND candidate.status = 'queued'
+                              AND candidate.execute_after < NOW()
+                            ORDER BY candidate.priority DESC, candidate.id ASC
+                            LIMIT LEAST({batch}, available.remaining)
+                        ) capped
+                        CROSS JOIN LATERAL (
+                            SELECT target.id, target.priority
+                            FROM {queue_table} target
+                            WHERE target.id = capped.id
+                              AND target.status = 'queued'
+                              AND target.execute_after < NOW()
+                            FOR UPDATE OF target SKIP LOCKED
+                        ) locked
+                        ORDER BY locked.priority DESC, locked.id ASC
+                        LIMIT LEAST({batch}, available.remaining)
+                    ) job
+                    WHERE available.remaining IS NOT NULL
+                ) job
+                {budget_where}
+                ORDER BY job.priority DESC, job.id ASC
+                LIMIT {batch}
+            """
+        else:
+            queued_body = f"""
                 SELECT job.id, job.priority
                 FROM available
                 CROSS JOIN LATERAL (
@@ -606,13 +652,16 @@ class QueryQueueBuilder:
                       AND candidate.status = 'queued'
                       AND candidate.execute_after < NOW()
                     ORDER BY candidate.priority DESC, candidate.id ASC
-                    LIMIT {lateral_limit}
+                    LIMIT {batch}
                     FOR UPDATE SKIP LOCKED
                 ) job
                 {budget_where}
                 ORDER BY job.priority DESC, job.id ASC
                 LIMIT {batch}
-            """,
+            """
+        composer.cte(
+            "next_queued",
+            queued_body,
             comment="New queued jobs; LATERAL hits the (entrypoint, priority, id) index.",
         )
 
