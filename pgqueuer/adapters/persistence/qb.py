@@ -592,11 +592,9 @@ class QueryQueueBuilder:
             )
 
         if capacity_gated:
-            # Windowing before the lock keeps the lock node out from under a LIMIT,
-            # where SKIP LOCKED slides down the backlog and past the cap (#761).
-            queued_body = f"""
-                SELECT job.id, job.priority
-                FROM (
+            composer.cte(
+                "unlimited_claims",
+                f"""
                     SELECT job.id, job.priority
                     FROM available
                     CROSS JOIN LATERAL (
@@ -610,7 +608,14 @@ class QueryQueueBuilder:
                         FOR UPDATE SKIP LOCKED
                     ) job
                     WHERE available.remaining IS NULL
-                    UNION ALL
+                """,
+                comment="Claims for entrypoints without a limit; lock straight down the backlog.",
+            )
+            # Windowing before the lock keeps the lock node out from under a LIMIT,
+            # where SKIP LOCKED slides down the backlog and past the cap (#761).
+            composer.cte(
+                "limited_claims",
+                f"""
                     SELECT job.id, job.priority
                     FROM available
                     CROSS JOIN LATERAL (
@@ -636,12 +641,23 @@ class QueryQueueBuilder:
                         LIMIT LEAST({batch}, available.remaining)
                     ) job
                     WHERE available.remaining IS NOT NULL
+                """,
+                comment="Claims for limited entrypoints; the window is fixed before the lock.",
+            )
+            queued_comment = "Both claim sets merged into one priority order."
+            queued_body = f"""
+                SELECT job.id, job.priority
+                FROM (
+                    SELECT id, priority FROM unlimited_claims
+                    UNION ALL
+                    SELECT id, priority FROM limited_claims
                 ) job
                 {budget_where}
                 ORDER BY job.priority DESC, job.id ASC
                 LIMIT {batch}
             """
         else:
+            queued_comment = "New queued jobs; LATERAL hits the (entrypoint, priority, id) index."
             queued_body = f"""
                 SELECT job.id, job.priority
                 FROM available
@@ -659,11 +675,7 @@ class QueryQueueBuilder:
                 ORDER BY job.priority DESC, job.id ASC
                 LIMIT {batch}
             """
-        composer.cte(
-            "next_queued",
-            queued_body,
-            comment="New queued jobs; LATERAL hits the (entrypoint, priority, id) index.",
-        )
+        composer.cte("next_queued", queued_body, comment=queued_comment)
 
         # The entrypoint concurrency gate is intentionally omitted here: re-picking a
         # stale job only transfers ownership of a row already counted in `picked`, so
