@@ -1,19 +1,148 @@
-# PgQueuer v1.0.0
+# Release Notes
 
-This is the first stable release of PgQueuer. It includes significant breaking
-changes that clean up the API surface, enforce the hexagonal architecture, and
-remove deprecated code paths. The goal is to establish a solid, maintainable
-foundation — from v1.0.0 onward, PgQueuer follows **semantic versioning**
-strictly: patch releases for bug fixes, minor releases for backward-compatible
-features, and major releases only when breaking changes are unavoidable.
+PgQueuer follows semantic versioning from v1.0.0 onward. Schema changes are
+applied by `pgq install` / `pgq upgrade`. Run the upgrade **before** starting
+workers on the new version. `QueueManager.run()` verifies the schema at
+startup and refuses to boot against an old one.
+
+Identifiers below use the default unprefixed names; substitute your own if you
+set `--prefix` / `PGQUEUER_PREFIX`.
+
+The top section is the next release. Add to it under the version the change
+warrants, and cut the tag from it when it ships. Release dates live in the git
+tags, so a section is written once and never revisited.
+
+---
+
+## v1.4.0
+
+### Schema change: capacity slots for `concurrency_limit`
+
+Per-entrypoint `concurrency_limit` is now enforced by capacity slots instead of
+a row count, closing an overshoot when several workers dequeued concurrently
+(#761, #774, #777). This adds one column and one partial unique index:
+
+```sql
+ALTER TABLE pgqueuer ADD COLUMN IF NOT EXISTS slot BIGINT;
+CREATE UNIQUE INDEX IF NOT EXISTS pgqueuer_picked_slot_idx
+    ON pgqueuer (entrypoint, slot) WHERE (status = 'picked' AND slot IS NOT NULL);
+```
+
+> **Migrate before deploying workers.** `verify_structure()` now requires
+> both, so workers started against an unmigrated database raise `RuntimeError`
+> on boot. The index build holds a `SHARE` lock and blocks writes to the queue
+> table for its duration. Run it in a low-traffic window on a large table.
+
+Jobs already `picked` when the migration runs keep `slot IS NULL`. They stay
+covered by the count gate and drain out normally.
+
+Workers must agree on an entrypoint's limit. If they disagree, the highest one
+wins; nothing validates or rejects the mismatch.
+
+### Fixed
+
+- Dequeue no longer overshoots `concurrency_limit`: candidates are windowed
+  before locking, so `SKIP LOCKED` cannot slide down the backlog past the cap
+  (#774).
+- `--restart-on-failure` now restarts. Each supervisor cycle owns its shutdown
+  event, so a manager setting `shutdown` on exit no longer latches the
+  process-level event and ends the loop. Workers that previously exited on
+  failure now restart in place. Review any external restart or alerting that
+  relied on the process dying.
+
+### Changed
+
+- `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`
+  take keyword-only arguments and return a `ComposedQuery` (`.sql`, `.args`)
+  instead of a SQL string. Both are internal but reachable via `Queries.qbq`.
+- Dequeue SQL is assembled per active gate by a new `SqlComposer`, so unused
+  concurrency gates no longer render (ADR-0024).
+- `is_unique_violation()` classifies driver errors by SQLSTATE instead of
+  importing asyncpg and psycopg. Drivers that do not expose `.sqlstate` are no
+  longer recognised.
+- `dequeue()` treats a lost slot race (SQLSTATE `23505` or `40P01`) as an empty
+  batch and lets the poll loop retry.
+
+---
+
+## v1.3.2
+
+- Pin published Docker images to the released PgQueuer version (#717).
+
+## v1.3.1
+
+- Publish multi-arch Docker images to GHCR (#716).
+
+## v1.3.0
+
+### Features
+
+- Built-in web dashboard for queue insights and management (#691).
+- First-class Postgres schema support. `prefix` is now a `DBSettings` field and
+  `add_prefix()` is deprecated (#703, #704).
+- `pgq sql` command group; `--dry-run` deprecated (#705).
+- Periodic log→statistics aggregation, no cron required (#707).
+- `connect_psycopg`, `ConnectionSettings`, and shared pool factories.
+  Single-connection factories are now context managers.
+
+### Fixes
+
+- Dequeue caps picks to the remaining per-entrypoint and per-worker slots, and
+  drops the batch cap to the tightest entrypoint limit (#696, #697).
+- Shutdown dispatches the remaining batch instead of stranding picked rows
+  (#693); `run()` tears down lifecycle tasks on failure (#694).
+- Drain confirms an empty queue with an uncached count before exiting.
+- Dequeue timeout probes eligible queued work before the deferred ETA (#695).
+- Aggregation index rebuilt on upgrade (#670); the aggregation tick is skipped
+  when the worker did no work (#713).
+- In-memory adapter dequeues from priority heaps instead of a full scan.
+
+## v1.2.0
+
+- `enqueue(on_conflict=...)` to control dedupe-key conflicts (#681).
+- Dequeue preserves priority when merging queued and stale jobs.
+
+## v1.1.1
+
+**Schema change.** Ships the `BIGINT` `id` widening described under v1.0.0
+(#676), lifting the ~2.1B lifetime-enqueue ceiling on the queue, statistics,
+and schedules tables. `pgq upgrade` rewrites each table under an
+`ACCESS EXCLUSIVE` lock. See the warning in the v1.0.0 notes, or use
+`pgq upgrade --no-widen-id` and widen out-of-band.
+
+## v1.1.0
+
+- Context injection is auto-detected from the handler signature (#635).
+- `--heartbeat-timeout` exposed on `pgq run` (#675).
+- **Schema change.** Dequeue rewritten around per-entrypoint `LATERAL` lookups,
+  backed by new entrypoint-leading indexes (#668). Applied by `pgq upgrade`.
+- Upgrade migration uses the configured status type rather than the default.
+- Tracing: one header per entrypoint when the SDK is absent;
+  `SentryTracing.trace_process` re-raises instead of swallowing.
+
+## v1.0.2
+
+- Stale-job recovery no longer blocked once an entrypoint is at its concurrency
+  limit (#633).
+- Jobs canceled by `SIGTERM` are recorded as `canceled` (#631).
+
+## v1.0.1
+
+- Use the selector event loop on Windows for psycopg (#629).
+
+---
+
+## v1.0.0
+
+The first stable release. It cleans up the API surface, enforces the hexagonal
+architecture, and removes deprecated code paths.
 
 If you are upgrading from v0.26.x, expect a one-time migration effort. The
-checklist at the bottom covers every change. Once migrated, the public API is
-stable and will not break without a major version bump.
+checklist at the end of this section covers every change.
 
-## Breaking Changes
+### Breaking Changes
 
-### 1. Sync entrypoints removed — all job handlers must use `async def`
+#### 1. Sync entrypoints removed: all job handlers must use `async def`
 
 Synchronous entrypoint functions (plain `def`) are no longer supported. Registering one
 raises `TypeError` immediately at decoration time with a message guiding you to the fix.
@@ -41,19 +170,19 @@ async def resize_image(job: Job) -> None:
 - Change every `def handler(job)` to `async def handler(job)`.
 - Wrap blocking or CPU-bound calls with `await asyncio.to_thread(fn, ...)`.
 - If you used `anyio.from_thread.run()` to call async code from sync handlers,
-  remove it — handlers now always run in an async context.
-- Remove imports of `SyncEntrypoint` and `SyncContextEntrypoint` — both are deleted.
+  remove it. Handlers now always run in an async context.
+- Remove imports of `SyncEntrypoint` and `SyncContextEntrypoint`. Both are deleted.
 
 The `Entrypoint` type alias is now `AsyncEntrypoint | AsyncContextEntrypoint`
 (previously a 4-variant union that included the sync types).
 
-### 2. Factory functions must be async context managers
+#### 2. Factory functions must be async context managers
 
 `pgq run` now requires factory functions to return an async context manager. Plain
 `async def` functions that return a value, and sync `@contextmanager` factories, are
 rejected with a `TypeError` that includes migration instructions.
 
-**Before (v0.26.x — any of these worked):**
+**Before (v0.26.x, any of these worked):**
 
 ```python
 # Plain async function
@@ -66,7 +195,7 @@ def factory():
     yield PgQueuer(...)
 ```
 
-**After (v1.0.0 — only this form is accepted):**
+**After (v1.0.0, only this form is accepted):**
 
 ```python
 from contextlib import asynccontextmanager
@@ -88,11 +217,11 @@ async def factory() -> AsyncGenerator[PgQueuer, None]:
 
 - Add the `@asynccontextmanager` decorator.
 - Change `return pgq` to `yield pgq`.
-- Move cleanup code after the `yield` — it runs on graceful shutdown.
+- Move cleanup code after the `yield`. It runs on graceful shutdown.
 - If you imported `run_factory`, replace it with `validate_factory_result`
-  (new name, new behavior — it validates the type but no longer converts it).
+  (new name, new behavior: it validates the type but no longer converts it).
 
-### 3. Removed public exports
+#### 3. Removed public exports
 
 | Removed from `pgqueuer.executors`   | Replacement              |
 | ----------------------------------- | ------------------------ |
@@ -103,7 +232,7 @@ async def factory() -> AsyncGenerator[PgQueuer, None]:
 | ----------------------------------- | -------------------------- |
 | `run_factory()`                     | `validate_factory_result()` |
 
-### 4. Database schema changes — re-run `pgq install` or `pgq upgrade`
+#### 4. Database schema changes: re-run `pgq install` or `pgq upgrade`
 
 Two schema additions are needed for the new retry and hold features:
 
@@ -117,12 +246,12 @@ schema manually, apply these migrations before starting upgraded workers.
 Table and type identifiers reflect the default unprefixed names; if you set
 `--prefix` / `PGQUEUER_PREFIX`, substitute your prefixed names accordingly.
 
-### 5. Removed `requests_per_second` rate limiting
+#### 5. Removed `requests_per_second` rate limiting
 
 The per-entrypoint `requests_per_second` parameter and the underlying RPS tracking
-infrastructure have been removed. The feature was inherently flaky — observed RPS
-was measured from recent samples and diverged from actual throughput under load,
-leading to unpredictable throttling.
+infrastructure have been removed. The feature was flaky: observed RPS came from
+recent samples and diverged from actual throughput under load, so throttling was
+unpredictable.
 
 **What was removed:**
 
@@ -137,10 +266,10 @@ leading to unpredictable throttling.
 
 - Remove any `requests_per_second=...` arguments from `@pgq.entrypoint()` calls.
 - Remove any calls to `qm.observed_requests_per_second()`.
-- Use `concurrency_limit` for controlling throughput instead — it provides
-  deterministic backpressure without measurement-based estimation.
+- Use `concurrency_limit` to control throughput instead. It gives deterministic
+  backpressure without measurement-based estimation.
 
-### 6. Deprecated executor parameter fields removed
+#### 6. Deprecated executor parameter fields removed
 
 The 4 deprecated sentinel fields (`channel`, `connection`, `queries`, `shutdown`)
 on `EntrypointExecutorParameters` and the 3 deprecated fields (`connection`,
@@ -153,14 +282,14 @@ a `TypeError` on construction.
 **How to migrate:** Remove these keyword arguments from any custom
 `EntrypointExecutorParameters(...)` or `ScheduleExecutorFactoryParameters(...)` calls.
 
-### 7. `PGChannel` type alias removed
+#### 7. `PGChannel` type alias removed
 
 The `PGChannel` alias (which was just `PGChannel = Channel`) has been removed from
 `pgqueuer.domain.types`, `pgqueuer.models`, and `pgqueuer.types`.
 
 **How to migrate:** Replace `PGChannel` with `Channel` everywhere.
 
-### 8. `statistics_table_status_type` removed from `DBSettings`
+#### 8. `statistics_table_status_type` removed from `DBSettings`
 
 The `DBSettings.statistics_table_status_type` field (marked `TODO: Remove`) has been
 removed. It was only used in the `pgq uninstall` teardown query, which now uses
@@ -168,7 +297,7 @@ removed. It was only used in the `pgq uninstall` teardown query, which now uses
 
 **How to migrate:** Remove any references to `DBSettings().statistics_table_status_type`.
 
-### 9. `AbstractScheduleExecutor.execute()` signature changed
+#### 9. `AbstractScheduleExecutor.execute()` signature changed
 
 The `execute()` method on `AbstractScheduleExecutor` now takes a second parameter:
 
@@ -183,14 +312,14 @@ async def execute(self, schedule: Schedule, context: ScheduleContext) -> None: .
 **How to migrate:** Add `context: ScheduleContext` to any custom schedule executor's
 `execute()` method. You can ignore the parameter if you don't need shared resources.
 
-### 10. Tracing singleton moved from adapters to ports
+#### 10. Tracing singleton moved from adapters to ports
 
 `TracingConfig`, `TRACER`, and `set_tracing_class()` moved from
 `pgqueuer.adapters.tracing` to `pgqueuer.ports.tracing`. The adapter module
 no longer re-exports them (see breaking change #18). Use
 `from pgqueuer.ports.tracing import TracingConfig` instead.
 
-### 11. Internal shim modules removed from package root
+#### 11. Internal shim modules removed from package root
 
 14 backward-compatibility shim modules have been removed from the `pgqueuer/`
 package root. These exposed internal implementation details. If you imported from
@@ -217,7 +346,7 @@ Public API shims (`pgqueuer.models`, `pgqueuer.queries`, `pgqueuer.executors`,
 `pgqueuer.errors`, `pgqueuer.db`, `pgqueuer.qm`, `pgqueuer.sm`,
 `pgqueuer.applications`, `pgqueuer.factories`, `pgqueuer.types`) are unchanged.
 
-### 12. `serialized_dispatch` parameter removed
+#### 12. `serialized_dispatch` parameter removed
 
 The `serialized_dispatch` parameter has been removed from `@pgq.entrypoint()`,
 `QueueManager.entrypoint()`, `PgQueuer.entrypoint()`, and
@@ -232,31 +361,31 @@ the same one-at-a-time semantics but enforced at the database level.
 @pgq.entrypoint("my_job", concurrency_limit=1)
 ```
 
-### 13. Concurrency limit is now global (database-enforced)
+#### 13. Concurrency limit is now global (database-enforced)
 
 `concurrency_limit` on entrypoints is now enforced globally at the database level
 via the dequeue SQL query, not per-worker via in-memory semaphores. This means
 the limit applies across all workers, not just within a single process.
 
-The `entrypoint()` decorator API is unchanged — you still pass
-`concurrency_limit=N`. But the enforcement is stricter: if you set
+The `entrypoint()` decorator API is unchanged; you still pass
+`concurrency_limit=N`. Enforcement is stricter: if you set
 `concurrency_limit=5`, at most 5 jobs run across your entire fleet, not 5 per
 worker.
 
-### 14. `RetryManager` removed
+#### 14. `RetryManager` removed
 
 The `RetryManager` class (`pgqueuer.core.retries`) has been deleted. It was an
 internal retry-with-backoff wrapper used by buffers. If you imported it directly,
-remove the import — retry logic is now handled inline by `TimedOverflowBuffer`.
+remove the import. `TimedOverflowBuffer` now handles retry logic inline.
 
-### 15. Buffer API: callbacks replaced with port injection
+#### 15. Buffer API: callbacks replaced with port injection
 
 `TimedOverflowBuffer` no longer accepts a `callback` parameter. Instead,
 subclasses override the `flush_items()` template method and inject a repository
 port. This only affects users who subclassed `TimedOverflowBuffer`,
 `JobStatusLogBuffer`, or `HeartbeatBuffer` directly.
 
-### 16. `retry_timer` replaced with global `heartbeat_timeout`
+#### 16. `retry_timer` replaced with global `heartbeat_timeout`
 
 The per-entrypoint `retry_timer` parameter has been removed from `@pgq.entrypoint()`,
 `QueueManager.entrypoint()`, `PgQueuer.entrypoint()`, and
@@ -293,7 +422,7 @@ await pgq.run(
 - Note: stale job retries are now always enabled (previously `retry_timer=0`
   disabled them).
 
-### 17. `RetryWithBackoffEntrypointExecutor` removed
+#### 17. `RetryWithBackoffEntrypointExecutor` removed
 
 The in-process retry executor `RetryWithBackoffEntrypointExecutor` has been removed
 along with its associated exceptions `MaxRetriesExceeded` and `MaxTimeExceeded`, and
@@ -324,7 +453,7 @@ from pgqueuer.executors import DatabaseRetryEntrypointExecutor
 )
 ```
 
-### 18. Tracing adapter re-exports removed
+#### 18. Tracing adapter re-exports removed
 
 `pgqueuer.adapters.tracing` no longer re-exports `TracingConfig`, `TRACER`,
 `set_tracing_class()`, or `TracingProtocol`. Import from `pgqueuer.ports.tracing`
@@ -338,7 +467,7 @@ from pgqueuer.adapters.tracing import TRACER, set_tracing_class
 from pgqueuer.ports.tracing import TRACER, set_tracing_class
 ```
 
-### 19. `log_statistics()` parameter renamed: `tail` → `limit`
+#### 19. `log_statistics()` parameter renamed: `tail` → `limit`
 
 The `tail` parameter on `Queries.log_statistics()` has been renamed to `limit` for
 consistency with other methods.
@@ -353,7 +482,7 @@ stats = await queries.log_statistics(limit=100)
 
 Positional calls (`log_statistics(100)`) are unaffected.
 
-### 20. CLI connection options simplified — `dsn()` helper removed
+#### 20. CLI connection options simplified, `dsn()` helper removed
 
 The 6 individual connection CLI options (`--pg-host`, `--pg-port`, `--pg-user`,
 `--pg-database`, `--pg-password`, `--pg-schema`) and the `dsn()` helper function
@@ -371,8 +500,8 @@ when no DSN is provided.
 
 **What stays:**
 
-- `--pg-dsn` / `PGDSN` — pass a full connection string
-- `--prefix` / `PGQUEUER_PREFIX` — prefix for PgQueuer database objects
+- `--pg-dsn` / `PGDSN`: pass a full connection string
+- `--prefix` / `PGQUEUER_PREFIX`: prefix for PgQueuer database objects
 
 **How to migrate:**
 
@@ -397,7 +526,7 @@ connection = await asyncpg.connect(dsn())
 connection = await asyncpg.connect()
 ```
 
-### 21. `QueueManager` and `SchedulerManager` constructor signature changed
+#### 21. `QueueManager` and `SchedulerManager` constructor signature changed
 
 `QueueManager` and `SchedulerManager` no longer accept a `connection` parameter.
 The first positional argument is now `queries` (a `RepositoryPort`), and the
@@ -441,10 +570,10 @@ sm = SchedulerManager(queries)
   `CompletionWatcher(driver, queries=Queries(driver))`.
 - If you accessed `qm.connection`, use `qm.queries.driver` instead.
 - If you accessed `sm.connection`, use `sm.queries.driver` instead.
-- `PgQueuer(driver)` is **unchanged** — it still accepts a driver and creates
+- `PgQueuer(driver)` is unchanged. It still accepts a driver and creates
   `Queries` internally.
 
-### 22. `TaskManagerPort` protocol added to ports layer
+#### 22. `TaskManagerPort` protocol added to ports layer
 
 The `Driver` protocol's `tm` property now returns `TaskManagerPort` (defined in
 `pgqueuer.ports.driver`) instead of the concrete `TaskManager` class. This is
@@ -454,14 +583,14 @@ property with `TaskManager` explicitly.
 **How to migrate:** Change the return type annotation from `TaskManager` to
 `TaskManagerPort`, or rely on structural subtyping (no annotation needed).
 
-### 23. `Driver` protocol requires `notify()` method
+#### 23. `Driver` protocol requires `notify()` method
 
 `pg_notify` has been moved out of the queries layer and into the `Driver`
 protocol. Drivers now send `NOTIFY` directly via a new abstract method instead
 of the queries layer building a raw SQL string. The
 `pgqueuer.adapters.persistence.qb.build_notify_query()` helper has been removed.
 
-**Why:** `pg_notify` is a transport concern — it pairs with `add_listener`,
+**Why:** `pg_notify` is a transport concern that pairs with `add_listener`,
 which already lived on `Driver`. Keeping it in the queries layer violated the
 ports/adapters boundary, forced the queries layer to know about NOTIFY
 mechanics, and required `build_notify_query()` to construct raw SQL by string
@@ -470,10 +599,10 @@ arguments, which is safer and easier to maintain. Custom drivers and the
 in-memory adapter can also intercept notifications directly instead of parsing
 emitted SQL.
 
-This is breaking for any custom async `Driver` implementation — it must now
-implement the new `notify()` coroutine. Built-in async drivers (`AsyncpgDriver`,
+This breaks any custom async `Driver` implementation, which must now implement
+the new `notify()` coroutine. Built-in async drivers (`AsyncpgDriver`,
 `AsyncpgPoolDriver`, `PsycopgDriver`, and the in-memory driver) have been
-updated. `SyncPsycopgDriver` is unaffected — it implements the separate
+updated. `SyncPsycopgDriver` is unaffected because it implements the separate
 `SyncDriver` protocol, which has no `notify()` method.
 
 **New method signature:**
@@ -499,9 +628,9 @@ Remove any imports of `build_notify_query` from
 
 ---
 
-## New Features
+### New Features
 
-### Database-level job retry via `RetryRequested`
+#### Database-level job retry via `RetryRequested`
 
 Raise `RetryRequested` from any handler to re-queue a job instead of failing it.
 The job keeps its row and ID in the queue table, its `attempts` counter is
@@ -521,7 +650,7 @@ async def call_api(job: Job) -> None:
 The new `job.attempts` field (`int`, default `0`) tracks how many retries have
 occurred, so handlers can implement custom backoff or give-up logic.
 
-### Automatic exponential backoff via `DatabaseRetryEntrypointExecutor`
+#### Automatic exponential backoff via `DatabaseRetryEntrypointExecutor`
 
 Wraps any handler with automatic retry and exponential backoff. Any unhandled
 exception (except `RetryRequested`, which passes through unchanged) is converted
@@ -546,7 +675,7 @@ async def flaky_api(job: Job) -> None:
     await call_unreliable_service(job.payload)
 ```
 
-### Hold failed jobs for manual re-queue (`on_failure="hold"`)
+#### Hold failed jobs for manual re-queue (`on_failure="hold"`)
 
 Set `on_failure="hold"` on an entrypoint to keep terminally failed jobs in the
 queue table with `status='failed'` instead of deleting them. They are skipped by
@@ -558,8 +687,8 @@ async def process_payment(job: Job) -> None:
     await payment_gateway.charge(job.payload)
 ```
 
-This combines naturally with `DatabaseRetryEntrypointExecutor` — jobs are held
-only after all retry attempts are exhausted.
+This combines with `DatabaseRetryEntrypointExecutor`: jobs are held only after
+all retry attempts are exhausted.
 
 Invalid `on_failure` values (e.g. typos like `on_failure="retry"`) raise
 `ValueError` immediately at decoration time.
@@ -579,7 +708,7 @@ failed = await queries.list_failed_jobs(limit=25)
 await queries.requeue_jobs([job.id for job in failed])
 ```
 
-### Forward CLI args to factory functions
+#### Forward CLI args to factory functions
 
 Pass arguments to your factory function using `--` in the CLI:
 
@@ -599,7 +728,7 @@ async def factory(args: list[str]) -> AsyncGenerator[PgQueuer, None]:
 
 Factories that don't need extra args continue to work unchanged.
 
-### `ScheduleContext` for shared resources in scheduled tasks
+#### `ScheduleContext` for shared resources in scheduled tasks
 
 Scheduled task handlers can now receive shared resources via `ScheduleContext`,
 matching the `Context.resources` pattern used by queue job handlers.
@@ -618,7 +747,7 @@ Handlers registered without `accepts_context` continue to work with just the
 schedule argument. Previously, the only way to access resources from scheduled tasks
 was via closure over `pgq.resources`.
 
-### Read-only MCP server for AI agent integration
+#### Read-only MCP server for AI agent integration
 
 PgQueuer now ships an optional Model Context Protocol server with 11 read-only
 tools for inspecting queue state, worker health, failures, throughput, schedules,
@@ -642,7 +771,7 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 
 ---
 
-## Bug Fixes
+### Bug Fixes
 
 - **Deferred jobs no longer delayed by `dequeue_timeout`:** Jobs scheduled with
   `execute_after` now wake up within ~100ms of their eligible time. Previously
@@ -663,7 +792,7 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   `Queries.peak_schedule()` and `ScheduleRepositoryPort.peak_schedule()` were
   renamed to `peek_schedule()` to fix the misspelling.
 
-- **`id` columns widened to `BIGINT` — no more ~2.1B lifetime-enqueue ceiling
+- **`id` columns widened to `BIGINT`
   ([#671](https://github.com/janbjorge/pgqueuer/issues/671)):** The `queue`,
   `statistics`, and `schedules` primary keys were `int4 SERIAL`, capped at
   2,147,483,647. Because the sequence only climbs and never reuses values, a
@@ -672,10 +801,10 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
   columns in place, along with their legacy `SERIAL` sequences (created
   `AS INTEGER`, so they would otherwise still cap at 2^31-1).
 
-  > ⚠️ **Migration takes an `ACCESS EXCLUSIVE` lock.** Widening `int4` → `BIGINT`
+  > **Migration takes an `ACCESS EXCLUSIVE` lock.** Widening `int4` → `BIGINT`
   > rewrites the whole table and rebuilds its indexes. For the duration of that
   > rewrite Postgres holds an `ACCESS EXCLUSIVE` lock, which blocks **everything**
-  > on the table — enqueues, dequeues, even plain `SELECT`. The rewrite time
+  > on the table: enqueues, dequeues, even plain `SELECT`. The rewrite time
   > scales with row count, so on a large or bloated `queue` table this can be a
   > multi-second-to-minutes stall. Additionally, while the migration *waits* to
   > acquire the lock, new queries queue up behind it, so a single long-running
@@ -687,15 +816,16 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 
 ---
 
-## Other Changes
+### Other Changes
 
 - Moved `TracingConfig`, `TRACER`, and `set_tracing_class()` from
   `pgqueuer.adapters.tracing` to `pgqueuer.ports.tracing` (resolves core→adapter
   import violation).
-- Simplified `TimedOverflowBuffer` internals — removed exponential backoff retry
-  machinery in favor of simple re-queue on flush failure.
+- Simplified `TimedOverflowBuffer` internals by removing the exponential backoff
+  retry machinery in favor of a simple re-queue on flush failure.
 - Concurrency enforcement moved from per-worker semaphores to database-level
-  `FOR UPDATE SKIP LOCKED` with row counting, providing correct global limits.
+  `FOR UPDATE SKIP LOCKED` with row counting, so limits are correct across the
+  fleet.
 - Consolidated all agent/AI guidance into `AGENTS.md` (previously split between
   `CLAUDE.md` and `AGENTS.md`).
 - Replaced PNG logo with SVG PQ monogram in docs.
@@ -715,17 +845,17 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 - Removed dead `EntrypointStatistics` class from `pgqueuer.domain.models`.
 - Added `has_function()` and `has_trigger()` to `SchemaManagementPort` for
   schema introspection.
-- Deleted `pgqueuer/core/helpers.py` — functions moved to their natural modules
-  (`listeners.py`, `executors.py`, `query_helpers.py`, etc.).
-- Removed `dsn()` helper from `pgqueuer.adapters.drivers` and `pgqueuer.db` —
-  use `asyncpg.connect()` or `psycopg.connect("")` which read libpq env vars
+- Deleted `pgqueuer/core/helpers.py`. Its functions moved to their natural
+  modules (`listeners.py`, `executors.py`, `query_helpers.py`, etc.).
+- Removed `dsn()` helper from `pgqueuer.adapters.drivers` and `pgqueuer.db`. Use
+  `asyncpg.connect()` or `psycopg.connect("")`, which read libpq env vars
   natively.
 - Consolidated `utc_now()` into a single utility in `pgqueuer.domain.models`.
 - Batched scheduler heartbeat updates for reduced DB round-trips.
 - Added PR title lint for Conventional Commits enforcement in CI.
 - Added `TaskManagerPort` protocol to `pgqueuer.ports.driver`, replacing the
   concrete `TaskManager` import that violated the ports→core boundary.
-- `QueueManager` and `SchedulerManager` no longer auto-create `Queries` —
+- `QueueManager` and `SchedulerManager` no longer auto-create `Queries`.
   `PgQueuer.__post_init__` is the sole wiring point that constructs concrete
   adapter instances.
 - Import-linter contracts expanded to 4: domain, ports, core, and metrics layers
@@ -736,11 +866,11 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 
 ---
 
-## Migration Checklist
+### Migration Checklist
 
 1. **Schema:** Run `pgq install` or `pgq upgrade`. Both add the `attempts`
    column and `'failed'` status enum value automatically. `pgq upgrade` also
-   widens the `int4` `id` columns to `BIGINT` (#671) — this takes an `ACCESS
+   widens the `int4` `id` columns to `BIGINT` (#671). That takes an `ACCESS
    EXCLUSIVE` lock and rewrites each table, so run it in a maintenance window on
    large tables (or `pgq upgrade --no-widen-id` and widen out-of-band).
 2. **Sync handlers:** Convert all `def handler(job)` to `async def handler(job)`.
@@ -765,7 +895,7 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
 11. **Internal imports:** If you imported from `pgqueuer.buffers`, `pgqueuer.qb`,
     `pgqueuer.helpers`, etc., update to canonical paths (see table above).
 12. **`RetryManager`:** Remove any imports of `RetryManager` from
-    `pgqueuer.core.retries` — the module is deleted.
+    `pgqueuer.core.retries`. The module is deleted.
 13. **Custom buffers:** If you subclassed `TimedOverflowBuffer`, replace
     `callback` parameter with a `flush_items()` method override.
 14. **`retry_timer`:** Remove `retry_timer=...` from all `@pgq.entrypoint()` calls.
@@ -792,9 +922,9 @@ Compatible with Claude Desktop, Claude Code, Cursor, and any MCP client. See
     `CompletionWatcher(driver, queries=Queries(driver))`.
 22. **Custom `Driver` implementations:** If you annotated the `tm` property
     return type as `TaskManager`, change it to `TaskManagerPort` from
-    `pgqueuer.ports.driver` (or remove the annotation — structural subtyping
+    `pgqueuer.ports.driver` (or remove the annotation; structural subtyping
     handles it).
-23. **Custom async `Driver` implementations — `notify()`:** Implement the new
+23. **Custom async `Driver` implementations, `notify()`:** Implement the new
     `notify(channel, payload)` coroutine on any custom async driver.
     (`SyncDriver` is unaffected.) Remove imports of `build_notify_query` from
     `pgqueuer.adapters.persistence.qb`.
