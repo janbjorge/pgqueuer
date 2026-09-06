@@ -11,9 +11,9 @@ import asyncpg
 import psycopg
 import pytest
 import pytest_asyncio
-from psycopg import sql
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core.tm import TaskManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
@@ -198,46 +198,55 @@ def build_dsn_for(base_url: str, path: str) -> str:
 
 @dataclasses.dataclass(frozen=True)
 class MaintenanceDb:
-    """One long-lived connection to the ``postgres`` maintenance database.
+    """CREATE / DROP DATABASE against the ``postgres`` maintenance database.
 
-    Only CREATE DATABASE / DROP DATABASE run here. Sync psycopg on purpose:
-    a sync connection is not tied to any asyncio loop, so a single
-    session-scoped connection can serve every test's function-scoped loop.
-    Before this, each test opened a 10-connection asyncpg pool just to run
+    Opened once per xdist worker and lives on pytest-asyncio's session loop.
+    Tests never touch it: the fixtures below run on the session loop too and
+    hand each test a plain DSN string, so nothing crosses between event loops.
+
+    Before this, every test opened a 10-connection asyncpg pool just to run
     these two statements (~190ms per test, ~45s of CI wall time).
     """
 
-    conn: psycopg.Connection[Any]
+    pool: asyncpg.Pool
+    background: TaskManager
 
-    def create_database(self, name: str, *, template: str | None = None) -> None:
-        stmt = sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name))
+    async def create_database(self, name: str, *, template: str | None = None) -> None:
+        stmt = f'CREATE DATABASE "{name}"'
         if template is not None:
-            stmt += sql.SQL(" TEMPLATE {}").format(sql.Identifier(template))
-        self.conn.execute(stmt)
+            stmt += f' TEMPLATE "{template}"'
+        await self.pool.execute(stmt)
 
-    def drop_database(self, name: str) -> None:
-        # FORCE terminates backends a test may have left open. The drop itself
-        # keeps the 1 GB tmpfs data dir bounded: every clone copies the
-        # template (~8 MiB), so a worker would run out of space mid-suite.
-        stmt = sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
-        self.conn.execute(stmt)
+    def drop_database_in_background(self, name: str) -> None:
+        # Not awaited: the task runs while the next test sets up, and the
+        # session fixture gathers whatever is left at exit.
+        # FORCE terminates backends a test may have left open. Dropping at all
+        # keeps the 1 GB tmpfs data dir bounded: each clone copies the ~8 MiB
+        # template, so a worker would run out of space mid-suite.
+        stmt = f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'
+        self.background.add(asyncio.create_task(self.pool.execute(stmt)))
 
 
-@pytest.fixture(scope="session")
-def maintenance_db(postgres_container: str) -> Generator[MaintenanceDb, None, None]:
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
+async def maintenance_db(postgres_container: str) -> AsyncGenerator[MaintenanceDb, None]:
     dsn = build_dsn_for(postgres_container, "/postgres")
-    with psycopg.connect(dsn, autocommit=True) as conn:
-        yield MaintenanceDb(conn)
+    # Two connections: one creates the next test's database while the other
+    # drops the previous one. asyncpg rejects concurrent work on one connection.
+    async with (
+        asyncpg.create_pool(dsn, min_size=2, max_size=2) as pool,
+        TaskManager() as background,
+    ):
+        yield MaintenanceDb(pool, background)
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def migrated_db(
     postgres_container: str,
     maintenance_db: MaintenanceDb,
 ) -> AsyncGenerator[str, None]:
     """Create the template database and install the pgqueuer schema into it once."""
     template = f"parent_{uuid.uuid4().hex}"
-    maintenance_db.create_database(template)
+    await maintenance_db.create_database(template)
 
     dsn = build_dsn_for(postgres_container, f"/{template}")
     conn = await asyncpg.connect(dsn=dsn)
@@ -249,15 +258,19 @@ async def migrated_db(
     yield dsn
 
 
-@pytest.fixture
-def dsn(migrated_db: str, maintenance_db: MaintenanceDb) -> Generator[str, None, None]:
-    """A fresh database per test, cloned from the migrated template."""
+@pytest_asyncio.fixture(loop_scope="session")
+async def dsn(migrated_db: str, maintenance_db: MaintenanceDb) -> AsyncGenerator[str, None]:
+    """A fresh database per test, cloned from the migrated template.
+
+    Runs on the session loop so it can share the maintenance connections.
+    The test itself runs on its own function loop and only sees the DSN.
+    """
     template = urlparse(migrated_db).path.strip("/")
     child = f"test_{uuid.uuid4().hex}"
 
-    maintenance_db.create_database(child, template=template)
+    await maintenance_db.create_database(child, template=template)
     yield build_dsn_for(migrated_db, f"/{child}")
-    maintenance_db.drop_database(child)
+    maintenance_db.drop_database_in_background(child)
 
 
 @pytest_asyncio.fixture(scope="function")
