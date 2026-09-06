@@ -10,6 +10,7 @@ import pytest
 from pgqueuer.adapters.persistence import sqlstate
 from pgqueuer.adapters.persistence.queries import Queries, lost_capacity_slot_race
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.queries import EntrypointExecutionParameter
 
@@ -119,8 +120,8 @@ class _FetchBoom:
 async def _dequeue(driver: object) -> list[Job]:
     return await Queries(driver).dequeue(  # type: ignore[arg-type]
         batch_size=1,
-        entrypoints={"fetch": EntrypointExecutionParameter(1)},
-        queue_manager_id=uuid.uuid4(),
+        entrypoints={QueueEntrypoint("fetch"): EntrypointExecutionParameter(1)},
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )
