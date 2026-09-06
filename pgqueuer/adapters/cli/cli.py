@@ -34,25 +34,22 @@ except ImportError:
 
 def asyncio_run(coro: Coroutine[object, object, object]) -> None:
     """Run *coro* on the best event loop for this platform."""
-    if sys.platform != "win32":
-        if HAS_UVLOOP:
-            uvloop.run(coro)
+    if sys.platform == "win32":
+        # psycopg async rejects ProactorEventLoop (Windows default); force the
+        # selector loop on every supported Windows + Python combination.
+        if sys.version_info >= (3, 12):
+            asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
+        elif sys.version_info >= (3, 11):
+            with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
+                runner.run(coro)
         else:
+            # Python 3.10: no Runner, no loop_factory; mutate policy.
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             asyncio.run(coro)
-        return
-
-    # psycopg async rejects ProactorEventLoop (Windows default); force the
-    # selector loop on every supported Windows + Python combination.
-    if sys.version_info >= (3, 12):
-        asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
-        return
-    if sys.version_info >= (3, 11):
-        with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
-            runner.run(coro)
-        return
-    # Python 3.10: no Runner, no loop_factory; mutate policy.
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-    asyncio.run(coro)
+    elif HAS_UVLOOP:
+        uvloop.run(coro)
+    else:
+        asyncio.run(coro)
 
 
 app = typer.Typer(
@@ -144,7 +141,7 @@ def main(
 def create_default_queries_factory(
     config: AppConfig,
     settings: qb.DBSettings,
-) -> Callable[..., contextlib.AbstractAsyncContextManager[queries.Queries]]:
+) -> Callable[[], contextlib.AbstractAsyncContextManager[queries.Queries]]:
     """Default Queries factory: try asyncpg, fall back to psycopg."""
 
     @contextlib.asynccontextmanager
@@ -185,12 +182,15 @@ async def yield_queries(
 ) -> AsyncGenerator[queries.Queries, None]:
     """Yield Queries from the user-supplied factory or the built-in default."""
     config: AppConfig = ctx.obj
+    factory_fn: Callable[[], object]
     if config.factory_fn_ref:
         factory_fn = factories.load_factory(config.factory_fn_ref)
     else:
         factory_fn = create_default_queries_factory(config, settings)
-    async with factories.validate_factory_result(factory_fn()) as q:
-        yield q
+    async with factories.validate_factory_result(factory_fn()) as entered:
+        if not isinstance(entered, queries.Queries):
+            raise TypeError(f"Factory must yield Queries, got {type(entered).__name__}")
+        yield entered
 
 
 def tablefmt() -> str:

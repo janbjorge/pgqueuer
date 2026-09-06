@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from contextlib import AbstractAsyncContextManager, suppress
+from contextlib import suppress
 from datetime import timedelta
 from typing import Callable, TypeAlias
 
@@ -11,10 +11,10 @@ from pgqueuer.core import applications, logconfig, qm, sm
 from pgqueuer.domain import types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
-ManagerFactory: TypeAlias = Callable[[], AbstractAsyncContextManager[Manager]]
+ManagerFactory: TypeAlias = Callable[[], object]
 
 
-def setup_shutdown_handlers(manager: Manager, shutdown: asyncio.Event) -> Manager:
+def setup_shutdown_handlers(manager: object, shutdown: asyncio.Event) -> Manager:
     """Wire *shutdown* into *manager* so cancellation propagates to inner managers."""
 
     if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
@@ -86,8 +86,8 @@ async def runit(
         forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
         failed = False
         try:
-            async with factories.validate_factory_result(factory()) as manager:
-                setup_shutdown_handlers(manager, cycle_shutdown)
+            async with factories.validate_factory_result(factory()) as entered:
+                manager = setup_shutdown_handlers(entered, cycle_shutdown)
                 await run_manager(
                     manager,
                     dequeue_timeout,

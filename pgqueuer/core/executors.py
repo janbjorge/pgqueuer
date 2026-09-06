@@ -25,7 +25,7 @@ AsyncContextCrontab: TypeAlias = Callable[
 ScheduleCrontab: TypeAlias = AsyncCrontab | AsyncContextCrontab
 
 
-def is_async_callable(obj: Callable[..., object] | object) -> bool:
+def is_async_callable(obj: object) -> bool:
     """Return True if *obj* is an async function or async-callable instance."""
     while isinstance(obj, functools.partial):
         obj = obj.func
@@ -35,8 +35,10 @@ def is_async_callable(obj: Callable[..., object] | object) -> bool:
     )
 
 
-def wants_context(func: Callable[..., object], context_type: type) -> bool:
+def wants_context(func: object, context_type: type) -> bool:
     """Return True if func declares a positionally-bindable parameter annotated context_type."""
+    if not callable(func):
+        return False
     # eval_str resolves string/forward-ref annotations (PEP 563) to real types.
     try:
         signature = inspect.signature(func, eval_str=True)
@@ -78,7 +80,7 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
     """Default executor: invokes the registered async entrypoint."""
 
     def __post_init__(self) -> None:
-        if not is_async_callable(cast(Callable[..., object], self.parameters.func)):
+        if not is_async_callable(self.parameters.func):
             raise TypeError(
                 "Entrypoint function must be async (defined with 'async def'). "
                 "Sync entrypoints are no longer supported. "

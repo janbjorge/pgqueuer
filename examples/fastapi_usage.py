@@ -11,7 +11,9 @@ from pgqueuer.queries import Queries
 
 def get_pgq_queries(request: Request) -> Queries:
     """Retrieve Queries instance from FastAPI app context."""
-    return request.app.extra["pgq_queries"]
+    pgq_queries = request.app.extra["pgq_queries"]
+    assert isinstance(pgq_queries, Queries)
+    return pgq_queries
 
 
 def create_app() -> FastAPI:
@@ -47,14 +49,14 @@ def create_app() -> FastAPI:
         payload: str,
         priority: int = 0,
         queries: Queries = Depends(get_pgq_queries),
-    ) -> dict:
+    ) -> dict[str, object]:
         ids = await queries.enqueue(entrypoint, payload.encode(), priority)
         return {"job_ids": ids}
 
     @app.get("/queue-size")
     async def get_queue_size(
         queries: Queries = Depends(get_pgq_queries),
-    ) -> list:
+    ) -> list[dict[str, object]]:
         stats = await queries.queue_size()
         return [
             {

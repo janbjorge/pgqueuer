@@ -154,7 +154,7 @@ async def test_coroutine_factory_rejected_with_migration() -> None:
 
     with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
         await supervisor.runit(
-            factory=factory,  # type: ignore[arg-type]
+            factory=factory,
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             restart_delay=timedelta(seconds=0),
@@ -176,7 +176,7 @@ async def test_sync_cm_factory_rejected_with_migration() -> None:
 
     with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
         await supervisor.runit(
-            factory=factory,  # type: ignore[arg-type]
+            factory=factory,
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             restart_delay=timedelta(seconds=0),
@@ -196,7 +196,7 @@ async def test_arbitrary_return_rejected_with_migration() -> None:
 
     with pytest.raises(TypeError, match="AsyncContextManager") as exc_info:
         await supervisor.runit(
-            factory=factory,  # type: ignore[arg-type]
+            factory=factory,
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             restart_delay=timedelta(seconds=0),
