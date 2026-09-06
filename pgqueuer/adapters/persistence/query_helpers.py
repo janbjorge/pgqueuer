@@ -17,7 +17,7 @@ class NormedEnqueueParam:
     payload: list[bytes | None]
     execute_after: list[timedelta]
     dedupe_key: list[str | None]
-    headers: list[dict | None]
+    headers: list[Mapping[str, object] | None]
 
 
 def normalize_enqueue_params(
@@ -26,7 +26,7 @@ def normalize_enqueue_params(
     priority: int | list[int],
     execute_after: timedelta | None | list[timedelta | None] = None,
     dedupe_key: str | list[str | None] | None = None,
-    headers: dict | list[dict | None] | None = None,
+    headers: dict[str, str] | list[dict[str, str] | None] | None = None,
 ) -> NormedEnqueueParam:
     """Normalize parameters for enqueue operations to handle both single and batch inputs."""
     normed_entrypoint = entrypoint if isinstance(entrypoint, list) else [entrypoint]
@@ -46,8 +46,13 @@ def normalize_enqueue_params(
     dedupe_key = [None] * len(normed_entrypoint) if dedupe_key is None else dedupe_key
     normed_dedupe_key = dedupe_key if isinstance(dedupe_key, list) else [dedupe_key]
 
-    headers = [None] * len(normed_entrypoint) if headers is None else headers
-    normed_headers = headers if isinstance(headers, list) else [headers]
+    normed_headers: list[Mapping[str, object] | None] = (
+        [None] * len(normed_entrypoint)
+        if headers is None
+        else list(headers)
+        if isinstance(headers, list)
+        else [headers]
+    )
 
     return NormedEnqueueParam(
         priority=normed_priority,
@@ -83,9 +88,9 @@ def scatter_ids_by_ordinal(
 
 
 def merge_tracing_headers(
-    headers: list[dict | None],
-    trace_headers: Generator[dict | None, None, None],
-) -> list[dict]:
+    headers: list[Mapping[str, object] | None],
+    trace_headers: Generator[Mapping[str, object] | None, None, None],
+) -> list[Mapping[str, object] | None]:
     """Merge tracing headers into the existing headers for each entrypoint."""
     return [
         {**(h or {}), **(t or {})}

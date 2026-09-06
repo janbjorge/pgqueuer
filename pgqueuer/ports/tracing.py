@@ -11,7 +11,7 @@ from pgqueuer.domain.models import Job
 class TracingProtocol(Protocol):
     """Tracing operations for queue producer and consumer paths."""
 
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
+    def trace_publish(self, entrypoints: list[str]) -> Generator[dict[str, object], None, None]:
         """Yield one tracing-header dict per entrypoint, in input order."""
         ...
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import anyio
 import async_timeout
@@ -544,7 +545,7 @@ async def test_retry_preserves_priority() -> None:
 async def test_retry_preserves_headers() -> None:
     """Headers survive retry — UPDATE keeps the row intact."""
     pq = PgQueuer.in_memory()
-    seen_headers: list[dict | None] = []
+    seen_headers: list[dict[str, Any] | None] = []
 
     @pq.entrypoint("headers_ep")
     async def handler(job: Job) -> None:
@@ -631,19 +632,21 @@ async def test_multiple_jobs_only_one_retries() -> None:
 
 async def test_inmemory_retry_job_nonexistent_is_noop(queries: InMemoryQueries) -> None:
     """Calling retry_job on a nonexistent job is a silent no-op."""
-    fake_job = Job(
-        id=99999,
-        priority=0,
-        created="2024-01-01T00:00:00Z",
-        updated="2024-01-01T00:00:00Z",
-        heartbeat="2024-01-01T00:00:00Z",
-        execute_after="2024-01-01T00:00:00Z",
-        status="picked",
-        entrypoint="ghost",
-        payload=None,
-        attempts=0,
-        queue_manager_id=None,
-        headers=None,
+    fake_job = Job.model_validate(
+        {
+            "id": JobId(99999),
+            "priority": 0,
+            "created": "2024-01-01T00:00:00Z",
+            "updated": "2024-01-01T00:00:00Z",
+            "heartbeat": "2024-01-01T00:00:00Z",
+            "execute_after": "2024-01-01T00:00:00Z",
+            "status": "picked",
+            "entrypoint": QueueEntrypoint("ghost"),
+            "payload": None,
+            "attempts": 0,
+            "queue_manager_id": None,
+            "headers": None,
+        }
     )
     # Should not raise
     await queries.retry_job(fake_job, timedelta(0), None)
@@ -745,19 +748,21 @@ async def test_database_retry_executor_chains_cause() -> None:
 
     original = ValueError("the root cause")
 
-    fake_job = Job(
-        id=1,
-        priority=0,
-        created="2024-01-01T00:00:00Z",
-        updated="2024-01-01T00:00:00Z",
-        heartbeat="2024-01-01T00:00:00Z",
-        execute_after="2024-01-01T00:00:00Z",
-        status="picked",
-        entrypoint="cause_ep",
-        payload=None,
-        attempts=0,
-        queue_manager_id=None,
-        headers=None,
+    fake_job = Job.model_validate(
+        {
+            "id": JobId(1),
+            "priority": 0,
+            "created": "2024-01-01T00:00:00Z",
+            "updated": "2024-01-01T00:00:00Z",
+            "heartbeat": "2024-01-01T00:00:00Z",
+            "execute_after": "2024-01-01T00:00:00Z",
+            "status": "picked",
+            "entrypoint": QueueEntrypoint("cause_ep"),
+            "payload": None,
+            "attempts": 0,
+            "queue_manager_id": None,
+            "headers": None,
+        }
     )
 
     # Monkey-patch the executor's func to raise

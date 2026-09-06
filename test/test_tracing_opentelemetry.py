@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from opentelemetry import trace
@@ -21,18 +22,17 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import SpanKind, StatusCode
-from pydantic_core import to_json
 
 from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _make_job(headers: dict | None = None, entrypoint: str = "say_hello") -> Job:
+def _make_job(headers: dict[str, Any] | None = None, entrypoint: str = "say_hello") -> Job:
     """Create a minimal Job for testing.
 
     ``Job.headers`` has a ``BeforeValidator`` that expects JSON-encoded
@@ -48,10 +48,10 @@ def _make_job(headers: dict | None = None, entrypoint: str = "say_hello") -> Job
         heartbeat=now,
         execute_after=now,
         status="queued",
-        entrypoint=entrypoint,
+        entrypoint=QueueEntrypoint(entrypoint),
         payload=b"hello",
-        queue_manager_id=uuid.uuid4(),
-        headers=to_json(headers) if headers is not None else None,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        headers=headers,
     )
 
 
@@ -87,8 +87,9 @@ def test_single_publish_yields_otel_header(
     tracing: OpenTelemetryTracing,
 ) -> None:
     (headers,) = tracing.trace_publish(["fetch"])
-    assert "otel" in headers
-    assert "traceparent" in headers["otel"]
+    otel = headers["otel"]
+    assert isinstance(otel, dict)
+    assert "traceparent" in otel
 
 
 def test_single_publish_span_name(
@@ -134,8 +135,9 @@ def test_batch_publish_yields_otel_headers_for_each(
     headers = list(tracing.trace_publish(["a", "b", "c"]))
     assert len(headers) == 3
     for h in headers:
-        assert "otel" in h
-        assert "traceparent" in h["otel"]
+        otel = h["otel"]
+        assert isinstance(otel, dict)
+        assert "traceparent" in otel
 
 
 def test_batch_publish_span_names(

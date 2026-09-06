@@ -10,14 +10,13 @@ import logfire
 import pytest
 from logfire.testing import TestExporter
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from pydantic_core import to_json
 
 from pgqueuer.adapters.tracing.logfire import LogfireTracing
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
-def _make_job(headers: dict | None, *, entrypoint: str = "say_hello") -> Job:
+def _make_job(headers: dict[str, Any] | None, *, entrypoint: str = "say_hello") -> Job:
     now = datetime.now(timezone.utc)
     return Job(
         id=JobId(7),
@@ -27,10 +26,10 @@ def _make_job(headers: dict | None, *, entrypoint: str = "say_hello") -> Job:
         heartbeat=now,
         execute_after=now,
         status="queued",
-        entrypoint=entrypoint,
+        entrypoint=QueueEntrypoint(entrypoint),
         payload=b"hello",
-        queue_manager_id=uuid.uuid4(),
-        headers=to_json(headers) if headers is not None else None,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        headers=headers,
     )
 
 
@@ -56,7 +55,9 @@ def _by_name(exporter: TestExporter, needle: str) -> dict[str, Any]:
 
 def test_publish_injects_traceparent(exporter: TestExporter) -> None:
     (headers,) = list(LogfireTracing().trace_publish(["say_hello"]))
-    assert "traceparent" in headers["logfire"]
+    logfire_headers = headers["logfire"]
+    assert isinstance(logfire_headers, dict)
+    assert "traceparent" in logfire_headers
 
 
 def test_publish_emits_span_per_entrypoint(exporter: TestExporter) -> None:

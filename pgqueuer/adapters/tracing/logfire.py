@@ -20,7 +20,7 @@ from pgqueuer.ports.tracing import TracingProtocol
 
 
 class LogfireTracing(TracingProtocol):
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
+    def trace_publish(self, entrypoints: list[str]) -> Generator[dict[str, object], None, None]:
         if not HAS_LOGFIRE:
             # One header per entrypoint: merge_tracing_headers zips against
             # the entrypoint list with strict=True.
