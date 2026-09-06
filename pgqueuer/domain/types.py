@@ -19,6 +19,7 @@ EVENT_TYPES = Literal[
 
 
 JobId = NewType("JobId", int)
+Slot = NewType("Slot", int)
 JOB_STATUS = Literal[
     "queued",
     "picked",
