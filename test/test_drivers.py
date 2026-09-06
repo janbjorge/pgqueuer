@@ -2,7 +2,7 @@ import asyncio
 import inspect
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
-from typing import AsyncContextManager, AsyncGenerator, Callable
+from typing import AsyncContextManager, AsyncGenerator, Callable, Iterable
 
 import asyncpg
 import psycopg
@@ -144,7 +144,7 @@ async def test_notify(
 )
 async def test_valid_query_syntax(
     dsn: str,
-    query: Callable[..., str],
+    query: Callable[..., str | Iterable[str]],
     name: str,
     driver: Callable[..., AsyncContextManager[Driver]],
 ) -> None:
@@ -156,7 +156,7 @@ async def test_valid_query_syntax(
         pytest.skip("builder requires arguments; covered by dedicated tests")
 
     sql = query()
-    sql = sql if isinstance(sql, str) else f"\n{'-' * 50}\n".join(x for x in sql)
+    sql = sql if isinstance(sql, str) else f"\n{'-' * 50}\n".join(sql)
     assert isinstance(sql, str)
 
     def rolledback(sql: str) -> str:

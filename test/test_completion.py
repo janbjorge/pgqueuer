@@ -8,6 +8,7 @@ import pytest
 
 from pgqueuer import db
 from pgqueuer.core.completion import CompletionWatcher
+from pgqueuer.domain.types import JOB_STATUS
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -90,16 +91,8 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
     class FakeJob:
         id: int
 
-    await qm.queries.log_jobs(
-        [
-            (
-                FakeJob(jid),  # type: ignore
-                "deleted",
-                None,
-            )
-            for jid in jids
-        ]
-    )
+    entries = [(FakeJob(jid), "deleted", None) for jid in jids]
+    await qm.queries.log_jobs(entries)  # type: ignore[arg-type]
 
     async with CompletionWatcher(apgdriver, queries=Queries(apgdriver)) as grp:
         waiters = [grp.wait_for(jid) for jid in jids]
@@ -109,8 +102,8 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
 
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
-async def test_completion_is_terminal(apgdriver: db.Driver, status: str) -> None:
-    assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)  # type: ignore
+async def test_completion_is_terminal(apgdriver: db.Driver, status: JOB_STATUS) -> None:
+    assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)
 
 
 # ─────────────────────────────────────────────────────────────────────

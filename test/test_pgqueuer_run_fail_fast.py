@@ -19,8 +19,8 @@ async def test_pgqueuer_run_propagates_scheduler_failure() -> None:
     async def scheduler_manager_run() -> None:
         raise RuntimeError("scheduler failure")
 
-    pgq.qm.run = queue_manager_run  # type: ignore
-    pgq.sm.run = scheduler_manager_run  # type: ignore
+    pgq.qm.run = queue_manager_run  # type: ignore[assignment]
+    pgq.sm.run = scheduler_manager_run
 
     with pytest.raises(RuntimeError, match="scheduler failure"):
         await pgq.run()
@@ -43,8 +43,8 @@ async def test_pgqueuer_run_propagates_queue_failure() -> None:
             scheduler_cancelled.set()
             raise
 
-    pgq.qm.run = queue_manager_run  # type: ignore
-    pgq.sm.run = scheduler_manager_run  # type: ignore
+    pgq.qm.run = queue_manager_run  # type: ignore[assignment]
+    pgq.sm.run = scheduler_manager_run
 
     with pytest.raises(RuntimeError, match="queue failure"):
         await pgq.run()
@@ -62,16 +62,17 @@ async def test_pgqueuer_run_normal_shutdown_no_exception() -> None:
     async def scheduler_manager_run() -> None:
         await pgq.shutdown.wait()
 
-    pgq.qm.run = queue_manager_run  # type: ignore
-    pgq.sm.run = scheduler_manager_run  # type: ignore
+    pgq.qm.run = queue_manager_run  # type: ignore[assignment]
+    pgq.sm.run = scheduler_manager_run
 
     # Trigger shutdown after a brief delay
     async def trigger_shutdown() -> None:
         await asyncio.sleep(0.01)
         pgq.shutdown.set()
 
-    asyncio.create_task(trigger_shutdown())
+    trigger = asyncio.create_task(trigger_shutdown())
     await pgq.run()  # Should return cleanly, no exception
+    await trigger
 
     assert pgq.shutdown.is_set()
 
@@ -87,8 +88,8 @@ async def test_pgqueuer_run_both_fail_propagates_first() -> None:
         await asyncio.sleep(0.01)
         raise RuntimeError("scheduler failure")
 
-    pgq.qm.run = queue_manager_run  # type: ignore
-    pgq.sm.run = scheduler_manager_run  # type: ignore
+    pgq.qm.run = queue_manager_run  # type: ignore[assignment]
+    pgq.sm.run = scheduler_manager_run
 
     with pytest.raises(RuntimeError, match="(queue|scheduler) failure"):
         await pgq.run()
@@ -105,8 +106,8 @@ async def test_pgqueuer_run_cancelled_externally() -> None:
     async def scheduler_manager_run() -> None:
         await asyncio.Future()
 
-    pgq.qm.run = queue_manager_run  # type: ignore
-    pgq.sm.run = scheduler_manager_run  # type: ignore
+    pgq.qm.run = queue_manager_run  # type: ignore[assignment]
+    pgq.sm.run = scheduler_manager_run
 
     task = asyncio.create_task(pgq.run())
     await asyncio.sleep(0.01)
