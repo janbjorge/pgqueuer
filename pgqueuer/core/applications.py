@@ -19,9 +19,8 @@ from pgqueuer.core.executors import (
 )
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
-from pgqueuer.domain.models import Channel
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import OnFailure, QueueExecutionMode
+from pgqueuer.domain.types import Channel, OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
 

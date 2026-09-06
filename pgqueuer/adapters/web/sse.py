@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 from datetime import timedelta
 
 from pgqueuer.core.listeners import initialize_notice_event_listener
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
 
 KEEPALIVE_SECONDS = 15.0
@@ -24,7 +24,7 @@ class Broadcaster:
     """
 
     driver: Driver
-    channel: models.Channel
+    channel: types.Channel
     debounce: timedelta = dataclasses.field(default=timedelta(milliseconds=250))
 
     subscribers: set[asyncio.Queue[str]] = dataclasses.field(default_factory=set, init=False)

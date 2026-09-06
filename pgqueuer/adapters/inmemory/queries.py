@@ -18,7 +18,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
-from pgqueuer.domain import errors, models
+from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.models import utc_now
 from pgqueuer.domain.types import (
     CronEntrypoint,
@@ -449,7 +449,7 @@ class InMemoryQueries:
         job_status: list[
             tuple[
                 models.Job,
-                models.JOB_STATUS,
+                types.JOB_STATUS,
                 models.TracebackRecord | None,
             ]
         ],
@@ -647,9 +647,9 @@ class InMemoryQueries:
     async def job_status(
         self,
         ids: list[JobId],
-    ) -> list[tuple[JobId, models.JOB_STATUS]]:
+    ) -> list[tuple[JobId, types.JOB_STATUS]]:
         id_set = {int(jid) for jid in ids}
-        latest: dict[int, models.JOB_STATUS] = {}
+        latest: dict[int, types.JOB_STATUS] = {}
         for entry in reversed(self._log):
             jid = entry["job_id"]
             if jid in id_set and jid not in latest:
@@ -993,7 +993,7 @@ class InMemoryQueries:
         self,
         limit: int = 50,
         offset: int = 0,
-        statuses: list[models.JOB_STATUS] | None = None,
+        statuses: list[types.JOB_STATUS] | None = None,
         entrypoints: list[str] | None = None,
     ) -> list[models.Job]:
         rows = [
@@ -1044,7 +1044,7 @@ class InMemoryQueries:
         if dk is not None:
             self._dedupe_index.pop(dk, None)
 
-    async def emit_table_changed(self, operation: models.OPERATIONS) -> None:
+    async def emit_table_changed(self, operation: types.OPERATIONS) -> None:
         event = models.TableChangedEvent(
             channel=self.qbq.settings.channel,
             sent_at=utc_now(),

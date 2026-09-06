@@ -10,7 +10,7 @@ from typing import Callable
 import croniter
 
 from pgqueuer.core import executors, logconfig, tm
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
 
@@ -56,8 +56,8 @@ class SchedulerManager:
         if not croniter.croniter.is_valid(expression):
             raise ValueError(f"Invalid cron expression: {expression}")
 
-        expression = models.CronExpression(" ".join(croniter.croniter(expression).expressions))
-        entrypoint = models.CronEntrypoint(entrypoint)
+        expression = types.CronExpression(" ".join(croniter.croniter(expression).expressions))
+        entrypoint = types.CronEntrypoint(entrypoint)
 
         key = models.CronExpressionEntrypoint(
             entrypoint=entrypoint,

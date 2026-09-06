@@ -12,7 +12,7 @@ from typing import Generic, Protocol, TypeVar
 from typing_extensions import Self
 
 from pgqueuer.core import logconfig
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 
 T = TypeVar("T")
 
@@ -129,7 +129,7 @@ class JobLogSink(Protocol):
         job_status: list[
             tuple[
                 models.Job,
-                models.JOB_STATUS,
+                types.JOB_STATUS,
                 models.TracebackRecord | None,
             ]
         ],
@@ -139,7 +139,7 @@ class JobLogSink(Protocol):
 class HeartbeatSink(Protocol):
     """Narrow port: accepts batched heartbeat updates."""
 
-    async def update_heartbeat(self, job_ids: list[models.JobId]) -> None: ...
+    async def update_heartbeat(self, job_ids: list[types.JobId]) -> None: ...
 
 
 @dataclasses.dataclass
@@ -147,7 +147,7 @@ class JobStatusLogBuffer(
     TimedOverflowBuffer[
         tuple[
             models.Job,
-            models.JOB_STATUS,
+            types.JOB_STATUS,
             models.TracebackRecord | None,
         ]
     ]
@@ -161,7 +161,7 @@ class JobStatusLogBuffer(
         items: list[
             tuple[
                 models.Job,
-                models.JOB_STATUS,
+                types.JOB_STATUS,
                 models.TracebackRecord | None,
             ]
         ],
@@ -170,10 +170,10 @@ class JobStatusLogBuffer(
 
 
 @dataclasses.dataclass
-class HeartbeatBuffer(TimedOverflowBuffer[models.JobId]):
+class HeartbeatBuffer(TimedOverflowBuffer[types.JobId]):
     """Batched buffer for heartbeat updates."""
 
     repository: HeartbeatSink
 
-    async def flush_items(self, items: list[models.JobId]) -> None:
+    async def flush_items(self, items: list[types.JobId]) -> None:
         await self.repository.update_heartbeat(items)

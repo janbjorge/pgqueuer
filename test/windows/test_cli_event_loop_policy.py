@@ -10,7 +10,7 @@ from pgqueuer.adapters.cli import cli
 
 
 def test_off_windows_delegates_to_asyncio_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli.sys, "platform", "linux")
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(cli, "HAS_UVLOOP", False)
 
     calls: list[Coroutine[object, object, None]] = []
@@ -19,7 +19,7 @@ def test_off_windows_delegates_to_asyncio_run(monkeypatch: pytest.MonkeyPatch) -
         calls.append(coro)
         coro.close()
 
-    monkeypatch.setattr(cli.asyncio, "run", fake_run)
+    monkeypatch.setattr(asyncio, "run", fake_run)
 
     async def noop() -> None:
         return None
@@ -32,7 +32,7 @@ def test_off_windows_delegates_to_asyncio_run(monkeypatch: pytest.MonkeyPatch) -
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="asyncio.Runner is 3.11+")
 def test_windows_path_runs_under_selector_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli.sys, "platform", "win32")
+    monkeypatch.setattr(sys, "platform", "win32")
 
     captured: list[type[asyncio.AbstractEventLoop]] = []
 
@@ -51,8 +51,8 @@ def test_windows_path_runs_under_selector_event_loop(monkeypatch: pytest.MonkeyP
 )
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_python_310_path_installs_selector_policy(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli.sys, "platform", "win32")
-    monkeypatch.setattr(cli.sys, "version_info", (3, 10, 0))
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "version_info", (3, 10, 0))
 
     seen: list[asyncio.AbstractEventLoopPolicy] = []
 
@@ -60,7 +60,7 @@ def test_python_310_path_installs_selector_policy(monkeypatch: pytest.MonkeyPatc
         seen.append(asyncio.get_event_loop_policy())
         coro.close()
 
-    monkeypatch.setattr(cli.asyncio, "run", fake_run)
+    monkeypatch.setattr(asyncio, "run", fake_run)
 
     original_policy = asyncio.get_event_loop_policy()
     asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())

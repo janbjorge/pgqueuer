@@ -6,7 +6,7 @@ import dataclasses
 from datetime import timedelta
 from typing import Literal, Protocol, overload
 
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import (
     CronEntrypoint,
@@ -55,7 +55,7 @@ class QueueRepositoryPort(Protocol):
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     async def enqueue(
@@ -68,7 +68,7 @@ class QueueRepositoryPort(Protocol):
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     @overload
     async def enqueue(
@@ -81,7 +81,7 @@ class QueueRepositoryPort(Protocol):
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     async def enqueue(
@@ -94,7 +94,7 @@ class QueueRepositoryPort(Protocol):
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     async def enqueue(
         self,
@@ -106,14 +106,14 @@ class QueueRepositoryPort(Protocol):
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
         *,
         on_conflict: OnConflict = "raise",
-    ) -> list[models.JobId] | list[models.JobId | None]: ...
+    ) -> list[types.JobId] | list[types.JobId | None]: ...
 
     async def log_jobs(
         self,
         job_status: list[
             tuple[
                 models.Job,
-                models.JOB_STATUS,
+                types.JOB_STATUS,
                 models.TracebackRecord | None,
             ]
         ],
@@ -126,7 +126,7 @@ class QueueRepositoryPort(Protocol):
         traceback_record: models.TracebackRecord | None,
     ) -> None: ...
 
-    async def requeue_jobs(self, ids: list[models.JobId]) -> None: ...
+    async def requeue_jobs(self, ids: list[types.JobId]) -> None: ...
 
     async def list_failed_jobs(
         self, limit: int = 100, order: SortOrder = "DESC"
@@ -136,9 +136,9 @@ class QueueRepositoryPort(Protocol):
 
     async def queue_size(self) -> list[models.QueueStatistics]: ...
 
-    async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None: ...
+    async def mark_job_as_cancelled(self, ids: list[types.JobId]) -> None: ...
 
-    async def update_heartbeat(self, job_ids: list[models.JobId]) -> None: ...
+    async def update_heartbeat(self, job_ids: list[types.JobId]) -> None: ...
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int: ...
 
@@ -160,8 +160,8 @@ class QueueRepositoryPort(Protocol):
 
     async def job_status(
         self,
-        ids: list[models.JobId],
-    ) -> list[tuple[models.JobId, models.JOB_STATUS]]: ...
+        ids: list[types.JobId],
+    ) -> list[tuple[types.JobId, types.JOB_STATUS]]: ...
 
     @property
     def driver(self) -> Driver: ...
@@ -219,15 +219,15 @@ class InsightsRepositoryPort(Protocol):
         self,
         limit: int = 50,
         offset: int = 0,
-        statuses: list[models.JOB_STATUS] | None = None,
+        statuses: list[types.JOB_STATUS] | None = None,
         entrypoints: list[str] | None = None,
     ) -> list[models.Job]: ...
 
-    async def queue_job_by_id(self, id: models.JobId) -> models.Job | None: ...
+    async def queue_job_by_id(self, id: types.JobId) -> models.Job | None: ...
 
     async def job_log_history(
         self,
-        id: models.JobId,
+        id: types.JobId,
         limit: int = 100,
     ) -> list[models.Log]: ...
 
@@ -251,15 +251,15 @@ class ScheduleRepositoryPort(Protocol):
         entrypoints: dict[models.CronExpressionEntrypoint, timedelta],
     ) -> list[models.Schedule]: ...
 
-    async def set_schedule_queued(self, ids: set[models.ScheduleId]) -> None: ...
+    async def set_schedule_queued(self, ids: set[types.ScheduleId]) -> None: ...
 
-    async def update_schedule_heartbeat(self, ids: set[models.ScheduleId]) -> None: ...
+    async def update_schedule_heartbeat(self, ids: set[types.ScheduleId]) -> None: ...
 
     async def peek_schedule(self) -> list[models.Schedule]: ...
 
     async def delete_schedule(
         self,
-        ids: set[models.ScheduleId],
+        ids: set[types.ScheduleId],
         entrypoints: set[CronEntrypoint],
     ) -> None: ...
 
@@ -269,7 +269,7 @@ class ScheduleRepositoryPort(Protocol):
 class NotificationPort(Protocol):
     """Abstraction over PostgreSQL NOTIFY for inter-process signalling."""
 
-    async def notify_job_cancellation(self, ids: list[models.JobId]) -> None: ...
+    async def notify_job_cancellation(self, ids: list[types.JobId]) -> None: ...
 
     async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None: ...
 

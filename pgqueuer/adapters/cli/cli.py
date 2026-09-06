@@ -219,7 +219,7 @@ async def display_stats(log_stats: list[models.LogStatistics]) -> None:
 
 async def display_pg_channel(
     connection: Driver,
-    channel: models.Channel,
+    channel: types.Channel,
 ) -> None:
     queue = asyncio.Queue[models.AnyEvent]()
     await listeners.initialize_notice_event_listener(
@@ -463,7 +463,7 @@ def listen(
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
-            await display_pg_channel(q.driver, models.Channel(channel))
+            await display_pg_channel(q.driver, types.Channel(channel))
 
     asyncio_run(run())
 
@@ -565,7 +565,7 @@ def schedules(
     async def run_async() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             if remove:
-                schedule_ids = {models.ScheduleId(int(x)) for x in remove if x.isdigit()}
+                schedule_ids = {types.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
                 await q.delete_schedule(schedule_ids, schedule_names)
             await display_schedule(await q.peek_schedule())

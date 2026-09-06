@@ -8,14 +8,14 @@ from datetime import timedelta
 from typing_extensions import Self
 
 from pgqueuer.core import buffers, logconfig
-from pgqueuer.domain import models
+from pgqueuer.domain import types
 
 
 @dataclass
 class Heartbeat:
     """Async context manager that sends periodic heartbeats to a buffer."""
 
-    job_id: models.JobId
+    job_id: types.JobId
     interval: timedelta
     buffer: buffers.HeartbeatBuffer
     shutdown: asyncio.Event = field(

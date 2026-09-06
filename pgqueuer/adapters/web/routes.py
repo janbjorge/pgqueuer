@@ -27,7 +27,7 @@ from pgqueuer.core.insights import (
     InsightsService,
     QueueManagementService,
 )
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 
 WEB_DIR = Path(__file__).parent
 STATIC_DIR = WEB_DIR / "static"
@@ -46,7 +46,7 @@ WINDOWS = {
     "24h": timedelta(hours=24),
 }
 
-ACTIVE_STATUSES: tuple[models.JOB_STATUS, ...] = ("queued", "picked")
+ACTIVE_STATUSES: tuple[types.JOB_STATUS, ...] = ("queued", "picked")
 
 PAGE_SIZE = 50
 
@@ -220,7 +220,7 @@ def parse_window(name: str) -> timedelta:
     return WINDOWS.get(name, WINDOWS["1h"])
 
 
-def parse_statuses(status: str) -> list[models.JOB_STATUS]:
+def parse_statuses(status: str) -> list[types.JOB_STATUS]:
     """Held-failed jobs are owned by the failures page; the browser only shows active rows."""
     return [s for s in ACTIVE_STATUSES if s == status] or list(ACTIVE_STATUSES)
 
@@ -428,8 +428,8 @@ def create_web_router(  # noqa: C901
         job_id: int,
         insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
-        job = await insights.job(models.JobId(job_id))
-        history = await insights.job_history(models.JobId(job_id))
+        job = await insights.job(types.JobId(job_id))
+        history = await insights.job_history(types.JobId(job_id))
         if job is None and not history:
             raise HTTPException(status_code=404, detail=f"job {job_id} not found")
         return render(
@@ -528,7 +528,7 @@ def create_web_router(  # noqa: C901
         job_id: int,
         management: QueueManagementService = Depends(get_management),
     ) -> Response:
-        await management.cancel([models.JobId(job_id)])
+        await management.cancel([types.JobId(job_id)])
         return Response(status_code=204, headers={"HX-Refresh": "true"})
 
     @router.post(
@@ -541,7 +541,7 @@ def create_web_router(  # noqa: C901
         management: QueueManagementService = Depends(get_management),
     ) -> Response:
         form = await request.form()
-        ids = [models.JobId(int(raw)) for raw in form.getlist("ids") if isinstance(raw, str)]
+        ids = [types.JobId(int(raw)) for raw in form.getlist("ids") if isinstance(raw, str)]
         if ids:
             await management.requeue(ids)
         return Response(status_code=204, headers={"HX-Refresh": "true"})

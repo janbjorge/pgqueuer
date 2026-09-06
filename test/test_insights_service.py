@@ -15,7 +15,7 @@ from pgqueuer.core.insights import (
     clamp_window,
     sparkline_buckets,
 )
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -128,7 +128,7 @@ class TestInsightsService:
         assert job is not None and job.payload == b"payload"
         history = await service.job_history(job_id)
         assert [h.status for h in history] == ["queued"]
-        assert await service.job(models.JobId(999_999)) is None
+        assert await service.job(types.JobId(999_999)) is None
 
     async def test_browse_queue_filters(self, queries: InMemoryQueries) -> None:
         await queries.enqueue(["ep_a", "ep_b"], [None, None], [0, 0])
