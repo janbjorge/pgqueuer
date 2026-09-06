@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
 
 from typing_extensions import Self
 
@@ -56,14 +56,14 @@ class Driver(Protocol):
     async def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         raise NotImplementedError
 
     async def execute(
         self,
         query: str,
-        *args: Any,
+        *args: object,
     ) -> str:
         raise NotImplementedError
 
@@ -102,6 +102,6 @@ class SyncDriver(Protocol):
     def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         raise NotImplementedError

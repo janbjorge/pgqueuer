@@ -13,7 +13,7 @@ from pydantic_core import to_json
 from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
-from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
+from pgqueuer.adapters.persistence.query_helpers import cell, merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
@@ -115,7 +115,7 @@ class Queries:
         )
         assert len(rows) == 1
         (row,) = rows
-        return row["exists"]
+        return cell(row, "exists", bool)
 
     async def table_has_index(self, table: str, index: str) -> bool:
         """Return True if *index* exists on *table*."""
@@ -126,7 +126,7 @@ class Queries:
         )
         assert len(rows) == 1
         (row,) = rows
-        return row["exists"]
+        return cell(row, "exists", bool)
 
     async def has_user_defined_enum(self, key: str, enum: str) -> bool:
         """Check if a value exists in a user-defined ENUM type."""
@@ -140,7 +140,7 @@ class Queries:
         )
         assert len(rows) == 1
         (row,) = rows
-        return row["exists"]
+        return cell(row, "exists", bool)
 
     async def has_function(self, function: str) -> bool:
         rows = await self.driver.fetch(
@@ -149,7 +149,7 @@ class Queries:
         )
         assert len(rows) == 1
         (row,) = rows
-        return row["exists"]
+        return cell(row, "exists", bool)
 
     async def has_trigger(self, trigger: str) -> bool:
         rows = await self.driver.fetch(
@@ -158,7 +158,7 @@ class Queries:
         )
         assert len(rows) == 1
         (row,) = rows
-        return row["exists"]
+        return cell(row, "exists", bool)
 
     async def dequeue(
         self,
@@ -298,17 +298,17 @@ class Queries:
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
-            return [types.JobId(row["id"]) for row in rows]
+            return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
-        return rows[0]["queued_work"] if rows else 0
+        return cell(rows[0], "queued_work", int) if rows else 0
 
     async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
         rows = await self.driver.fetch(self.qbq.build_has_eligible_queued_work(), entrypoints)
-        return rows[0]["queued_work"] if rows else 0
+        return cell(rows[0], "queued_work", int) if rows else 0
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
         """Delete jobs; restrict to *entrypoint* when given, else truncate."""
@@ -549,15 +549,18 @@ class Queries:
         self,
         ids: list[types.JobId],
     ) -> list[tuple[types.JobId, types.JOB_STATUS]]:
+        rows = await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         return [
-            (row["job_id"], row["status"])
-            for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
+            (row.job_id, row.status)
+            for row in (models.JobStatusRow.model_validate(r) for r in rows)
         ]
 
     async def next_deferred_eta(self, entrypoints: list[QueueEntrypoint]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
         rows = await self.driver.fetch(self.qbq.build_next_deferred_eta_query(), entrypoints)
-        return rows[0]["eta"] if rows and rows[0]["eta"] is not None else None
+        if not rows or rows[0]["eta"] is None:
+            return None
+        return cell(rows[0], "eta", timedelta)
 
     async def queue_age(self) -> list[models.QueueAgeStats]:
         """Backlog age of queued jobs per entrypoint, oldest first."""
@@ -674,7 +677,7 @@ class Queries:
 
     async def unaggregated_log_count(self) -> int:
         rows = await self.driver.fetch(self.qbq.build_unaggregated_log_count_query())
-        return rows[0]["unaggregated"] if rows else 0
+        return cell(rows[0], "unaggregated", int) if rows else 0
 
     async def schema_info(self) -> list[models.TableInfo]:
         """Size, row estimate, and persistence mode of each PgQueuer table."""
@@ -801,7 +804,7 @@ class SyncQueries:
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
-            return [types.JobId(row["id"]) for row in rows]
+            return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 
     def queue_size(self) -> list[models.QueueStatistics]:

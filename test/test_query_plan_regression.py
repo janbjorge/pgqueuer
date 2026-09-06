@@ -32,14 +32,15 @@ def _flatten(node: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-async def _plan_nodes(driver: db.Driver, sql: str, *args: object) -> list[dict]:
+async def _plan_nodes(driver: db.Driver, sql: str, *args: object) -> list[dict[str, Any]]:
     rows = await driver.fetch("EXPLAIN (FORMAT JSON) " + sql, *args)
     raw = rows[0]["QUERY PLAN"]
-    plan = json.loads(raw) if isinstance(raw, str) else raw
+    assert isinstance(raw, str)
+    plan = json.loads(raw)
     return _flatten(plan[0]["Plan"])
 
 
-async def _analyze_nodes(driver: db.Driver, sql: str, *args: object) -> list[dict]:
+async def _analyze_nodes(driver: db.Driver, sql: str, *args: object) -> list[dict[str, Any]]:
     # EXPLAIN ANALYZE executes the query; dequeue mutates (UPDATE + log INSERT),
     # so run inside a transaction we roll back to keep the guard side-effect-free.
     await driver.execute("BEGIN")
@@ -48,7 +49,8 @@ async def _analyze_nodes(driver: db.Driver, sql: str, *args: object) -> list[dic
     finally:
         await driver.execute("ROLLBACK")
     raw = rows[0]["QUERY PLAN"]
-    plan = json.loads(raw) if isinstance(raw, str) else raw
+    assert isinstance(raw, str)
+    plan = json.loads(raw)
     return _flatten(plan[0]["Plan"])
 
 

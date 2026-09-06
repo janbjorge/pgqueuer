@@ -134,6 +134,13 @@ class Log(BaseModel):
     aggregated: bool
 
 
+class JobStatusRow(BaseModel):
+    """One ``(job_id, status)`` pair from a job-status lookup."""
+
+    job_id: JobId
+    status: JOB_STATUS
+
+
 class QueueStatistics(BaseModel):
     """Per-(entrypoint, priority, status) job count snapshot."""
 

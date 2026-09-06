@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from typing_extensions import Self
 
@@ -37,15 +37,15 @@ class AsyncpgDriver(Driver):
     async def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         async with self._lock:
             return [dict(x) for x in await self._connection.fetch(query, *args)]
 
     async def execute(
         self,
         query: str,
-        *args: Any,
+        *args: object,
     ) -> str:
         async with self._lock:
             return await self._connection.execute(query, *args)
@@ -106,14 +106,14 @@ class AsyncpgPoolDriver(Driver):
     async def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         return [dict(x) for x in await self._pool.fetch(query, *args)]
 
     async def execute(
         self,
         query: str,
-        *args: Any,
+        *args: object,
     ) -> str:
         return await self._pool.execute(query, *args)
 

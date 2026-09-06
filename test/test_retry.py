@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
 from pgqueuer import db, queries
+from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.models import Job
@@ -196,7 +197,7 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
         sql = f"""SELECT NOW() - heartbeat AS dt FROM {DBSettings().queue_table} WHERE id = ANY($1::bigint[])"""  # noqa: E501
         rows = await apgdriver.fetch(sql, [jobid])
         assert len(rows) == 1
-        return rows[0]["dt"]
+        return cell(rows[0], "dt", timedelta)
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:

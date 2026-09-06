@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Generator, Sequence
+from typing import Generator, Sequence, TypeVar
 
 from pgqueuer.domain.types import JobId
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -56,8 +59,16 @@ def normalize_enqueue_params(
     )
 
 
+def cell(row: Mapping[str, object], key: str, kind: type[T]) -> T:
+    """Return ``row[key]`` checked to be *kind*; driver rows arrive untyped."""
+    value = row[key]
+    if not isinstance(value, kind):
+        raise TypeError(f"column {key!r}: expected {kind.__name__}, got {type(value).__name__}")
+    return value
+
+
 def scatter_ids_by_ordinal(
-    rows: list[dict],
+    rows: list[dict[str, object]],
     count: int,
 ) -> list[JobId | None]:
     """Place each inserted row's id at its 1-based input ordinal.
@@ -67,7 +78,7 @@ def scatter_ids_by_ordinal(
     """
     ids: list[JobId | None] = [None] * count
     for row in rows:
-        ids[row["ord"] - 1] = JobId(row["id"])
+        ids[cell(row, "ord", int) - 1] = JobId(cell(row, "id", int))
     return ids
 
 
