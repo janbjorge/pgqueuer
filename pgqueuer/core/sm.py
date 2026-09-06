@@ -20,7 +20,7 @@ class SchedulerManager:
     """Cron-driven scheduler. ``resources`` is propagated into each ScheduleContext."""
 
     queries: RepositoryPort
-    resources: MutableMapping = dataclasses.field(default_factory=dict)
+    resources: MutableMapping[str, object] = dataclasses.field(default_factory=dict)
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,

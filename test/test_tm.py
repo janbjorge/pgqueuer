@@ -12,7 +12,7 @@ async def test_task_manager(N: int) -> None:
     tm = TaskManager()
     assert len(tm.tasks) == 0
 
-    async def waiter(future: asyncio.Future) -> None:
+    async def waiter(future: asyncio.Future[None]) -> None:
         return await future
 
     for _ in range(N):
@@ -27,7 +27,7 @@ async def test_task_manager(N: int) -> None:
 
 @pytest.mark.parametrize("N", (1, 2, 3, 5, 64))
 async def test_task_manager_ctx_mngr(N: int) -> None:
-    async def waiter(future: asyncio.Future) -> None:
+    async def waiter(future: asyncio.Future[None]) -> None:
         return await future
 
     future = asyncio.Future[None]()

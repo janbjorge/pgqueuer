@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import asyncio
 import uuid
 from datetime import timedelta
 from itertools import count
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 import pytest
 
@@ -14,15 +16,15 @@ from test.helpers import mocked_job
 class _FakeJobLogSink:
     """Test double satisfying the JobLogSink protocol."""
 
-    def __init__(self, fn: Callable[[list], Awaitable[None]]) -> None:
+    def __init__(self, fn: Callable[[list[Any]], Awaitable[None]]) -> None:
         self._fn = fn
 
-    async def log_jobs(self, items: list) -> None:
+    async def log_jobs(self, items: list[Any]) -> None:
         await self._fn(items)
 
 
 def job_faker(
-    cnt: count = count(),
+    cnt: count[int] = count(),
     queue_manager_id: uuid.UUID = uuid.uuid4(),
 ) -> Job:
     return mocked_job(
@@ -39,7 +41,7 @@ def job_faker(
 async def test_job_buffer_max_size(max_size: int) -> None:
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -65,7 +67,7 @@ async def test_job_buffer_timeout(
 ) -> None:
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -90,7 +92,7 @@ async def test_job_buffer_flush_on_exit(max_size: int) -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -114,7 +116,7 @@ async def test_job_buffer_multiple_flushes(max_size: int, flushes: int) -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.append(x)
 
     async with JobStatusLogBuffer(
@@ -139,7 +141,7 @@ async def test_job_buffer_flush_on_exception(max_size: int) -> None:
     helper_buffer = []
     flush_call_count = 0
 
-    async def faulty_helper(x: list) -> None:
+    async def faulty_helper(x: list[Any]) -> None:
         nonlocal flush_call_count
         flush_call_count += 1
         if flush_call_count < 2:
@@ -169,7 +171,7 @@ async def test_job_buffer_flush_order(max_size: int) -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -191,7 +193,7 @@ async def test_job_buffer_concurrent_adds(max_size: int) -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -218,7 +220,7 @@ async def test_job_buffer_empty_flush() -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(
@@ -239,7 +241,7 @@ async def test_job_buffer_reuse_after_flush(max_size: int) -> None:
     """
     helper_buffer = []
 
-    async def helper(x: list) -> None:
+    async def helper(x: list[Any]) -> None:
         helper_buffer.extend(x)
 
     async with JobStatusLogBuffer(

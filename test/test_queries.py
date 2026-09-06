@@ -714,7 +714,9 @@ async def test_enqueue_on_conflict_skip_single(
     assert sum(x.count for x in sq.queue_size()) == 1
 
 
-async def fetch_jobs_by_id(driver: db.Driver, ids: list[models.JobId | None]) -> dict:
+async def fetch_jobs_by_id(
+    driver: db.Driver, ids: list[models.JobId | None]
+) -> dict[object, dict[str, object]]:
     sql = f"SELECT id, entrypoint, payload FROM {DBSettings().queue_table} WHERE id = ANY($1)"
     return {r["id"]: r for r in await driver.fetch(sql, [x for x in ids if x is not None])}
 

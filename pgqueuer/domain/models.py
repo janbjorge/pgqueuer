@@ -166,7 +166,7 @@ class Context:
     """
 
     cancellation: anyio.CancelScope
-    resources: MutableMapping = dataclasses.field(default_factory=dict)
+    resources: MutableMapping[str, object] = dataclasses.field(default_factory=dict)
 
 
 @dataclasses.dataclass
@@ -180,7 +180,7 @@ class ScheduleContext:
             mapping; never None. Users can mutate this at runtime if needed.
     """
 
-    resources: MutableMapping = dataclasses.field(default_factory=dict)
+    resources: MutableMapping[str, object] = dataclasses.field(default_factory=dict)
 
 
 class CronExpressionEntrypoint(NamedTuple):

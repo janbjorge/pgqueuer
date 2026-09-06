@@ -237,7 +237,7 @@ class Producer:
     shutdown: asyncio.Event
     queries: RepositoryPort
     batch_size: int
-    cnt: count
+    cnt: count[int]
 
     async def run(self) -> None:
         while not self.shutdown.is_set():

@@ -48,7 +48,7 @@ class PgQueuer:
         default=Channel(DBSettings().channel),
     )
     # Shared resources mapping passed to QueueManager and propagated into each job Context.
-    resources: MutableMapping = dataclasses.field(
+    resources: MutableMapping[str, object] = dataclasses.field(
         default_factory=dict,
     )
     queries: RepositoryPort | None = dataclasses.field(default=None)
@@ -83,7 +83,7 @@ class PgQueuer:
         cls,
         connection: "asyncpg.Connection",
         channel: Channel | None = None,
-        resources: MutableMapping | None = None,
+        resources: MutableMapping[str, object] | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
@@ -97,7 +97,7 @@ class PgQueuer:
         cls,
         pool: "asyncpg.Pool",
         channel: Channel | None = None,
-        resources: MutableMapping | None = None,
+        resources: MutableMapping[str, object] | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
@@ -111,7 +111,7 @@ class PgQueuer:
         cls,
         connection: "psycopg.AsyncConnection",
         channel: Channel | None = None,
-        resources: MutableMapping | None = None,
+        resources: MutableMapping[str, object] | None = None,
     ) -> "PgQueuer":
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
@@ -125,7 +125,7 @@ class PgQueuer:
         cls,
         driver: Driver,
         channel: Channel | None = None,
-        resources: MutableMapping | None = None,
+        resources: MutableMapping[str, object] | None = None,
     ) -> "PgQueuer":
         channel = channel or Channel(DBSettings().channel)
         resources = resources or {}
@@ -135,7 +135,7 @@ class PgQueuer:
     def in_memory(
         cls,
         channel: Channel | None = None,
-        resources: MutableMapping | None = None,
+        resources: MutableMapping[str, object] | None = None,
     ) -> "PgQueuer":
         """Create a PgQueuer backed entirely by in-memory data structures.
 

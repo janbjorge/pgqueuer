@@ -18,7 +18,7 @@ class TTLCache(Generic[T]):
     expires_at: datetime = dataclasses.field(init=False, default_factory=datetime.now)
     value: T | object = dataclasses.field(init=False, default=UNSET)
     lock: asyncio.Lock = dataclasses.field(init=False, default_factory=asyncio.Lock)
-    update_task: asyncio.Task | None = dataclasses.field(init=False, default=None)
+    update_task: asyncio.Task[None] | None = dataclasses.field(init=False, default=None)
 
     async def __call__(self) -> T:
         """Return the cached value, refreshing once if expired/unset."""

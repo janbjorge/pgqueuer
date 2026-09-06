@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 import uvicorn
 from typer.testing import CliRunner
@@ -8,8 +10,8 @@ from pgqueuer.adapters.cli.cli import app
 
 
 @pytest.fixture
-def uvicorn_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
-    calls: list[dict] = []
+def uvicorn_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
     monkeypatch.setattr(
         uvicorn,
         "run",
@@ -18,19 +20,19 @@ def uvicorn_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict]:
     return calls
 
 
-def test_cli_web_defaults(uvicorn_calls: list[dict]) -> None:
+def test_cli_web_defaults(uvicorn_calls: list[dict[str, Any]]) -> None:
     result = CliRunner().invoke(app, ["web"])
     assert result.exit_code == 0, result.output
     assert uvicorn_calls == [{"host": "127.0.0.1", "port": 8080}]
 
 
-def test_cli_web_flags(uvicorn_calls: list[dict]) -> None:
+def test_cli_web_flags(uvicorn_calls: list[dict[str, Any]]) -> None:
     result = CliRunner().invoke(app, ["web", "--host", "0.0.0.0", "--port", "9000"])
     assert result.exit_code == 0, result.output
     assert uvicorn_calls == [{"host": "0.0.0.0", "port": 9000}]
 
 
-def test_cli_web_env_vars(uvicorn_calls: list[dict]) -> None:
+def test_cli_web_env_vars(uvicorn_calls: list[dict[str, Any]]) -> None:
     result = CliRunner().invoke(
         app,
         ["web"],
@@ -40,7 +42,7 @@ def test_cli_web_env_vars(uvicorn_calls: list[dict]) -> None:
     assert uvicorn_calls == [{"host": "0.0.0.0", "port": 9001}]
 
 
-def test_cli_web_flag_beats_env(uvicorn_calls: list[dict]) -> None:
+def test_cli_web_flag_beats_env(uvicorn_calls: list[dict[str, Any]]) -> None:
     result = CliRunner().invoke(
         app,
         ["web", "--port", "9002"],

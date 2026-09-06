@@ -42,7 +42,7 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Lock,
     )
-    pending_tasks: set[asyncio.Task] = dataclasses.field(
+    pending_tasks: set[asyncio.Task[None]] = dataclasses.field(
         init=False,
         default_factory=set,
     )
@@ -105,7 +105,7 @@ class TimedOverflowBuffer(Generic[T]):
     def schedule_flush(self) -> None:
         self.add_task(asyncio.create_task(self.flush()))
 
-    def add_task(self, task: asyncio.Task) -> None:
+    def add_task(self, task: asyncio.Task[None]) -> None:
         self.pending_tasks.add(task)
         task.add_done_callback(self.pending_tasks.discard)
 

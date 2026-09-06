@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
@@ -22,7 +23,7 @@ ENTRYPOINTS = [QueueEntrypoint(name) for name in ENTRYPOINT_NAMES]
 SEED = 3000
 
 
-def _flatten(node: dict) -> list[dict]:
+def _flatten(node: dict[str, Any]) -> list[dict[str, Any]]:
     out = [node]
     children = node.get("Plans")
     if isinstance(children, list):
@@ -78,11 +79,11 @@ async def _bulk_seed(driver: db.Driver, rows: int, n_eps: int) -> None:
     await driver.execute(f"ANALYZE {QUEUE_TABLE};")
 
 
-def _queue_scans(nodes: list[dict]) -> list[dict]:
+def _queue_scans(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [n for n in nodes if n.get("Relation Name") == QUEUE_TABLE]
 
 
-def _rows_scanned(nodes: list[dict]) -> int:
+def _rows_scanned(nodes: list[dict[str, Any]]) -> int:
     # Under a Nested Loop / LATERAL, EXPLAIN reports `Actual Rows` as a per-loop
     # average, not the total. Multiply by `Actual Loops` so the bound counts the
     # real rows the scan touched across all entrypoints.
@@ -92,7 +93,7 @@ def _rows_scanned(nodes: list[dict]) -> int:
     )
 
 
-def _scan_summary(nodes: list[dict]) -> list[tuple]:
+def _scan_summary(nodes: list[dict[str, Any]]) -> list[tuple[object, ...]]:
     return [
         (n.get("Node Type"), n.get("Actual Rows"), n.get("Actual Loops"))
         for n in _queue_scans(nodes)
