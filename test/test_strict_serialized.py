@@ -9,7 +9,7 @@ from itertools import chain
 import pytest
 
 from pgqueuer.db import Driver
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -142,7 +142,7 @@ async def test_no_jobs_processed_when_locked(
     picked_job = await queries.dequeue(
         1,
         {QueueEntrypoint("serialized_dispatch_true"): EntrypointExecutionParameter(1)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )

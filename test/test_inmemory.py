@@ -11,7 +11,7 @@ import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ async def test_dedupe_key_rejects_duplicate(queries: InMemoryQueries) -> None:
 
 async def test_dedupe_key_freed_after_log(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, dedupe_key="dk1")
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -140,7 +140,7 @@ async def test_dedupe_key_on_conflict_skip_no_log_for_skipped(
 
 async def test_dedupe_key_on_conflict_skip_freed_after_log(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, dedupe_key="dk1")
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -161,7 +161,7 @@ async def test_dedupe_key_on_conflict_skip_freed_after_log(queries: InMemoryQuer
 
 async def test_dequeue_basic(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", b"data")
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -181,7 +181,7 @@ async def test_dequeue_priority_ordering(queries: InMemoryQueries) -> None:
         [b"lo", b"hi", b"med"],
         [1, 10, 5],
     )
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -196,7 +196,7 @@ async def test_dequeue_priority_ordering(queries: InMemoryQueries) -> None:
 
 async def test_dequeue_execute_after(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, execute_after=timedelta(hours=1))
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -214,7 +214,7 @@ async def test_dequeue_serialized_dispatch(queries: InMemoryQueries) -> None:
         [None, None],
         [0, 0],
     )
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(1)}
 
     # First dequeue should get 1 job (concurrency_limit=1 = only one at a time)
@@ -232,7 +232,7 @@ async def test_dequeue_concurrency_limit(queries: InMemoryQueries) -> None:
         [None, None, None],
         [0, 0, 0],
     )
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(2)}
 
     jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -248,7 +248,7 @@ async def test_dequeue_leaves_capacity_slot_unset(queries: InMemoryQueries) -> N
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(1)}
 
     (job,) = await queries.dequeue(
-        10, params, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30)
+        10, params, QueueManagerId(uuid.uuid4()), None, heartbeat_timeout=timedelta(seconds=30)
     )
     assert job.slot is None
 
@@ -259,7 +259,7 @@ async def test_dequeue_global_concurrency_limit(queries: InMemoryQueries) -> Non
         [None, None, None],
         [0, 0, 0],
     )
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
 
     jobs = await queries.dequeue(
@@ -276,7 +276,7 @@ async def test_dequeue_global_concurrency_limit(queries: InMemoryQueries) -> Non
 async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
     """Picked jobs with expired heartbeat should be retried."""
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
 
     jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -297,7 +297,7 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
 async def test_dequeue_stale_priority_beats_fresh_work(queries: InMemoryQueries) -> None:
     """A stale high-priority job outranks fresh lower-priority work (#684)."""
     await queries.enqueue("ep", b"stale-hi", priority=10)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
 
     picked = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -326,7 +326,7 @@ async def test_dequeue_deferred_jobs_delivered_in_priority_order_when_due(
         execute_after=[timedelta(hours=1), timedelta(hours=1)],
     )
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     assert (
         await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -351,7 +351,7 @@ async def test_dequeue_redelivers_candidate_bumped_by_higher_priority(
         QueueEntrypoint("ep_a"): EntrypointExecutionParameter(0),
         QueueEntrypoint("ep_b"): EntrypointExecutionParameter(0),
     }
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     first = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     assert [j.payload for j in first] == [b"hi"]
@@ -363,7 +363,7 @@ async def test_dequeue_redelivers_candidate_bumped_by_higher_priority(
 async def test_retry_job_with_delay_defers_redelivery(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", b"x")
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=1))
     await queries.retry_job(job, timedelta(hours=1), None)
@@ -385,7 +385,7 @@ async def test_cancelled_queued_job_not_delivered(queries: InMemoryQueries) -> N
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
-        uuid.uuid4(),
+        QueueManagerId(uuid.uuid4()),
         None,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -400,7 +400,7 @@ async def test_cancelled_deferred_job_not_delivered_when_due(queries: InMemoryQu
         jobs = await queries.dequeue(
             10,
             {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
-            uuid.uuid4(),
+            QueueManagerId(uuid.uuid4()),
             None,
             heartbeat_timeout=timedelta(seconds=30),
         )
@@ -417,7 +417,7 @@ async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
-        uuid.uuid4(),
+        QueueManagerId(uuid.uuid4()),
         None,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -427,7 +427,7 @@ async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(
 async def test_requeue_failed_job_dequeued_again(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", b"x")
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
     await queries.log_jobs([(job, "failed", None)])
@@ -444,14 +444,16 @@ async def test_requeue_failed_job_dequeued_again(queries: InMemoryQueries) -> No
 async def test_dequeue_empty_entrypoints(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
     jobs = await queries.dequeue(
-        10, {}, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30)
+        10, {}, QueueManagerId(uuid.uuid4()), None, heartbeat_timeout=timedelta(seconds=30)
     )
     assert len(jobs) == 0
 
 
 async def test_dequeue_batch_size_validation(queries: InMemoryQueries) -> None:
     with pytest.raises(ValueError):
-        await queries.dequeue(0, {}, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30))
+        await queries.dequeue(
+            0, {}, QueueManagerId(uuid.uuid4()), None, heartbeat_timeout=timedelta(seconds=30)
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +463,7 @@ async def test_dequeue_batch_size_validation(queries: InMemoryQueries) -> None:
 
 async def test_log_jobs_removes_from_queue(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -477,7 +479,7 @@ async def test_log_jobs_removes_from_queue(queries: InMemoryQueries) -> None:
 
 async def test_log_jobs_adds_to_log(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -550,7 +552,7 @@ async def test_clear_queue_filtered(queries: InMemoryQueries) -> None:
 
 async def test_update_heartbeat(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -572,7 +574,7 @@ async def test_update_heartbeat(queries: InMemoryQueries) -> None:
 
 async def test_queue_log_lifecycle(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -596,7 +598,7 @@ async def test_queue_log_lifecycle(queries: InMemoryQueries) -> None:
 
 async def test_log_statistics(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -618,7 +620,7 @@ async def test_log_statistics(queries: InMemoryQueries) -> None:
 
 async def test_job_status(queries: InMemoryQueries) -> None:
     ids = await queries.enqueue("ep", None)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},

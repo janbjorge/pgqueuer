@@ -14,6 +14,7 @@ from pgqueuer.domain.types import (
     OnFailure,
     QueueEntrypoint,
     QueueExecutionMode,
+    QueueManagerId,
     ScheduleId,
     Slot,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "OnFailure",
     "QueueEntrypoint",
     "QueueExecutionMode",
+    "QueueManagerId",
     "ScheduleId",
     "Slot",
 ]

@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 
 from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -232,7 +232,7 @@ async def test_concurrency_limit_holds_across_concurrent_dequeues(
             q.dequeue(
                 batch_size=concurrency_limit,
                 entrypoints={FETCH: EntrypointExecutionParameter(concurrency_limit)},
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -282,7 +282,7 @@ async def test_concurrency_limit_holds_when_priority_arrives_mid_claim(
             q.dequeue(
                 batch_size=limit,
                 entrypoints={FETCH: EntrypointExecutionParameter(limit)},
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -329,7 +329,7 @@ async def test_concurrency_limit_rollback_releases_capacity_for_the_other_worker
             q.dequeue(
                 batch_size=concurrency_limit,
                 entrypoints={FETCH: EntrypointExecutionParameter(concurrency_limit)},
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -384,7 +384,7 @@ async def test_slot_race_does_not_lose_unlimited_jobs_in_the_same_batch(
             q.dequeue(
                 batch_size=10,
                 entrypoints=entrypoints,
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -430,7 +430,7 @@ async def test_dequeue_assigns_capacity_slots(apgdriver: Driver) -> None:
             FETCH: EntrypointExecutionParameter(limit),
             QueueEntrypoint("loose"): EntrypointExecutionParameter(0),
         },
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(minutes=10),
     )

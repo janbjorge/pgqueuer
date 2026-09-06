@@ -25,6 +25,7 @@ from pgqueuer.domain.types import (
     JobId,
     OnConflict,
     QueueEntrypoint,
+    QueueManagerId,
     ScheduleId,
     SortOrder,
 )
@@ -318,7 +319,7 @@ class InMemoryQueries:
 
     def _count_picked_jobs(
         self,
-        queue_manager_id: uuid.UUID,
+        queue_manager_id: QueueManagerId,
         entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
     ) -> tuple[dict[QueueEntrypoint, int], int]:
         picked_per_ep: dict[QueueEntrypoint, int] = {}
@@ -370,7 +371,7 @@ class InMemoryQueries:
         self,
         batch_size: int,
         entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
-        queue_manager_id: uuid.UUID,
+        queue_manager_id: QueueManagerId,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> list[models.Job]:

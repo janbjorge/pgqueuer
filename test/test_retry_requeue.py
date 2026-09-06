@@ -18,7 +18,7 @@ from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import RetryException, RetryRequested
 from pgqueuer.domain.models import Context, Job, JobId, TracebackRecord
-from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode
+from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
@@ -58,7 +58,7 @@ def test_retry_requested_is_retry_exception() -> None:
 
 async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> None:
     ids = await queries.enqueue("ep", b"payload", priority=5)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -95,7 +95,7 @@ async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> Non
 
 async def test_inmemory_retry_job_writes_log_entry(queries: InMemoryQueries) -> None:
     ids = await queries.enqueue("ep", b"x", priority=0)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -572,7 +572,7 @@ async def test_retry_with_delay_prevents_immediate_dequeue(
 ) -> None:
     """A retried job with non-zero delay is not dequeued until execute_after passes."""
     await queries.enqueue("ep", b"x", priority=0)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     ep_params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
 
     jobs = await queries.dequeue(
@@ -656,7 +656,7 @@ async def test_inmemory_retry_job_nonexistent_is_noop(queries: InMemoryQueries) 
 async def test_inmemory_retry_job_stores_traceback(queries: InMemoryQueries) -> None:
     """Traceback record is stored as JSON in the retry log entry."""
     await queries.enqueue("ep", b"x", priority=0)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
         {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},

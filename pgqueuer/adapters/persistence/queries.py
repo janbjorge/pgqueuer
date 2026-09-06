@@ -16,7 +16,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.types import CronEntrypoint, QueueEntrypoint
+from pgqueuer.domain.types import CronEntrypoint, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -162,7 +162,7 @@ class Queries:
         self,
         batch_size: int,
         entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
-        queue_manager_id: uuid.UUID,
+        queue_manager_id: QueueManagerId,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> list[models.Job]:

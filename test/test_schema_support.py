@@ -17,7 +17,7 @@ from async_timeout import timeout
 from pgqueuer import db, queries
 from pgqueuer.core.listeners import initialize_notice_event_listener
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import AnyEvent, Channel, CronExpressionEntrypoint
 from pgqueuer.queries import EntrypointExecutionParameter
 from pgqueuer.types import CronEntrypoint, CronExpression
@@ -41,7 +41,7 @@ async def enqueue_dequeue_round_trip(q: queries.Queries) -> None:
     jobs = await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )

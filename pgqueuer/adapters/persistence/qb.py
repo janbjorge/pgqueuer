@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import dataclasses
-import uuid
 from datetime import timedelta
 from typing import Generator
 
@@ -14,7 +13,7 @@ from pgqueuer.domain.settings import (
     DurabilityPolicy,
     QualifiedNames,
 )
-from pgqueuer.domain.types import OnConflict, QueueEntrypoint, SortOrder
+from pgqueuer.domain.types import OnConflict, QueueEntrypoint, QueueManagerId, SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -484,7 +483,7 @@ class QueryQueueBuilder:
         batch_size: int,
         entrypoints: list[QueueEntrypoint],
         concurrency_limits: list[int],
-        queue_manager_id: uuid.UUID,
+        queue_manager_id: QueueManagerId,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> ComposedQuery:

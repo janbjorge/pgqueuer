@@ -20,6 +20,7 @@ from pgqueuer.domain.types import (
     CronExpression,
     JobId,
     QueueEntrypoint,
+    QueueManagerId,
     ScheduleId,
     Slot,
 )
@@ -98,7 +99,7 @@ class Job(BaseModel):
     entrypoint: QueueEntrypoint
     payload: bytes | None
     attempts: int = 0
-    queue_manager_id: uuid.UUID | None
+    queue_manager_id: QueueManagerId | None
     slot: Slot | None = None
     headers: Annotated[
         dict[str, Any] | None,
@@ -240,7 +241,7 @@ class ThroughputBucket(BaseModel):
 class ActiveWorker(BaseModel):
     """A queue manager currently holding picked jobs."""
 
-    queue_manager_id: uuid.UUID
+    queue_manager_id: QueueManagerId
     active_jobs: int
     oldest_heartbeat: AwareDatetime
     newest_heartbeat: AwareDatetime
@@ -252,7 +253,7 @@ class StaleJob(BaseModel):
 
     id: JobId
     priority: int
-    queue_manager_id: uuid.UUID | None
+    queue_manager_id: QueueManagerId | None
     created: AwareDatetime
     updated: AwareDatetime
     heartbeat: AwareDatetime

@@ -8,7 +8,7 @@ import pytest
 
 from pgqueuer import db, errors, models, queries
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -40,7 +40,7 @@ async def test_queries_next_jobs(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
@@ -74,7 +74,7 @@ async def test_queries_next_jobs_concurrent(
         while jobs := await q.dequeue(
             entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(1)},
             batch_size=10,
-            queue_manager_id=uuid.uuid4(),
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
             global_concurrency_limit=1000,
             heartbeat_timeout=timedelta(seconds=30),
         ):
@@ -120,7 +120,7 @@ async def test_move_job_log(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
@@ -195,7 +195,7 @@ async def test_queue_priority(
     while next_jobs := await q.dequeue(
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=10,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
@@ -231,7 +231,7 @@ async def test_queue_priority_across_entrypoints(
             QueueEntrypoint(ep): queries.EntrypointExecutionParameter(0) for ep in entrypoints
         },
         batch_size=batch_size,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
@@ -255,7 +255,7 @@ async def test_stale_job_priority_beats_fresh_work(apgdriver: db.Driver) -> None
     picked = await q.dequeue(
         batch_size=10,
         entrypoints=entrypoints,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -268,7 +268,7 @@ async def test_stale_job_priority_beats_fresh_work(apgdriver: db.Driver) -> None
     recovered = await q.dequeue(
         batch_size=1,
         entrypoints=entrypoints,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=heartbeat_timeout,
     )
@@ -295,7 +295,7 @@ async def test_dequeue_caps_at_batch_size_across_entrypoints(
         entrypoints={
             QueueEntrypoint(ep): queries.EntrypointExecutionParameter(0) for ep in entrypoints
         },
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -317,7 +317,7 @@ async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
     picked = await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("foo"): queries.EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -338,7 +338,7 @@ async def test_dequeue_caps_picks_to_entrypoint_remaining_slots(apgdriver: db.Dr
             QueueEntrypoint("tight"): queries.EntrypointExecutionParameter(2),
             QueueEntrypoint("loose"): queries.EntrypointExecutionParameter(0),
         },
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -351,7 +351,7 @@ async def test_dequeue_caps_picks_to_entrypoint_remaining_slots(apgdriver: db.Dr
 async def test_dequeue_hard_caps_worker_budget(apgdriver: db.Driver) -> None:
     """A worker's picked total never exceeds global_concurrency_limit, even mid-batch."""
     q = queries.Queries(apgdriver)
-    queue_manager_id = uuid.uuid4()
+    queue_manager_id = QueueManagerId(uuid.uuid4())
 
     await q.enqueue(["fetch"] * 10, [None] * 10, [0] * 10)
 
@@ -382,7 +382,7 @@ async def test_eligible_queued_work_excludes_deferred(apgdriver: db.Driver) -> N
     picked = await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("foo"): queries.EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -412,7 +412,7 @@ async def test_queue_retry_timer(
     while _ := await q.dequeue(
         batch_size=10,
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     ):
@@ -425,7 +425,7 @@ async def test_queue_retry_timer(
                 entrypoints={
                     QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)
                 },
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
             ),
@@ -440,7 +440,7 @@ async def test_queue_retry_timer(
     while next_jobs := await q.dequeue(
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=10,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=retry_timer,
     ):
@@ -466,7 +466,7 @@ async def test_queue_log_queued_picked_successful(
 
     # Pick all jobs
     picked_jobs = []
-    queue_manager_id = uuid.uuid4()
+    queue_manager_id = QueueManagerId(uuid.uuid4())
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
@@ -563,7 +563,7 @@ async def test_queue_log_queued_picked_exception(
 
     # Pick all jobs
     picked_jobs = []
-    queue_manager_id = uuid.uuid4()
+    queue_manager_id = QueueManagerId(uuid.uuid4())
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
@@ -851,7 +851,7 @@ async def test_log_statistics(
     jobs = await q.dequeue(
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=N,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -878,7 +878,7 @@ async def _log_n_successful(q: queries.Queries, N: int) -> None:
     jobs = await q.dequeue(
         entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=N,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -981,7 +981,7 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     jobs = await q.dequeue(
         entrypoints={QueueEntrypoint("header_task"): queries.EntrypointExecutionParameter(0)},
         batch_size=1,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
