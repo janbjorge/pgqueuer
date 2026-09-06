@@ -10,7 +10,7 @@ import pytest
 
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
 QUEUE_TABLE = qb.DBSettings().queue_table
 EP_PRIO_ID_IDX = f"{QUEUE_TABLE}_ep_prio_id_idx"
@@ -122,7 +122,7 @@ async def test_dequeue_uses_entrypoint_priority_index(
         batch_size=10,
         entrypoints=ENTRYPOINTS,
         concurrency_limits=[concurrency_limit] * len(ENTRYPOINTS),
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=global_limit,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -184,7 +184,7 @@ async def test_dequeue_plan_scans_proportional_to_batch(
         batch_size=BATCH,
         entrypoints=eps,
         concurrency_limits=[concurrency_limit] * BULK_EPS,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=global_limit,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -231,7 +231,7 @@ async def test_dequeue_gate_skips_saturated_entrypoints(
         batch_size=BATCH,
         entrypoints=eps,
         concurrency_limits=[1] * BULK_EPS,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=global_limit,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -267,7 +267,7 @@ async def test_dequeue_plan_is_independent_of_concurrency_limit(
         batch_size=BATCH,
         entrypoints=eps,
         concurrency_limits=[concurrency_limit] * BULK_EPS,
-        queue_manager_id=uuid.uuid4(),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )

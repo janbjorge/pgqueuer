@@ -26,3 +26,12 @@ def test_queue_entrypoint_reexported_from_shims() -> None:
     from pgqueuer.domain import types
 
     assert m.QueueEntrypoint is t.QueueEntrypoint is types.QueueEntrypoint
+
+
+def test_queue_manager_id_reexported_from_shims() -> None:
+    """QueueManagerId reaches both compatibility shims."""
+    import pgqueuer.models as m
+    import pgqueuer.types as t
+    from pgqueuer.domain import types
+
+    assert m.QueueManagerId is t.QueueManagerId is types.QueueManagerId

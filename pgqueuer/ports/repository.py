@@ -13,6 +13,7 @@ from pgqueuer.domain.types import (
     CronEntrypoint,
     OnConflict,
     QueueEntrypoint,
+    QueueManagerId,
     SortOrder,
 )
 from pgqueuer.ports.driver import Driver
@@ -38,7 +39,7 @@ class QueueRepositoryPort(Protocol):
         self,
         batch_size: int,
         entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
-        queue_manager_id: uuid.UUID,
+        queue_manager_id: QueueManagerId,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> list[models.Job]: ...

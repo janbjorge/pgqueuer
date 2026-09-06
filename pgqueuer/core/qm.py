@@ -53,9 +53,9 @@ class QueueManager:
             default_factory=dict,
         )
     )
-    queue_manager_id: uuid.UUID = dataclasses.field(
+    queue_manager_id: types.QueueManagerId = dataclasses.field(
         init=False,
-        default_factory=uuid.uuid4,
+        default_factory=lambda: types.QueueManagerId(uuid.uuid4()),
     )
     # Shared resources mapping propagated into each job Context.
     resources: MutableMapping = dataclasses.field(

@@ -9,7 +9,7 @@ from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.db import Driver
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import QueueEntrypoint
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 
@@ -20,7 +20,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
             await Queries(apgdriver).dequeue(
                 10,
                 {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-                uuid.uuid4(),
+                QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
             )
@@ -34,7 +34,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
             await Queries(apgdriver).dequeue(
                 10,
                 {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-                uuid.uuid4(),
+                QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
             )
@@ -51,7 +51,7 @@ async def test_execute_after_zero(apgdriver: Driver) -> None:
             await Queries(apgdriver).dequeue(
                 10,
                 {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-                uuid.uuid4(),
+                QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
             )
@@ -68,7 +68,7 @@ async def test_execute_after_negative(apgdriver: Driver) -> None:
             await Queries(apgdriver).dequeue(
                 10,
                 {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-                uuid.uuid4(),
+                QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
             )
@@ -83,7 +83,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
     before = await Queries(apgdriver).dequeue(
         10,
         {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-        uuid.uuid4(),
+        QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -93,7 +93,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
     after = await Queries(apgdriver).dequeue(
         10,
         {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-        uuid.uuid4(),
+        QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
@@ -107,7 +107,7 @@ async def test_execute_after_updated_gt_execute_after(apgdriver: Driver) -> None
     after = await Queries(apgdriver).dequeue(
         10,
         {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
-        uuid.uuid4(),
+        QueueManagerId(uuid.uuid4()),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
