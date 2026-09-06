@@ -10,7 +10,7 @@ from __future__ import annotations
 import dataclasses
 from datetime import timedelta
 
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.ports.repository import InsightsRepositoryPort, QueueRepositoryPort
 
 DEFAULT_WINDOW = timedelta(hours=1)
@@ -75,15 +75,15 @@ class InsightsService:
         self,
         limit: int = 50,
         offset: int = 0,
-        statuses: list[models.JOB_STATUS] | None = None,
+        statuses: list[types.JOB_STATUS] | None = None,
         entrypoints: list[str] | None = None,
     ) -> list[models.Job]:
         return await self.repository.browse_queue(limit, offset, statuses, entrypoints)
 
-    async def job(self, id: models.JobId) -> models.Job | None:
+    async def job(self, id: types.JobId) -> models.Job | None:
         return await self.repository.queue_job_by_id(id)
 
-    async def job_history(self, id: models.JobId) -> list[models.Log]:
+    async def job_history(self, id: types.JobId) -> list[models.Log]:
         return await self.repository.job_log_history(id)
 
     async def schedules(self) -> list[models.Schedule]:
@@ -202,10 +202,10 @@ class QueueManagementService:
 
     repository: QueueRepositoryPort
 
-    async def requeue(self, ids: list[models.JobId]) -> None:
+    async def requeue(self, ids: list[types.JobId]) -> None:
         """Move held ``'failed'`` jobs back to queued; other statuses are unaffected."""
         await self.repository.requeue_jobs(ids)
 
-    async def cancel(self, ids: list[models.JobId]) -> None:
+    async def cancel(self, ids: list[types.JobId]) -> None:
         """Cancel jobs: logs ``'canceled'`` and notifies in-flight workers."""
         await self.repository.mark_job_as_cancelled(ids)

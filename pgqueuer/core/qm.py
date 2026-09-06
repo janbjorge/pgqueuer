@@ -37,8 +37,8 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
+    channel: types.Channel = dataclasses.field(
+        default=types.Channel(DBSettings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(
@@ -66,7 +66,7 @@ class QueueManager:
     tracer: tracing.TracingProtocol | None = None
 
     # Per job.
-    job_context: dict[models.JobId, models.Context] = dataclasses.field(
+    job_context: dict[types.JobId, models.Context] = dataclasses.field(
         init=False,
         default_factory=dict,
     )
@@ -143,7 +143,7 @@ class QueueManager:
                     timeout=interval.total_seconds() * random.uniform(0.8, 1.2),
                 )
 
-    def get_context(self, job_id: models.JobId) -> models.Context:
+    def get_context(self, job_id: types.JobId) -> models.Context:
         return self.job_context[job_id]
 
     def register_executor(

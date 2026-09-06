@@ -49,7 +49,7 @@ class EventRouter:
 def default_event_router(
     *,
     notice_event_queue: PGNoticeEventListener,
-    canceled: MutableMapping[models.JobId, models.Context],
+    canceled: MutableMapping[types.JobId, models.Context],
     pending_health_check: MutableMapping[
         types.HealthCheckId, asyncio.Future[models.HealthCheckEvent]
     ],
@@ -78,7 +78,7 @@ def default_event_router(
 
 async def initialize_notice_event_listener(
     connection: Driver,
-    channel: models.Channel,
+    channel: types.Channel,
     event_handler: Callable[[models.AnyEvent], None],
 ) -> None:
     """Add a listener on *channel* and funnel parsed events to *event_handler*."""

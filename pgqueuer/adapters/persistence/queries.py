@@ -211,7 +211,7 @@ class Queries:
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     async def enqueue(
@@ -224,7 +224,7 @@ class Queries:
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     @overload
     async def enqueue(
@@ -237,7 +237,7 @@ class Queries:
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     async def enqueue(
@@ -250,7 +250,7 @@ class Queries:
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     async def enqueue(
         self,
@@ -262,7 +262,7 @@ class Queries:
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
         *,
         on_conflict: types.OnConflict = "raise",
-    ) -> list[models.JobId] | list[models.JobId | None]:
+    ) -> list[types.JobId] | list[types.JobId | None]:
         """Insert one or many jobs. Scalar args = single insert; lists = batch insert.
 
         With ``on_conflict="skip"``, dedupe-key duplicates are skipped instead of
@@ -298,7 +298,7 @@ class Queries:
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
-            return [models.JobId(row["id"]) for row in rows]
+            return [types.JobId(row["id"]) for row in rows]
         assert_never(on_conflict)
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
@@ -320,7 +320,7 @@ class Queries:
         else:
             await self.driver.execute(self.qbq.build_truncate_queue_query())
 
-    async def mark_job_as_cancelled(self, ids: list[models.JobId]) -> None:
+    async def mark_job_as_cancelled(self, ids: list[types.JobId]) -> None:
         """Log *ids* as 'canceled' and emit a cancellation NOTIFY."""
         await asyncio.gather(
             self.driver.execute(
@@ -344,7 +344,7 @@ class Queries:
         job_status: list[
             tuple[
                 models.Job,
-                models.JOB_STATUS,
+                types.JOB_STATUS,
                 models.TracebackRecord | None,
             ]
         ],
@@ -382,7 +382,7 @@ class Queries:
             traceback_record.model_dump_json() if traceback_record else None,
         )
 
-    async def requeue_jobs(self, ids: list[models.JobId]) -> None:
+    async def requeue_jobs(self, ids: list[types.JobId]) -> None:
         """Move failed jobs back to queued status for reprocessing.
 
         Resets attempts to 0 and sets execute_after to NOW().
@@ -448,7 +448,7 @@ class Queries:
         rows = await self.driver.fetch(query.sql, *query.args)
         return [models.LogStatistics.model_validate(row) for row in rows]
 
-    async def notify_job_cancellation(self, ids: list[models.JobId]) -> None:
+    async def notify_job_cancellation(self, ids: list[types.JobId]) -> None:
         """Emit a ``cancellation_event`` NOTIFY carrying *ids*."""
         await self.driver.notify(
             self.qbq.settings.channel,
@@ -472,7 +472,7 @@ class Queries:
             ).model_dump_json(),
         )
 
-    async def update_heartbeat(self, job_ids: list[models.JobId]) -> None:
+    async def update_heartbeat(self, job_ids: list[types.JobId]) -> None:
         await self.driver.execute(
             self.qbq.build_update_heartbeat_query(),
             list(set(job_ids)),
@@ -503,13 +503,13 @@ class Queries:
             )
         ]
 
-    async def set_schedule_queued(self, ids: set[models.ScheduleId]) -> None:
+    async def set_schedule_queued(self, ids: set[types.ScheduleId]) -> None:
         await self.driver.execute(
             self.qbs.build_set_schedule_queued_query(),
             list(ids),
         )
 
-    async def update_schedule_heartbeat(self, ids: set[models.ScheduleId]) -> None:
+    async def update_schedule_heartbeat(self, ids: set[types.ScheduleId]) -> None:
         await self.driver.execute(
             self.qbs.build_update_schedule_heartbeat(),
             list(ids),
@@ -525,7 +525,7 @@ class Queries:
 
     async def delete_schedule(
         self,
-        ids: set[models.ScheduleId],
+        ids: set[types.ScheduleId],
         entrypoints: set[CronEntrypoint],
     ) -> None:
         await self.driver.execute(
@@ -547,8 +547,8 @@ class Queries:
 
     async def job_status(
         self,
-        ids: list[models.JobId],
-    ) -> list[tuple[models.JobId, models.JOB_STATUS]]:
+        ids: list[types.JobId],
+    ) -> list[tuple[types.JobId, types.JOB_STATUS]]:
         return [
             (row["job_id"], row["status"])
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
@@ -640,7 +640,7 @@ class Queries:
         self,
         limit: int = 50,
         offset: int = 0,
-        statuses: list[models.JOB_STATUS] | None = None,
+        statuses: list[types.JOB_STATUS] | None = None,
         entrypoints: list[str] | None = None,
     ) -> list[models.Job]:
         """Paginated queue rows, optionally filtered by status and entrypoint."""
@@ -653,13 +653,13 @@ class Queries:
         )
         return [models.Job.model_validate(row) for row in rows]
 
-    async def queue_job_by_id(self, id: models.JobId) -> models.Job | None:
+    async def queue_job_by_id(self, id: types.JobId) -> models.Job | None:
         rows = await self.driver.fetch(self.qbq.build_queue_job_by_id_query(), id)
         return models.Job.model_validate(rows[0]) if rows else None
 
     async def job_log_history(
         self,
-        id: models.JobId,
+        id: types.JobId,
         limit: int = 100,
     ) -> list[models.Log]:
         """State transitions of one job, oldest first."""
@@ -708,7 +708,7 @@ class SyncQueries:
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     def enqueue(
@@ -721,7 +721,7 @@ class SyncQueries:
         headers: dict[str, str] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     @overload
     def enqueue(
@@ -734,7 +734,7 @@ class SyncQueries:
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["raise"] = "raise",
-    ) -> list[models.JobId]: ...
+    ) -> list[types.JobId]: ...
 
     @overload
     def enqueue(
@@ -747,7 +747,7 @@ class SyncQueries:
         headers: list[dict[str, str] | None] | None = None,
         *,
         on_conflict: Literal["skip"],
-    ) -> list[models.JobId | None]: ...
+    ) -> list[types.JobId | None]: ...
 
     def enqueue(
         self,
@@ -759,7 +759,7 @@ class SyncQueries:
         headers: dict[str, str] | list[dict[str, str] | None] | None = None,
         *,
         on_conflict: types.OnConflict = "raise",
-    ) -> list[models.JobId] | list[models.JobId | None]:
+    ) -> list[types.JobId] | list[types.JobId | None]:
         """Insert one or many jobs. Scalar args = single insert; lists = batch insert.
 
         With ``on_conflict="skip"``, dedupe-key duplicates are skipped instead of
@@ -801,7 +801,7 @@ class SyncQueries:
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
         if on_conflict == "raise":
-            return [models.JobId(row["id"]) for row in rows]
+            return [types.JobId(row["id"]) for row in rows]
         assert_never(on_conflict)
 
     def queue_size(self) -> list[models.QueueStatistics]:

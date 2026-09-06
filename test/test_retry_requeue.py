@@ -17,8 +17,8 @@ from pgqueuer.core.executors import (
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import RetryException, RetryRequested
-from pgqueuer.domain.models import Context, Job, JobId, TracebackRecord
-from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode, QueueManagerId
+from pgqueuer.domain.models import Context, Job, TracebackRecord
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueExecutionMode, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 

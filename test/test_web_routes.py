@@ -26,7 +26,7 @@ from pgqueuer.adapters.web.routes import (
     throughput_chart_svg,
 )
 from pgqueuer.adapters.web.sse import Broadcaster
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -395,7 +395,7 @@ class TestChartSlots:
         return datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
 
     def bucket(
-        self, minutes_ago: int, status: models.JOB_STATUS, count: int
+        self, minutes_ago: int, status: types.JOB_STATUS, count: int
     ) -> models.ThroughputBucket:
         return models.ThroughputBucket(
             bucket=self.now() - timedelta(minutes=minutes_ago),

@@ -8,7 +8,7 @@ from datetime import timedelta
 from itertools import chain
 
 from pgqueuer.core import tm
-from pgqueuer.domain import models
+from pgqueuer.domain import models, types
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
 from pgqueuer.ports.repository import QueueRepositoryPort
@@ -42,7 +42,7 @@ class CompletionWatcher:
         default_factory=lambda: timedelta(milliseconds=50),
         repr=False,
     )
-    waiters: defaultdict[models.JobId, list[asyncio.Future[models.JOB_STATUS]]] = field(
+    waiters: defaultdict[types.JobId, list[asyncio.Future[types.JOB_STATUS]]] = field(
         default_factory=lambda: defaultdict(list),
         init=False,
         repr=False,
@@ -81,9 +81,9 @@ class CompletionWatcher:
         await self.task_manager.gather_tasks()
         return False
 
-    def wait_for(self, jid: models.JobId) -> asyncio.Future[models.JOB_STATUS]:
+    def wait_for(self, jid: types.JobId) -> asyncio.Future[types.JOB_STATUS]:
         """Return a Future that resolves when *jid* reaches a terminal state."""
-        fut: asyncio.Future[models.JOB_STATUS] = asyncio.get_running_loop().create_future()
+        fut: asyncio.Future[types.JOB_STATUS] = asyncio.get_running_loop().create_future()
         self.waiters[jid].append(fut)
         self._schedule_refresh_waiters()
         return fut
@@ -138,6 +138,6 @@ class CompletionWatcher:
                         if not waiter.done():
                             waiter.set_result(status)
 
-    def _is_terminal(self, status: models.JOB_STATUS) -> bool:
+    def _is_terminal(self, status: types.JOB_STATUS) -> bool:
         """Return ``True`` if *status* is terminal."""
         return status in ("canceled", "deleted", "exception", "successful")
