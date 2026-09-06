@@ -20,6 +20,22 @@ class SqlStateError(Protocol):
     def sqlstate(self) -> str | None: ...
 
 
+@runtime_checkable
+class ConstraintNamed(Protocol):
+    """Exception or diagnostic that names the violated constraint."""
+
+    @property
+    def constraint_name(self) -> str | None: ...
+
+
+@runtime_checkable
+class DiagnosticError(Protocol):
+    """psycopg-style error whose ``diag`` carries constraint details."""
+
+    @property
+    def diag(self) -> object: ...
+
+
 class TaskManagerPort(Protocol):
     """Protocol for managing background asyncio tasks."""
 
