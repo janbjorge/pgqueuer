@@ -9,7 +9,12 @@ from typing import Literal, Protocol, overload
 
 from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import CronEntrypoint, OnConflict, SortOrder
+from pgqueuer.domain.types import (
+    CronEntrypoint,
+    OnConflict,
+    QueueEntrypoint,
+    SortOrder,
+)
 from pgqueuer.ports.driver import Driver
 
 
@@ -32,7 +37,7 @@ class QueueRepositoryPort(Protocol):
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, EntrypointExecutionParameter],
+        entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
@@ -134,9 +139,9 @@ class QueueRepositoryPort(Protocol):
 
     async def update_heartbeat(self, job_ids: list[models.JobId]) -> None: ...
 
-    async def queued_work(self, entrypoints: list[str]) -> int: ...
+    async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int: ...
 
-    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
         ...
 
@@ -162,7 +167,7 @@ class QueueRepositoryPort(Protocol):
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None: ...
 
-    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+    async def next_deferred_eta(self, entrypoints: list[QueueEntrypoint]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
         ...
 

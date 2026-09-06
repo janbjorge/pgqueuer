@@ -10,12 +10,14 @@ import pytest
 
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
+from pgqueuer.domain.types import QueueEntrypoint
 
 QUEUE_TABLE = qb.DBSettings().queue_table
 EP_PRIO_ID_IDX = f"{QUEUE_TABLE}_ep_prio_id_idx"
 EP_EA_IDX = f"{QUEUE_TABLE}_ep_ea_idx"
 
-ENTRYPOINTS = ["a", "b", "c", "d"]
+ENTRYPOINT_NAMES = ["a", "b", "c", "d"]
+ENTRYPOINTS = [QueueEntrypoint(name) for name in ENTRYPOINT_NAMES]
 # Large enough that the planner prefers the index over a Seq Scan.
 SEED = 3000
 
@@ -51,7 +53,7 @@ async def _analyze_nodes(driver: db.Driver, sql: str, *args: object) -> list[dic
 
 async def _seed(driver: db.Driver) -> queries.Queries:
     q = queries.Queries(driver)
-    eps = [ENTRYPOINTS[i % len(ENTRYPOINTS)] for i in range(SEED)]
+    eps = [ENTRYPOINT_NAMES[i % len(ENTRYPOINT_NAMES)] for i in range(SEED)]
     await q.enqueue(eps, [None] * SEED, [i % 7 for i in range(SEED)])
     await driver.execute(f"ANALYZE {QUEUE_TABLE};")
     return q
@@ -140,7 +142,7 @@ async def test_next_deferred_eta_uses_execute_after_index(apgdriver: db.Driver) 
     """next_deferred_eta reads the (entrypoint, execute_after) index with a LIMIT (#668)."""
     q = await _seed(apgdriver)
     await q.enqueue(
-        ENTRYPOINTS,
+        ENTRYPOINT_NAMES,
         [None] * len(ENTRYPOINTS),
         [0] * len(ENTRYPOINTS),
         [timedelta(seconds=60)] * len(ENTRYPOINTS),
@@ -177,7 +179,7 @@ async def test_dequeue_plan_scans_proportional_to_batch(
     """
     await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)
     q = queries.Queries(apgdriver)
-    eps = [f"ep_{i}" for i in range(BULK_EPS)]
+    eps = [QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)]
     query = q.qbq.build_dequeue_query(
         batch_size=BATCH,
         entrypoints=eps,
@@ -224,7 +226,7 @@ async def test_dequeue_gate_skips_saturated_entrypoints(
     await apgdriver.execute(f"ANALYZE {QUEUE_TABLE};")
 
     q = queries.Queries(apgdriver)
-    eps = [f"ep_{i}" for i in range(BULK_EPS)]
+    eps = [QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)]
     query = q.qbq.build_dequeue_query(
         batch_size=BATCH,
         entrypoints=eps,
@@ -260,7 +262,7 @@ async def test_dequeue_plan_is_independent_of_concurrency_limit(
     """
     await _bulk_seed(apgdriver, BULK_ROWS, BULK_EPS)
     q = queries.Queries(apgdriver)
-    eps = [f"ep_{i}" for i in range(BULK_EPS)]
+    eps = [QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)]
     query = q.qbq.build_dequeue_query(
         batch_size=BATCH,
         entrypoints=eps,

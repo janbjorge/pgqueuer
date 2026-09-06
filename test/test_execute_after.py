@@ -9,6 +9,7 @@ from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.db import Driver
 from pgqueuer.domain.models import Job
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
 
 
@@ -18,7 +19,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
         len(
             await Queries(apgdriver).dequeue(
                 10,
-                {"foo": EntrypointExecutionParameter(0)},
+                {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
                 uuid.uuid4(),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
@@ -32,7 +33,7 @@ async def test_execute_after_default_is_now(apgdriver: Driver) -> None:
         len(
             await Queries(apgdriver).dequeue(
                 10,
-                {"foo": EntrypointExecutionParameter(0)},
+                {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
                 uuid.uuid4(),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
@@ -49,7 +50,7 @@ async def test_execute_after_zero(apgdriver: Driver) -> None:
         len(
             await Queries(apgdriver).dequeue(
                 10,
-                {"foo": EntrypointExecutionParameter(0)},
+                {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
                 uuid.uuid4(),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
@@ -66,7 +67,7 @@ async def test_execute_after_negative(apgdriver: Driver) -> None:
         len(
             await Queries(apgdriver).dequeue(
                 10,
-                {"foo": EntrypointExecutionParameter(0)},
+                {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
                 uuid.uuid4(),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
@@ -81,7 +82,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
     await Queries(apgdriver).enqueue("foo", None, 0, execute_after)
     before = await Queries(apgdriver).dequeue(
         10,
-        {"foo": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
         uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -91,7 +92,7 @@ async def test_execute_after_1_second(apgdriver: Driver) -> None:
     await asyncio.sleep(execute_after.total_seconds())
     after = await Queries(apgdriver).dequeue(
         10,
-        {"foo": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
         uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -105,7 +106,7 @@ async def test_execute_after_updated_gt_execute_after(apgdriver: Driver) -> None
     await asyncio.sleep(execute_after.total_seconds())
     after = await Queries(apgdriver).dequeue(
         10,
-        {"foo": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("foo"): EntrypointExecutionParameter(0)},
         uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -116,21 +117,21 @@ async def test_execute_after_updated_gt_execute_after(apgdriver: Driver) -> None
 
 async def test_next_deferred_eta_returns_none_when_empty(apgdriver: Driver) -> None:
     q = Queries(apgdriver)
-    eta = await q.next_deferred_eta(["foo"])
+    eta = await q.next_deferred_eta([QueueEntrypoint("foo")])
     assert eta is None
 
 
 async def test_next_deferred_eta_returns_none_for_ready_jobs(apgdriver: Driver) -> None:
     q = Queries(apgdriver)
     await q.enqueue("foo", None, 0)
-    eta = await q.next_deferred_eta(["foo"])
+    eta = await q.next_deferred_eta([QueueEntrypoint("foo")])
     assert eta is None
 
 
 async def test_next_deferred_eta_returns_timedelta(apgdriver: Driver) -> None:
     q = Queries(apgdriver)
     await q.enqueue("foo", None, 0, timedelta(seconds=10))
-    eta = await q.next_deferred_eta(["foo"])
+    eta = await q.next_deferred_eta([QueueEntrypoint("foo")])
     assert eta is not None
     assert eta.total_seconds() > 5
 
@@ -144,19 +145,19 @@ async def test_next_deferred_eta_returns_soonest_of_many(apgdriver: Driver) -> N
         [0, 0, 0],
         [timedelta(seconds=300), timedelta(seconds=30), timedelta(seconds=120)],
     )
-    eta = await q.next_deferred_eta(["foo"])
+    eta = await q.next_deferred_eta([QueueEntrypoint("foo")])
     assert eta is not None
     assert 20 < eta.total_seconds() <= 30
 
 
 async def test_next_deferred_eta_inmemory(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, 0, timedelta(seconds=10))
-    eta = await queries.next_deferred_eta(["ep"])
+    eta = await queries.next_deferred_eta([QueueEntrypoint("ep")])
     assert eta is not None
     assert eta.total_seconds() > 5
 
     # Unrelated entrypoint should return None
-    eta2 = await queries.next_deferred_eta(["other"])
+    eta2 = await queries.next_deferred_eta([QueueEntrypoint("other")])
     assert eta2 is None
 
 

@@ -124,8 +124,8 @@ class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
 
 @dataclasses.dataclass
 class ScheduleExecutorFactoryParameters:
-    entrypoint: str
-    expression: str
+    entrypoint: types.CronEntrypoint
+    expression: types.CronExpression
     func: ScheduleCrontab
     clean_old: bool
     accepts_context: bool = False

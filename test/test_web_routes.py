@@ -27,6 +27,7 @@ from pgqueuer.adapters.web.routes import (
 )
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.domain import models
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -52,7 +53,9 @@ async def client(queries: InMemoryQueries) -> AsyncGenerator[httpx.AsyncClient, 
 async def dequeue_all(queries: InMemoryQueries, entrypoint: str) -> list[models.Job]:
     return await queries.dequeue(
         batch_size=100,
-        entrypoints={entrypoint: EntrypointExecutionParameter(concurrency_limit=0)},
+        entrypoints={
+            QueueEntrypoint(entrypoint): EntrypointExecutionParameter(concurrency_limit=0)
+        },
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),

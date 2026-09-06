@@ -8,6 +8,7 @@ import pytest
 
 from pgqueuer import db, errors, models, queries
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import QueueEntrypoint
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -38,7 +39,7 @@ async def test_queries_next_jobs(
     seen = list[int]()
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -71,7 +72,7 @@ async def test_queries_next_jobs_concurrent(
 
     async def consumer() -> None:
         while jobs := await q.dequeue(
-            entrypoints={"placeholder": queries.EntrypointExecutionParameter(1)},
+            entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(1)},
             batch_size=10,
             queue_manager_id=uuid.uuid4(),
             global_concurrency_limit=1000,
@@ -118,7 +119,7 @@ async def test_move_job_log(
 
     while jobs := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -192,7 +193,7 @@ async def test_queue_priority(
     )
 
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -226,7 +227,9 @@ async def test_queue_priority_across_entrypoints(
 
     drained = list[models.Job]()
     while next_jobs := await q.dequeue(
-        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        entrypoints={
+            QueueEntrypoint(ep): queries.EntrypointExecutionParameter(0) for ep in entrypoints
+        },
         batch_size=batch_size,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -245,7 +248,7 @@ async def test_queue_priority_across_entrypoints(
 async def test_stale_job_priority_beats_fresh_work(apgdriver: db.Driver) -> None:
     """A stale high-priority job outranks fresh lower-priority work (#684)."""
     q = queries.Queries(apgdriver)
-    entrypoints = {"placeholder": queries.EntrypointExecutionParameter(0)}
+    entrypoints = {QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)}
     heartbeat_timeout = timedelta(seconds=0.01)
 
     await q.enqueue("placeholder", b"stale-hi", priority=10)
@@ -289,7 +292,9 @@ async def test_dequeue_caps_at_batch_size_across_entrypoints(
 
     picked = await q.dequeue(
         batch_size=batch_size,
-        entrypoints={ep: queries.EntrypointExecutionParameter(0) for ep in entrypoints},
+        entrypoints={
+            QueueEntrypoint(ep): queries.EntrypointExecutionParameter(0) for ep in entrypoints
+        },
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -302,22 +307,22 @@ async def test_has_queued_work_existence_contract(apgdriver: db.Driver) -> None:
     """queued_work reports positive when work exists, zero otherwise, ignoring picked rows."""
     q = queries.Queries(apgdriver)
 
-    assert await q.queued_work(["foo"]) == 0
+    assert await q.queued_work([QueueEntrypoint("foo")]) == 0
 
     await q.enqueue(["foo"] * 3, [None] * 3, [0] * 3)
 
-    assert await q.queued_work(["foo"]) > 0
-    assert await q.queued_work(["bar"]) == 0
+    assert await q.queued_work([QueueEntrypoint("foo")]) > 0
+    assert await q.queued_work([QueueEntrypoint("bar")]) == 0
 
     picked = await q.dequeue(
         batch_size=10,
-        entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("foo"): queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
     )
     assert len(picked) == 3
-    assert await q.queued_work(["foo"]) == 0
+    assert await q.queued_work([QueueEntrypoint("foo")]) == 0
 
 
 async def test_dequeue_caps_picks_to_entrypoint_remaining_slots(apgdriver: db.Driver) -> None:
@@ -330,8 +335,8 @@ async def test_dequeue_caps_picks_to_entrypoint_remaining_slots(apgdriver: db.Dr
     picked = await q.dequeue(
         batch_size=10,
         entrypoints={
-            "tight": queries.EntrypointExecutionParameter(2),
-            "loose": queries.EntrypointExecutionParameter(0),
+            QueueEntrypoint("tight"): queries.EntrypointExecutionParameter(2),
+            QueueEntrypoint("loose"): queries.EntrypointExecutionParameter(0),
         },
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=None,
@@ -353,7 +358,7 @@ async def test_dequeue_hard_caps_worker_budget(apgdriver: db.Driver) -> None:
     async def dequeue() -> list[models.Job]:
         return await q.dequeue(
             batch_size=4,
-            entrypoints={"fetch": queries.EntrypointExecutionParameter(0)},
+            entrypoints={QueueEntrypoint("fetch"): queries.EntrypointExecutionParameter(0)},
             queue_manager_id=queue_manager_id,
             global_concurrency_limit=5,
             heartbeat_timeout=timedelta(seconds=30),
@@ -371,12 +376,12 @@ async def test_eligible_queued_work_excludes_deferred(apgdriver: db.Driver) -> N
     await q.enqueue("foo", None, 0)
     await q.enqueue("foo", None, 0, execute_after=timedelta(seconds=30))
 
-    assert await q.queued_work(["foo"]) > 0
-    assert await q.eligible_queued_work(["foo"]) > 0
+    assert await q.queued_work([QueueEntrypoint("foo")]) > 0
+    assert await q.eligible_queued_work([QueueEntrypoint("foo")]) > 0
 
     picked = await q.dequeue(
         batch_size=10,
-        entrypoints={"foo": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("foo"): queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -384,8 +389,8 @@ async def test_eligible_queued_work_excludes_deferred(apgdriver: db.Driver) -> N
     assert len(picked) == 1
 
     # Only the deferred job remains: still queued work, but none eligible.
-    assert await q.queued_work(["foo"]) > 0
-    assert await q.eligible_queued_work(["foo"]) == 0
+    assert await q.queued_work([QueueEntrypoint("foo")]) > 0
+    assert await q.eligible_queued_work([QueueEntrypoint("foo")]) == 0
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -406,7 +411,7 @@ async def test_queue_retry_timer(
     # Pick all jobs, and mark then as "in progress"
     while _ := await q.dequeue(
         batch_size=10,
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),
@@ -417,7 +422,9 @@ async def test_queue_retry_timer(
         len(
             await q.dequeue(
                 batch_size=10,
-                entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+                entrypoints={
+                    QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)
+                },
                 queue_manager_id=uuid.uuid4(),
                 global_concurrency_limit=1000,
                 heartbeat_timeout=timedelta(seconds=30),
@@ -431,7 +438,7 @@ async def test_queue_retry_timer(
 
     # Re-fetch, should get the same number of jobs as queued (N).
     while next_jobs := await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=10,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -463,7 +470,9 @@ async def test_queue_log_queued_picked_successful(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
-            "test_queue_log_queued_picked_successful": queries.EntrypointExecutionParameter(0)
+            QueueEntrypoint(
+                "test_queue_log_queued_picked_successful"
+            ): queries.EntrypointExecutionParameter(0)
         },
         queue_manager_id=queue_manager_id,
         global_concurrency_limit=1000,
@@ -558,7 +567,9 @@ async def test_queue_log_queued_picked_exception(
     while jobs := await q.dequeue(
         batch_size=10,
         entrypoints={
-            "test_queue_log_queued_picked_exception": queries.EntrypointExecutionParameter(0)
+            QueueEntrypoint(
+                "test_queue_log_queued_picked_exception"
+            ): queries.EntrypointExecutionParameter(0)
         },
         queue_manager_id=queue_manager_id,
         global_concurrency_limit=1000,
@@ -838,7 +849,7 @@ async def test_log_statistics(
 
     # Log jobs
     jobs = await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=N,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -865,7 +876,7 @@ async def _unaggregated_count(q: queries.Queries) -> int:
 async def _log_n_successful(q: queries.Queries, N: int) -> None:
     await q.enqueue(["placeholder"] * N, [None] * N, [0] * N)
     jobs = await q.dequeue(
-        entrypoints={"placeholder": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("placeholder"): queries.EntrypointExecutionParameter(0)},
         batch_size=N,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,
@@ -968,7 +979,7 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.enqueue("header_task", None, headers=headers)
 
     jobs = await q.dequeue(
-        entrypoints={"header_task": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("header_task"): queries.EntrypointExecutionParameter(0)},
         batch_size=1,
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=1000,

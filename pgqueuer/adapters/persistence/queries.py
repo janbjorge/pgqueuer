@@ -16,7 +16,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.types import CronEntrypoint
+from pgqueuer.domain.types import CronEntrypoint, QueueEntrypoint
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -161,7 +161,7 @@ class Queries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, EntrypointExecutionParameter],
+        entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
@@ -297,11 +297,11 @@ class Queries:
             return [models.JobId(row["id"]) for row in rows]
         assert_never(on_conflict)
 
-    async def queued_work(self, entrypoints: list[str]) -> int:
+    async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
         return rows[0]["queued_work"] if rows else 0
 
-    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
         rows = await self.driver.fetch(self.qbq.build_has_eligible_queued_work(), entrypoints)
         return rows[0]["queued_work"] if rows else 0
@@ -550,7 +550,7 @@ class Queries:
             for row in await self.driver.fetch(self.qbq.build_job_status_query(), ids)
         ]
 
-    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+    async def next_deferred_eta(self, entrypoints: list[QueueEntrypoint]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
         rows = await self.driver.fetch(self.qbq.build_next_deferred_eta_query(), entrypoints)
         return rows[0]["eta"] if rows and rows[0]["eta"] is not None else None
