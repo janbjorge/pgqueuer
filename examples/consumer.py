@@ -29,11 +29,15 @@ async def create_pgqueuer() -> PgQueuer:
     # inject the job's Context (auto-detected from the signature).
     @pgq.entrypoint("fetch")
     async def process_message(job: Job, ctx: Context) -> None:
-        processed = ctx.resources.setdefault("processed_jobs", 0) + 1
+        processed = ctx.resources.get("processed_jobs", 0)
+        assert isinstance(processed, int)
+        processed += 1
         ctx.resources["processed_jobs"] = processed
+        feature_flags = ctx.resources["feature_flags"]
+        assert isinstance(feature_flags, dict)
         print(
             f"Processed message: {job!r} "
-            f"(processed_jobs={processed}, beta_mode={ctx.resources['feature_flags']['beta_mode']})"
+            f"(processed_jobs={processed}, beta_mode={feature_flags['beta_mode']})"
         )
 
     @pgq.schedule("scheduled_every_minute", "* * * * *")

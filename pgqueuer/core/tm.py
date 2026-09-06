@@ -29,12 +29,12 @@ async def cancel_on_exit(task: asyncio.Task[T]) -> AsyncGenerator[asyncio.Task[T
 class TaskManager:
     """Tracks asyncio Tasks, logs unhandled exceptions, awaits them on __aexit__."""
 
-    tasks: set[asyncio.Task] = dataclasses.field(
+    tasks: set[asyncio.Task[object]] = dataclasses.field(
         default_factory=set,
         init=False,
     )
 
-    def log_unhandled_exception(self, task: asyncio.Task) -> None:
+    def log_unhandled_exception(self, task: asyncio.Task[object]) -> None:
         """Log non-cancellation exceptions raised by a finished task."""
         if not task.cancelled() and (exception := task.exception()):
             logconfig.logger.error(
@@ -43,13 +43,13 @@ class TaskManager:
                 exc_info=exception,
             )
 
-    def add(self, task: asyncio.Task) -> None:
+    def add(self, task: asyncio.Task[object]) -> None:
         """Track *task*; auto-remove and log on completion."""
         self.tasks.add(task)
         task.add_done_callback(self.log_unhandled_exception)
         task.add_done_callback(self.tasks.remove)
 
-    async def gather_tasks(self, return_exceptions: bool = True) -> list[BaseException | None]:
+    async def gather_tasks(self, return_exceptions: bool = True) -> list[object]:
         """Await every tracked task and return per-task results/exceptions."""
         return await asyncio.gather(
             *self.tasks,

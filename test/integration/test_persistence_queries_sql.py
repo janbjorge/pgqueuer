@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import timedelta
+from typing import Any
 
 import asyncpg
 import pytest
@@ -32,7 +33,7 @@ async def test_dequeue_locking_race_single_job_one_picker(
     qm1_id = QueueManagerId(uuid.uuid4())
     qm2_id = QueueManagerId(uuid.uuid4())
 
-    async def dequeue_1() -> list:
+    async def dequeue_1() -> list[Any]:
         return await q.dequeue(
             batch_size=1,
             entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
@@ -41,7 +42,7 @@ async def test_dequeue_locking_race_single_job_one_picker(
             heartbeat_timeout=timedelta(seconds=30),
         )
 
-    async def dequeue_2() -> list:
+    async def dequeue_2() -> list[Any]:
         await asyncio.sleep(0.001)
         return await q.dequeue(
             batch_size=1,
@@ -119,7 +120,7 @@ async def test_concurrent_enqueue_dedup_race(
     """Concurrent enqueue same dedupe_key: one succeeds, one fails."""
     q = Queries(apgdriver)
 
-    results: dict[int, list | Exception] = {}
+    results: dict[int, list[Any] | Exception] = {}
 
     async def enqueue_worker(worker_id: int) -> None:
         try:

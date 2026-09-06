@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from typing import MutableMapping
 from unittest.mock import Mock
 
 import pytest
@@ -484,7 +485,7 @@ async def test_schedule_context_resources_via_scheduler(
     )
 
     scheduler.resources = {"shared_key": "shared_value"}
-    received_resources: list[dict] = []
+    received_resources: list[MutableMapping[str, object]] = []
 
     async def handler(schedule: Schedule, ctx: ScheduleContext) -> None:
         received_resources.append(dict(ctx.resources))

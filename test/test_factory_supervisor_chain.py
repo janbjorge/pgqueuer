@@ -11,7 +11,7 @@ import asyncio
 import functools
 from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
-from typing import AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Generator
 
 import async_timeout
 import pytest
@@ -394,7 +394,7 @@ async def test_run_manager_dispatches_to_queue_manager() -> None:
     qm.shutdown.set()
 
     original_run = qm.run
-    called_with: dict = {}
+    called_with: dict[str, Any] = {}
 
     async def spy_run(**kwargs: object) -> None:
         called_with.update(kwargs)
@@ -446,7 +446,7 @@ async def test_run_manager_dispatches_to_pgqueuer() -> None:
     pgq = _make_pgqueuer()
     pgq.shutdown.set()
 
-    called_with: dict = {}
+    called_with: dict[str, Any] = {}
     original_run = pgq.run
 
     async def spy_run(**kwargs: object) -> None:
