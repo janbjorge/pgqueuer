@@ -225,17 +225,10 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
     assert len(evnets) == 0
 
 
-def test_event_router_dispatches_correct_handler() -> None:
-    router = EventRouter()
-    called = {"flag": False}
-
-    @router.register("table_changed_event")
-    def _handle(evt: TableChangedEvent) -> None:
-        called["flag"] = evt.table == "jobs_table"
-
-    event = AnyEvent(
+def _table_changed_event() -> AnyEvent:
+    return AnyEvent(
         root=TableChangedEvent(
-            channel="chan",
+            channel=Channel("chan"),
             sent_at=datetime.now(tz=timezone.utc),
             type="table_changed_event",
             operation="insert",
@@ -243,36 +236,46 @@ def test_event_router_dispatches_correct_handler() -> None:
         )
     )
 
-    router(event)
-    assert called["flag"] is True
+
+def test_event_router_dispatches_table_changed_to_its_handler() -> None:
+    seen: list[TableChangedEvent] = []
+    router = EventRouter(
+        on_table_changed=seen.append,
+        on_cancellation=lambda evt: pytest.fail(f"unexpected {evt!r}"),
+        on_health_check=lambda evt: pytest.fail(f"unexpected {evt!r}"),
+    )
+
+    router(_table_changed_event())
+
+    assert [evt.table for evt in seen] == ["jobs_table"]
 
 
-def test_event_router_duplicate_registration_raises() -> None:
-    router = EventRouter()
+def test_event_router_dispatches_each_type_once() -> None:
+    hits: list[str] = []
+    router = EventRouter(
+        on_table_changed=lambda evt: hits.append(evt.type),
+        on_cancellation=lambda evt: hits.append(evt.type),
+        on_health_check=lambda evt: hits.append(evt.type),
+    )
+    sent_at = datetime.now(tz=timezone.utc)
 
-    @router.register("table_changed_event")
-    def _handler(evt: TableChangedEvent) -> None:
-        pass
-
-    with pytest.raises(ValueError):
-
-        @router.register("table_changed_event")
-        def _another(evt: TableChangedEvent) -> None:
-            pass
-
-
-def test_event_router_missing_handler_raises() -> None:
-    router = EventRouter()
-
-    event = AnyEvent(
-        root=TableChangedEvent(
-            channel="chan",
-            sent_at=datetime.now(tz=timezone.utc),
-            type="table_changed_event",
-            operation="insert",
-            table="jobs_table",
+    router(_table_changed_event())
+    router(
+        AnyEvent(
+            root=CancellationEvent(
+                channel=Channel("chan"), sent_at=sent_at, type="cancellation_event", ids=[]
+            )
+        )
+    )
+    router(
+        AnyEvent(
+            root=HealthCheckEvent(
+                channel=Channel("chan"),
+                sent_at=sent_at,
+                type="health_check_event",
+                id=HealthCheckId(uuid.uuid4()),
+            )
         )
     )
 
-    with pytest.raises(NotImplementedError):
-        router(event)
+    assert hits == ["table_changed_event", "cancellation_event", "health_check_event"]

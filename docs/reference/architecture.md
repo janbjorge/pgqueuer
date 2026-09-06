@@ -24,9 +24,11 @@ Producer ──enqueue──▶ PostgreSQL ──NOTIFY──▶ EventRouter
 4. The **QueueManager** waits for events, fetches ready jobs with `FOR UPDATE SKIP LOCKED` (see [Row Locking & SKIP LOCKED](skip-locked.md) for the mechanics), and dispatches them to registered entrypoints.
 5. After execution, the **Consumer** updates job status back in PostgreSQL.
 
-`EventRouter` maps notification types to the functions registered via
-`@pgq.entrypoint`. Because the notification arrives over `LISTEN/NOTIFY`, a
-consumer picks up new work without waiting for its next poll.
+`EventRouter` dispatches each notification type to its typed handler: table
+changes feed the listener queue, cancellations cancel the job's scope, and
+health-check echoes resolve the pending probe. Because the notification arrives
+over `LISTEN/NOTIFY`, a consumer picks up new work without waiting for its next
+poll.
 
 ## QueueManager processing loop
 
