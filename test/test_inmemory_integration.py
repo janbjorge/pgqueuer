@@ -9,7 +9,7 @@ from datetime import timedelta
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode
 
 # ---------------------------------------------------------------------------
 # PgQueuer.in_memory() factory
@@ -83,7 +83,7 @@ async def test_performance_enqueue_dequeue() -> None:
     t0 = time.perf_counter()
     dequeued = await queries.dequeue(
         n,
-        {"perf_ep": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("perf_ep"): EntrypointExecutionParameter(0)},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),

@@ -20,7 +20,14 @@ from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models
 from pgqueuer.domain.models import utc_now
-from pgqueuer.domain.types import CronEntrypoint, JobId, OnConflict, ScheduleId, SortOrder
+from pgqueuer.domain.types import (
+    CronEntrypoint,
+    JobId,
+    OnConflict,
+    QueueEntrypoint,
+    ScheduleId,
+    SortOrder,
+)
 from pgqueuer.ports import tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
@@ -312,9 +319,9 @@ class InMemoryQueries:
     def _count_picked_jobs(
         self,
         queue_manager_id: uuid.UUID,
-        entrypoints: dict[str, EntrypointExecutionParameter],
-    ) -> tuple[dict[str, int], int]:
-        picked_per_ep: dict[str, int] = {}
+        entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
+    ) -> tuple[dict[QueueEntrypoint, int], int]:
+        picked_per_ep: dict[QueueEntrypoint, int] = {}
         total_picked = 0
         for job_id in self._picked_ids:
             j = self._jobs[job_id]
@@ -328,7 +335,7 @@ class InMemoryQueries:
     def _collect_stale_candidates(
         self,
         now: datetime,
-        entrypoints: dict[str, EntrypointExecutionParameter],
+        entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
         heartbeat_timeout: timedelta,
     ) -> list[dict[str, Any]]:
         candidates = [
@@ -362,7 +369,7 @@ class InMemoryQueries:
     async def dequeue(
         self,
         batch_size: int,
-        entrypoints: dict[str, EntrypointExecutionParameter],
+        entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
@@ -609,13 +616,13 @@ class InMemoryQueries:
             for (ep, pri, st), count in sorted(counts.items())
         ]
 
-    async def queued_work(self, entrypoints: list[str]) -> int:
+    async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         ep_set = set(entrypoints)
         return sum(
             1 for j in self._jobs.values() if j["status"] == "queued" and j["entrypoint"] in ep_set
         )
 
-    async def eligible_queued_work(self, entrypoints: list[str]) -> int:
+    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
         now = utc_now()
         ep_set = set(entrypoints)
@@ -828,7 +835,7 @@ class InMemoryQueries:
         else:
             self._log.clear()
 
-    async def next_deferred_eta(self, entrypoints: list[str]) -> timedelta | None:
+    async def next_deferred_eta(self, entrypoints: list[QueueEntrypoint]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
         now = utc_now()
         ep_set = set(entrypoints)

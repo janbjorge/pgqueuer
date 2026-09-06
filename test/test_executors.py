@@ -10,6 +10,7 @@ import anyio
 import pytest
 
 from pgqueuer.db import Driver
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.executors import (
     AbstractEntrypointExecutor,
     EntrypointExecutor,
@@ -230,9 +231,11 @@ def test_entrypoint_auto_detects_context() -> None:
     @qm.entrypoint("unrelated_second")
     async def unrelated_second(job: Job, config: dict | None = None) -> None: ...
 
-    assert qm.entrypoint_registry["with_context"].parameters.accepts_context
-    assert not qm.entrypoint_registry["without_context"].parameters.accepts_context
-    assert not qm.entrypoint_registry["unrelated_second"].parameters.accepts_context
+    assert qm.entrypoint_registry[QueueEntrypoint("with_context")].parameters.accepts_context
+    assert not qm.entrypoint_registry[QueueEntrypoint("without_context")].parameters.accepts_context
+    assert not qm.entrypoint_registry[
+        QueueEntrypoint("unrelated_second")
+    ].parameters.accepts_context
 
 
 def test_entrypoint_explicit_flag_overrides_detection() -> None:
@@ -244,8 +247,8 @@ def test_entrypoint_explicit_flag_overrides_detection() -> None:
     @qm.entrypoint("forced_on", accepts_context=True)
     async def forced_on(job: Job) -> None: ...
 
-    assert not qm.entrypoint_registry["forced_off"].parameters.accepts_context
-    assert qm.entrypoint_registry["forced_on"].parameters.accepts_context
+    assert not qm.entrypoint_registry[QueueEntrypoint("forced_off")].parameters.accepts_context
+    assert qm.entrypoint_registry[QueueEntrypoint("forced_on")].parameters.accepts_context
 
 
 async def test_custom_threading_executor() -> None:

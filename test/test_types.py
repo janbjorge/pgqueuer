@@ -17,3 +17,12 @@ def test_slot_reexported_from_shims() -> None:
     from pgqueuer.domain import types
 
     assert m.Slot is t.Slot is types.Slot
+
+
+def test_queue_entrypoint_reexported_from_shims() -> None:
+    """QueueEntrypoint reaches both compatibility shims."""
+    import pgqueuer.models as m
+    import pgqueuer.types as t
+    from pgqueuer.domain import types
+
+    assert m.QueueEntrypoint is t.QueueEntrypoint is types.QueueEntrypoint

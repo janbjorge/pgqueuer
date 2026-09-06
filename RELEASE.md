@@ -56,9 +56,20 @@ wins; nothing validates or rejects the mismatch.
   `concurrency_limit`; `None` for unlimited entrypoints and unpicked rows.
   Typed as the new `Slot` identity in `pgqueuer.domain.types` (re-exported
   from `pgqueuer.types` and `pgqueuer.models`); a plain `int` at runtime.
+- `QueueEntrypoint` identity type in `pgqueuer.domain.types` (re-exported from
+  `pgqueuer.types` and `pgqueuer.models`) for the queue entrypoint name on
+  `Job`, `Log`, the statistics models and `QueueManager.entrypoint_registry`;
+  a plain `str` at runtime. Schedules keep the existing `CronEntrypoint`.
 
 ### Changed
 
+- Type annotations only, no runtime change: `dequeue()`, `queued_work()`,
+  `eligible_queued_work()`, `next_deferred_eta()` and
+  `QueryQueueBuilder.build_dequeue_query()` take `QueueEntrypoint` instead of
+  `str`, and `QueueManager.entrypoint_registry` is keyed by `QueueEntrypoint`.
+  Code that calls these directly with literals needs `QueueEntrypoint("name")`
+  to pass mypy. `enqueue()`, `clear_queue()` and the `@entrypoint` decorator
+  still take `str`.
 - `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`
   take keyword-only arguments and return a `ComposedQuery` (`.sql`, `.args`)
   instead of a SQL string. Both are internal but reachable via `Queries.qbq`.

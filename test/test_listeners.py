@@ -15,6 +15,7 @@ from pgqueuer.core.listeners import (
     initialize_notice_event_listener,
 )
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
@@ -155,7 +156,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
 
     await Queries(apgdriver).dequeue(
         100,
-        {"test_emit_stable_changed_update": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("test_emit_stable_changed_update"): EntrypointExecutionParameter(0)},
         uuid.uuid4(),
         global_concurrency_limit=1000,
         heartbeat_timeout=timedelta(seconds=30),

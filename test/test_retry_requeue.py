@@ -18,7 +18,7 @@ from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import RetryException, RetryRequested
 from pgqueuer.domain.models import Context, Job, JobId, TracebackRecord
-from pgqueuer.domain.types import QueueExecutionMode
+from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
@@ -61,7 +61,7 @@ async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> Non
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -82,7 +82,7 @@ async def test_inmemory_retry_job_updates_state(queries: InMemoryQueries) -> Non
     # Verify via dequeue that the job is eligible again and has attempts=1
     jobs_again = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -98,7 +98,7 @@ async def test_inmemory_retry_job_writes_log_entry(queries: InMemoryQueries) -> 
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -573,7 +573,7 @@ async def test_retry_with_delay_prevents_immediate_dequeue(
     """A retried job with non-zero delay is not dequeued until execute_after passes."""
     await queries.enqueue("ep", b"x", priority=0)
     qm_id = uuid.uuid4()
-    ep_params = {"ep": EntrypointExecutionParameter(0)}
+    ep_params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
 
     jobs = await queries.dequeue(
         10, ep_params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
@@ -659,7 +659,7 @@ async def test_inmemory_retry_job_stores_traceback(queries: InMemoryQueries) -> 
     qm_id = uuid.uuid4()
     jobs = await queries.dequeue(
         10,
-        {"ep": EntrypointExecutionParameter(0)},
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),

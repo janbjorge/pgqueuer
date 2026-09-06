@@ -12,6 +12,7 @@ from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.cache import TTLCache
 from pgqueuer.core.tm import TaskManager
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -425,7 +426,7 @@ async def test_drain_shutdown_ignores_stale_cached_queued_work(
 
     cached = TTLCache.create(
         ttl=timedelta(hours=1),
-        on_expired=lambda: qm.queries.queued_work(["fetch"]),
+        on_expired=lambda: qm.queries.queued_work([QueueEntrypoint("fetch")]),
     )
     assert await cached() == 0
 
@@ -448,7 +449,7 @@ async def test_drain_shutdown_sets_shutdown_when_queue_confirmed_empty(
 
     cached = TTLCache.create(
         ttl=timedelta(hours=1),
-        on_expired=lambda: qm.queries.queued_work(["fetch"]),
+        on_expired=lambda: qm.queries.queued_work([QueueEntrypoint("fetch")]),
     )
 
     await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager(), cached)

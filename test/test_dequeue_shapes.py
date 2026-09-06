@@ -22,6 +22,7 @@ from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.composer import ComposedQuery
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import QueueEntrypoint
 
 SNAPSHOT_DIR = Path(__file__).parent / "query_shapes"
 
@@ -41,7 +42,7 @@ def compose(
 ) -> ComposedQuery:
     return (builder or pinned_builder()).build_dequeue_query(
         batch_size=10,
-        entrypoints=["fetch"],
+        entrypoints=[QueueEntrypoint("fetch")],
         concurrency_limits=[concurrency_limit],
         queue_manager_id=uuid.UUID(int=0),
         global_concurrency_limit=global_limit,
@@ -114,7 +115,7 @@ def test_dequeue_rejects_mismatched_concurrency_limits() -> None:
     with pytest.raises(ValueError, match="same length"):
         pinned_builder().build_dequeue_query(
             batch_size=10,
-            entrypoints=["a", "b"],
+            entrypoints=[QueueEntrypoint("a"), QueueEntrypoint("b")],
             concurrency_limits=[0],
             queue_manager_id=uuid.UUID(int=0),
             global_concurrency_limit=None,
@@ -143,7 +144,9 @@ async def test_dequeue_shapes_respect_gates(
     dequeue = functools.partial(
         q.dequeue,
         batch_size=10,
-        entrypoints={"fetch": queries.EntrypointExecutionParameter(concurrency_limit)},
+        entrypoints={
+            QueueEntrypoint("fetch"): queries.EntrypointExecutionParameter(concurrency_limit)
+        },
         queue_manager_id=uuid.uuid4(),
         global_concurrency_limit=global_limit,
         heartbeat_timeout=timedelta(seconds=30),
@@ -163,7 +166,7 @@ async def test_minimal_shape_recovers_stale_jobs(apgdriver: db.Driver) -> None:
     dequeue = functools.partial(
         q.dequeue,
         batch_size=10,
-        entrypoints={"fetch": queries.EntrypointExecutionParameter(0)},
+        entrypoints={QueueEntrypoint("fetch"): queries.EntrypointExecutionParameter(0)},
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )

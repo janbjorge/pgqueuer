@@ -14,7 +14,7 @@ from pgqueuer.domain.settings import (
     DurabilityPolicy,
     QualifiedNames,
 )
-from pgqueuer.domain.types import OnConflict, SortOrder
+from pgqueuer.domain.types import OnConflict, QueueEntrypoint, SortOrder
 
 # Re-export for backward compatibility within the adapter layer
 __all__ = [
@@ -482,7 +482,7 @@ class QueryQueueBuilder:
         self,
         *,
         batch_size: int,
-        entrypoints: list[str],
+        entrypoints: list[QueueEntrypoint],
         concurrency_limits: list[int],
         queue_manager_id: uuid.UUID,
         global_concurrency_limit: int | None,
