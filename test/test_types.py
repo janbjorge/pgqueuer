@@ -35,3 +35,12 @@ def test_queue_manager_id_reexported_from_shims() -> None:
     from pgqueuer.domain import types
 
     assert m.QueueManagerId is t.QueueManagerId is types.QueueManagerId
+
+
+def test_health_check_id_reexported_from_shims() -> None:
+    """HealthCheckId reaches both compatibility shims."""
+    import pgqueuer.models as m
+    import pgqueuer.types as t
+    from pgqueuer.domain import types
+
+    assert m.HealthCheckId is t.HealthCheckId is types.HealthCheckId

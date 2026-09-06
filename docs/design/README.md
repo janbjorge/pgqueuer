@@ -190,7 +190,8 @@ Arrows denote dependency, not communication flow.
 
 | Component        | Type         | Description                                    |
 |------------------|--------------|------------------------------------------------|
-| JobId, ScheduleId, QueueManagerId, Slot | Value Object | `NewType` identities (`domain/types.py`) |
+| JobId, ScheduleId, QueueManagerId, HealthCheckId, Slot | Value Object | `NewType` identities (`domain/types.py`) |
+| Priority         | Value Object | Plain `int` ordering weight. A quantity, not an identity, so no `NewType`, same as `attempts` and `concurrency_limit` |
 | Entrypoint       | Value Object | Name binding a job to its registered handler (`QueueEntrypoint`); schedules use the `CronEntrypoint` variant |
 | Payload          | Value Object | Opaque `bytes`; the library ships no serializer (ADR-0009) |
 | Headers          | Value Object | Side-channel dict for tracing propagation      |

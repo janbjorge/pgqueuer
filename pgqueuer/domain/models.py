@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import dataclasses
 import traceback
-import uuid
 from collections.abc import MutableMapping
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any, Literal, NamedTuple
@@ -18,6 +17,7 @@ from pgqueuer.domain.types import (
     Channel,
     CronEntrypoint,
     CronExpression,
+    HealthCheckId,
     JobId,
     QueueEntrypoint,
     QueueManagerId,
@@ -68,7 +68,7 @@ class CancellationEvent(Event):
 class HealthCheckEvent(Event):
     """Echo response for a health-check probe; ``id`` matches the originating probe."""
 
-    id: uuid.UUID
+    id: HealthCheckId
     type: Literal["health_check_event"]
 
 

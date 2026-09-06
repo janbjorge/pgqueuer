@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import uuid
 from datetime import timedelta
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -16,7 +15,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.types import CronEntrypoint, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
@@ -456,7 +455,7 @@ class Queries:
             ).model_dump_json(),
         )
 
-    async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
+    async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None:
         """Emit a ``health_check_event`` NOTIFY tagged with ``health_check_event_id``."""
         await self.driver.notify(
             self.qbq.settings.channel,

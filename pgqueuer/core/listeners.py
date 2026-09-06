@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -51,7 +50,9 @@ def default_event_router(
     *,
     notice_event_queue: PGNoticeEventListener,
     canceled: MutableMapping[models.JobId, models.Context],
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[models.HealthCheckEvent]],
+    pending_health_check: MutableMapping[
+        types.HealthCheckId, asyncio.Future[models.HealthCheckEvent]
+    ],
 ) -> EventRouter:
     """Return an `EventRouter` wired with handlers for all known event types."""
 

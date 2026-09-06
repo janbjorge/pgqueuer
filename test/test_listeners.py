@@ -15,7 +15,7 @@ from pgqueuer.core.listeners import (
     initialize_notice_event_listener,
 )
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
@@ -31,7 +31,7 @@ from pgqueuer.queries import EntrypointExecutionParameter, Queries
 async def test_handle_table_changed_event() -> None:
     notice_event_queue = PGNoticeEventListener()
     canceled: MutableMapping[JobId, Context] = {}
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+    pending_health_check: MutableMapping[HealthCheckId, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=TableChangedEvent(
@@ -55,7 +55,7 @@ async def test_handle_table_changed_event() -> None:
 async def test_handle_cancellation_event() -> None:
     notice_event_queue = PGNoticeEventListener()
     canceled: MutableMapping[JobId, Context] = {}
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+    pending_health_check: MutableMapping[HealthCheckId, asyncio.Future[HealthCheckEvent]] = {}
 
     cancellation_context = Context(
         cancellation=CancelScope(), resources={"test_key": "listener_test"}
@@ -84,7 +84,7 @@ async def test_handle_cancellation_event() -> None:
 async def test_handle_health_check_event_event() -> None:
     notice_event_queue = PGNoticeEventListener()
     canceled: MutableMapping[JobId, Context] = {}
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+    pending_health_check: MutableMapping[HealthCheckId, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=HealthCheckEvent(

@@ -11,6 +11,7 @@ from pgqueuer.core.listeners import (
     PGNoticeEventListener,
     default_event_router,
 )
+from pgqueuer.domain.types import HealthCheckId
 from pgqueuer.models import (
     AnyEvent,
     Context,
@@ -27,7 +28,7 @@ async def test_health_check_callback_ignores_done_future() -> None:
     """Router callback must not crash when the future is already resolved."""
     notice_event_queue = PGNoticeEventListener()
     canceled: MutableMapping[JobId, Context] = {}
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+    pending_health_check: MutableMapping[HealthCheckId, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=HealthCheckEvent(
@@ -56,7 +57,7 @@ async def test_health_check_callback_ignores_cancelled_future() -> None:
     """Router callback must not crash when the future is already cancelled."""
     notice_event_queue = PGNoticeEventListener()
     canceled: MutableMapping[JobId, Context] = {}
-    pending_health_check: MutableMapping[uuid.UUID, asyncio.Future[HealthCheckEvent]] = {}
+    pending_health_check: MutableMapping[HealthCheckId, asyncio.Future[HealthCheckEvent]] = {}
 
     event = AnyEvent(
         root=HealthCheckEvent(
