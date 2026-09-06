@@ -5,16 +5,15 @@ from __future__ import annotations
 import asyncio
 import contextlib
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
-from typing import MutableMapping, TypeAlias, TypeVar
+from typing import MutableMapping
+
+from typing_extensions import assert_never
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
 from pgqueuer.ports.driver import Driver
-
-EventHandler: TypeAlias = Callable[[models.Event], None]
-HandlerTypeVar = TypeVar("HandlerTypeVar", bound=Callable[..., None])
 
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
@@ -23,27 +22,22 @@ class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
 
 @dataclass
 class EventRouter:
-    """Dispatch parsed NOTIFY events to exactly one handler per `type`."""
+    """Dispatch a parsed NOTIFY envelope to the handler for its event type."""
 
-    handlers: dict[types.EVENT_TYPES, EventHandler] = field(default_factory=dict, init=False)
-
-    def register(self, event_type: types.EVENT_TYPES) -> Callable[[HandlerTypeVar], HandlerTypeVar]:
-        """Decorator that wires *func* to *event_type*. The function must return `None`."""
-
-        def decorator(func: HandlerTypeVar) -> HandlerTypeVar:
-            if event_type in self.handlers:
-                raise ValueError(f"duplicate handler for {event_type!r}")
-            self.handlers[event_type] = func
-            return func
-
-        return decorator
+    on_table_changed: Callable[[models.TableChangedEvent], None]
+    on_cancellation: Callable[[models.CancellationEvent], None]
+    on_health_check: Callable[[models.HealthCheckEvent], None]
 
     def __call__(self, envelope: models.AnyEvent) -> None:
         event = envelope.root
-        try:
-            self.handlers[event.type](event)
-        except KeyError as exc:
-            raise NotImplementedError(event) from exc
+        if isinstance(event, models.TableChangedEvent):
+            self.on_table_changed(event)
+        elif isinstance(event, models.CancellationEvent):
+            self.on_cancellation(event)
+        elif isinstance(event, models.HealthCheckEvent):
+            self.on_health_check(event)
+        else:
+            assert_never(event)
 
 
 def default_event_router(
@@ -56,24 +50,23 @@ def default_event_router(
 ) -> EventRouter:
     """Return an `EventRouter` wired with handlers for all known event types."""
 
-    router = EventRouter()
-
-    @router.register("table_changed_event")
-    def _table_changed(evt: models.TableChangedEvent) -> None:
+    def on_table_changed(evt: models.TableChangedEvent) -> None:
         notice_event_queue.put_nowait(evt)
 
-    @router.register("cancellation_event")
-    def _cancellation(evt: models.CancellationEvent) -> None:
+    def on_cancellation(evt: models.CancellationEvent) -> None:
         for jid in evt.ids:
             if ctx := canceled.get(jid):
                 ctx.cancellation.cancel()
 
-    @router.register("health_check_event")
-    def _health_check_event(evt: models.HealthCheckEvent) -> None:
+    def on_health_check(evt: models.HealthCheckEvent) -> None:
         if (fut := pending_health_check.get(evt.id)) and not fut.done():
             fut.set_result(evt)
 
-    return router
+    return EventRouter(
+        on_table_changed=on_table_changed,
+        on_cancellation=on_cancellation,
+        on_health_check=on_health_check,
+    )
 
 
 async def initialize_notice_event_listener(
