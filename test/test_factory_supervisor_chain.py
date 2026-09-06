@@ -429,7 +429,7 @@ async def test_run_manager_dispatches_to_scheduler_manager() -> None:
         called = True
         return await original_run()
 
-    sm.run = spy_run  # type: ignore[method-assign]
+    sm.run = spy_run
 
     await supervisor.run_manager(
         sm,

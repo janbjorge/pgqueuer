@@ -356,12 +356,12 @@ class ThroughputStrategy:
             created_at=datetime.now(timezone.utc),
             driver=self.settings.driver,
             strategy=StrategyEnum.throughput,
-            elapsed=self.tqdm_format_dict.get("elapsed", 0),
+            elapsed=timedelta(seconds=float(self.tqdm_format_dict.get("elapsed", 0))),
             github_ref_name=os.environ.get("REF_NAME", ""),
             queued=sum(x.count for x in qsize),
             rate=float(self.tqdm_format_dict.get("n", 0))
             / max(float(self.tqdm_format_dict.get("elapsed", 1)), 1),
-            steps=self.tqdm_format_dict.get("n", 0),
+            steps=int(self.tqdm_format_dict.get("n", 0)),
         )
 
     async def teardown(self) -> None:  # pragma: no cover - nothing to clean up
@@ -476,7 +476,7 @@ def main(
         tp_settings = ThroughputSettings(
             driver=driver,
             strategy=strategy,
-            timer=timer,
+            timer=timedelta(seconds=timer),
             dequeue=dequeue,
             dequeue_batch_size=dequeue_batch_size,
             enqueue=enqueue,

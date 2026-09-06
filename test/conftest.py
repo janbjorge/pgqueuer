@@ -19,8 +19,10 @@ from pgqueuer.queries import Queries
 
 try:  # pragma: no cover - uvloop not installed on Windows
     import uvloop
+
+    HAS_UVLOOP = True
 except ModuleNotFoundError:
-    uvloop = None  # type: ignore[assignment]
+    HAS_UVLOOP = False
 
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.wait_strategies import HealthcheckWaitStrategy
@@ -120,7 +122,10 @@ class PgQueuerPostgresContainer(DockerContainer):
 @pytest.fixture(scope="session", autouse=True)
 def event_loop_policy() -> asyncio.AbstractEventLoopPolicy:
     """Provide uvloop if available; fallback to default policy."""
-    return asyncio.DefaultEventLoopPolicy() if uvloop is None else uvloop.EventLoopPolicy()
+    policy: asyncio.AbstractEventLoopPolicy = (
+        uvloop.EventLoopPolicy() if HAS_UVLOOP else asyncio.DefaultEventLoopPolicy()
+    )
+    return policy
 
 
 CONNECTION_ENV_VARS = (

@@ -158,6 +158,10 @@ warn_unused_configs = true
 warn_unused_ignores = true
 explicit_package_bases = true
 
+[[tool.mypy.overrides]]
+module = "test.*"
+disable_error_code = ["method-assign"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 timeout = "20"

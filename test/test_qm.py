@@ -181,7 +181,7 @@ async def test_run_unlimited_budget_reaches_dequeue_as_none(
         seen.append(kwargs["global_concurrency_limit"])
         return await original(*args, **kwargs)
 
-    qm.queries.dequeue = spying_dequeue  # type: ignore[method-assign]
+    qm.queries.dequeue = spying_dequeue
 
     @qm.entrypoint("fetch")
     async def fetch(job: Job) -> None: ...
@@ -367,7 +367,7 @@ async def test_run_failure_leaves_no_pending_lifecycle_tasks(
     async def failing_dequeue(*args: Any, **kwargs: Any) -> list[Job]:
         raise RuntimeError("boom")
 
-    queries.dequeue = failing_dequeue  # type: ignore[method-assign]
+    queries.dequeue = failing_dequeue
 
     before = asyncio.all_tasks()
     with pytest.raises(RuntimeError, match="boom"):
@@ -406,7 +406,7 @@ async def test_shutdown_mid_batch_leaves_no_stranded_picked_jobs(
             qm.shutdown.set()
         return await original_dequeue(*args, **kwargs)
 
-    queries.dequeue = dequeue_then_shutdown  # type: ignore[method-assign]
+    queries.dequeue = dequeue_then_shutdown
 
     async with async_timeout.timeout(10):
         await qm.run(dequeue_timeout=timedelta(seconds=0.01), batch_size=batch_size)
