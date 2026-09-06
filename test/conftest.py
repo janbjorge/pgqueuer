@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import uuid
 from typing import Any, AsyncGenerator, Generator
@@ -10,9 +11,10 @@ import asyncpg
 import psycopg
 import pytest
 import pytest_asyncio
+from psycopg import sql
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
 try:  # pragma: no cover - uvloop not installed on Windows
@@ -189,39 +191,73 @@ async def postgres_container() -> AsyncGenerator[str, None]:
         yield running.get_connection_url()
 
 
-@pytest.fixture(scope="session")
-async def migrated_db(postgres_container: str) -> AsyncGenerator[str, None]:
-    """Ensure the database is migrated before running tests."""
-
-    parent = f"parent_{uuid.uuid4().hex}"
-
-    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, "/postgres")) as pool:
-        await pool.execute(f"CREATE DATABASE {parent}")
-
-    async with asyncpg.create_pool(dsn=build_dsn_for(postgres_container, f"/{parent}")) as pool:
-        await Queries(AsyncpgPoolDriver(pool)).install()
-
-    yield build_dsn_for(postgres_container, f"/{parent}")
-
-
 def build_dsn_for(base_url: str, path: str) -> str:
     """Build a DSN for the specified path."""
     return urlunparse(urlparse(base_url)._replace(path=path))
 
 
-@pytest_asyncio.fixture(scope="function")
-async def dsn(migrated_db: str) -> AsyncGenerator[str, None]:
-    parent = urlparse(migrated_db).path.strip("/")
+@dataclasses.dataclass(frozen=True)
+class MaintenanceDb:
+    """One long-lived connection to the ``postgres`` maintenance database.
+
+    Only CREATE DATABASE / DROP DATABASE run here. Sync psycopg on purpose:
+    a sync connection is not tied to any asyncio loop, so a single
+    session-scoped connection can serve every test's function-scoped loop.
+    Before this, each test opened a 10-connection asyncpg pool just to run
+    these two statements (~190ms per test, ~45s of CI wall time).
+    """
+
+    conn: psycopg.Connection[Any]
+
+    def create_database(self, name: str, *, template: str | None = None) -> None:
+        stmt = sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name))
+        if template is not None:
+            stmt += sql.SQL(" TEMPLATE {}").format(sql.Identifier(template))
+        self.conn.execute(stmt)
+
+    def drop_database(self, name: str) -> None:
+        # FORCE terminates backends a test may have left open. The drop itself
+        # keeps the 1 GB tmpfs data dir bounded: every clone copies the
+        # template (~8 MiB), so a worker would run out of space mid-suite.
+        stmt = sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(name))
+        self.conn.execute(stmt)
+
+
+@pytest.fixture(scope="session")
+def maintenance_db(postgres_container: str) -> Generator[MaintenanceDb, None, None]:
+    dsn = build_dsn_for(postgres_container, "/postgres")
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        yield MaintenanceDb(conn)
+
+
+@pytest.fixture(scope="session")
+async def migrated_db(
+    postgres_container: str,
+    maintenance_db: MaintenanceDb,
+) -> AsyncGenerator[str, None]:
+    """Create the template database and install the pgqueuer schema into it once."""
+    template = f"parent_{uuid.uuid4().hex}"
+    maintenance_db.create_database(template)
+
+    dsn = build_dsn_for(postgres_container, f"/{template}")
+    conn = await asyncpg.connect(dsn=dsn)
+    try:
+        await Queries(AsyncpgDriver(conn)).install()
+    finally:
+        await conn.close()
+
+    yield dsn
+
+
+@pytest.fixture
+def dsn(migrated_db: str, maintenance_db: MaintenanceDb) -> Generator[str, None, None]:
+    """A fresh database per test, cloned from the migrated template."""
+    template = urlparse(migrated_db).path.strip("/")
     child = f"test_{uuid.uuid4().hex}"
 
-    async with asyncpg.create_pool(dsn=build_dsn_for(migrated_db, path="/postgres")) as pool:
-        # Create a short-lived test db from the template dbname on the container
-        await pool.execute(f"CREATE DATABASE {child} TEMPLATE {parent}")
-
-        yield build_dsn_for(migrated_db, path=f"/{child}")
-
-        # Clean up the test db
-        await pool.execute(f'DROP DATABASE IF EXISTS "{child}" WITH (FORCE)')
+    maintenance_db.create_database(child, template=template)
+    yield build_dsn_for(migrated_db, f"/{child}")
+    maintenance_db.drop_database(child)
 
 
 @pytest_asyncio.fixture(scope="function")
