@@ -7,6 +7,7 @@ import psycopg
 import pytest
 
 from pgqueuer import db, errors, models, queries
+from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
@@ -872,7 +873,7 @@ async def test_log_statistics(
 
 async def _unaggregated_count(q: queries.Queries) -> int:
     rows = await q.driver.fetch(q.qbq.build_unaggregated_log_count_query())
-    return int(rows[0]["unaggregated"])
+    return cell(rows[0], "unaggregated", int)
 
 
 async def _log_n_successful(q: queries.Queries, N: int) -> None:
@@ -902,7 +903,7 @@ async def test_aggregate_logs_populates_statistics_without_read(apgdriver: db.Dr
     assert await _unaggregated_count(q) == 0
     stats_query = q.qbq.build_log_statistics_query(limit=None, last=None)
     stats = await q.driver.fetch(stats_query.sql, *stats_query.args)
-    assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
+    assert sum(cell(r, "count", int) for r in stats) == 3 * N  # queued + picked + successful
 
 
 async def test_aggregate_logs_advisory_lock_skips_when_held(
@@ -972,7 +973,7 @@ async def test_upgrade_from_legacy_composite_index_still_aggregates(
     assert await _unaggregated_count(q) == 0
     stats_query = q.qbq.build_log_statistics_query(limit=None, last=None)
     stats = await q.driver.fetch(stats_query.sql, *stats_query.args)
-    assert sum(int(r["count"]) for r in stats) == 3 * N  # queued + picked + successful
+    assert sum(cell(r, "count", int) for r in stats) == 3 * N  # queued + picked + successful
 
 
 async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:

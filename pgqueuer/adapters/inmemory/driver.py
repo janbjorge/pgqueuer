@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Any, Callable
+from typing import Callable
 
 from typing_extensions import Self
 
@@ -23,10 +23,10 @@ class InMemoryDriver:
         self._tm = TaskManager()
         self._listeners: dict[str, list[Callable[[str], None]]] = defaultdict(list)
 
-    async def fetch(self, query: str, *args: Any) -> list[dict]:
+    async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
         raise NotImplementedError("InMemoryDriver does not support SQL fetch")
 
-    async def execute(self, query: str, *args: Any) -> str:
+    async def execute(self, query: str, *args: object) -> str:
         raise NotImplementedError("InMemoryDriver does not support SQL execute")
 
     async def add_listener(

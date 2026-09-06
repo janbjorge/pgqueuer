@@ -5,8 +5,11 @@ from datetime import timedelta
 from itertools import count
 from typing import Any
 
+import pytest
+
 from pgqueuer.adapters.persistence.query_helpers import (
     NormedEnqueueParam,
+    cell,
     normalize_enqueue_params,
     scatter_ids_by_ordinal,
 )
@@ -257,3 +260,17 @@ def test_scatter_matches_simulated_insert_semantics() -> None:
         active = {key for key in "abc" if rng.random() < 0.4}
         inserted, expected = simulate_enqueue(keys, active)
         assert scatter_ids_by_ordinal(inserted, len(keys)) == expected
+
+
+def test_cell_returns_value_of_expected_type() -> None:
+    row: dict[str, object] = {"exists": True, "queued_work": 3}
+    assert cell(row, "exists", bool) is True
+    assert cell(row, "queued_work", int) == 3
+
+
+def test_cell_rejects_wrong_type_and_missing_key() -> None:
+    row: dict[str, object] = {"eta": "not-a-timedelta"}
+    with pytest.raises(TypeError, match="column 'eta': expected timedelta, got str"):
+        cell(row, "eta", timedelta)
+    with pytest.raises(KeyError):
+        cell(row, "missing", int)

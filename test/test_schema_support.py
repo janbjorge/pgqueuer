@@ -15,6 +15,7 @@ import pytest
 from async_timeout import timeout
 
 from pgqueuer import db, queries
+from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.core.listeners import initialize_notice_event_listener
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
@@ -33,7 +34,7 @@ async def table_schemas(driver: db.Driver, table: str) -> set[str]:
         WHERE c.relname = $1 AND c.relkind = 'r'""",
         table,
     )
-    return {row["nspname"] for row in rows}
+    return {cell(row, "nspname", str) for row in rows}
 
 
 async def enqueue_dequeue_round_trip(q: queries.Queries) -> None:

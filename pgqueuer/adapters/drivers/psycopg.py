@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Callable
 
 from typing_extensions import Self
 
@@ -59,8 +59,8 @@ class PsycopgDriver(Driver):
     async def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         from psycopg import AsyncRawCursor
         from psycopg.rows import dict_row
 
@@ -71,7 +71,7 @@ class PsycopgDriver(Driver):
     async def execute(
         self,
         query: str,
-        *args: Any,
+        *args: object,
     ) -> str:
         from psycopg import AsyncRawCursor
 
@@ -146,8 +146,8 @@ class SyncPsycopgDriver(SyncDriver):
     def fetch(
         self,
         query: str,
-        *args: Any,
-    ) -> list[dict]:
+        *args: object,
+    ) -> list[dict[str, object]]:
         from psycopg import RawCursor
         from psycopg.rows import dict_row
 

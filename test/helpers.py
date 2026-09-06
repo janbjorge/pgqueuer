@@ -13,6 +13,7 @@ import async_timeout
 from pgqueuer import db
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.queries import Queries
+from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 
@@ -44,7 +45,7 @@ async def id_data_type(driver: db.Driver, table: str, schema: str | None = None)
           AND column_name = 'id';""",
         table,
     )
-    return rows[0]["data_type"]
+    return cell(rows[0], "data_type", str)
 
 
 async def simulate_legacy_serial(driver: db.Driver, table: str, schema: str | None = None) -> None:
