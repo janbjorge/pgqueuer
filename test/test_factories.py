@@ -131,3 +131,16 @@ def test_validate_rejects_arbitrary_type_with_migration_message() -> None:
 
     msg = str(exc_info.value)
     assert "@asynccontextmanager" in msg
+
+
+def test_load_factory_rejects_non_callable_attribute(monkeypatch: pytest.MonkeyPatch) -> None:
+    mock_module: Mock = Mock(spec_set=["not_callable"])
+    mock_module.not_callable = 42
+
+    def mock_import_module(module_name: str) -> Any:
+        return mock_module
+
+    monkeypatch.setattr("importlib.import_module", mock_import_module)
+
+    with pytest.raises(TypeError, match="does not resolve to a callable, got int"):
+        load_factory("test_module:not_callable")

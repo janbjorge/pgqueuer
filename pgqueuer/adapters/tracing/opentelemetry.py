@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Generator
+from typing import TYPE_CHECKING, AsyncIterator, Generator
 
 if TYPE_CHECKING:
     import opentelemetry
@@ -152,7 +152,7 @@ class OpenTelemetryTracing(TracingProtocol):
                         yield {"otel": carrier}
 
     @asynccontextmanager
-    async def trace_process(self, job: Job) -> Any:
+    async def trace_process(self, job: Job) -> AsyncIterator[None]:
         """Extract W3C trace context from job headers and wrap execution in a
         ``CONSUMER`` ``process {destination}`` span.
 

@@ -19,7 +19,9 @@ ReduceFn: TypeAlias = Callable[[Iterable[float]], float]
 
 def get_queries(request: Request) -> Queries:
     """Retrieve the Queries object from the FastAPI application state."""
-    return request.app.extra["pgq_queries"]
+    pgq_queries = request.app.extra["pgq_queries"]
+    assert isinstance(pgq_queries, Queries)
+    return pgq_queries
 
 
 @asynccontextmanager

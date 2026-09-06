@@ -16,7 +16,7 @@ USER_ENV = "PGQUEUER_WEB_USER"
 PASSWORD_ENV = "PGQUEUER_WEB_PASSWORD"
 
 
-def create_basic_auth_dependency() -> Callable[..., None] | None:
+def create_basic_auth_dependency() -> Callable[[HTTPBasicCredentials], None] | None:
     """HTTP Basic auth dependency from env vars, or None when auth is not configured."""
     user = os.environ.get(USER_ENV)
     password = os.environ.get(PASSWORD_ENV)
