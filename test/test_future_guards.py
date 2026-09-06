@@ -11,7 +11,7 @@ from pgqueuer.core.listeners import (
     PGNoticeEventListener,
     default_event_router,
 )
-from pgqueuer.domain.types import HealthCheckId
+from pgqueuer.domain.types import Channel, HealthCheckId
 from pgqueuer.models import (
     AnyEvent,
     Context,
@@ -32,10 +32,10 @@ async def test_health_check_callback_ignores_done_future() -> None:
 
     event = AnyEvent(
         root=HealthCheckEvent(
-            channel="ch",
+            channel=Channel("ch"),
             sent_at=datetime.now(timezone.utc),
             type="health_check_event",
-            id=uuid.uuid4(),
+            id=HealthCheckId(uuid.uuid4()),
         )
     )
     assert isinstance(event.root, HealthCheckEvent)
@@ -61,10 +61,10 @@ async def test_health_check_callback_ignores_cancelled_future() -> None:
 
     event = AnyEvent(
         root=HealthCheckEvent(
-            channel="ch",
+            channel=Channel("ch"),
             sent_at=datetime.now(timezone.utc),
             type="health_check_event",
-            id=uuid.uuid4(),
+            id=HealthCheckId(uuid.uuid4()),
         )
     )
     assert isinstance(event.root, HealthCheckEvent)

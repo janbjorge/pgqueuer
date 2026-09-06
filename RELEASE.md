@@ -84,6 +84,22 @@ wins; nothing validates or rejects the mismatch.
   bare `uuid.uuid4()` needs `QueueManagerId(uuid.uuid4())` to pass mypy.
 - Type annotations only, no runtime change: `notify_health_check()` takes
   `HealthCheckId` instead of `uuid.UUID`.
+- mypy now runs in `strict` mode with `Any` banned inside `pgqueuer/`. Public
+  signatures tightened as a result: `Driver.fetch()`/`execute()` take
+  `*args: object` and rows are `list[dict[str, object]]`; `Job.headers` and
+  `TracebackRecord.additional_context` are `dict[str, object]`;
+  `Context.resources` / `ScheduleContext.resources` are
+  `MutableMapping[str, object]`, so readers narrow with `isinstance`;
+  `TracingProtocol.trace_publish()` yields `dict[str, object]`;
+  `load_factory()` returns a `Factory` protocol; `EventRouter` takes three typed
+  handlers instead of a `register()` decorator; `ScheduleExecutorFactoryParameters`
+  uses `CronEntrypoint`/`CronExpression`.
+- `Job.headers` also accepts an already-parsed dict on construction, not only
+  JSON text.
+- `load_factory()` raises `TypeError` when the `module:attr` path is not
+  callable, and `pgq` commands raise `TypeError` when a factory yields
+  something other than `Queries`, instead of failing later with an
+  `AttributeError`.
 - `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`
   take keyword-only arguments and return a `ComposedQuery` (`.sql`, `.args`)
   instead of a SQL string. Both are internal but reachable via `Queries.qbq`.

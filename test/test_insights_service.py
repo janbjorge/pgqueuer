@@ -172,14 +172,18 @@ class TestSparklineBuckets:
     def test_counts_are_conserved(self) -> None:
         now = models.utc_now()
         series = [
-            models.ThroughputBucket(bucket=now, entrypoint="ep", status="successful", count=3),
+            models.ThroughputBucket(
+                bucket=now, entrypoint=QueueEntrypoint("ep"), status="successful", count=3
+            ),
             models.ThroughputBucket(
                 bucket=now - timedelta(minutes=30),
-                entrypoint="ep",
+                entrypoint=QueueEntrypoint("ep"),
                 status="exception",
                 count=2,
             ),
-            models.ThroughputBucket(bucket=now, entrypoint="other", status="successful", count=9),
+            models.ThroughputBucket(
+                bucket=now, entrypoint=QueueEntrypoint("other"), status="successful", count=9
+            ),
         ]
         buckets = sparkline_buckets(series, "ep", timedelta(hours=1))
         assert sum(buckets) == 5

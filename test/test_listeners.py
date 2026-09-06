@@ -15,11 +15,10 @@ from pgqueuer.core.listeners import (
     initialize_notice_event_listener,
 )
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import HealthCheckId, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import Channel, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import (
     AnyEvent,
     CancellationEvent,
-    Channel,
     Context,
     HealthCheckEvent,
     JobId,
@@ -35,7 +34,7 @@ async def test_handle_table_changed_event() -> None:
 
     event = AnyEvent(
         root=TableChangedEvent(
-            channel="channel_1",
+            channel=Channel("channel_1"),
             sent_at=datetime.now(tz=timezone.utc),
             type="table_changed_event",
             operation="insert",
@@ -65,7 +64,7 @@ async def test_handle_cancellation_event() -> None:
 
     event = AnyEvent(
         root=CancellationEvent(
-            channel="channel_1",
+            channel=Channel("channel_1"),
             sent_at=datetime.now(tz=timezone.utc),
             type="cancellation_event",
             ids=[job_id],
@@ -88,10 +87,10 @@ async def test_handle_health_check_event_event() -> None:
 
     event = AnyEvent(
         root=HealthCheckEvent(
-            channel="channel_1",
+            channel=Channel("channel_1"),
             sent_at=datetime.now(timezone.utc),
             type="health_check_event",
-            id=uuid.uuid4(),
+            id=HealthCheckId(uuid.uuid4()),
         )
     )
     assert isinstance(event.root, HealthCheckEvent)

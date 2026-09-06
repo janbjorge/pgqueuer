@@ -8,6 +8,7 @@ import pytest
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import ScheduleId
 from pgqueuer.executors import (
     ScheduleExecutor,
     ScheduleExecutorFactoryParameters,
@@ -420,7 +421,7 @@ async def test_schedule_executor_without_context() -> None:
     executor = ScheduleExecutor(parameters=params)
 
     fake_schedule = Schedule(
-        id=1,
+        id=ScheduleId(1),
         expression=CronExpression("* * * * *"),
         heartbeat=datetime.now(timezone.utc),
         created=datetime.now(timezone.utc),
@@ -453,7 +454,7 @@ async def test_schedule_executor_with_context() -> None:
     executor = ScheduleExecutor(parameters=params)
 
     fake_schedule = Schedule(
-        id=1,
+        id=ScheduleId(1),
         expression=CronExpression("* * * * *"),
         heartbeat=datetime.now(timezone.utc),
         created=datetime.now(timezone.utc),

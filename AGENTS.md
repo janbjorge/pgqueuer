@@ -142,7 +142,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - **Formatter/linter**: ruff (line-length=100)
 - **Lint rules**: C, E, F, I, PIE, Q, RET, RSE, SIM, W, C90 (max-complexity=15)
 - **isort**: combined-as-imports, furthest-to-closest relative imports
-- **Mypy** strict mode with Pydantic plugin, targets Python 3.10.
+- **Mypy** `strict = true` plus `warn_unreachable` and the error codes `truthy-bool`, `truthy-iterable`, `redundant-expr`, `unused-awaitable`, `possibly-undefined`, `ignore-without-code`; Pydantic plugin with `init_typed`; targets Python 3.10. Inside `pgqueuer/` the override adds `disallow_any_explicit` and `disallow_any_unimported`. Run it as `uv run mypy . --no-incremental`; the incremental cache has reported green on stale signatures.
 
 ### Import Rules
 
@@ -156,13 +156,14 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 ### Type Annotations
 
 - **Always annotate** all function/method signatures (`mypy: disallow_untyped_defs = true`)
-- Use **native Python types**: `list[int]`, `dict[str, Any]`, `int | None` (not `Optional`)
+- Use **native Python types**: `list[int]`, `dict[str, object]`, `int | None` (not `Optional`)
 - Use `NewType` for domain primitives: `JobId = NewType("JobId", int)`
 - Use `Literal` for string unions: `Literal["queued", "picked", "successful"]`
 - **Exhaustive dispatch.** When branching on a `Literal` or `Enum` value, handle every member in an explicit `if`/`elif` chain and terminate with `else: assert_never(value)` (`typing_extensions.assert_never`) so mypy proves totality. No bare fallthroughs, no catch-all `else` doing real work — adding a new member must produce a type error at every dispatch site.
 - Use `Protocol` for structural subtyping (port interfaces)
 - Use `TypeAlias` for complex callable types
-- **Avoid `Any`** at nearly all cost. The codebase only uses it on driver protocol boundaries for variadic `*args` in SQL query methods -- nowhere else. Use proper types, generics, protocols, or `object` instead.
+- **`Any` is banned in `pgqueuer/`** (`disallow_any_explicit`). Use `object` and narrow with `isinstance`. Driver `*args` are `object`; rows come back as `dict[str, object]` and scalars are read through `query_helpers.cell(row, key, kind)`, multi-column rows through a pydantic model. User-owned bags (`Context.resources`) are `MutableMapping[str, object]`. `Callable[..., X]` counts as `Any`; declare a `Protocol` with `__call__(self, *args: object)` instead. Untyped third-party values are assigned to an `object`-annotated name before an `isinstance` check. Test code may use `Any`.
+- **Import domain types from `pgqueuer.domain.types`**, never via `models.JobId`; `no_implicit_reexport` is on and only the top-level shims re-export.
 - **Generic constructors over type-annotated assignments** for typed stdlib objects: `fut = asyncio.Future[MyType]()` not `fut: asyncio.Future[MyType] = asyncio.Future()`.
 - **No `# type: ignore` in production code.** `type: ignore` comments are forbidden in `pgqueuer/`. Fix the underlying type issue instead (use `dataclasses.KW_ONLY`, protocols, generics, overloads, etc.). `# type: ignore` is acceptable in test code only.
 
@@ -189,7 +190,7 @@ if isinstance(exc, SqlStateError) and isinstance(exc.sqlstate, str):
     return exc.sqlstate
 ```
 
-Two grandfathered call sites remain: `domain/settings.py` iterating declared dataclass fields, and `core/executors.py` probing `__call__`. Add no more; replace them when the code is next touched.
+Three grandfathered call sites remain: `domain/settings.py` iterating declared dataclass fields, `core/executors.py` probing `__call__`, and `adapters/cli/factories.py` resolving a `module:attr` path. Add no more; replace them when the code is next touched.
 
 Test code may use reflection where the test is *about* reflection. `monkeypatch.setattr` is pytest's API, not the builtin, and is unaffected.
 
