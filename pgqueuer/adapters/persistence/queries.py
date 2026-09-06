@@ -28,13 +28,16 @@ def is_unique_violation(exc: Exception) -> bool:
     return sqlstate.is_unique_violation(exc)
 
 
-def lost_capacity_slot_race(exc: Exception) -> bool:
+def lost_capacity_slot_race(exc: Exception, slot_index: str) -> bool:
     """Return True if a concurrent dequeue took the capacity slot this claim wanted.
 
-    The loser sees the unique violation directly, or a deadlock when several
-    limited entrypoints in one batch make two dequeues cross each other.
+    The loser sees a unique violation on *slot_index*, or a deadlock when
+    several limited entrypoints in one batch make two dequeues cross each
+    other. Other unique violations are not a lost slot and must propagate.
     """
-    return sqlstate.is_unique_violation(exc) or sqlstate.is_deadlock_detected(exc)
+    if sqlstate.is_deadlock_detected(exc):
+        return True
+    return sqlstate.is_unique_violation(exc) and sqlstate.constraint_of(exc) == slot_index
 
 
 @dataclasses.dataclass
@@ -187,11 +190,13 @@ class Queries:
         )
         # Losing the slot race means the capacity went to another worker, which
         # is the same outcome as finding nothing claimable: report an empty
-        # batch and let the poll loop try again.
+        # batch and let the poll loop try again. Match the slot index by name
+        # so a 23505 on any other unique constraint still surfaces.
+        slot_index = f"{self.qbe.settings.queue_table}_picked_slot_idx"
         try:
             rows = await self.driver.fetch(query.sql, *query.args)
         except Exception as exc:
-            if lost_capacity_slot_race(exc):
+            if lost_capacity_slot_race(exc, slot_index):
                 return []
             raise
         return [models.Job.model_validate(row) for row in rows]
