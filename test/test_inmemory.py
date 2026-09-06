@@ -11,7 +11,7 @@ import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
@@ -724,7 +724,7 @@ async def test_health_check_notification(queries: InMemoryQueries, driver: InMem
     notifications: list[str] = []
     await driver.add_listener(queries.qbq.settings.channel, notifications.append)
 
-    await queries.notify_health_check(uuid.uuid4())
+    await queries.notify_health_check(HealthCheckId(uuid.uuid4()))
     assert any("health_check_event" in n for n in notifications)
 
 

@@ -64,6 +64,10 @@ wins; nothing validates or rejects the mismatch.
   `pgqueuer.types` and `pgqueuer.models`) for the worker id on `Job`,
   `StaleJob`, `ActiveWorker` and `QueueManager.queue_manager_id`; a plain
   `uuid.UUID` at runtime.
+- `HealthCheckId` identity type in `pgqueuer.domain.types` (re-exported from
+  `pgqueuer.types` and `pgqueuer.models`) for the health-check probe id on
+  `HealthCheckEvent.id`; a plain `uuid.UUID` at runtime, distinct from
+  `QueueManagerId` at type level.
 
 ### Changed
 
@@ -78,6 +82,8 @@ wins; nothing validates or rejects the mismatch.
   `QueryQueueBuilder.build_dequeue_query()` take `queue_manager_id:
   QueueManagerId` instead of `uuid.UUID`. Code calling them directly with a
   bare `uuid.uuid4()` needs `QueueManagerId(uuid.uuid4())` to pass mypy.
+- Type annotations only, no runtime change: `notify_health_check()` takes
+  `HealthCheckId` instead of `uuid.UUID`.
 - `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`
   take keyword-only arguments and return a `ComposedQuery` (`.sql`, `.args`)
   instead of a SQL string. Both are internal but reachable via `Queries.qbq`.

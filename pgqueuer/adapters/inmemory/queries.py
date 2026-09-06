@@ -22,6 +22,7 @@ from pgqueuer.domain import errors, models
 from pgqueuer.domain.models import utc_now
 from pgqueuer.domain.types import (
     CronEntrypoint,
+    HealthCheckId,
     JobId,
     OnConflict,
     QueueEntrypoint,
@@ -717,7 +718,7 @@ class InMemoryQueries:
         )
         await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
 
-    async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None:
+    async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None:
         event = models.HealthCheckEvent(
             channel=self.qbq.settings.channel,
             sent_at=utc_now(),

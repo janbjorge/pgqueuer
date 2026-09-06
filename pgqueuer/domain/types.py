@@ -22,6 +22,7 @@ EVENT_TYPES = Literal[
 JobId = NewType("JobId", int)
 QueueEntrypoint = NewType("QueueEntrypoint", str)
 QueueManagerId = NewType("QueueManagerId", uuid.UUID)
+HealthCheckId = NewType("HealthCheckId", uuid.UUID)
 Slot = NewType("Slot", int)
 JOB_STATUS = Literal[
     "queued",

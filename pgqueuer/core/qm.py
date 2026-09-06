@@ -71,7 +71,7 @@ class QueueManager:
         default_factory=dict,
     )
 
-    pending_health_check: dict[uuid.UUID, asyncio.Future[models.HealthCheckEvent]] = (
+    pending_health_check: dict[types.HealthCheckId, asyncio.Future[models.HealthCheckEvent]] = (
         dataclasses.field(
             init=False,
             default_factory=dict,
@@ -96,7 +96,7 @@ class QueueManager:
         timeout: timedelta = timedelta(seconds=10),
     ) -> models.HealthCheckEvent:
         """Round-trip a NOTIFY/LISTEN probe. Raises ``FailingListenerError`` on timeout."""
-        health_check_event_id = uuid.uuid4()
+        health_check_event_id = types.HealthCheckId(uuid.uuid4())
         fut = asyncio.Future[models.HealthCheckEvent]()
         self.pending_health_check[health_check_event_id] = fut
         try:

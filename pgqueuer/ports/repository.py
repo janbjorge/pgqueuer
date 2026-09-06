@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import uuid
 from datetime import timedelta
 from typing import Literal, Protocol, overload
 
@@ -11,6 +10,7 @@ from pgqueuer.domain import models
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import (
     CronEntrypoint,
+    HealthCheckId,
     OnConflict,
     QueueEntrypoint,
     QueueManagerId,
@@ -271,7 +271,7 @@ class NotificationPort(Protocol):
 
     async def notify_job_cancellation(self, ids: list[models.JobId]) -> None: ...
 
-    async def notify_health_check(self, health_check_event_id: uuid.UUID) -> None: ...
+    async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None: ...
 
 
 class SchemaManagementPort(Protocol):
