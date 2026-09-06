@@ -299,3 +299,114 @@ async def test_concurrency_limit_holds_when_priority_arrives_mid_claim(
     overlap = await asyncio.wait_for(task_b, timeout=30)
     total = len(first) + len(overlap)
     assert total <= limit, f"picked {total} jobs, limit {limit}"
+
+
+@pytest.mark.parametrize("concurrency_limit", (1, 2))
+async def test_concurrency_limit_rollback_releases_capacity_for_the_other_worker(
+    connect: Callable[[], Awaitable[asyncpg.Connection]],
+    concurrency_limit: int,
+) -> None:
+    """A rolled-back claim must free the slot so the waiting worker can pick."""
+    conn_a = await connect()
+    conn_b = await connect()
+    conn_monitor = await connect()
+
+    queries_a = Queries(AsyncpgDriver(conn_a))
+    queries_b = Queries(AsyncpgDriver(conn_b))
+
+    n_jobs = 2 * concurrency_limit
+    await queries_a.enqueue(
+        ["fetch"] * n_jobs,
+        [f"{n}".encode() for n in range(n_jobs)],
+        [0] * n_jobs,
+    )
+
+    def dequeue(q: Queries) -> asyncio.Task[list[Job]]:
+        return asyncio.ensure_future(
+            q.dequeue(
+                batch_size=concurrency_limit,
+                entrypoints={"fetch": EntrypointExecutionParameter(concurrency_limit)},
+                queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=None,
+                heartbeat_timeout=timedelta(minutes=10),
+            )
+        )
+
+    transaction_a = conn_a.transaction()
+    await transaction_a.start()
+    first = await dequeue(queries_a)
+    assert len(first) == concurrency_limit
+
+    task_b = dequeue(queries_b)
+    await _wait_until_done_or_lock_blocked(conn_monitor, task_b, conn_b.get_server_pid())
+    await transaction_a.rollback()
+
+    overlap = await asyncio.wait_for(task_b, timeout=30)
+    claimed = overlap or await asyncio.wait_for(dequeue(queries_b), timeout=30)
+    assert len(claimed) == concurrency_limit
+
+
+async def test_slot_race_does_not_lose_unlimited_jobs_in_the_same_batch(
+    connect: Callable[[], Awaitable[asyncpg.Connection]],
+) -> None:
+    """A lost limited slot aborts the whole statement; unlimited work stays queued.
+
+    Limited and unlimited claims share one UPDATE. A unique-violation on the
+    limited slot rolls that statement back, including any unlimited rows it
+    would have picked. Those rows remain queued, so the next poll takes them.
+    """
+    limit = 1
+    n_loose = 5
+    conn_a = await connect()
+    conn_b = await connect()
+    conn_monitor = await connect()
+
+    queries_a = Queries(AsyncpgDriver(conn_a))
+    queries_b = Queries(AsyncpgDriver(conn_b))
+    queries_monitor = Queries(AsyncpgDriver(conn_monitor))
+
+    await queries_monitor.enqueue(["tight"] * limit, [b"tight"] * limit, [0] * limit)
+    await queries_monitor.enqueue(["loose"] * n_loose, [b"loose"] * n_loose, [0] * n_loose)
+
+    tight = {"tight": EntrypointExecutionParameter(limit)}
+    both = {
+        "tight": EntrypointExecutionParameter(limit),
+        "loose": EntrypointExecutionParameter(0),
+    }
+
+    def dequeue(
+        q: Queries, entrypoints: dict[str, EntrypointExecutionParameter]
+    ) -> asyncio.Task[list[Job]]:
+        return asyncio.ensure_future(
+            q.dequeue(
+                batch_size=10,
+                entrypoints=entrypoints,
+                queue_manager_id=uuid.uuid4(),
+                global_concurrency_limit=None,
+                heartbeat_timeout=timedelta(minutes=10),
+            )
+        )
+
+    transaction_a = conn_a.transaction()
+    await transaction_a.start()
+    first = await dequeue(queries_a, tight)
+    assert len(first) == limit
+    assert {job.entrypoint for job in first} == {"tight"}
+
+    # A new tight job changes B's candidate window onto a row A never locked,
+    # so B contends for the slot instead of SKIP LOCKED-skipping A's rows.
+    await queries_monitor.enqueue(["tight"], [b"late"], [10])
+
+    task_b = dequeue(queries_b, both)
+    await _wait_until_done_or_lock_blocked(conn_monitor, task_b, conn_b.get_server_pid())
+    await transaction_a.commit()
+
+    overlap = await asyncio.wait_for(task_b, timeout=30)
+    tight_overlap = [job for job in overlap if job.entrypoint == "tight"]
+    assert len(first) + len(tight_overlap) <= limit
+
+    loose_ids = {job.id for job in overlap if job.entrypoint == "loose"}
+    remaining = await asyncio.wait_for(dequeue(queries_b, both), timeout=30)
+    loose_ids.update(job.id for job in remaining if job.entrypoint == "loose")
+    assert len(loose_ids) == n_loose
+    assert all(job.entrypoint != "tight" for job in remaining)
