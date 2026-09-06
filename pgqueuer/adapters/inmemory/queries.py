@@ -229,6 +229,7 @@ class InMemoryQueries:
                 "payload": normed.payload[i],
                 "attempts": 0,
                 "queue_manager_id": None,
+                "slot": None,
                 "headers": hdr,
             }
 

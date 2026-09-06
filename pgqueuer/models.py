@@ -27,6 +27,7 @@ from pgqueuer.domain.types import (
     CronExpression,
     JobId,
     ScheduleId,
+    Slot,
 )
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "Schedule",
     "ScheduleContext",
     "ScheduleId",
+    "Slot",
     "TableChangedEvent",
     "TracebackRecord",
 ]

@@ -50,6 +50,13 @@ wins; nothing validates or rejects the mismatch.
   failure now restart in place. Review any external restart or alerting that
   relied on the process dying.
 
+### Added
+
+- `Job.slot` exposes the capacity seat a picked job holds under a
+  `concurrency_limit`; `None` for unlimited entrypoints and unpicked rows.
+  Typed as the new `Slot` identity in `pgqueuer.domain.types` (re-exported
+  from `pgqueuer.types` and `pgqueuer.models`); a plain `int` at runtime.
+
 ### Changed
 
 - `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`

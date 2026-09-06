@@ -241,6 +241,17 @@ async def test_dequeue_concurrency_limit(queries: InMemoryQueries) -> None:
     assert len(jobs2) == 0
 
 
+async def test_dequeue_leaves_capacity_slot_unset(queries: InMemoryQueries) -> None:
+    """The in-memory adapter enforces limits by counting, so ``Job.slot`` stays None."""
+    await queries.enqueue("ep", None)
+    params = {"ep": EntrypointExecutionParameter(1)}
+
+    (job,) = await queries.dequeue(
+        10, params, uuid.uuid4(), None, heartbeat_timeout=timedelta(seconds=30)
+    )
+    assert job.slot is None
+
+
 async def test_dequeue_global_concurrency_limit(queries: InMemoryQueries) -> None:
     await queries.enqueue(
         ["ep", "ep", "ep"],

@@ -20,6 +20,7 @@ from pgqueuer.domain.types import (
     CronExpression,
     JobId,
     ScheduleId,
+    Slot,
 )
 
 
@@ -80,7 +81,11 @@ class AnyEvent(
 
 
 class Job(BaseModel):
-    """A queued or in-flight job row."""
+    """A queued or in-flight job row.
+
+    ``slot`` is the capacity seat held while picked under a ``concurrency_limit``;
+    None for unlimited entrypoints and for rows not currently picked.
+    """
 
     id: JobId
     priority: int
@@ -93,6 +98,7 @@ class Job(BaseModel):
     payload: bytes | None
     attempts: int = 0
     queue_manager_id: uuid.UUID | None
+    slot: Slot | None = None
     headers: Annotated[
         dict[str, Any] | None,
         BeforeValidator(lambda x: None if x is None else from_json(x)),
