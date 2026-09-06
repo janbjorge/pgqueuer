@@ -13,9 +13,12 @@ import pytest
 import pytest_asyncio
 
 from pgqueuer.db import AsyncpgDriver, Driver
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
+
+FETCH = QueueEntrypoint("fetch")
 
 
 @dataclass
@@ -228,8 +231,8 @@ async def test_concurrency_limit_holds_across_concurrent_dequeues(
         return asyncio.ensure_future(
             q.dequeue(
                 batch_size=concurrency_limit,
-                entrypoints={"fetch": EntrypointExecutionParameter(concurrency_limit)},
-                queue_manager_id=uuid.uuid4(),
+                entrypoints={FETCH: EntrypointExecutionParameter(concurrency_limit)},
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -278,8 +281,8 @@ async def test_concurrency_limit_holds_when_priority_arrives_mid_claim(
         return asyncio.ensure_future(
             q.dequeue(
                 batch_size=limit,
-                entrypoints={"fetch": EntrypointExecutionParameter(limit)},
-                queue_manager_id=uuid.uuid4(),
+                entrypoints={FETCH: EntrypointExecutionParameter(limit)},
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -325,8 +328,8 @@ async def test_concurrency_limit_rollback_releases_capacity_for_the_other_worker
         return asyncio.ensure_future(
             q.dequeue(
                 batch_size=concurrency_limit,
-                entrypoints={"fetch": EntrypointExecutionParameter(concurrency_limit)},
-                queue_manager_id=uuid.uuid4(),
+                entrypoints={FETCH: EntrypointExecutionParameter(concurrency_limit)},
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -368,20 +371,20 @@ async def test_slot_race_does_not_lose_unlimited_jobs_in_the_same_batch(
     await queries_monitor.enqueue(["tight"] * limit, [b"tight"] * limit, [0] * limit)
     await queries_monitor.enqueue(["loose"] * n_loose, [b"loose"] * n_loose, [0] * n_loose)
 
-    tight = {"tight": EntrypointExecutionParameter(limit)}
+    tight = {QueueEntrypoint("tight"): EntrypointExecutionParameter(limit)}
     both = {
-        "tight": EntrypointExecutionParameter(limit),
-        "loose": EntrypointExecutionParameter(0),
+        QueueEntrypoint("tight"): EntrypointExecutionParameter(limit),
+        QueueEntrypoint("loose"): EntrypointExecutionParameter(0),
     }
 
     def dequeue(
-        q: Queries, entrypoints: dict[str, EntrypointExecutionParameter]
+        q: Queries, entrypoints: dict[QueueEntrypoint, EntrypointExecutionParameter]
     ) -> asyncio.Task[list[Job]]:
         return asyncio.ensure_future(
             q.dequeue(
                 batch_size=10,
                 entrypoints=entrypoints,
-                queue_manager_id=uuid.uuid4(),
+                queue_manager_id=QueueManagerId(uuid.uuid4()),
                 global_concurrency_limit=None,
                 heartbeat_timeout=timedelta(minutes=10),
             )
@@ -410,3 +413,31 @@ async def test_slot_race_does_not_lose_unlimited_jobs_in_the_same_batch(
     loose_ids.update(job.id for job in remaining if job.entrypoint == "loose")
     assert len(loose_ids) == n_loose
     assert all(job.entrypoint != "tight" for job in remaining)
+
+
+async def test_dequeue_assigns_capacity_slots(apgdriver: Driver) -> None:
+    """A limited entrypoint gets a distinct seat in ``Job.slot``; an unlimited one gets none."""
+    limit = 3
+    n_fetch = 2 * limit
+    n_loose = 2
+    q = Queries(apgdriver)
+    await q.enqueue(["fetch"] * n_fetch, [None] * n_fetch, [0] * n_fetch)
+    await q.enqueue(["loose"] * n_loose, [None] * n_loose, [0] * n_loose)
+
+    picked = await q.dequeue(
+        batch_size=10,
+        entrypoints={
+            FETCH: EntrypointExecutionParameter(limit),
+            QueueEntrypoint("loose"): EntrypointExecutionParameter(0),
+        },
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(minutes=10),
+    )
+
+    fetch = [job for job in picked if job.entrypoint == FETCH]
+    loose = [job for job in picked if job.entrypoint == "loose"]
+    assert len(fetch) == limit
+    assert {job.slot for job in fetch} == set(range(limit))
+    assert len(loose) == n_loose
+    assert all(job.slot is None for job in loose)

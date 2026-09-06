@@ -18,7 +18,7 @@ import pytest
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
-from pgqueuer.domain.types import CronEntrypoint, CronExpression
+from pgqueuer.domain.types import CronEntrypoint, CronExpression, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -29,13 +29,13 @@ async def test_dequeue_locking_race_single_job_one_picker(
     q = Queries(apgdriver)
 
     await q.enqueue(["ep"], [None], [0])
-    qm1_id = uuid.uuid4()
-    qm2_id = uuid.uuid4()
+    qm1_id = QueueManagerId(uuid.uuid4())
+    qm2_id = QueueManagerId(uuid.uuid4())
 
     async def dequeue_1() -> list:
         return await q.dequeue(
             batch_size=1,
-            entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+            entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
             queue_manager_id=qm1_id,
             global_concurrency_limit=None,
             heartbeat_timeout=timedelta(seconds=30),
@@ -45,7 +45,7 @@ async def test_dequeue_locking_race_single_job_one_picker(
         await asyncio.sleep(0.001)
         return await q.dequeue(
             batch_size=1,
-            entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+            entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
             queue_manager_id=qm2_id,
             global_concurrency_limit=None,
             heartbeat_timeout=timedelta(seconds=30),
@@ -66,11 +66,11 @@ async def test_atomicity_dequeue_log_entry_created(
     q = Queries(apgdriver)
 
     jids = await q.enqueue(["ep"], [None], [0])
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     jobs = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -96,10 +96,10 @@ async def test_dedupe_constraint_partial_index(
     with pytest.raises(Exception):
         await q.enqueue(["ep"], [None], [0], dedupe_key=["k"], on_conflict="raise")
 
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -147,10 +147,10 @@ async def test_stale_job_recovery_heartbeat_timeout(
 
     await q.enqueue(["ep"], [None], [0])
 
-    qm1_id = uuid.uuid4()
+    qm1_id = QueueManagerId(uuid.uuid4())
     jobs = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm1_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=1),
@@ -161,10 +161,10 @@ async def test_stale_job_recovery_heartbeat_timeout(
 
     await asyncio.sleep(1.2)
 
-    qm2_id = uuid.uuid4()
+    qm2_id = QueueManagerId(uuid.uuid4())
     jobs2 = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm2_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=1),
@@ -233,11 +233,11 @@ async def test_mark_job_cancellation(
     q = Queries(apgdriver)
 
     jids = await q.enqueue(["ep"], [None], [0])
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     jobs = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -260,11 +260,11 @@ async def test_traceback_jsonb_roundtrip(
     q = Queries(apgdriver)
 
     jids = await q.enqueue(["ep"], [None], [0])
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
 
     jobs = await q.dequeue(
         batch_size=1,
-        entrypoints={"ep": EntrypointExecutionParameter(concurrency_limit=1)},
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
         queue_manager_id=qm_id,
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),

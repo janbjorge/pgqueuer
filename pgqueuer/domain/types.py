@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from enum import Enum
 from typing import Literal, NewType
 
@@ -19,6 +20,9 @@ EVENT_TYPES = Literal[
 
 
 JobId = NewType("JobId", int)
+QueueEntrypoint = NewType("QueueEntrypoint", str)
+QueueManagerId = NewType("QueueManagerId", uuid.UUID)
+Slot = NewType("Slot", int)
 JOB_STATUS = Literal[
     "queued",
     "picked",

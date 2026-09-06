@@ -47,13 +47,15 @@ class QueueManager:
     )
 
     # Per entrypoint
-    entrypoint_registry: dict[str, executors.AbstractEntrypointExecutor] = dataclasses.field(
-        init=False,
-        default_factory=dict,
+    entrypoint_registry: dict[types.QueueEntrypoint, executors.AbstractEntrypointExecutor] = (
+        dataclasses.field(
+            init=False,
+            default_factory=dict,
+        )
     )
-    queue_manager_id: uuid.UUID = dataclasses.field(
+    queue_manager_id: types.QueueManagerId = dataclasses.field(
         init=False,
-        default_factory=uuid.uuid4,
+        default_factory=lambda: types.QueueManagerId(uuid.uuid4()),
     )
     # Shared resources mapping propagated into each job Context.
     resources: MutableMapping = dataclasses.field(
@@ -150,10 +152,11 @@ class QueueManager:
         executor: executors.AbstractEntrypointExecutor,
     ) -> None:
         """Bind *name* to *executor*. Raises RuntimeError on duplicate name."""
-        if name in self.entrypoint_registry:
+        entrypoint = types.QueueEntrypoint(name)
+        if entrypoint in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
-        self.entrypoint_registry[name] = executor
+        self.entrypoint_registry[entrypoint] = executor
 
     def entrypoint(
         self,
@@ -180,7 +183,7 @@ class QueueManager:
         ``'hold'`` parks it with status ``'failed'`` for manual re-queue.
         """
 
-        if name in self.entrypoint_registry:
+        if types.QueueEntrypoint(name) in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
         if not isinstance(concurrency_limit, int):
@@ -218,7 +221,7 @@ class QueueManager:
 
         return register
 
-    def entrypoints_below_capacity_limits(self) -> set[str]:
+    def entrypoints_below_capacity_limits(self) -> set[types.QueueEntrypoint]:
         """All registered entrypoints; per-entrypoint limits are enforced in SQL."""
         return set(self.entrypoint_registry)
 

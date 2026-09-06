@@ -19,7 +19,10 @@ from pgqueuer.domain.types import (
     CronEntrypoint,
     CronExpression,
     JobId,
+    QueueEntrypoint,
+    QueueManagerId,
     ScheduleId,
+    Slot,
 )
 
 
@@ -80,7 +83,11 @@ class AnyEvent(
 
 
 class Job(BaseModel):
-    """A queued or in-flight job row."""
+    """A queued or in-flight job row.
+
+    ``slot`` is the capacity seat held while picked under a ``concurrency_limit``;
+    None for unlimited entrypoints and for rows not currently picked.
+    """
 
     id: JobId
     priority: int
@@ -89,10 +96,11 @@ class Job(BaseModel):
     heartbeat: AwareDatetime
     execute_after: AwareDatetime
     status: JOB_STATUS
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     payload: bytes | None
     attempts: int = 0
-    queue_manager_id: uuid.UUID | None
+    queue_manager_id: QueueManagerId | None
+    slot: Slot | None = None
     headers: Annotated[
         dict[str, Any] | None,
         BeforeValidator(lambda x: None if x is None else from_json(x)),
@@ -118,7 +126,7 @@ class Log(BaseModel):
     job_id: JobId
     status: JOB_STATUS
     priority: int
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     traceback: Annotated[
         TracebackRecord | None,
         BeforeValidator(lambda x: None if x is None else from_json(x)),
@@ -130,7 +138,7 @@ class QueueStatistics(BaseModel):
     """Per-(entrypoint, priority, status) job count snapshot."""
 
     count: int
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     priority: int
     status: JOB_STATUS
 
@@ -140,7 +148,7 @@ class LogStatistics(BaseModel):
 
     count: int
     created: AwareDatetime
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     priority: int
     status: JOB_STATUS
 
@@ -195,7 +203,7 @@ class Schedule(BaseModel):
 class QueueAgeStats(BaseModel):
     """Per-entrypoint backlog age for queued jobs."""
 
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     queued_count: int
     oldest_created: AwareDatetime
     oldest_age_seconds: float
@@ -205,7 +213,7 @@ class QueueAgeStats(BaseModel):
 class JobDurationStats(BaseModel):
     """Per-entrypoint execution-duration percentiles derived from log transitions."""
 
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     completed: int
     p50_seconds: float
     p95_seconds: float
@@ -216,7 +224,7 @@ class JobDurationStats(BaseModel):
 class ThroughputStats(BaseModel):
     """Total processed jobs per (entrypoint, status) over a time window."""
 
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     status: JOB_STATUS
     total_count: int
 
@@ -225,7 +233,7 @@ class ThroughputBucket(BaseModel):
     """Per-minute processed-job count for one (entrypoint, status)."""
 
     bucket: AwareDatetime
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     status: JOB_STATUS
     count: int
 
@@ -233,11 +241,11 @@ class ThroughputBucket(BaseModel):
 class ActiveWorker(BaseModel):
     """A queue manager currently holding picked jobs."""
 
-    queue_manager_id: uuid.UUID
+    queue_manager_id: QueueManagerId
     active_jobs: int
     oldest_heartbeat: AwareDatetime
     newest_heartbeat: AwareDatetime
-    entrypoints: list[str]
+    entrypoints: list[QueueEntrypoint]
 
 
 class StaleJob(BaseModel):
@@ -245,13 +253,13 @@ class StaleJob(BaseModel):
 
     id: JobId
     priority: int
-    queue_manager_id: uuid.UUID | None
+    queue_manager_id: QueueManagerId | None
     created: AwareDatetime
     updated: AwareDatetime
     heartbeat: AwareDatetime
     execute_after: AwareDatetime
     status: JOB_STATUS
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     seconds_since_heartbeat: float
 
 
@@ -267,7 +275,7 @@ class TableInfo(BaseModel):
 class EntrypointStat(BaseModel):
     """Combined per-entrypoint health row: depth, latency, durations, failure rate."""
 
-    entrypoint: str
+    entrypoint: QueueEntrypoint
     queued: int
     picked: int
     oldest_age_seconds: float | None

@@ -14,6 +14,7 @@ from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core import buffers
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.domain import models
+from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 EP_UNLIMITED = EntrypointExecutionParameter(0)
@@ -23,10 +24,10 @@ EP_SERIAL = EntrypointExecutionParameter(1)
 async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> None:
     """log_jobs('canceled') removes the row and frees the slot."""
     await queries.enqueue("ep", b"x", priority=1)
-    qm_id = uuid.uuid4()
+    qm_id = QueueManagerId(uuid.uuid4())
     jobs = await queries.dequeue(
         10,
-        {"ep": EP_UNLIMITED},
+        {QueueEntrypoint("ep"): EP_UNLIMITED},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -40,7 +41,7 @@ async def test_log_canceled_releases_picked_row(queries: InMemoryQueries) -> Non
     assert [e.status for e in log if e.job_id == job.id and e.status == "canceled"] == ["canceled"]
     again = await queries.dequeue(
         10,
-        {"ep": EP_UNLIMITED},
+        {QueueEntrypoint("ep"): EP_UNLIMITED},
         qm_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -63,7 +64,7 @@ async def test_dispatch_cancellation_error_logs_canceled(
     await queries.enqueue("hang", b"payload", priority=1)
     jobs = await queries.dequeue(
         10,
-        {"hang": EP_UNLIMITED},
+        {QueueEntrypoint("hang"): EP_UNLIMITED},
         qm.queue_manager_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -112,7 +113,7 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
     await queries.enqueue("serial", b"first", priority=1)
     jobs = await queries.dequeue(
         10,
-        {"serial": EP_SERIAL},
+        {QueueEntrypoint("serial"): EP_SERIAL},
         qm.queue_manager_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -137,7 +138,7 @@ async def test_cancel_frees_concurrency_slot(queries: InMemoryQueries) -> None:
     await queries.enqueue("serial", b"second", priority=1)
     next_jobs = await queries.dequeue(
         10,
-        {"serial": EP_SERIAL},
+        {QueueEntrypoint("serial"): EP_SERIAL},
         qm.queue_manager_id,
         None,
         heartbeat_timeout=timedelta(seconds=30),
@@ -153,11 +154,11 @@ async def test_stale_recovery_bypasses_concurrency_limit(
     """Stale rows are recoverable even when picked count == concurrency_limit."""
     heartbeat_timeout = timedelta(milliseconds=20)
 
-    qm_a = uuid.uuid4()
+    qm_a = QueueManagerId(uuid.uuid4())
     await queries.enqueue("ep", b"x", priority=1)
     jobs_a = await queries.dequeue(
         10,
-        {"ep": EP_SERIAL},
+        {QueueEntrypoint("ep"): EP_SERIAL},
         qm_a,
         None,
         heartbeat_timeout=heartbeat_timeout,
@@ -167,10 +168,10 @@ async def test_stale_recovery_bypasses_concurrency_limit(
 
     await asyncio.sleep(heartbeat_timeout.total_seconds() * 3)
 
-    qm_b = uuid.uuid4()
+    qm_b = QueueManagerId(uuid.uuid4())
     jobs_b = await queries.dequeue(
         10,
-        {"ep": EP_SERIAL},
+        {QueueEntrypoint("ep"): EP_SERIAL},
         qm_b,
         None,
         heartbeat_timeout=heartbeat_timeout,

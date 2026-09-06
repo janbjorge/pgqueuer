@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from pgqueuer import db, queries
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.types import JobId
@@ -305,7 +306,7 @@ async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver)
     (job_id,) = await crashed_manager.queries.enqueue([entrypoint], [None], [0])
 
     execution_params = {
-        entrypoint: queries.EntrypointExecutionParameter(
+        QueueEntrypoint(entrypoint): queries.EntrypointExecutionParameter(
             concurrency_limit=concurrency_limit,
         )
     }
@@ -351,7 +352,7 @@ async def test_stale_recovery_at_concurrency_limit(apgdriver: db.Driver) -> None
     retry_timer = timedelta(milliseconds=100)
     entrypoint = "stale_at_limit"
     execution_params = {
-        entrypoint: queries.EntrypointExecutionParameter(concurrency_limit=1),
+        QueueEntrypoint(entrypoint): queries.EntrypointExecutionParameter(concurrency_limit=1),
     }
 
     q = queries.Queries(apgdriver)

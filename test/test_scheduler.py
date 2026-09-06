@@ -410,8 +410,8 @@ async def test_schedule_executor_without_context() -> None:
         received_schedules.append(schedule)
 
     params = ScheduleExecutorFactoryParameters(
-        entrypoint="no_ctx",
-        expression="* * * * *",
+        entrypoint=CronEntrypoint("no_ctx"),
+        expression=CronExpression("* * * * *"),
         func=handler,
         clean_old=False,
         accepts_context=False,
@@ -443,8 +443,8 @@ async def test_schedule_executor_with_context() -> None:
         received.append((schedule, ctx))
 
     params = ScheduleExecutorFactoryParameters(
-        entrypoint="with_ctx",
-        expression="* * * * *",
+        entrypoint=CronEntrypoint("with_ctx"),
+        expression=CronExpression("* * * * *"),
         func=handler,
         clean_old=False,
         accepts_context=True,

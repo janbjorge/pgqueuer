@@ -144,7 +144,7 @@ pgqueuer/
 
   domain/
     models.py                 # Job, Schedule, Event, Context, statistics
-    types.py                  # JobId, JOB_STATUS, Channel, etc.
+    types.py                  # JobId, QueueEntrypoint, QueueManagerId, Slot, JOB_STATUS, etc.
     errors.py                 # Exception hierarchy
     settings.py               # DBSettings, Durability, DurabilityPolicy
 

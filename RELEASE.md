@@ -50,8 +50,24 @@ wins; nothing validates or rejects the mismatch.
   failure now restart in place. Review any external restart or alerting that
   relied on the process dying.
 
+### Added
+
+- `Job.slot` exposes the capacity seat a picked job holds under a
+  `concurrency_limit`; `None` for unlimited entrypoints and unpicked rows.
+- New identity types in `pgqueuer.domain.types` (re-exported from
+  `pgqueuer.types` and `pgqueuer.models`): `QueueEntrypoint`, `QueueManagerId`,
+  `Slot`. Job, log and statistics models now carry them; at runtime they are
+  plain `str`, `uuid.UUID` and `int`.
+
 ### Changed
 
+- Type annotations only, no runtime change: `dequeue()`, `queued_work()`,
+  `eligible_queued_work()` and `next_deferred_eta()` take `QueueEntrypoint` and
+  `QueueManagerId` instead of `str` and `uuid.UUID`, and
+  `QueueManager.entrypoint_registry` is keyed by `QueueEntrypoint`. Code that
+  calls these directly with literals needs `QueueEntrypoint("name")` to pass
+  mypy. `enqueue()`, `clear_queue()` and the `@entrypoint` decorator still take
+  `str`.
 - `QueryQueueBuilder.build_dequeue_query()` and `build_log_statistics_query()`
   take keyword-only arguments and return a `ComposedQuery` (`.sql`, `.args`)
   instead of a SQL string. Both are internal but reachable via `Queries.qbq`.
