@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
-from pydantic_core import to_json
 
 import pgqueuer.adapters.tracing.logfire as logfire_mod
 import pgqueuer.adapters.tracing.sentry as sentry_mod
@@ -14,10 +14,10 @@ from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.tracing.logfire import LogfireTracing
 from pgqueuer.adapters.tracing.sentry import SentryTracing
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
-def _make_job(headers: dict) -> Job:
+def _make_job(headers: dict[str, Any]) -> Job:
     now = datetime.now(timezone.utc)
     return Job(
         id=JobId(1),
@@ -27,10 +27,10 @@ def _make_job(headers: dict) -> Job:
         heartbeat=now,
         execute_after=now,
         status="queued",
-        entrypoint="say_hello",
+        entrypoint=QueueEntrypoint("say_hello"),
         payload=b"hello",
-        queue_manager_id=uuid.uuid4(),
-        headers=to_json(headers),
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        headers=headers,
     )
 
 

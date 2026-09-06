@@ -8,7 +8,7 @@ from pgqueuer.models import JobId, TracebackRecord
 
 def test_from_exception() -> None:
     job_id: JobId = JobId(123)
-    additional: dict[str, str] = {"detail": "Error occurred"}
+    additional: dict[str, object] = {"detail": "Error occurred"}
 
     try:
         raise ValueError("Testing error")
@@ -40,7 +40,7 @@ def test_timestamp() -> None:
 
 def test_model_dump() -> None:
     job_id: JobId = JobId(789)
-    additional: dict[str, str] = {"key": "value"}
+    additional: dict[str, object] = {"key": "value"}
     try:
         raise KeyError("Missing key")
     except Exception as exc:

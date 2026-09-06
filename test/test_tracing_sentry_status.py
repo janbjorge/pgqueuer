@@ -8,15 +8,14 @@ from typing import Any, Iterator
 
 import pytest
 import sentry_sdk
-from pydantic_core import to_json
 from sentry_sdk.transport import Transport
 
 from pgqueuer.adapters.tracing.sentry import SentryTracing
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
-def _make_job(headers: dict | None) -> Job:
+def _make_job(headers: dict[str, Any] | None) -> Job:
     now = datetime.now(timezone.utc)
     return Job(
         id=JobId(1),
@@ -26,10 +25,10 @@ def _make_job(headers: dict | None) -> Job:
         heartbeat=now,
         execute_after=now,
         status="queued",
-        entrypoint="say_hello",
+        entrypoint=QueueEntrypoint("say_hello"),
         payload=b"hello",
-        queue_manager_id=uuid.uuid4(),
-        headers=to_json(headers) if headers is not None else None,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        headers=headers,
     )
 
 

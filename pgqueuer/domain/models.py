@@ -4,7 +4,7 @@ import dataclasses
 import traceback
 from collections.abc import MutableMapping
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any, Literal, NamedTuple
+from typing import Annotated, Literal, NamedTuple
 
 import anyio
 from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel
@@ -102,21 +102,26 @@ class Job(BaseModel):
     queue_manager_id: QueueManagerId | None
     slot: Slot | None = None
     headers: Annotated[
-        dict[str, Any] | None,
-        BeforeValidator(lambda x: None if x is None else from_json(x)),
+        dict[str, object] | None,
+        BeforeValidator(lambda x: x if x is None or isinstance(x, dict) else from_json(x)),
     ]
 
-    def logfire_headers(self) -> dict[str, Any] | None:
+    def header_section(self, key: str) -> dict[str, object] | None:
+        """Return the nested header dict under *key*, or None when absent or not a dict."""
+        section = None if self.headers is None else self.headers.get(key)
+        return section if isinstance(section, dict) else None
+
+    def logfire_headers(self) -> dict[str, object] | None:
         """Return the ``logfire`` sub-dict from job headers, or None."""
-        return None if self.headers is None else self.headers.get("logfire")
+        return self.header_section("logfire")
 
-    def sentry_headers(self) -> dict[str, Any] | None:
+    def sentry_headers(self) -> dict[str, object] | None:
         """Return the ``sentry`` sub-dict from job headers, or None."""
-        return None if self.headers is None else self.headers.get("sentry")
+        return self.header_section("sentry")
 
-    def otel_headers(self) -> dict[str, Any] | None:
+    def otel_headers(self) -> dict[str, object] | None:
         """Return the ``otel`` W3C propagation sub-dict from job headers, or None."""
-        return None if self.headers is None else self.headers.get("otel")
+        return self.header_section("otel")
 
 
 class Log(BaseModel):
@@ -311,14 +316,14 @@ class TracebackRecord(BaseModel):
     exception_type: str
     exception_message: str
     traceback: str
-    additional_context: dict[str, Any] | None
+    additional_context: dict[str, object] | None
 
     @classmethod
     def from_exception(
         cls,
         exc: Exception,
         job_id: JobId,
-        additional_context: dict[str, Any] | None = None,
+        additional_context: dict[str, object] | None = None,
     ) -> TracebackRecord:
         return cls(
             job_id=job_id,

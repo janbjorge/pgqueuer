@@ -8,15 +8,14 @@ from typing import Any, Iterator
 
 import pytest
 import sentry_sdk
-from pydantic_core import to_json
 from sentry_sdk.transport import Transport
 
 from pgqueuer.adapters.tracing.sentry import SentryTracing
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
-def _make_job(headers: dict | None, *, entrypoint: str = "say_hello") -> Job:
+def _make_job(headers: dict[str, Any] | None, *, entrypoint: str = "say_hello") -> Job:
     now = datetime.now(timezone.utc)
     return Job(
         id=JobId(1),
@@ -26,10 +25,10 @@ def _make_job(headers: dict | None, *, entrypoint: str = "say_hello") -> Job:
         heartbeat=now,
         execute_after=now,
         status="queued",
-        entrypoint=entrypoint,
+        entrypoint=QueueEntrypoint(entrypoint),
         payload=b"hello",
-        queue_manager_id=uuid.uuid4(),
-        headers=to_json(headers) if headers is not None else None,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        headers=headers,
     )
 
 
@@ -66,9 +65,11 @@ def _consumer(transactions: list[dict[str, Any]]) -> dict[str, Any]:
 
 def test_publish_injects_sentry_headers(transactions: list[dict[str, Any]]) -> None:
     (headers,) = list(SentryTracing().trace_publish(["say_hello"]))
-    assert set(headers["sentry"]) == {"sentry-trace", "baggage"}
+    sentry = headers["sentry"]
+    assert isinstance(sentry, dict)
+    assert set(sentry) == {"sentry-trace", "baggage"}
     # sentry-trace = "{trace_id}-{span_id}-{sampled}"; trace_id is 16 bytes hex.
-    assert len(headers["sentry"]["sentry-trace"].split("-")[0]) == 32
+    assert len(sentry["sentry-trace"].split("-")[0]) == 32
 
 
 def test_publish_emits_one_span_per_entrypoint(transactions: list[dict[str, Any]]) -> None:
@@ -82,7 +83,9 @@ def test_publish_emits_one_span_per_entrypoint(transactions: list[dict[str, Any]
 async def test_consumer_continues_producer_trace(transactions: list[dict[str, Any]]) -> None:
     tracing = SentryTracing()
     (headers,) = list(tracing.trace_publish(["say_hello"]))
-    publish_trace_id = headers["sentry"]["sentry-trace"].split("-")[0]
+    sentry = headers["sentry"]
+    assert isinstance(sentry, dict)
+    publish_trace_id = sentry["sentry-trace"].split("-")[0]
 
     async with tracing.trace_process(_make_job(headers)):
         pass

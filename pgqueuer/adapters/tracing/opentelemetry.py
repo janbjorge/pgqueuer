@@ -67,20 +67,20 @@ class OpenTelemetryTracing(TracingProtocol):
 
     def __init__(
         self,
-        tracer: Any = None,
+        tracer: opentelemetry.trace.Tracer | None = None,
         instrumentation_name: str = "pgqueuer",
     ) -> None:
         self._tracer_arg = tracer
         self._instrumentation_name = instrumentation_name
 
-    def _get_tracer(self) -> Any:
+    def _get_tracer(self) -> opentelemetry.trace.Tracer | None:
         if not HAS_OTEL:
             return None
         if self._tracer_arg is not None:
             return self._tracer_arg
         return opentelemetry.trace.get_tracer(self._instrumentation_name)
 
-    def trace_publish(self, entrypoints: list[str]) -> Generator[dict, None, None]:
+    def trace_publish(self, entrypoints: list[str]) -> Generator[dict[str, object], None, None]:
         """Inject W3C trace context into job headers on enqueue.
 
         Single message: one ``PRODUCER`` ``send {destination}`` span whose
