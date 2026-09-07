@@ -155,7 +155,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 ### Type Annotations
 
-- **Always annotate** all function/method signatures (`mypy: disallow_untyped_defs = true`)
+- **Always annotate** all function/method signatures (`strict = true` implies `disallow_untyped_defs`)
 - Use **native Python types**: `list[int]`, `dict[str, object]`, `int | None` (not `Optional`)
 - Use `NewType` for domain primitives: `JobId = NewType("JobId", int)`
 - Use `Literal` for string unions: `Literal["queued", "picked", "successful"]`
