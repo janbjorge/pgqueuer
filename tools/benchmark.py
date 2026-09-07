@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from itertools import count
 from pathlib import Path
-from typing import Protocol
+from typing import NoReturn, Protocol
 
 import typer
 import uvloop
@@ -32,7 +32,7 @@ def tablefmt() -> str:
     return os.environ.get("PGQUEUER_TABLEFMT", os.environ.get("TABLEFMT", "pretty"))
 
 
-def job_progress_bar(total: int | None = None) -> tqdm:
+def job_progress_bar(total: int | None = None) -> tqdm[NoReturn]:
     """Return a progress bar configured for job throughput measurements."""
     return tqdm(total=total, ascii=True, unit=" job", unit_scale=True, file=sys.stdout)
 
@@ -221,7 +221,7 @@ async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort
 class Consumer:
     pgq: PgQueuer
     batch_size: int
-    bar: tqdm
+    bar: tqdm[NoReturn]
     mode: types.QueueExecutionMode = types.QueueExecutionMode.continuous
 
     async def run(self) -> None:
