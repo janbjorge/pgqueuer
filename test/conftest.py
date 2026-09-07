@@ -63,7 +63,7 @@ def queries(driver: InMemoryDriver) -> InMemoryQueries:
     return InMemoryQueries(driver=driver)
 
 
-class PgQueuerPostgresContainer(DockerContainer):
+class PgQueuerPostgresContainer(DockerContainer):  # type: ignore[misc]
     """Postgres container with modern wait strategy support
     (libpq env defaults: PGUSER, PGPASSWORD, PGDATABASE, PGPORT)."""
 

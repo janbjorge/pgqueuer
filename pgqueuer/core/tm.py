@@ -51,10 +51,11 @@ class TaskManager:
 
     async def gather_tasks(self, return_exceptions: bool = True) -> list[object]:
         """Await every tracked task and return per-task results/exceptions."""
-        return await asyncio.gather(
+        results: list[object] = await asyncio.gather(
             *self.tasks,
             return_exceptions=return_exceptions,
         )
+        return results
 
     async def __aenter__(self) -> TaskManager:
         return self

@@ -160,6 +160,7 @@ class DBSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PGQUEUER_",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Prepended to every object name not explicitly overridden; lets multiple

@@ -543,7 +543,7 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
     logs = await q.queue_log()
 
     assert sorted(logs, key=lambda log: log.job_id) == sorted(
-        [models.Log(**entry) for entry in entries], key=lambda log: log.job_id
+        [models.Log.model_validate(entry) for entry in entries], key=lambda log: log.job_id
     )
 
 

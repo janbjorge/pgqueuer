@@ -113,7 +113,7 @@ class _FetchBoom:
     def __init__(self, exc: Exception) -> None:
         self.exc = exc
 
-    async def fetch(self, query: str, *args: object) -> list[dict]:
+    async def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
         raise self.exc
 
 

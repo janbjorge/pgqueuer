@@ -399,7 +399,7 @@ class TestChartSlots:
     ) -> models.ThroughputBucket:
         return models.ThroughputBucket(
             bucket=self.now() - timedelta(minutes=minutes_ago),
-            entrypoint="ep",
+            entrypoint=QueueEntrypoint("ep"),
             status=status,
             count=count,
         )

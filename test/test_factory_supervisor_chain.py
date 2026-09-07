@@ -315,7 +315,7 @@ async def test_asynccm_factory_setup_raises_propagates() -> None:
     @asynccontextmanager
     async def factory() -> AsyncGenerator[PgQueuer, None]:
         raise RuntimeError("setup failed")
-        yield  # unreachable, needed for generator
+        yield  # type: ignore[unreachable]  # keeps this a generator
 
     with pytest.raises(RuntimeError, match="setup failed"):
         await supervisor.runit(
@@ -361,7 +361,7 @@ async def test_factory_raises_restart_on_failure_retries() -> None:
         nonlocal call_count
         call_count += 1
         raise RuntimeError("transient error")
-        yield  # unreachable, needed for generator
+        yield  # type: ignore[unreachable]  # keeps this a generator
 
     shutdown = asyncio.Event()
     task = asyncio.create_task(

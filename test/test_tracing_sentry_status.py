@@ -60,7 +60,9 @@ def transactions() -> Iterator[list[dict[str, Any]]]:
 def _status(transactions: list[dict[str, Any]]) -> str:
     consumer = [t for t in transactions if t.get("transaction") == "queue_consumer_transaction"]
     assert len(consumer) == 1, [t.get("transaction") for t in transactions]
-    return consumer[0]["contexts"]["trace"]["status"]
+    status = consumer[0]["contexts"]["trace"]["status"]
+    assert isinstance(status, str)
+    return status
 
 
 async def test_status_ok_on_success(transactions: list[dict[str, Any]]) -> None:

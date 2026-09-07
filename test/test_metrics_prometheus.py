@@ -6,6 +6,7 @@ from typing import cast
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
 from pgqueuer.models import LogStatistics, QueueStatistics
@@ -52,10 +53,12 @@ def test_custom_metric_names_are_used() -> None:
         queue_count="custom_queue_count",
         log_count="custom_log_count",
     )
-    queue_stats = [QueueStatistics(entrypoint="main", status="queued", count=2, priority=0)]
+    queue_stats = [
+        QueueStatistics(entrypoint=QueueEntrypoint("main"), status="queued", count=2, priority=0)
+    ]
     log_stats = [
         LogStatistics(
-            entrypoint="main",
+            entrypoint=QueueEntrypoint("main"),
             status="successful",
             count=5,
             priority=0,
@@ -84,11 +87,13 @@ async def test_collect_metrics_returns_payload() -> None:
 
 async def test_collect_metrics_with_statistics() -> None:
     queue_stats = [
-        QueueStatistics(entrypoint="worker", status="queued", count=10, priority=0),
+        QueueStatistics(
+            entrypoint=QueueEntrypoint("worker"), status="queued", count=10, priority=0
+        ),
     ]
     log_stats = [
         LogStatistics(
-            entrypoint="worker",
+            entrypoint=QueueEntrypoint("worker"),
             status="successful",
             count=25,
             priority=0,

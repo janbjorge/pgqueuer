@@ -19,7 +19,13 @@ import pytest
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
-from pgqueuer.domain.types import CronEntrypoint, CronExpression, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import (
+    CronEntrypoint,
+    CronExpression,
+    JobId,
+    QueueEntrypoint,
+    QueueManagerId,
+)
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
@@ -274,7 +280,7 @@ async def test_traceback_jsonb_roundtrip(
     job = jobs[0]
 
     tb_record = TracebackRecord(
-        job_id=int(jids[0]),
+        job_id=JobId(int(jids[0])),
         timestamp=datetime.now(timezone.utc),
         exception_type="ValueError",
         exception_message="test error",
