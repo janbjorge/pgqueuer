@@ -101,6 +101,7 @@ dev = [
     "tqdm",
     "types-croniter",
     "types-tabulate",
+    "types-tqdm",
     "uvicorn",
     "time-machine>=2.16.0",
     "testcontainers>=4.14.2",
@@ -168,6 +169,11 @@ init_forbid_extra = true
 
 [[tool.mypy.overrides]]
 module = "pgqueuer.*"
+disallow_any_explicit = true
+disallow_any_unimported = true
+
+[[tool.mypy.overrides]]
+module = ["tools.*", "examples.*"]
 disallow_any_explicit = true
 disallow_any_unimported = true
 
