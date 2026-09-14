@@ -6,8 +6,8 @@ Accepted
 
 ## Context
 
-The library owns its schema lifecycle (ADR-0015) and migrates it as an
-idempotent, forward-only stream with no version table (ADR-0016). It had
+The library owns its schema lifecycle (ADR-0015) and migrates it
+idempotently and forward-only, with no version table (ADR-0016). It had
 no stated answer to the other half: whether the schema a worker finds is
 one this code can drive.
 
