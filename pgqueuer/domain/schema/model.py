@@ -42,8 +42,8 @@ class Table:
     name: TableName
     columns: tuple[Column, ...]
     unlogged: bool
+    id_sequence_type: SqlType
     unique_constraints: tuple[tuple[ColumnName, ...], ...] = ()
-    id_sequence_type: SqlType | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -75,7 +75,6 @@ class Trigger:
     name: TriggerName
     table: TableName
     function: FunctionName
-    live_definition: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,14 +98,6 @@ class Retired:
     indexes: tuple[IndexName, ...] = ()
     types: tuple[TypeName, ...] = ()
     columns: tuple[tuple[TableName, ColumnName], ...] = ()
-
-
-@dataclasses.dataclass(frozen=True)
-class Plan:
-    """DDL to converge a database, plus what the planner declined to do."""
-
-    statements: tuple[str, ...] = ()
-    notes: tuple[str, ...] = ()
 
 
 def column(
