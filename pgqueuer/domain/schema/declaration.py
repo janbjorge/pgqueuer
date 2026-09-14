@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pgqueuer.domain.schema.model import EnumType, Retired, Schema
+from pgqueuer.domain.schema.model import ColumnRef, EnumType, Retired, Schema
 from pgqueuer.domain.schema.notify import notify_function, notify_trigger
 from pgqueuer.domain.schema.queue import queue_indexes, queue_table
 from pgqueuer.domain.schema.queue_log import queue_log_indexes, queue_log_table
@@ -59,5 +59,10 @@ def retired(settings: DBSettings) -> Retired:
     return Retired(
         indexes=(IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),),
         types=(TypeName(settings.legacy_statistics_status_type),),
-        columns=((TableName(settings.statistics_table), ColumnName("time_in_queue")),),
+        columns=(
+            ColumnRef(
+                table=TableName(settings.statistics_table),
+                column=ColumnName("time_in_queue"),
+            ),
+        ),
     )

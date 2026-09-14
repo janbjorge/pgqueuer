@@ -97,7 +97,7 @@ class QueryBuilderEnvironment:
 
     CREATE {durability_policy.statistics_table} TABLE {qn.statistics_table} (
         id BIGSERIAL PRIMARY KEY,
-        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', NOW() at time zone 'UTC'),
+        created TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT DATE_TRUNC('sec', timezone('UTC', NOW())),
         count BIGINT NOT NULL,
         priority INT NOT NULL,
         status {qn.queue_status_type} NOT NULL,
@@ -105,7 +105,7 @@ class QueryBuilderEnvironment:
     );
     CREATE UNIQUE INDEX {s.statistics_table}_unique_count ON {qn.statistics_table} (
         priority,
-        DATE_TRUNC('sec', created at time zone 'UTC'),
+        DATE_TRUNC('sec', timezone('UTC', created)),
         status,
         entrypoint
     );

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from pgqueuer.domain.types import (
     ColumnName,
@@ -18,6 +18,23 @@ ColumnKind = Literal["plain", "serial", "identity"]
 
 STATUS_TYPE = SqlType("{status_type}")
 TIMESTAMP = SqlType("timestamp with time zone")
+
+
+class ColumnRef(NamedTuple):
+    """One column, addressed by the table it belongs to."""
+
+    table: TableName
+    column: ColumnName
+
+
+class UniqueConstraint(NamedTuple):
+    """Columns a table declares unique.
+
+    Carries no name: PostgreSQL generates one, and the declaration should not
+    have to predict it.
+    """
+
+    columns: tuple[ColumnName, ...]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,7 +60,7 @@ class Table:
     columns: tuple[Column, ...]
     unlogged: bool
     id_sequence_type: SqlType
-    unique_constraints: tuple[tuple[ColumnName, ...], ...] = ()
+    unique_constraints: tuple[UniqueConstraint, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -97,7 +114,7 @@ class Retired:
 
     indexes: tuple[IndexName, ...] = ()
     types: tuple[TypeName, ...] = ()
-    columns: tuple[tuple[TableName, ColumnName], ...] = ()
+    columns: tuple[ColumnRef, ...] = ()
 
 
 def column(
