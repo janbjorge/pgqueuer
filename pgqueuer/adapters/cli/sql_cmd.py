@@ -7,7 +7,7 @@ import inspect
 import typer
 from typing_extensions import Annotated
 
-from pgqueuer.adapters.persistence import qb
+from pgqueuer.adapters.persistence import qb, schema_ddl
 
 sql_app = typer.Typer(
     help=(
@@ -57,12 +57,11 @@ DurabilityArgument = Annotated[
 
 
 def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
-    qbe = qb.QueryBuilderEnvironment(settings)
-    return inspect.cleandoc(qbe.build_install_query(create_schema=create_schema)).strip()
+    return schema_ddl.render_install(settings, create_schema=create_schema)
 
 
-def render_uninstall() -> str:
-    return inspect.cleandoc(qb.QueryBuilderEnvironment().build_uninstall_query()).strip()
+def render_uninstall(settings: qb.DBSettings) -> str:
+    return schema_ddl.render_uninstall(settings)
 
 
 def render_upgrade(settings: qb.DBSettings) -> str:
@@ -99,7 +98,7 @@ def install(
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
 def uninstall() -> None:
-    typer.echo(render_uninstall())
+    typer.echo(render_uninstall(qb.DBSettings()))
 
 
 @sql_app.command(help="SQL to migrate an existing installation to the current version.")

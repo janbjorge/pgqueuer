@@ -37,15 +37,16 @@ def test_sql_commands_emit_sql(args: list[str], marker: str) -> None:
 
 
 def test_sql_statements_are_left_aligned() -> None:
-    """Top-level statements start at column 0; qb's source-indentation artifact
-    is stripped while inner structure (columns, plpgsql body) keeps its indent."""
+    """Top-level statements start at column 0; only inner structure (columns,
+    plpgsql body) is indented."""
     uninstall = CliRunner().invoke(app, ["sql", "uninstall"]).output
     assert all(line.startswith("DROP") for line in uninstall.splitlines() if line.strip())
 
     install = CliRunner().invoke(app, ["sql", "install"]).output
-    assert install.startswith("CREATE TYPE")
+    assert install.startswith("-- pgqueuer ")
+    assert "\nCREATE TYPE" in install
     assert "\n    CREATE TABLE" not in install
-    assert "\n    id BIGSERIAL" in install  # column indentation preserved
+    assert "\n    id bigserial" in install  # column indentation preserved
 
 
 def test_sql_commands_are_deterministic() -> None:

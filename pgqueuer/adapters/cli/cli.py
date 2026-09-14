@@ -364,7 +364,7 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall())
+        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(qb.DBSettings()))
         return
 
     async def run() -> None:
