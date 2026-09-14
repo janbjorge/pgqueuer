@@ -4,7 +4,7 @@ import dataclasses
 
 import pytest
 
-from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.adapters.persistence.schema_inspect import fold_timezone_calls, inspect
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Schema, resolve
@@ -55,6 +55,30 @@ async def test_prefixed_and_schema_scoped_install(apgdriver: AsyncpgDriver) -> N
     settings = DBSettings(prefix="acme_", db_schema="billing")
     await queries_for(apgdriver, settings).install()
     assert collapse(await inspect(apgdriver, settings)) == declared(settings)
+
+
+@pytest.mark.parametrize(
+    "thirteen, fourteen_plus",
+    [
+        (
+            "date_trunc('sec'::text, timezone('UTC'::text, now()))",
+            "date_trunc('sec'::text, (now() AT TIME ZONE 'UTC'::text))",
+        ),
+        (
+            "USING btree (priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint)",  # noqa: E501
+            "USING btree (priority, date_trunc('sec'::text, (created AT TIME ZONE 'UTC'::text)), status, entrypoint)",  # noqa: E501
+        ),
+        ("USING btree (created)", "USING btree (created)"),
+    ],
+)
+def test_postgres_13_timezone_spelling_folds(thirteen: str, fourteen_plus: str) -> None:
+    """PostgreSQL 14 changed how AT TIME ZONE is deparsed; 13 folds onto 14+.
+
+    Verbatim catalog output, so the fold is covered on every major rather than
+    only when the PG 13 job runs.
+    """
+    assert fold_timezone_calls(thirteen) == fourteen_plus
+    assert fold_timezone_calls(fourteen_plus) == fourteen_plus
 
 
 async def test_missing_namespace_is_reported(apgdriver: AsyncpgDriver) -> None:
