@@ -192,6 +192,16 @@ if isinstance(exc, SqlStateError) and isinstance(exc.sqlstate, str):
 
 Three grandfathered call sites remain: `domain/settings.py` iterating declared dataclass fields, `core/executors.py` probing `__call__`, and `adapters/cli/factories.py` resolving a `module:attr` path. Add no more; replace them when the code is next touched.
 
+**`operator.attrgetter`, `operator.itemgetter` and `operator.methodcaller` are banned outright.** They are `getattr`, a subscript and a method call wearing a functional hat: the name stays a string mypy cannot check, so `attrgetter("naem")` type-checks and blows up at runtime. Being stdlib does not redeem them. A lambda says the same thing and is checked:
+
+```python
+# Bad — "name" is unverifiable, and the sort key's type is unknown
+tuple(sorted(tables, key=operator.attrgetter("name")))
+
+# Good — mypy resolves the attribute and its type
+tuple(sorted(tables, key=lambda table: table.name))
+```
+
 Test code may use reflection where the test is *about* reflection. `monkeypatch.setattr` is pytest's API, not the builtin, and is unaffected.
 
 ### Naming Conventions
