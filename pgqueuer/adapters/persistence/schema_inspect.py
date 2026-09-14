@@ -187,45 +187,11 @@ def index_body(definition: str, db_schema: str | None) -> SqlExpression:
     names even when the schema is on ``search_path``, so drop the qualifier.
     """
     tail = definition[definition.index(" USING ") + 1 :]
-    return SqlExpression(fold_timezone_calls(unqualify(tail, db_schema)))
+    return SqlExpression(unqualify(tail, db_schema))
 
 
 def unqualify(text: str, db_schema: str | None) -> str:
     return text if db_schema is None else text.replace(f"{db_schema}.", "")
-
-
-def closing_paren(text: str, start: int) -> int:
-    """Index of the paren matching the one at ``start``, quotes respected."""
-    depth, quoted, position = 0, False, start
-    while position < len(text):
-        character = text[position]
-        if character == "'":
-            quoted = not quoted
-        elif not quoted and character == "(":
-            depth += 1
-        elif not quoted and character == ")":
-            depth -= 1
-            if depth == 0:
-                return position
-        position += 1
-    raise ValueError(f"unbalanced parentheses in {text!r}")
-
-
-def fold_timezone_calls(expression: str) -> str:
-    """Rewrite PostgreSQL 13's ``timezone(zone, value)`` as ``AT TIME ZONE``.
-
-    PostgreSQL 14 changed how it deparses ``AT TIME ZONE``, so one DDL reads
-    back two ways across the supported majors. The model declares the 14+
-    spelling and 13 is folded onto it.
-    """
-    marker = "timezone("
-    while (start := expression.find(marker)) != -1:
-        opening = start + len(marker) - 1
-        closing = closing_paren(expression, opening)
-        zone, _, value = expression[opening + 1 : closing].partition(", ")
-        folded = f"({value} AT TIME ZONE {zone})"
-        expression = expression[:start] + folded + expression[closing + 1 :]
-    return expression
 
 
 def column_kind(row: ColumnRow) -> ColumnKind:
@@ -379,11 +345,7 @@ def build_column(
         name=ColumnName(row.name),
         type=SqlType(unqualify(row.type, db_schema)),
         not_null=row.not_null,
-        default=(
-            None
-            if default is None
-            else SqlExpression(fold_timezone_calls(unqualify(default, db_schema)))
-        ),
+        default=None if default is None else SqlExpression(unqualify(default, db_schema)),
         kind=kind,
         primary_key=ColumnRef(TableName(row.tbl), ColumnName(row.name)) in primary_keys,
     )
