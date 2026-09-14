@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from pgqueuer.domain.types import ColumnName, SqlType, TableName
+
 
 class PgqException(Exception):
     """Base class for all exceptions raised by PgQueuer."""
@@ -42,3 +44,28 @@ class DuplicateJobError(PgqException):
 
 class FailingListenerError(PgqException):
     """Raised when a listener fails to process a job."""
+
+
+class SchemaDriftError(PgqException):
+    """Raised when an upgrade meets a schema change it cannot safely convert.
+
+    The planner refuses rather than guessing at a cast that could lose data.
+    Apply the change by hand and re-run the upgrade.
+    """
+
+    def __init__(
+        self,
+        *,
+        table: TableName,
+        column: ColumnName,
+        installed: SqlType,
+        declared: SqlType,
+    ) -> None:
+        super().__init__(
+            f"{table}.{column} is {installed} in the database but declared {declared}; "
+            "no supported conversion. Alter the column by hand, then re-run upgrade."
+        )
+        self.table = table
+        self.column = column
+        self.installed = installed
+        self.declared = declared
