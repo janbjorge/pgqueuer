@@ -17,7 +17,7 @@ def queue_log_table(settings: DBSettings) -> Table:
             column("status", STATUS_TYPE, not_null=True),
             column("priority", "integer", not_null=True),
             column("entrypoint", "text", not_null=True),
-            column("traceback", "jsonb", default="NULL::jsonb"),
+            column("traceback", "jsonb"),
             column("aggregated", "boolean", default="false"),
         ),
     )

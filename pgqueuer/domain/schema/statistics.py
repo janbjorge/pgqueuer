@@ -16,7 +16,7 @@ def statistics_table(settings: DBSettings) -> Table:
                 "created",
                 TIMESTAMP,
                 not_null=True,
-                default="date_trunc('sec'::text, timezone('UTC'::text, now()))",
+                default="date_trunc('sec'::text, (now() AT TIME ZONE 'UTC'::text))",
             ),
             column("count", "bigint", not_null=True),
             column("priority", "integer", not_null=True),
@@ -32,7 +32,7 @@ def statistics_indexes(settings: DBSettings) -> tuple[Index, ...]:
         index(
             f"{stats}_unique_count",
             stats,
-            "USING btree (priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint)",  # noqa: E501
+            "USING btree (priority, date_trunc('sec'::text, (created AT TIME ZONE 'UTC'::text)), status, entrypoint)",  # noqa: E501
             unique=True,
         ),
     )
