@@ -24,6 +24,7 @@ Conventions:
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 - [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
+- [ADR-0016: Schema upgrades are computed from the live database](ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
 - [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
 - [ADR-0025: The schema contract is a declared manifest](ADR-0025-the-schema-contract-is-a-declared-manifest.md)
 
@@ -206,19 +207,23 @@ leaves open.
     must never touch non-PgQueuer objects.
   - Not covered: CLI command names, migration style (ADR-0016).
 
-- [ ] **ADR-0016: Schema migrations are idempotent and forward-only**
-  - Decision: the upgrade path is a replayable stream of idempotent steps;
-    there are no down-migrations.
-  - Fork: idempotent replay vs. versioned up/down migrations with a
-    recorded schema version.
+- [x] **ADR-0016: Schema upgrades are computed from the live database**
+  - Decision: one declarative model is the source of truth for the target
+    schema; install renders it and upgrade applies the difference between
+    it and the catalog. Forward-only, no down-migrations.
+  - Fork: computed diff vs. a hand-written idempotent step stream vs.
+    versioned up/down migrations with a recorded schema version.
   - Consequences (this is where "no version table" lives): no version
-    bookkeeping, re-running upgrade is always safe, no downgrade path, the
-    step list is append-only forever, and each step must guard its own
-    applicability.
-  - Pointers: `build_upgrade_queries()` in
-    `pgqueuer/adapters/persistence/qb.py`; opt-out knob for the one
-    table-rewriting step (`widen_id` in `pgqueuer/domain/settings.py`).
-  - Not covered: individual step contents, DO-block guard patterns.
+    bookkeeping, re-running upgrade is always safe, no downgrade path, and
+    install and upgrade cannot drift because they are one artifact.
+    Planning the exact upgrade needs a connection; the offline script is a
+    weaker superset. Retirement is an explicit list, never inferred.
+  - Pointers: model and plan in `pgqueuer/domain/schema.py`; inspection,
+    rendering and planning in `pgqueuer/adapters/persistence/`; opt-out
+    knob for the one table-rewriting change (`widen_id` in
+    `pgqueuer/domain/settings.py`).
+  - Not covered: the model's field layout, the catalog queries, statement
+    ordering, CLI flag spellings.
 
 - [ ] **ADR-0017: Multiple independent installs may share one database**
   - Decision: all DB object names are namespaced (prefix and/or schema) so
