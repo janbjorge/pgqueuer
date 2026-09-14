@@ -5,10 +5,20 @@ import textwrap
 from typing import Literal
 
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import (
+    ColumnName,
+    FunctionName,
+    IndexName,
+    SqlExpression,
+    SqlType,
+    TableName,
+    TriggerName,
+    TypeName,
+)
 
 ColumnKind = Literal["plain", "serial", "identity"]
 
-STATUS_TYPE = "{status_type}"
+STATUS_TYPE = SqlType("{status_type}")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -20,36 +30,36 @@ class Column:
     ``false``). Either may contain the ``{status_type}`` placeholder.
     """
 
-    name: str
-    type: str
+    name: ColumnName
+    type: SqlType
     not_null: bool = False
-    default: str | None = None
+    default: SqlExpression | None = None
     kind: ColumnKind = "plain"
     primary_key: bool = False
 
 
 @dataclasses.dataclass(frozen=True)
 class Table:
-    name: str
+    name: TableName
     columns: tuple[Column, ...]
     unlogged: bool
-    unique_constraints: tuple[tuple[str, ...], ...] = ()
-    id_sequence_type: str | None = None
+    unique_constraints: tuple[tuple[ColumnName, ...], ...] = ()
+    id_sequence_type: SqlType | None = None
 
 
 @dataclasses.dataclass(frozen=True)
 class Index:
     """A standalone index. Constraint-backed indexes belong to their table."""
 
-    name: str
-    table: str
+    name: IndexName
+    table: TableName
     unique: bool
-    body: str
+    body: SqlExpression
 
 
 @dataclasses.dataclass(frozen=True)
 class EnumType:
-    name: str
+    name: TypeName
     labels: tuple[str, ...]
 
 
@@ -57,15 +67,15 @@ class EnumType:
 class Function:
     """A function, ``body`` holding ``pg_proc.prosrc`` rather than full DDL."""
 
-    name: str
+    name: FunctionName
     body: str
 
 
 @dataclasses.dataclass(frozen=True)
 class Trigger:
-    name: str
-    table: str
-    function: str
+    name: TriggerName
+    table: TableName
+    function: FunctionName
     live_definition: str | None = None
 
 
@@ -87,9 +97,9 @@ class Retired:
     dropped for being merely absent.
     """
 
-    indexes: tuple[str, ...] = ()
-    types: tuple[str, ...] = ()
-    columns: tuple[tuple[str, str], ...] = ()
+    indexes: tuple[IndexName, ...] = ()
+    types: tuple[TypeName, ...] = ()
+    columns: tuple[tuple[TableName, ColumnName], ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,11 +109,8 @@ class Plan:
     statements: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
 
-    def __bool__(self) -> bool:
-        return bool(self.statements)
 
-
-def resolve(schema: Schema, status_type: str) -> Schema:
+def resolve(schema: Schema, status_type: TypeName) -> Schema:
     """Substitute the status enum placeholder throughout ``schema``.
 
     Comparison passes the bare enum name, DDL rendering the qualified one.
@@ -113,15 +120,17 @@ def resolve(schema: Schema, status_type: str) -> Schema:
         return value.replace(STATUS_TYPE, status_type)
 
     return Schema(
-        enums=tuple(dataclasses.replace(enum, name=text(enum.name)) for enum in schema.enums),
+        enums=schema.enums,
         tables=tuple(
             dataclasses.replace(
                 table,
                 columns=tuple(
                     dataclasses.replace(
                         column,
-                        type=text(column.type),
-                        default=None if column.default is None else text(column.default),
+                        type=SqlType(text(column.type)),
+                        default=(
+                            None if column.default is None else SqlExpression(text(column.default))
+                        ),
                     )
                     for column in table.columns
                 ),
@@ -129,7 +138,8 @@ def resolve(schema: Schema, status_type: str) -> Schema:
             for table in schema.tables
         ),
         indexes=tuple(
-            dataclasses.replace(index, body=text(index.body)) for index in schema.indexes
+            dataclasses.replace(index, body=SqlExpression(text(index.body)))
+            for index in schema.indexes
         ),
         functions=schema.functions,
         triggers=schema.triggers,
@@ -183,27 +193,60 @@ def notify_function_body(channel: str) -> str:
     )
 
 
+def column(
+    name: str,
+    sql_type: str,
+    *,
+    not_null: bool = False,
+    default: str | None = None,
+    kind: ColumnKind = "plain",
+    primary_key: bool = False,
+) -> Column:
+    """Build a :class:`Column` from plain strings.
+
+    Keeps the declaration reading as DDL. The domain types are applied at this
+    boundary, so every consumer of the model still gets them.
+    """
+    return Column(
+        name=ColumnName(name),
+        type=SqlType(sql_type),
+        not_null=not_null,
+        default=None if default is None else SqlExpression(default),
+        kind=kind,
+        primary_key=primary_key,
+    )
+
+
+def index(name: str, table: str, body: str, *, unique: bool = False) -> Index:
+    return Index(
+        name=IndexName(name),
+        table=TableName(table),
+        unique=unique,
+        body=SqlExpression(body),
+    )
+
+
 def queue_table(settings: DBSettings) -> Table:
     timestamp = "timestamp with time zone"
     return Table(
-        name=settings.queue_table,
+        name=TableName(settings.queue_table),
         unlogged=settings.durability.config.queue_table == "UNLOGGED",
-        id_sequence_type="bigint",
+        id_sequence_type=SqlType("bigint"),
         columns=(
-            Column("id", "bigint", not_null=True, kind="serial", primary_key=True),
-            Column("priority", "integer", not_null=True),
-            Column("queue_manager_id", "uuid"),
-            Column("created", timestamp, not_null=True, default="now()"),
-            Column("updated", timestamp, not_null=True, default="now()"),
-            Column("heartbeat", timestamp, not_null=True, default="now()"),
-            Column("execute_after", timestamp, not_null=True, default="now()"),
-            Column("status", STATUS_TYPE, not_null=True),
-            Column("entrypoint", "text", not_null=True),
-            Column("dedupe_key", "text"),
-            Column("payload", "bytea"),
-            Column("headers", "jsonb"),
-            Column("attempts", "integer", not_null=True, default="0"),
-            Column("slot", "bigint"),
+            column("id", "bigint", not_null=True, kind="serial", primary_key=True),
+            column("priority", "integer", not_null=True),
+            column("queue_manager_id", "uuid"),
+            column("created", timestamp, not_null=True, default="now()"),
+            column("updated", timestamp, not_null=True, default="now()"),
+            column("heartbeat", timestamp, not_null=True, default="now()"),
+            column("execute_after", timestamp, not_null=True, default="now()"),
+            column("status", STATUS_TYPE, not_null=True),
+            column("entrypoint", "text", not_null=True),
+            column("dedupe_key", "text"),
+            column("payload", "bytea"),
+            column("headers", "jsonb"),
+            column("attempts", "integer", not_null=True, default="0"),
+            column("slot", "bigint"),
         ),
     )
 
@@ -211,39 +254,39 @@ def queue_table(settings: DBSettings) -> Table:
 def queue_log_table(settings: DBSettings) -> Table:
     timestamp = "timestamp with time zone"
     return Table(
-        name=settings.queue_table_log,
+        name=TableName(settings.queue_table_log),
         unlogged=settings.durability.config.queue_log_table == "UNLOGGED",
-        id_sequence_type="bigint",
+        id_sequence_type=SqlType("bigint"),
         columns=(
-            Column("id", "bigint", not_null=True, kind="identity", primary_key=True),
-            Column("created", timestamp, not_null=True, default="now()"),
-            Column("job_id", "bigint", not_null=True),
-            Column("status", STATUS_TYPE, not_null=True),
-            Column("priority", "integer", not_null=True),
-            Column("entrypoint", "text", not_null=True),
-            Column("traceback", "jsonb", default="NULL::jsonb"),
-            Column("aggregated", "boolean", default="false"),
+            column("id", "bigint", not_null=True, kind="identity", primary_key=True),
+            column("created", timestamp, not_null=True, default="now()"),
+            column("job_id", "bigint", not_null=True),
+            column("status", STATUS_TYPE, not_null=True),
+            column("priority", "integer", not_null=True),
+            column("entrypoint", "text", not_null=True),
+            column("traceback", "jsonb", default="NULL::jsonb"),
+            column("aggregated", "boolean", default="false"),
         ),
     )
 
 
 def statistics_table(settings: DBSettings) -> Table:
     return Table(
-        name=settings.statistics_table,
+        name=TableName(settings.statistics_table),
         unlogged=settings.durability.config.statistics_table == "UNLOGGED",
-        id_sequence_type="bigint",
+        id_sequence_type=SqlType("bigint"),
         columns=(
-            Column("id", "bigint", not_null=True, kind="serial", primary_key=True),
-            Column(
+            column("id", "bigint", not_null=True, kind="serial", primary_key=True),
+            column(
                 "created",
                 "timestamp with time zone",
                 not_null=True,
                 default="date_trunc('sec'::text, timezone('UTC'::text, now()))",
             ),
-            Column("count", "bigint", not_null=True),
-            Column("priority", "integer", not_null=True),
-            Column("status", STATUS_TYPE, not_null=True),
-            Column("entrypoint", "text", not_null=True),
+            column("count", "bigint", not_null=True),
+            column("priority", "integer", not_null=True),
+            column("status", STATUS_TYPE, not_null=True),
+            column("entrypoint", "text", not_null=True),
         ),
     )
 
@@ -251,20 +294,20 @@ def statistics_table(settings: DBSettings) -> Table:
 def schedules_table(settings: DBSettings) -> Table:
     timestamp = "timestamp with time zone"
     return Table(
-        name=settings.schedules_table,
+        name=TableName(settings.schedules_table),
         unlogged=settings.durability.config.schedules_table == "UNLOGGED",
-        id_sequence_type="bigint",
-        unique_constraints=(("expression", "entrypoint"),),
+        id_sequence_type=SqlType("bigint"),
+        unique_constraints=((ColumnName("expression"), ColumnName("entrypoint")),),
         columns=(
-            Column("id", "bigint", not_null=True, kind="serial", primary_key=True),
-            Column("expression", "text", not_null=True),
-            Column("entrypoint", "text", not_null=True),
-            Column("heartbeat", timestamp, not_null=True, default="now()"),
-            Column("created", timestamp, not_null=True, default="now()"),
-            Column("updated", timestamp, not_null=True, default="now()"),
-            Column("next_run", timestamp, not_null=True, default="now()"),
-            Column("last_run", timestamp),
-            Column("status", STATUS_TYPE, default=f"'queued'::{STATUS_TYPE}"),
+            column("id", "bigint", not_null=True, kind="serial", primary_key=True),
+            column("expression", "text", not_null=True),
+            column("entrypoint", "text", not_null=True),
+            column("heartbeat", timestamp, not_null=True, default="now()"),
+            column("created", timestamp, not_null=True, default="now()"),
+            column("updated", timestamp, not_null=True, default="now()"),
+            column("next_run", timestamp, not_null=True, default="now()"),
+            column("last_run", timestamp),
+            column("status", STATUS_TYPE, default=f"'queued'::{STATUS_TYPE}"),
         ),
     )
 
@@ -272,92 +315,57 @@ def schedules_table(settings: DBSettings) -> Table:
 def indexes(settings: DBSettings) -> tuple[Index, ...]:
     queue = settings.queue_table
     log = settings.queue_table_log
-    unindexed = (
-        Index(
-            name=f"{queue}_priority_id_id1_idx",
-            table=queue,
-            unique=False,
-            body=(
-                "USING btree (priority, id DESC) INCLUDE (id) "
-                f"WHERE (status = 'queued'::{STATUS_TYPE})"
-            ),
+    stats = settings.statistics_table
+    declared = (
+        index(
+            f"{queue}_priority_id_id1_idx",
+            queue,
+            f"USING btree (priority, id DESC) INCLUDE (id) WHERE (status = 'queued'::{STATUS_TYPE})",  # noqa: E501
         ),
-        Index(
-            name=f"{queue}_updated_id_id1_idx",
-            table=queue,
-            unique=False,
-            body=(
-                "USING btree (updated, id DESC) INCLUDE (id) "
-                f"WHERE (status = 'picked'::{STATUS_TYPE})"
-            ),
+        index(
+            f"{queue}_updated_id_id1_idx",
+            queue,
+            f"USING btree (updated, id DESC) INCLUDE (id) WHERE (status = 'picked'::{STATUS_TYPE})",  # noqa: E501
         ),
-        Index(
-            name=f"{queue}_queue_manager_id_idx",
-            table=queue,
-            unique=False,
-            body="USING btree (queue_manager_id) WHERE (queue_manager_id IS NOT NULL)",
+        index(
+            f"{queue}_queue_manager_id_idx",
+            queue,
+            "USING btree (queue_manager_id) WHERE (queue_manager_id IS NOT NULL)",
         ),
-        Index(
-            name=f"{queue}_ep_prio_id_idx",
-            table=queue,
-            unique=False,
-            body=(
-                "USING btree (entrypoint, priority DESC, id) "
-                f"WHERE (status = 'queued'::{STATUS_TYPE})"
-            ),
+        index(
+            f"{queue}_ep_prio_id_idx",
+            queue,
+            f"USING btree (entrypoint, priority DESC, id) WHERE (status = 'queued'::{STATUS_TYPE})",  # noqa: E501
         ),
-        Index(
-            name=f"{queue}_ep_ea_idx",
-            table=queue,
-            unique=False,
-            body=(
-                f"USING btree (entrypoint, execute_after) WHERE (status = 'queued'::{STATUS_TYPE})"
-            ),
+        index(
+            f"{queue}_ep_ea_idx",
+            queue,
+            f"USING btree (entrypoint, execute_after) WHERE (status = 'queued'::{STATUS_TYPE})",  # noqa: E501
         ),
-        Index(
-            name=f"{queue}_unique_dedupe_key",
-            table=queue,
+        index(
+            f"{queue}_unique_dedupe_key",
+            queue,
+            f"USING btree (dedupe_key) WHERE ((status = ANY (ARRAY['queued'::{STATUS_TYPE}, 'picked'::{STATUS_TYPE}])) AND (dedupe_key IS NOT NULL))",  # noqa: E501
             unique=True,
-            body=(
-                "USING btree (dedupe_key) WHERE ((status = ANY "
-                f"(ARRAY['queued'::{STATUS_TYPE}, 'picked'::{STATUS_TYPE}])) "
-                "AND (dedupe_key IS NOT NULL))"
-            ),
         ),
-        Index(
-            name=f"{queue}_picked_slot_idx",
-            table=queue,
+        index(
+            f"{queue}_picked_slot_idx",
+            queue,
+            f"USING btree (entrypoint, slot) WHERE ((status = 'picked'::{STATUS_TYPE}) AND (slot IS NOT NULL))",  # noqa: E501
             unique=True,
-            body=(
-                "USING btree (entrypoint, slot) "
-                f"WHERE ((status = 'picked'::{STATUS_TYPE}) AND (slot IS NOT NULL))"
-            ),
         ),
-        Index(
-            name=f"{log}_not_aggregated",
-            table=log,
-            unique=False,
-            body="USING btree ((1)) WHERE (NOT aggregated)",
-        ),
-        Index(name=f"{log}_created", table=log, unique=False, body="USING btree (created)"),
-        Index(name=f"{log}_status", table=log, unique=False, body="USING btree (status)"),
-        Index(
-            name=f"{log}_job_id_status",
-            table=log,
-            unique=False,
-            body="USING btree (job_id, created DESC)",
-        ),
-        Index(
-            name=f"{settings.statistics_table}_unique_count",
-            table=settings.statistics_table,
+        index(f"{log}_not_aggregated", log, "USING btree ((1)) WHERE (NOT aggregated)"),
+        index(f"{log}_created", log, "USING btree (created)"),
+        index(f"{log}_status", log, "USING btree (status)"),
+        index(f"{log}_job_id_status", log, "USING btree (job_id, created DESC)"),
+        index(
+            f"{stats}_unique_count",
+            stats,
+            "USING btree (priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint)",  # noqa: E501
             unique=True,
-            body=(
-                "USING btree (priority, date_trunc('sec'::text, "
-                "timezone('UTC'::text, created)), status, entrypoint)"
-            ),
         ),
     )
-    return tuple(sorted(unindexed, key=lambda index: index.name))
+    return tuple(sorted(declared, key=lambda declaration: declaration.name))
 
 
 def target(settings: DBSettings) -> Schema:
@@ -376,7 +384,7 @@ def target(settings: DBSettings) -> Schema:
     return Schema(
         enums=(
             EnumType(
-                name=settings.queue_status_type,
+                name=TypeName(settings.queue_status_type),
                 labels=(
                     "queued",
                     "picked",
@@ -392,15 +400,15 @@ def target(settings: DBSettings) -> Schema:
         indexes=indexes(settings),
         functions=(
             Function(
-                name=settings.function,
+                name=FunctionName(settings.function),
                 body=notify_function_body(settings.channel),
             ),
         ),
         triggers=(
             Trigger(
-                name=settings.trigger,
-                table=settings.queue_table,
-                function=settings.function,
+                name=TriggerName(settings.trigger),
+                table=TableName(settings.queue_table),
+                function=FunctionName(settings.function),
             ),
         ),
     )
@@ -413,7 +421,7 @@ def retired(settings: DBSettings) -> Retired:
     would destroy data an operator may still read.
     """
     return Retired(
-        indexes=(f"{settings.queue_table}_heartbeat_id_id1_idx",),
-        types=(settings.legacy_statistics_status_type,),
-        columns=((settings.statistics_table, "time_in_queue"),),
+        indexes=(IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),),
+        types=(TypeName(settings.legacy_statistics_status_type),),
+        columns=((TableName(settings.statistics_table), ColumnName("time_in_queue")),),
     )

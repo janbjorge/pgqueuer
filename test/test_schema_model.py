@@ -4,6 +4,7 @@ import pytest
 
 from pgqueuer.domain import schema
 from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.types import TypeName
 
 CUSTOM = DBSettings(
     prefix="acme_",
@@ -62,7 +63,10 @@ def test_indexes_reference_declared_tables() -> None:
 
 def test_resolve_substitutes_the_status_placeholder() -> None:
     settings = DBSettings()
-    resolved = schema.resolve(schema.target(settings), settings.queue_status_type)
+    resolved = schema.resolve(
+        schema.target(settings),
+        TypeName(settings.queue_status_type),
+    )
     rendered = [
         *(column.type for table in resolved.tables for column in table.columns),
         *(column.default or "" for table in resolved.tables for column in table.columns),

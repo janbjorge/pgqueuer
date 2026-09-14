@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from pgqueuer.domain.types import ColumnName, SqlType, TableName
+
 
 class PgqException(Exception):
     """Base class for all exceptions raised by PgQueuer."""
@@ -51,7 +53,14 @@ class SchemaDriftError(PgqException):
     Apply the change by hand and re-run the upgrade.
     """
 
-    def __init__(self, table: str, column: str, installed: str, declared: str) -> None:
+    def __init__(
+        self,
+        *,
+        table: TableName,
+        column: ColumnName,
+        installed: SqlType,
+        declared: SqlType,
+    ) -> None:
         super().__init__(
             f"{table}.{column} is {installed} in the database but declared {declared}; "
             "no supported conversion. Alter the column by hand, then re-run upgrade."
