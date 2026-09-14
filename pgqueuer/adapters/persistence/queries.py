@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -25,6 +27,16 @@ from pgqueuer.ports.tracing import TracingProtocol
 def is_unique_violation(exc: Exception) -> bool:
     """Return True if *exc* is a unique-constraint violation from the driver."""
     return sqlstate.is_unique_violation(exc)
+
+
+@contextmanager
+def raising_duplicate_job(dedupe_key: list[str | None]) -> Iterator[None]:
+    try:
+        yield
+    except Exception as e:
+        if is_unique_violation(e):
+            raise errors.DuplicateJobError(dedupe_key) from e
+        raise
 
 
 def lost_capacity_slot_race(exc: Exception, slot_index: str) -> bool:
@@ -280,7 +292,7 @@ class Queries:
                 )
             )
 
-        try:
+        with raising_duplicate_job(normed_params.dedupe_key):
             rows = await self.driver.fetch(
                 self.qbq.build_enqueue_query(on_conflict),
                 normed_params.priority,
@@ -290,10 +302,6 @@ class Queries:
                 normed_params.dedupe_key,
                 [to_json(x).decode() for x in normed_params.headers],
             )
-        except Exception as e:
-            if is_unique_violation(e):
-                raise errors.DuplicateJobError(normed_params.dedupe_key) from e
-            raise
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
@@ -786,7 +794,7 @@ class SyncQueries:
                 )
             )
 
-        try:
+        with raising_duplicate_job(normed_params.dedupe_key):
             rows = self.driver.fetch(
                 self.qbq.build_enqueue_query(on_conflict),
                 normed_params.priority,
@@ -796,10 +804,6 @@ class SyncQueries:
                 normed_params.dedupe_key,
                 [to_json(x).decode() for x in normed_params.headers],
             )
-        except Exception as e:
-            if is_unique_violation(e):
-                raise errors.DuplicateJobError(normed_params.dedupe_key) from e
-            raise
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))

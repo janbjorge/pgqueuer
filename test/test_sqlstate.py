@@ -8,7 +8,13 @@ import psycopg
 import pytest
 
 from pgqueuer.adapters.persistence import sqlstate
-from pgqueuer.adapters.persistence.queries import Queries, lost_capacity_slot_race
+from pgqueuer.adapters.persistence.queries import (
+    Queries,
+    SyncQueries,
+    lost_capacity_slot_race,
+    raising_duplicate_job,
+)
+from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
@@ -24,7 +30,7 @@ class AsyncpgNamedUnique(asyncpg.UniqueViolationError):
         self.constraint_name = constraint_name
 
 
-class _Diag:
+class ConstraintDiag:
     def __init__(self, constraint_name: str | None) -> None:
         self.constraint_name = constraint_name
 
@@ -36,7 +42,7 @@ class PsycopgNamedUnique(Exception):
 
     def __init__(self, constraint_name: str | None) -> None:
         super().__init__()
-        self.diag = _Diag(constraint_name)
+        self.diag = ConstraintDiag(constraint_name)
 
 
 @pytest.mark.parametrize(
@@ -109,7 +115,7 @@ def test_lost_capacity_slot_race_matches_only_the_slot_index(
     assert lost_capacity_slot_race(exc, SLOT_INDEX) is lost
 
 
-class _FetchBoom:
+class FetchBoom:
     def __init__(self, exc: Exception) -> None:
         self.exc = exc
 
@@ -117,7 +123,7 @@ class _FetchBoom:
         raise self.exc
 
 
-async def _dequeue(driver: object) -> list[Job]:
+async def dequeue_jobs(driver: object) -> list[Job]:
     return await Queries(driver).dequeue(  # type: ignore[arg-type]
         batch_size=1,
         entrypoints={QueueEntrypoint("fetch"): EntrypointExecutionParameter(1)},
@@ -128,15 +134,68 @@ async def _dequeue(driver: object) -> list[Job]:
 
 
 async def test_dequeue_returns_empty_on_slot_unique_violation() -> None:
-    assert await _dequeue(_FetchBoom(AsyncpgNamedUnique(SLOT_INDEX))) == []
-    assert await _dequeue(_FetchBoom(PsycopgNamedUnique(SLOT_INDEX))) == []
-    assert await _dequeue(_FetchBoom(asyncpg.DeadlockDetectedError())) == []
+    assert await dequeue_jobs(FetchBoom(AsyncpgNamedUnique(SLOT_INDEX))) == []
+    assert await dequeue_jobs(FetchBoom(PsycopgNamedUnique(SLOT_INDEX))) == []
+    assert await dequeue_jobs(FetchBoom(asyncpg.DeadlockDetectedError())) == []
 
 
 async def test_dequeue_reraises_unrelated_unique_violation() -> None:
     with pytest.raises(asyncpg.UniqueViolationError):
-        await _dequeue(_FetchBoom(AsyncpgNamedUnique(OTHER_INDEX)))
+        await dequeue_jobs(FetchBoom(AsyncpgNamedUnique(OTHER_INDEX)))
     with pytest.raises(PsycopgNamedUnique):
-        await _dequeue(_FetchBoom(PsycopgNamedUnique(OTHER_INDEX)))
+        await dequeue_jobs(FetchBoom(PsycopgNamedUnique(OTHER_INDEX)))
     with pytest.raises(asyncpg.UniqueViolationError):
-        await _dequeue(_FetchBoom(asyncpg.UniqueViolationError()))
+        await dequeue_jobs(FetchBoom(asyncpg.UniqueViolationError()))
+
+
+class SyncFetchBoom:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+    def fetch(self, query: str, *args: object) -> list[dict[str, object]]:
+        raise self.exc
+
+
+def test_raising_duplicate_job_translates_unique_violation() -> None:
+    exc = asyncpg.UniqueViolationError()
+    with pytest.raises(DuplicateJobError) as raised, raising_duplicate_job(["k"]):
+        raise exc
+    assert raised.value.dedupe_key == ["k"]
+    assert raised.value.__cause__ is exc
+
+
+def test_raising_duplicate_job_propagates_other_errors() -> None:
+    with pytest.raises(RuntimeError, match="boom"), raising_duplicate_job(["k"]):
+        raise RuntimeError("boom")
+
+
+async def enqueue_job(driver: object) -> object:
+    return await Queries(driver).enqueue("ep", None, dedupe_key="k")  # type: ignore[arg-type]
+
+
+def sync_enqueue_job(driver: object) -> object:
+    return SyncQueries(driver).enqueue("ep", None, dedupe_key="k")  # type: ignore[arg-type]
+
+
+async def test_enqueue_translates_unique_violation_to_duplicate_job() -> None:
+    with pytest.raises(DuplicateJobError) as raised:
+        await enqueue_job(FetchBoom(asyncpg.UniqueViolationError()))
+    assert raised.value.dedupe_key == ["k"]
+    with pytest.raises(DuplicateJobError):
+        await enqueue_job(FetchBoom(psycopg.errors.UniqueViolation()))
+
+
+async def test_enqueue_propagates_non_unique_violations() -> None:
+    with pytest.raises(asyncpg.DeadlockDetectedError):
+        await enqueue_job(FetchBoom(asyncpg.DeadlockDetectedError()))
+
+
+def test_sync_enqueue_translates_unique_violation_to_duplicate_job() -> None:
+    with pytest.raises(DuplicateJobError) as raised:
+        sync_enqueue_job(SyncFetchBoom(asyncpg.UniqueViolationError()))
+    assert raised.value.dedupe_key == ["k"]
+
+
+def test_sync_enqueue_propagates_non_unique_violations() -> None:
+    with pytest.raises(RuntimeError, match="boom"):
+        sync_enqueue_job(SyncFetchBoom(RuntimeError("boom")))
