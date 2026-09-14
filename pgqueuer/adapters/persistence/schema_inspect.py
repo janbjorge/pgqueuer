@@ -9,12 +9,14 @@ from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.schema.model import (
     Column,
     ColumnKind,
+    ColumnRef,
     EnumType,
     Function,
     Index,
     Schema,
     Table,
     Trigger,
+    UniqueConstraint,
 )
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import (
@@ -192,13 +194,12 @@ def unqualify(text: str, db_schema: str | None) -> str:
     return text if db_schema is None else text.replace(f"{db_schema}.", "")
 
 
-def column_kind_and_default(row: ColumnRow) -> tuple[ColumnKind, str | None]:
-    """A serial column is a nextval default; the default is the serial-ness."""
+def column_kind(row: ColumnRow) -> ColumnKind:
     if row.identity:
-        return "identity", row.default
+        return "identity"
     if row.default is not None and row.default.startswith("nextval("):
-        return "serial", None
-    return "plain", row.default
+        return "serial"
+    return "plain"
 
 
 async def namespace_present(
@@ -302,11 +303,14 @@ def build_tables(
     db_schema: str | None,
 ) -> tuple[Table, ...]:
     primary_keys = {
-        (row.tbl, name) for row in constraints if row.kind == "p" for name in row.columns
+        ColumnRef(TableName(row.tbl), ColumnName(name))
+        for row in constraints
+        if row.kind == "p"
+        for name in row.columns
     }
     unique = {
         row.tbl: tuple(
-            tuple(ColumnName(name) for name in entry.columns)
+            UniqueConstraint(columns=tuple(ColumnName(name) for name in entry.columns))
             for entry in constraints
             if entry.kind == "u" and entry.tbl == row.tbl
         )
@@ -331,15 +335,17 @@ def build_tables(
 
 def build_column(
     row: ColumnRow,
-    primary_keys: set[tuple[str, str]],
+    primary_keys: set[ColumnRef],
     db_schema: str | None,
 ) -> Column:
-    kind, default = column_kind_and_default(row)
+    kind = column_kind(row)
+    # A serial column reports nextval() as its default; that is the serial-ness.
+    default = None if kind == "serial" else row.default
     return Column(
         name=ColumnName(row.name),
         type=SqlType(unqualify(row.type, db_schema)),
         not_null=row.not_null,
         default=None if default is None else SqlExpression(unqualify(default, db_schema)),
         kind=kind,
-        primary_key=(row.tbl, row.name) in primary_keys,
+        primary_key=ColumnRef(TableName(row.tbl), ColumnName(row.name)) in primary_keys,
     )

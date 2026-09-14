@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from pgqueuer.domain.schema.model import STATUS_TYPE, TIMESTAMP, Table, column
+from pgqueuer.domain.schema.model import (
+    STATUS_TYPE,
+    TIMESTAMP,
+    Table,
+    UniqueConstraint,
+    column,
+)
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import ColumnName, SqlType, TableName
 
@@ -10,7 +16,9 @@ def schedules_table(settings: DBSettings) -> Table:
         name=TableName(settings.schedules_table),
         unlogged=settings.durability.config.schedules_table == "UNLOGGED",
         id_sequence_type=SqlType("bigint"),
-        unique_constraints=((ColumnName("expression"), ColumnName("entrypoint")),),
+        unique_constraints=(
+            UniqueConstraint(columns=(ColumnName("expression"), ColumnName("entrypoint"))),
+        ),
         columns=(
             column("id", "bigint", not_null=True, kind="serial", primary_key=True),
             column("expression", "text", not_null=True),
