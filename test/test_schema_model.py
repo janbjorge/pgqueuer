@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from pgqueuer.domain import schema
+from pgqueuer.domain.schema import model
+from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import TypeName
 
@@ -12,36 +13,36 @@ CUSTOM = DBSettings(
 )
 
 
-def all_names(target: schema.Schema) -> list[str]:
+def all_names(schema: model.Schema) -> list[str]:
     return [
-        *(enum.name for enum in target.enums),
-        *(table.name for table in target.tables),
-        *(index.name for index in target.indexes),
-        *(function.name for function in target.functions),
-        *(trigger.name for trigger in target.triggers),
+        *(enum.name for enum in schema.enums),
+        *(table.name for table in schema.tables),
+        *(index.name for index in schema.indexes),
+        *(function.name for function in schema.functions),
+        *(trigger.name for trigger in schema.triggers),
     ]
 
 
 def test_every_object_carries_the_prefix() -> None:
-    for name in all_names(schema.target(CUSTOM)):
+    for name in all_names(target(CUSTOM)):
         assert name.startswith("acme_"), name
 
 
 def test_no_object_name_is_schema_qualified() -> None:
     """Names are bare; inspect() strips the qualifier so comparison lines up."""
-    for name in all_names(schema.target(CUSTOM)):
+    for name in all_names(target(CUSTOM)):
         assert "." not in name, name
 
 
 def test_collections_are_sorted() -> None:
-    target = schema.target(DBSettings())
-    assert list(target.tables) == sorted(target.tables, key=lambda table: table.name)
-    assert list(target.indexes) == sorted(target.indexes, key=lambda index: index.name)
+    schema = target(DBSettings())
+    assert list(schema.tables) == sorted(schema.tables, key=lambda table: table.name)
+    assert list(schema.indexes) == sorted(schema.indexes, key=lambda index: index.name)
 
 
 def test_target_is_recomputed_per_call() -> None:
     """Equal settings give equal but distinct values, so nothing is cached."""
-    first, second = schema.target(DBSettings()), schema.target(DBSettings())
+    first, second = target(DBSettings()), target(DBSettings())
     assert first == second
     assert first is not second
 
@@ -51,37 +52,34 @@ def test_target_is_recomputed_per_call() -> None:
     [("durable", False), ("volatile", True)],
 )
 def test_durability_selects_table_persistence(durability: str, unlogged: bool) -> None:
-    target = schema.target(DBSettings(durability=durability))  # type: ignore[arg-type]
-    assert all(table.unlogged is unlogged for table in target.tables)
+    schema = target(DBSettings(durability=durability))  # type: ignore[arg-type]
+    assert all(table.unlogged is unlogged for table in schema.tables)
 
 
 def test_indexes_reference_declared_tables() -> None:
-    target = schema.target(CUSTOM)
-    tables = {table.name for table in target.tables}
-    assert {index.table for index in target.indexes} <= tables
+    schema = target(CUSTOM)
+    tables = {table.name for table in schema.tables}
+    assert {index.table for index in schema.indexes} <= tables
 
 
 def test_resolve_substitutes_the_status_placeholder() -> None:
     settings = DBSettings()
-    resolved = schema.resolve(
-        schema.target(settings),
-        TypeName(settings.queue_status_type),
-    )
+    resolved = model.resolve(target(settings), TypeName(settings.queue_status_type))
     rendered = [
         *(column.type for table in resolved.tables for column in table.columns),
         *(column.default or "" for table in resolved.tables for column in table.columns),
         *(index.body for index in resolved.indexes),
     ]
-    assert not any(schema.STATUS_TYPE in text for text in rendered)
+    assert not any(model.STATUS_TYPE in text for text in rendered)
     assert any(settings.queue_status_type in text for text in rendered)
 
 
 def test_retired_names_are_not_in_target() -> None:
     """Retirement is explicit; an object cannot be both declared and retired."""
     settings = DBSettings()
-    target, gone = schema.target(settings), schema.retired(settings)
-    assert not {index.name for index in target.indexes} & set(gone.indexes)
-    assert not {enum.name for enum in target.enums} & set(gone.types)
+    schema, gone = target(settings), retired(settings)
+    assert not {index.name for index in schema.indexes} & set(gone.indexes)
+    assert not {enum.name for enum in schema.enums} & set(gone.types)
 
-    declared = {(table.name, column.name) for table in target.tables for column in table.columns}
+    declared = {(table.name, column.name) for table in schema.tables for column in table.columns}
     assert not declared & set(gone.columns)
