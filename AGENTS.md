@@ -165,6 +165,20 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - **`Any` is banned in `pgqueuer/`, `tools/` and `examples/`** (`disallow_any_explicit`). Use `object` and narrow with `isinstance`. Driver `*args` are `object`; rows come back as `dict[str, object]` and scalars are read through `query_helpers.cell(row, key, kind)`, multi-column rows through a pydantic model. User-owned bags (`Context.resources`) are `MutableMapping[str, object]`. `Callable[..., X]` counts as `Any`; declare a `Protocol` with `__call__(self, *args: object)` instead. Untyped third-party values are assigned to an `object`-annotated name before an `isinstance` check. Test code under `test/` may use `Any`.
 - **Import domain types from `pgqueuer.domain.types`**, never via `models.JobId`; `no_implicit_reexport` is on and only the top-level shims re-export.
 - **Generic constructors over type-annotated assignments** for typed stdlib objects: `fut = asyncio.Future[MyType]()` not `fut: asyncio.Future[MyType] = asyncio.Future()`.
+- **No bare tuples as records.** A tuple whose elements mean different things needs a `NamedTuple` at minimum, a frozen dataclass when it grows behaviour. `tuple[X, ...]` as a homogeneous collection is fine; `tuple[str, str]` standing in for a record is not — the caller unpacks by position, a swap type-checks, and the meaning lives only in the variable name at the call site.
+
+```python
+# Bad — what is [0], and what happens when a third element appears?
+def column_kind_and_default(row: Row) -> tuple[ColumnKind, str | None]: ...
+retired_columns: tuple[tuple[str, str], ...]
+
+# Good
+class ColumnRef(NamedTuple):
+    table: TableName
+    column: ColumnName
+
+retired_columns: tuple[ColumnRef, ...]
+```
 - **No `# type: ignore` in production code.** `type: ignore` comments are forbidden in `pgqueuer/`. Fix the underlying type issue instead (use `dataclasses.KW_ONLY`, protocols, generics, overloads, etc.). `# type: ignore` is acceptable in test code only.
 
 ### Dynamic Attribute Access
