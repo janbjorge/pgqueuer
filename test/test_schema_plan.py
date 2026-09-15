@@ -8,12 +8,16 @@ the plan puts exactly that thing back.
 from __future__ import annotations
 
 import dataclasses
+from typing import Callable
+
+import pytest
 
 from pgqueuer.adapters.persistence.schema_plan import plan
+from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
-from pgqueuer.domain.schema.model import Plan, Schema, resolve
+from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, resolve
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import TypeName
+from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName, TypeName
 
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
 
@@ -182,3 +186,204 @@ def test_serial_columns_are_never_added_to_an_existing_table() -> None:
     live = without_column(schema, settings.queue_table, "id")
 
     assert plan(live, schema, settings).statements == ()
+
+
+def changed_column(
+    schema: Schema,
+    table: str,
+    column: str,
+    edit: Callable[[Column], Column],
+) -> Schema:
+    """Apply *edit* to one named column, leaving the rest of the schema alone."""
+    return dataclasses.replace(
+        schema,
+        tables=tuple(
+            dataclasses.replace(
+                entry,
+                columns=tuple(
+                    edit(item) if item.name == column else item for item in entry.columns
+                ),
+            )
+            if entry.name == table
+            else entry
+            for entry in schema.tables
+        ),
+    )
+
+
+def test_a_narrow_id_is_widened_when_enabled() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    assert plan(live, schema, settings).statements == (
+        f"ALTER TABLE {settings.queue_table} ALTER COLUMN id TYPE bigint;",
+    )
+
+
+def test_a_narrow_id_is_reported_when_widening_is_disabled() -> None:
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    computed = plan(live, schema, settings)
+    assert computed.statements == ()
+    assert len(computed.notes) == 1
+    assert "still integer" in computed.notes[0]
+
+
+def test_a_legacy_status_type_is_cast_through_text() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.statistics_table,
+        "status",
+        lambda entry: dataclasses.replace(
+            entry, type=SqlType(settings.legacy_statistics_status_type)
+        ),
+    )
+
+    assert plan(live, schema, settings).statements == (
+        f"ALTER TABLE {settings.statistics_table} ALTER COLUMN status "
+        f"TYPE {settings.queue_status_type} USING status::TEXT::{settings.queue_status_type};",
+    )
+
+
+def test_an_unrecognised_type_change_refuses() -> None:
+    """The planner does not guess at a cast that could lose data."""
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "payload",
+        lambda entry: dataclasses.replace(entry, type=SqlType("text")),
+    )
+
+    with pytest.raises(SchemaDriftError) as raised:
+        plan(live, schema, settings)
+    assert "payload" in str(raised.value)
+    assert "text" in str(raised.value)
+
+
+def test_a_kind_change_refuses() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table_log,
+        "id",
+        lambda entry: dataclasses.replace(entry, kind="serial", type=SqlType("integer")),
+    )
+
+    with pytest.raises(SchemaDriftError):
+        plan(live, schema, settings)
+
+
+def test_not_null_and_default_are_brought_into_line() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "attempts",
+        lambda entry: dataclasses.replace(entry, not_null=False, default=None),
+    )
+
+    assert plan(live, schema, settings).statements == (
+        f"ALTER TABLE {settings.queue_table} ALTER COLUMN attempts SET NOT NULL;",
+        f"ALTER TABLE {settings.queue_table} ALTER COLUMN attempts SET DEFAULT 0;",
+    )
+
+
+def test_a_redefined_index_is_dropped_before_it_is_rebuilt() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    name = f"{settings.queue_table_log}_not_aggregated"
+    live = dataclasses.replace(
+        schema,
+        indexes=tuple(
+            dataclasses.replace(entry, body=SqlExpression("USING btree (created)"))
+            if entry.name == name
+            else entry
+            for entry in schema.indexes
+        ),
+    )
+
+    statements = plan(live, schema, settings).statements
+    assert statements[0] == f"DROP INDEX IF EXISTS {name};"
+    assert statements[1].startswith(f"CREATE INDEX {name} ON")
+
+
+def test_a_changed_function_body_is_replaced_not_recreated() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        functions=tuple(
+            dataclasses.replace(entry, body="BEGIN RETURN NULL; END;") for entry in schema.functions
+        ),
+    )
+
+    statements = plan(live, schema, settings).statements
+    assert len(statements) == 1
+    assert statements[0].startswith("CREATE OR REPLACE FUNCTION")
+
+
+def test_function_bodies_compare_on_tokens_not_indentation() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        functions=tuple(
+            dataclasses.replace(entry, body=f"  {entry.body}\n\n") for entry in schema.functions
+        ),
+    )
+
+    assert plan(live, schema, settings).statements == ()
+
+
+def test_a_retired_index_is_dropped_only_when_present() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    stale = Index(
+        name=IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),
+        table=TableName(settings.queue_table),
+        unique=False,
+        body=SqlExpression("USING btree (heartbeat, id DESC)"),
+    )
+    live = dataclasses.replace(
+        schema, indexes=tuple(sorted(schema.indexes + (stale,), key=lambda entry: entry.name))
+    )
+
+    assert plan(live, schema, settings).statements == (f"DROP INDEX IF EXISTS {stale.name};",)
+    assert plan(schema, schema, settings).statements == ()
+
+
+def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        tables=tuple(
+            dataclasses.replace(entry, unlogged=True)
+            if entry.name == settings.queue_table
+            else entry
+            for entry in schema.tables
+        ),
+    )
+
+    computed = plan(live, schema, settings)
+    assert computed.statements == ()
+    assert "pgq durability" in computed.notes[0]

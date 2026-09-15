@@ -23,7 +23,7 @@ from pgqueuer.adapters.persistence.schema_ddl import rendered
 from pgqueuer.adapters.persistence.schema_inspect import inspect
 from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.domain.schema.model import Plan, Schema, Table
+from pgqueuer.domain.schema.model import Schema, Table
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -208,17 +208,31 @@ async def test_upgrade_is_rerunnable(apgdriver: AsyncpgDriver, release: str) -> 
 
 
 @pytest.mark.parametrize("release", RELEASES)
-async def test_nothing_is_absent_after_upgrade(apgdriver: AsyncpgDriver, release: str) -> None:
-    """The planner, run against the real catalog, finds nothing left to create.
+async def test_nothing_is_left_to_do_after_upgrade(apgdriver: AsyncpgDriver, release: str) -> None:
+    """The planner, run against the real catalog, has no statement left to emit.
 
     ``shortfall`` above compares two models; this compares what the planner
-    would actually emit. Both must agree that the database is converged.
+    would actually do. Both must agree the database is converged.
+
+    Notes are not statements and do not count. A v0.18 database keeps
+    ``time_in_queue`` by design, so the note offering to drop it is still
+    there, and will be until an operator acts on it.
     """
     settings = DBSettings()
     await upgraded(apgdriver, release)
 
     live = await inspect(apgdriver, settings)
-    assert plan(live, rendered(settings), settings) == Plan()
+    assert plan(live, rendered(settings), settings).statements == ()
+
+
+async def test_a_retired_column_is_reported_not_dropped(apgdriver: AsyncpgDriver) -> None:
+    """v0.18 is the only fixture that still carries time_in_queue."""
+    settings = DBSettings()
+    await upgraded(apgdriver, "v0.18.10")
+
+    computed = plan(await inspect(apgdriver, settings), rendered(settings), settings)
+    assert [one for one in computed.notes if "time_in_queue" in one]
+    assert all("DROP COLUMN" not in one for one in computed.statements)
 
 
 async def test_an_untouched_database_needs_the_whole_schema(apgdriver: AsyncpgDriver) -> None:
