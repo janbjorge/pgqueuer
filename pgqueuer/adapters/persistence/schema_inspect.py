@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
+from typing import TypeVar
 
 from pydantic import BaseModel
 
@@ -211,6 +213,13 @@ async def namespace_present(
     return bool(rows) and cell(rows[0], "present", bool)
 
 
+R = TypeVar("R", bound=BaseModel)
+
+
+async def rows_of(driver: Driver, shape: type[R], query: str, names: Sequence[str]) -> list[R]:
+    return [shape.model_validate(row) for row in await driver.fetch(query, names)]
+
+
 async def inspect(driver: Driver, settings: DBSettings) -> Schema:
     """Read the installed schema, spelled as ``pg_catalog`` reports it."""
     declared, gone = target(settings), retired(settings)
@@ -222,29 +231,15 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
     if settings.db_schema is not None and not await namespace_present(driver, queries, settings):
         return Schema((), (), (), (), (), namespace_exists=False)
 
-    columns = [
-        ColumnRow.model_validate(row) for row in await driver.fetch(queries.columns(), table_names)
-    ]  # noqa: E501
-    indexes = [
-        IndexRow.model_validate(row) for row in await driver.fetch(queries.indexes(), table_names)
-    ]  # noqa: E501
-    constraints = [
-        ConstraintRow.model_validate(row)
-        for row in await driver.fetch(queries.constraints(), table_names)
-    ]  # noqa: E501
-    sequences = [
-        SequenceRow.model_validate(row)
-        for row in await driver.fetch(queries.sequences(), table_names)
-    ]  # noqa: E501
-    enums = [EnumRow.model_validate(row) for row in await driver.fetch(queries.enums(), type_names)]
-    triggers = [
-        TriggerRow.model_validate(row)
-        for row in await driver.fetch(queries.triggers(), [declared.triggers[0].name])
-    ]  # noqa: E501
-    functions = [
-        FunctionRow.model_validate(row)
-        for row in await driver.fetch(queries.functions(), [declared.functions[0].name])
-    ]  # noqa: E501
+    columns = await rows_of(driver, ColumnRow, queries.columns(), table_names)
+    indexes = await rows_of(driver, IndexRow, queries.indexes(), table_names)
+    constraints = await rows_of(driver, ConstraintRow, queries.constraints(), table_names)
+    sequences = await rows_of(driver, SequenceRow, queries.sequences(), table_names)
+    enums = await rows_of(driver, EnumRow, queries.enums(), type_names)
+    triggers = await rows_of(driver, TriggerRow, queries.triggers(), [declared.triggers[0].name])
+    functions = await rows_of(
+        driver, FunctionRow, queries.functions(), [declared.functions[0].name]
+    )
 
     return Schema(
         enums=build_enums(enums),

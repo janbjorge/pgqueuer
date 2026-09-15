@@ -1,9 +1,4 @@
-"""Unit tests for the absent-object planner. No database.
-
-The planner is a pure function over two :class:`Schema` values, so each case
-here removes exactly one thing from a copy of the declaration and checks that
-the plan puts exactly that thing back.
-"""
+"""Planner unit tests, no database: break one thing, expect one statement back."""
 
 from __future__ import annotations
 
@@ -159,10 +154,8 @@ def test_absent_index_is_created() -> None:
 def test_the_planner_only_ever_adds() -> None:
     """An invariant, not a convention.
 
-    Checked on the leading keyword rather than by substring: the notify
-    trigger fires on TRUNCATE, so its DDL contains the word without being a
-    destructive statement. Retirement is planned against an explicit list, and
-    a retired column is reported rather than dropped.
+    Checked on the leading keyword: the notify trigger fires on TRUNCATE, so
+    its DDL carries the word without being destructive.
     """
     settings = DBSettings()
     schema = declared(settings)

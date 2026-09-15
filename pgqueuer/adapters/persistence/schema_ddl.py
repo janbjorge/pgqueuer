@@ -1,11 +1,4 @@
-"""Render the schema model as DDL.
-
-The model in :mod:`pgqueuer.domain.schema` is the only description of the
-target shape; every statement here is derived from it. Definitions are emitted
-in PostgreSQL's own canonical spelling, so what these renderers create reads
-back from ``pg_catalog`` as what the model declares -- the property
-``test_schema_inspect.py`` holds down.
-"""
+"""Render the schema model as DDL, in the spelling ``pg_catalog`` reports back."""
 
 from __future__ import annotations
 
@@ -34,19 +27,12 @@ except ImportError:  # Source checkout without a build; the header says so.
 
 
 def rendered(settings: DBSettings) -> Schema:
-    """The target schema with the status enum spelled as DDL must reference it.
-
-    ``inspect()`` compares against the bare name; DDL needs the qualified one.
-    """
+    """The target schema with the status enum qualified, as DDL must spell it."""
     return resolve(target(settings), TypeName(settings.qualified.queue_status_type))
 
 
 def column_type(entry: Column) -> str:
-    """The type as written in ``CREATE TABLE``, which is not the reported type.
-
-    A serial column reports ``bigint`` plus a ``nextval`` default; ``BIGSERIAL``
-    is the shorthand that produces exactly that.
-    """
+    """Spelling for ``CREATE TABLE``: ``BIGSERIAL`` reports back as bigint plus a default."""
     if entry.kind == "plain":
         return entry.type
     if entry.kind == "serial":
@@ -89,7 +75,7 @@ def render_enum(entry: EnumType, settings: DBSettings) -> str:
 
 
 def render_function(entry: Function, settings: DBSettings, *, replace: bool = False) -> str:
-    """``body`` is ``pg_proc.prosrc``: exactly what sits between the dollar quotes."""
+    """``body`` is ``pg_proc.prosrc``: what sits between the dollar quotes."""
     create = "CREATE OR REPLACE FUNCTION" if replace else "CREATE FUNCTION"
     return (
         f"{create} {settings.qualify(entry.name)}() RETURNS TRIGGER AS "
@@ -106,11 +92,7 @@ def render_trigger(entry: Trigger, settings: DBSettings) -> str:
 
 
 def provenance(settings: DBSettings) -> str:
-    """Names the release and the settings that shaped the output below it.
-
-    Saved as a migration file, the statements alone do not say which prefix or
-    durability produced them.
-    """
+    """Names the release and the settings that shaped the statements below it."""
     return (
         f"-- pgqueuer {VERSION} -- prefix={settings.prefix!r} "
         f"schema={settings.db_schema!r} durability={settings.durability.value}"
@@ -132,10 +114,7 @@ def render_install(settings: DBSettings, *, create_schema: bool = True) -> str:
 
 
 def render_uninstall(settings: DBSettings) -> str:
-    """Drop what install created, dependents first, plus the retired types.
-
-    Retired indexes and columns are not listed: their tables go with the rest.
-    """
+    """Drop what install created, dependents first, plus the retired types."""
     schema = rendered(settings)
     statements = [
         f"DROP TRIGGER IF EXISTS {entry.name} ON {settings.qualify(entry.table)};"
@@ -155,22 +134,15 @@ def render_uninstall(settings: DBSettings) -> str:
 
 
 def redefined_indexes(settings: DBSettings) -> tuple[IndexName, ...]:
-    """Indexes whose definition changed after they first shipped.
+    """Indexes redefined after they shipped, which ``IF NOT EXISTS`` cannot fix.
 
-    ``CREATE INDEX IF NOT EXISTS`` cannot redefine an index that already exists
-    under the same name, and an offline script cannot see which shape is
-    installed, so these are dropped first and rebuilt unconditionally. Naming
-    them by hand is the price of converging without a connection; the planner
-    works this out from the catalog instead.
+    Offline they are dropped and rebuilt by name; the planner reads the catalog.
     """
     return (
-        # #668 widened this to a 4-column composite, then it was reverted to
-        # the constant-key worklist index the aggregation actually uses.
+        # Shipped briefly as a 4-column composite before the revert.
         IndexName(f"{settings.queue_table_log}_not_aggregated"),
-        # Keyed on date_trunc('sec', time_in_queue) before v0.19, which no
-        # longer matches the aggregation's ON CONFLICT specification, and on
-        # PostgreSQL 14+ every older install still spells the UTC truncation
-        # AT TIME ZONE where the declaration says timezone().
+        # Keyed on time_in_queue before v0.19, and PG 14+ keeps the older
+        # AT TIME ZONE spelling where the declaration says timezone().
         IndexName(f"{settings.statistics_table}_unique_count"),
     )
 
@@ -181,11 +153,10 @@ def converge_namespace(settings: DBSettings) -> Generator[str, None, None]:
 
 
 def converge_enums(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
-    """Create each enum if absent, then add every label it should carry.
+    """``CREATE TYPE`` has no ``IF NOT EXISTS``, hence the exception block.
 
-    ``CREATE TYPE`` has no ``IF NOT EXISTS``, hence the exception block. Labels
-    are added one statement at a time because a value added by ``ALTER TYPE``
-    cannot be used in the transaction that added it.
+    Labels are one statement each: a value added by ``ALTER TYPE`` cannot be
+    used in the transaction that added it.
     """
     for entry in schema.enums:
         yield (
@@ -197,11 +168,7 @@ def converge_enums(schema: Schema, settings: DBSettings) -> Generator[str, None,
 
 
 def retirement_note(table: Table, settings: DBSettings) -> str:
-    """Comment naming the retired columns on *table*, empty when it has none.
-
-    Reported, never dropped: the column holds data an operator may still want,
-    and a schema diff is no reason to destroy it.
-    """
+    """Comment naming *table*'s retired columns, empty when it has none."""
     gone = [entry for entry in retired(settings).columns if entry.table == table.name]
     if not gone:
         return ""
@@ -214,12 +181,10 @@ def retirement_note(table: Table, settings: DBSettings) -> str:
 
 
 def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
-    """Create absent tables whole, then add absent columns to existing ones.
+    """Create absent tables, then add absent plain columns to the rest.
 
-    Only plain columns are added: a table that exists already has its
-    ``id``, and ``ADD COLUMN`` cannot introduce a serial primary key to one.
-    ``SET DEFAULT`` is catalog-only, so re-stating it costs nothing and
-    converges a default whose spelling drifted.
+    ``ADD COLUMN`` cannot introduce a serial primary key, and ``SET DEFAULT`` is
+    catalog-only, so re-stating a default costs nothing and converges its spelling.
     """
     for table in schema.tables:
         qualified = settings.qualify(table.name)
@@ -236,12 +201,9 @@ def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None
 
 
 def converge_retired_columns(settings: DBSettings) -> Generator[str, None, None]:
-    """Relax NOT NULL on columns the current schema no longer writes.
+    """Relax NOT NULL on columns nothing has written since v0.19.
 
-    ``pgqueuer_statistics.time_in_queue`` is ``INTERVAL NOT NULL`` on installs
-    from v0.18 and earlier, and nothing has supplied a value for it since. Every
-    statistics insert on such a database fails on the not-null constraint. The
-    column is not dropped -- it holds data -- so the constraint is what gives.
+    Dropping them is not on the table: they hold data, so the constraint gives.
     """
     for entry in retired(settings).columns:
         yield f"""DO $$
@@ -257,10 +219,7 @@ END $$;"""
 
 
 def converge_statistics_status(settings: DBSettings) -> Generator[str, None, None]:
-    """Move the statistics status column off its own pre-v0.27 enum.
-
-    Runs after the labels are in place, and before the old type is dropped.
-    """
+    """Move the statistics status column off its own pre-v0.27 enum."""
     status = settings.qualified.queue_status_type
     yield (
         f"ALTER TABLE {settings.qualified.statistics_table} "
@@ -298,11 +257,9 @@ END $$;"""
 
 
 def widen_id_sequence(table: TableName, settings: DBSettings) -> str:
-    """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+    """Widen a legacy int4 sequence, which ``ALTER COLUMN TYPE`` leaves capped.
 
-    ALTER SEQUENCE ... AS BIGINT is a cheap, idempotent no-op when the
-    sequence is already BIGINT, so no data_type guard is needed. *table* is
-    a bare name; pg_get_serial_sequence returns a qualified sequence name.
+    ``AS BIGINT`` is a no-op on an already wide sequence, so it needs no guard.
     """
     return f"""DO $$
 DECLARE
@@ -315,12 +272,9 @@ END $$;"""
 
 
 def converge_id_width(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
-    """Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
+    """Widen int4 id columns, which cap lifetime ids at ~2.1B.
 
-    int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail. ALTER
-    TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table, so it blocks
-    briefly -- gated by settings.widen_id so an operator can widen a large
-    table out of band instead.
+    Gated: the rewrite takes ACCESS EXCLUSIVE, which a large table may not afford.
     """
     if not settings.widen_id:
         return
@@ -331,17 +285,12 @@ def converge_id_width(schema: Schema, settings: DBSettings) -> Generator[str, No
 
 
 def render_converge(settings: DBSettings) -> Generator[str, None, None]:
-    """Statements that bring any earlier schema up to the declaration.
+    """Statements bringing any earlier schema up to the declaration, offline.
 
-    The offline counterpart to the computed plan: it can create what is absent
-    and re-state what is cheap to re-state, but it cannot see what is
-    installed, so it cannot retype a column or rebuild an index it has not
-    been told about. A connection gets the exact delta instead.
-
-    Order is deliberate. Enum labels precede the statistics retype that needs
-    them; the retype precedes dropping the type it moves off. Columns are
-    added before the indexes that reference them, and the retired type goes
-    last because a column may still be using it until then.
+    Blind to what is installed, so it creates and re-states rather than diffing;
+    a connection gets the exact delta instead. Order is load-bearing: labels
+    before the retype that uses them, columns before the indexes over them, and
+    the retired type last, since a column references it until the retype runs.
     """
     schema = rendered(settings)
     yield from converge_namespace(settings)
