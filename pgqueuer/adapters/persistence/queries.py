@@ -138,12 +138,15 @@ class Queries:
         finally:
             await self.driver.execute("SELECT pg_advisory_unlock($1)", key)
 
-    async def upgrade(self) -> None:
-        """Converge the installed schema onto the declaration.
+    async def apply_upgrade(self) -> models_schema.Plan:
+        """Converge the installed schema onto the declaration; return what ran.
 
         One statement per round trip, never batched: ``ALTER TYPE ... ADD
         VALUE`` and the statements that use the new label cannot share a
         transaction.
+
+        The plan is computed inside the lock, so what is returned is what was
+        applied rather than what a second look would find.
         """
         async with self.schema_lock():
             computed = await self.plan_upgrade()
@@ -151,6 +154,16 @@ class Queries:
                 await self.driver.execute(statement)
         for note in computed.notes:
             logger.warning("%s", note)
+        return computed
+
+    async def upgrade(self) -> None:
+        """Converge the installed schema onto the declaration.
+
+        Returns nothing, to keep the shape ``SchemaManagementPort`` declares.
+        Callers holding a concrete ``Queries`` and wanting to report on the
+        upgrade should use :meth:`apply_upgrade`.
+        """
+        await self.apply_upgrade()
 
     async def alter_durability(self) -> None:
         """Switch table durability mode without data loss."""

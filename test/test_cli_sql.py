@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from pgqueuer.adapters.cli import cli
 from pgqueuer.adapters.cli.cli import app
+from pgqueuer.domain.schema.model import Plan
 
 SQL_COMMANDS = [
     (["sql", "install"], "CREATE TYPE"),
@@ -121,3 +122,34 @@ def test_dry_run_hidden_from_help(command: str) -> None:
     result = CliRunner().invoke(app, [command, "--help"])
     assert result.exit_code == 0
     assert "--dry-run" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("statements", "planned_only", "expected"),
+    [
+        ((), False, "PgQueuer schema is already up to date."),
+        (("CREATE INDEX a ON t (c);",), False, "Applied 1 statement."),
+        (("a;", "b;"), False, "Applied 2 statements."),
+        (("a;", "b;"), True, "Would apply 2 statements."),
+    ],
+)
+def test_report_upgrade_summarises_on_stderr(
+    capsys: pytest.CaptureFixture[str],
+    statements: tuple[str, ...],
+    planned_only: bool,
+    expected: str,
+) -> None:
+    """Summary and notes go to stderr so stdout carries only SQL."""
+    cli.report_upgrade(Plan(statements=statements), planned_only=planned_only)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert expected in captured.err
+
+
+def test_report_upgrade_prefixes_notes(capsys: pytest.CaptureFixture[str]) -> None:
+    cli.report_upgrade(Plan(notes=("time_in_queue is unused",)), planned_only=False)
+
+    captured = capsys.readouterr()
+    assert "note: time_in_queue is unused" in captured.err
+    assert "already up to date" in captured.err

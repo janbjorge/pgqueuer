@@ -7,11 +7,13 @@ import sys
 import time
 from datetime import timedelta
 
+import psycopg
 import pytest
 from typer.testing import CliRunner
 
 from pgqueuer.adapters.cli import supervisor
 from pgqueuer.adapters.cli.cli import app
+from pgqueuer.domain.settings import DBSettings
 from test.helpers import env_from_dsn
 
 
@@ -173,3 +175,36 @@ def test_cli_run_forwards_heartbeat_timeout(
     result = CliRunner().invoke(app, ["run", "examples.consumer:main", *extra_args])
     assert result.exit_code == 0, result.output
     assert captured["heartbeat_timeout"] == expected
+
+
+def test_cli_upgrade_reports_converged_and_plans_the_delta(dsn: str) -> None:
+    """`pgq upgrade` says what it did; `--plan` says what it would do.
+
+    The summary and any notes go to stderr, so `pgq upgrade --plan` can be
+    redirected straight into a migration file without picking up prose.
+    """
+    runner = CliRunner()
+    env = os.environ.copy()
+    env.update(env_from_dsn(dsn))
+
+    converged = runner.invoke(app, ["upgrade"], env=env)
+    assert converged.exit_code == 0, converged.stdout
+    assert "already up to date" in converged.stderr
+    assert converged.stdout.strip() == ""
+
+    name = f"{DBSettings().queue_table}_ep_ea_idx"
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f"DROP INDEX {name}".encode())
+
+    planned = runner.invoke(app, ["upgrade", "--plan"], env=env)
+    assert planned.exit_code == 0, planned.stdout
+    assert planned.stdout.count("CREATE INDEX") == 1
+    assert name in planned.stdout
+    assert "Would apply 1 statement." in planned.stderr
+
+    applied = runner.invoke(app, ["upgrade"], env=env)
+    assert applied.exit_code == 0, applied.stdout
+    assert "Applied 1 statement." in applied.stderr
+    assert applied.stdout.strip() == ""
+
+    assert "already up to date" in runner.invoke(app, ["upgrade"], env=env).stderr

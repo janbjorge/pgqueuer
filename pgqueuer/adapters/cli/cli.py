@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, Callable, Coroutine
+from typing import TYPE_CHECKING, Callable, Coroutine, TypeVar
 
 import typer
 from tabulate import tabulate
@@ -19,6 +19,7 @@ from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.domain import models, types
+from pgqueuer.domain.schema import model as schema_model
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -32,24 +33,25 @@ except ImportError:
     HAS_UVLOOP = False
 
 
-def asyncio_run(coro: Coroutine[object, object, object]) -> None:
-    """Run *coro* on the best event loop for this platform."""
+T = TypeVar("T")
+
+
+def asyncio_run(coro: Coroutine[object, object, T]) -> T:
+    """Run *coro* on the best event loop for this platform and return its result."""
     if sys.platform == "win32":
         # psycopg async rejects ProactorEventLoop (Windows default); force the
         # selector loop on every supported Windows + Python combination.
         if sys.version_info >= (3, 12):
-            asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
-        elif sys.version_info >= (3, 11):
+            return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
+        if sys.version_info >= (3, 11):
             with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
-                runner.run(coro)
-        else:
-            # Python 3.10: no Runner, no loop_factory; mutate policy.
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            asyncio.run(coro)
-    elif HAS_UVLOOP:
-        uvloop.run(coro)
-    else:
-        asyncio.run(coro)
+                return runner.run(coro)
+        # Python 3.10: no Runner, no loop_factory; mutate policy.
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        return asyncio.run(coro)
+    if HAS_UVLOOP:
+        return uvloop.run(coro)
+    return asyncio.run(coro)
 
 
 app = typer.Typer(
@@ -375,6 +377,22 @@ def uninstall(
     typer.secho("Uninstalled PgQueuer schema.", err=True)
 
 
+def report_upgrade(applied: schema_model.Plan, planned_only: bool) -> None:
+    """Summary and notes on stderr; the plan itself, if asked for, on stdout.
+
+    Keeping the split means ``pgq upgrade --plan > migration.sql`` yields SQL
+    and nothing else.
+    """
+    for note in applied.notes:
+        typer.secho(f"note: {note}", err=True)
+    if not applied.statements:
+        typer.secho("PgQueuer schema is already up to date.", err=True)
+        return
+    count = len(applied.statements)
+    verb = "Would apply" if planned_only else "Applied"
+    typer.secho(f"{verb} {count} statement{'' if count == 1 else 's'}.", err=True)
+
+
 @app.command(help="Apply upgrades to the existing PgQueuer database schema.")
 def upgrade(
     ctx: Context,
@@ -384,6 +402,15 @@ def upgrade(
         hidden=True,
         help="Deprecated: use 'pgq sql upgrade'.",
     ),
+    plan: bool = typer.Option(
+        False,
+        "--plan",
+        help=(
+            "Print the statements this database actually needs and exit without "
+            "applying them. Unlike 'pgq sql upgrade', which cannot see the "
+            "database and re-states the whole schema, this is the exact delta."
+        ),
+    ),
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
@@ -392,12 +419,14 @@ def upgrade(
         emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))
         return
 
-    async def run() -> None:
+    async def run() -> schema_model.Plan:
         async with yield_queries(ctx, settings) as q:
-            await q.upgrade()
+            return await q.plan_upgrade() if plan else await q.apply_upgrade()
 
-    asyncio_run(run())
-    typer.secho("Upgraded PgQueuer schema.", err=True)
+    applied = asyncio_run(run())
+    if plan:
+        typer.echo("\n\n".join(applied.statements))
+    report_upgrade(applied, planned_only=plan)
 
 
 @app.command(help="Display a live dashboard showing job statistics.")
