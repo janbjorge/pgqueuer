@@ -153,6 +153,22 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     invoke_ok(["verify", "--expect", "absent"], base_env)
 
 
+def test_cli_install_refuses_an_installed_database(dsn: str) -> None:
+    """Re-running install used to surface a raw DuplicateObjectError traceback.
+
+    The dsn fixture arrives with PgQueuer already installed, which is the state
+    a provisioning script that runs install twice would find.
+    """
+    env = os.environ.copy()
+    env.update(env_from_dsn(dsn))
+
+    result = CliRunner().invoke(app, ["install"], env=env)
+
+    assert result.exit_code == 1
+    assert "already installed" in result.stderr
+    assert "pgq upgrade" in result.stderr
+
+
 @pytest.mark.parametrize(
     ("extra_args", "expected"),
     [

@@ -25,6 +25,11 @@ pgq install --durability balanced
 On success, a confirmation is written to stderr; stdout stays empty. To preview or
 capture the SQL instead of executing it, use [`pgq sql install`](#sql).
 
+`install` creates objects from nothing. Pointed at a database that already has
+this installation it refuses and exits `1`, naming the prefix and schema it
+found. For a command that is safe to run repeatedly -- including against an
+empty database, where it installs everything -- use [`pgq upgrade`](#upgrade).
+
 ---
 
 ### `uninstall`

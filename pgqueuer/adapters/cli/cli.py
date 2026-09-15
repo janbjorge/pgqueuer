@@ -281,6 +281,12 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
+def located(settings: qb.DBSettings) -> str:
+    """Which installation a message is about, when several share a database."""
+    where = settings.db_schema or "the connection's search_path"
+    return f"prefix={settings.prefix!r}, schema={where}"
+
+
 @app.command(help="Install the necessary database schema for PgQueuer.")
 def install(
     ctx: Context,
@@ -298,11 +304,20 @@ def install(
         emit_deprecated_dry_run(ctx, sql_cmd.render_install(settings, create_schema))
         return
 
-    async def run() -> None:
+    async def run() -> bool:
         async with yield_queries(ctx, settings) as q:
+            if await q.schema_is_installed():
+                return False
             await q.install(create_schema=create_schema)
+            return True
 
-    asyncio_run(run())
+    if not asyncio_run(run()):
+        typer.secho(
+            f"PgQueuer is already installed ({located(settings)}). "
+            "Run 'pgq upgrade' to bring it up to date.",
+            err=True,
+        )
+        raise typer.Exit(1)
     typer.secho(f"Installed PgQueuer schema (durability={durability.value}).", err=True)
 
 
