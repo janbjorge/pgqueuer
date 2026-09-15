@@ -18,7 +18,7 @@ from typing_extensions import AsyncGenerator, assert_never
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
-from pgqueuer.domain import models, types
+from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
 from pgqueuer.ports.driver import Driver
 
@@ -429,7 +429,12 @@ def upgrade(
         async with yield_queries(ctx, settings) as q:
             return await q.plan_upgrade() if plan else await q.apply_upgrade()
 
-    applied = asyncio_run(run())
+    try:
+        applied = asyncio_run(run())
+    except errors.SchemaDriftError as drift:
+        # The one failure here addressed to an operator rather than a developer.
+        typer.secho(f"error: {drift}", err=True, fg=typer.colors.RED)
+        raise typer.Exit(1) from None
     if plan:
         typer.echo("\n\n".join(applied.statements))
     report_upgrade(applied, planned_only=plan)

@@ -92,6 +92,10 @@ note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
       scales with row count. Prefer a maintenance window.
 ```
 
+A column whose installed type the planner has no conversion for stops the
+upgrade rather than guessing at a cast. It exits `1` with one line on stderr
+naming the column and both types; alter it by hand and re-run.
+
 !!! note "Concurrency"
     Upgrades of one installation serialize on a session advisory lock, keyed on
     the qualified queue table and held across planning and applying. Two
