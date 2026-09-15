@@ -30,6 +30,19 @@ def queue_table(settings: DBSettings) -> Table:
     )
 
 
+def dedupe_predicate(settings: DBSettings) -> str:
+    """Partial-index predicate of ``{queue_table}_unique_dedupe_key``.
+
+    An ``ON CONFLICT`` arbiter has to restate it for PostgreSQL to infer the
+    index, so the two are read from here rather than kept in step by hand.
+    """
+    status = settings.queue_status_type
+    return (
+        f"((status = ANY (ARRAY['queued'::{status}, 'picked'::{status}]))"
+        " AND (dedupe_key IS NOT NULL))"
+    )
+
+
 def queue_indexes(settings: DBSettings) -> tuple[Index, ...]:
     queue = settings.queue_table
     status = settings.queue_status_type
@@ -62,7 +75,7 @@ def queue_indexes(settings: DBSettings) -> tuple[Index, ...]:
         index(
             f"{queue}_unique_dedupe_key",
             queue,
-            f"USING btree (dedupe_key) WHERE ((status = ANY (ARRAY['queued'::{status}, 'picked'::{status}])) AND (dedupe_key IS NOT NULL))",  # noqa: E501
+            f"USING btree (dedupe_key) WHERE {dedupe_predicate(settings)}",
             unique=True,
         ),
         index(

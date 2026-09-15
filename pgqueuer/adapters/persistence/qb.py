@@ -8,6 +8,7 @@ from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
+from pgqueuer.domain.schema.queue import dedupe_predicate
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
@@ -588,10 +589,11 @@ class QueryQueueBuilder:
 
     def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
         if on_conflict == "skip":
-            # The arbiter predicate must textually match the partial unique index
-            # {queue_table}_unique_dedupe_key so PostgreSQL can infer it.
-            on_conflict_clause = """ON CONFLICT (dedupe_key)
-                WHERE ((status IN ('queued', 'picked') AND dedupe_key IS NOT NULL))
+            # Restating the index predicate is what lets PostgreSQL infer the
+            # arbiter; spelled() qualifies the enum for a schema'd install.
+            predicate = schema_ddl.spelled(dedupe_predicate(self.settings), self.settings)
+            on_conflict_clause = f"""ON CONFLICT (dedupe_key)
+                WHERE {predicate}
                 DO NOTHING"""
         elif on_conflict == "raise":
             on_conflict_clause = ""
