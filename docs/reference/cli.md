@@ -69,6 +69,10 @@ Output goes to stderr: `PgQueuer schema is already up to date.`, or
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
 
+A column whose installed type the planner has no conversion for stops the
+upgrade rather than guessing at a cast. It exits `1` with one line on stderr
+naming the column and both types; alter it by hand and re-run.
+
 !!! note "Concurrency"
     Upgrades of one installation serialize on a session advisory lock, keyed on
     the qualified queue table and held across planning and applying. Two

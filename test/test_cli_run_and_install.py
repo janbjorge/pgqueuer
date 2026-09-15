@@ -153,6 +153,25 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     invoke_ok(["verify", "--expect", "absent"], base_env)
 
 
+def test_cli_upgrade_reports_drift_without_a_traceback(dsn: str) -> None:
+    """Drift is the one failure here addressed to an operator, not a developer.
+
+    It used to arrive on line 145 of a rich traceback through uvloop and asyncpg.
+    """
+    env = os.environ.copy()
+    env.update(env_from_dsn(dsn))
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        table = DBSettings().queue_table
+        connection.execute(f"ALTER TABLE {table} ALTER COLUMN payload TYPE text".encode())
+
+    result = CliRunner().invoke(app, ["upgrade"], env=env)
+
+    assert result.exit_code == 1
+    assert "Traceback" not in result.stderr
+    assert "no supported conversion" in result.stderr
+    assert result.stdout.strip() == ""
+
+
 @pytest.mark.parametrize(
     ("extra_args", "expected"),
     [
