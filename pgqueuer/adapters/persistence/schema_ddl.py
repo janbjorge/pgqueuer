@@ -231,12 +231,23 @@ END $$;"""
 
 
 def converge_statistics_status(settings: DBSettings) -> Generator[str, None, None]:
-    """Move the statistics status column off its own pre-v0.27 enum."""
+    """Move the statistics status column off its own pre-v0.27 enum.
+
+    Guarded on the installed type: the retype rewrites the table, and offline
+    there is nothing else to stop it running on every re-apply. ``udt_name``
+    reports the bare type name, so it compares against the bare declaration.
+    """
     status = settings.qualified.queue_status_type
-    yield (
-        f"ALTER TABLE {settings.qualified.statistics_table} "
-        f"ALTER COLUMN status TYPE {status} USING status::TEXT::{status};"
-    )
+    yield f"""DO $$
+BEGIN
+    IF (SELECT udt_name FROM information_schema.columns
+        WHERE table_schema = {settings.schema_expr}
+          AND table_name = '{settings.statistics_table}'
+          AND column_name = 'status') IS DISTINCT FROM '{settings.queue_status_type}' THEN
+        ALTER TABLE {settings.qualified.statistics_table}
+            ALTER COLUMN status TYPE {status} USING status::TEXT::{status};
+    END IF;
+END $$;"""
 
 
 def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:

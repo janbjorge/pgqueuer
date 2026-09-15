@@ -25,6 +25,11 @@ pgq install --durability balanced
 On success, a confirmation is written to stderr; stdout stays empty. To preview or
 capture the SQL instead of executing it, use [`pgq sql install`](#sql).
 
+`install` creates objects from nothing. Pointed at a database that already has
+this installation it refuses and exits `1`, naming the prefix and schema it
+found. For a command that is safe to run repeatedly -- including against an
+empty database, where it installs everything -- use [`pgq upgrade`](#upgrade).
+
 ---
 
 ### `uninstall`
@@ -56,7 +61,6 @@ already current runs nothing and says so.
   by a comment naming the release and warning that the delta belongs to this
   database. A converged database prints nothing at all. See
   [`pgq sql upgrade`](#sql) for the artifact to check in.
-- `--durability`: Adjust the durability level during the upgrade (same options as `install`).
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
 - `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
@@ -64,13 +68,32 @@ already current runs nothing and says so.
 ```bash
 pgq upgrade --plan          # what would change, nothing applied
 pgq upgrade                 # apply it
-pgq upgrade --durability durable
 ```
+
+`upgrade` never changes durability. Switching a table between `LOGGED` and
+`UNLOGGED` rewrites it, which does not belong in a command the deployment guide
+calls safe to run against a live database. A table whose durability differs
+from the declared level is reported as a `note:` and left alone; use
+[`pgq durability`](#durability) to change it. The declared level comes from
+`PGQUEUER_DURABILITY` (default `durable`), so an installation running
+`volatile` should set that variable for the notes to be accurate.
 
 Output goes to stderr: `PgQueuer schema is already up to date.`, or
 `Applied 3 statements.` Anything the upgrade will not do on its own is reported
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
+
+A `note:` also lands before an upgrade that rewrites a table. Converting a
+column type is the only thing here that does, and Postgres holds
+`ACCESS EXCLUSIVE` for the whole rewrite, blocking enqueues, dequeues and
+reads. Run `--plan` first on any database old enough to still be on `int4` ids
+or the pre-v0.27 statistics enum:
+
+```
+note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
+      the whole rewrite, blocking enqueues, dequeues and reads, for a time that
+      scales with row count. Prefer a maintenance window.
+```
 
 !!! note "Concurrency"
     Upgrades of one installation serialize on a session advisory lock, keyed on

@@ -22,6 +22,11 @@ Install PgQueuer schema via the CLI. Make sure your PostgreSQL environment varia
 pgq install
 ```
 
+`install` builds the schema from nothing and refuses a database that already
+has it, exiting `1`. In a provisioning script that may run more than once,
+reach for `pgq upgrade` instead: it installs an empty database and converges
+an existing one, so it is safe to run every time.
+
 To see what SQL will be executed without applying it, use the offline
 [`pgq sql`](cli.md#sql) group. It never connects to a database, so you can pipe
 the script to psql or hand it to your migration tool (Flyway, sqitch, Alembic)
