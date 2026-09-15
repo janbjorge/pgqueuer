@@ -5,7 +5,6 @@ import pytest
 from pgqueuer.domain.schema import model
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import TypeName
 
 CUSTOM = DBSettings(
     prefix="acme_",
@@ -62,16 +61,17 @@ def test_indexes_reference_declared_tables() -> None:
     assert {index.table for index in schema.indexes} <= tables
 
 
-def test_resolve_substitutes_the_status_placeholder() -> None:
-    settings = DBSettings()
-    resolved = model.resolve(target(settings), TypeName(settings.queue_status_type))
-    rendered = [
-        *(column.type for table in resolved.tables for column in table.columns),
-        *(column.default or "" for table in resolved.tables for column in table.columns),
-        *(index.body for index in resolved.indexes),
+def test_the_status_enum_is_named_bare_wherever_it_appears() -> None:
+    """Declared unqualified, so a declared object string-compares to an inspected one."""
+    settings = CUSTOM
+    schema = target(settings)
+    written = [
+        *(column.type for table in schema.tables for column in table.columns),
+        *(column.default or "" for table in schema.tables for column in table.columns),
+        *(index.body for index in schema.indexes),
     ]
-    assert not any(model.STATUS_TYPE in text for text in rendered)
-    assert any(settings.queue_status_type in text for text in rendered)
+    assert any(settings.queue_status_type in text for text in written)
+    assert not any(settings.qualified.queue_status_type in text for text in written)
 
 
 def test_retired_names_are_not_in_target() -> None:

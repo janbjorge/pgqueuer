@@ -16,8 +16,8 @@ from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.domain.schema.declaration import target
-from pgqueuer.domain.schema.model import Schema, resolve
-from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint, QueueManagerId, TypeName
+from pgqueuer.domain.schema.model import Schema
+from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 
@@ -147,5 +147,5 @@ def collapse(schema: Schema) -> Schema:
 
 
 def declared_schema(settings: qb.DBSettings) -> Schema:
-    """The target model, resolved and normalised the same way ``collapse`` reads."""
-    return collapse(resolve(target(settings), TypeName(settings.queue_status_type)))
+    """The target model, normalised the same way ``collapse`` reads."""
+    return collapse(target(settings))

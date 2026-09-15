@@ -14,10 +14,10 @@ from typing import NamedTuple
 
 import pytest
 
-from pgqueuer.adapters.persistence.schema_ddl import rendered
 from pgqueuer.adapters.persistence.schema_inspect import inspect
 from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Schema, Table
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
@@ -201,7 +201,7 @@ async def test_nothing_is_left_to_do_after_upgrade(apgdriver: AsyncpgDriver, rel
     await upgraded(apgdriver, release)
 
     live = await inspect(apgdriver, settings)
-    assert plan(live, rendered(settings), settings).statements == ()
+    assert plan(live, target(settings), settings).statements == ()
 
 
 async def test_a_retired_column_is_reported_not_dropped(apgdriver: AsyncpgDriver) -> None:
@@ -209,7 +209,7 @@ async def test_a_retired_column_is_reported_not_dropped(apgdriver: AsyncpgDriver
     settings = DBSettings()
     await upgraded(apgdriver, "v0.18.10")
 
-    computed = plan(await inspect(apgdriver, settings), rendered(settings), settings)
+    computed = plan(await inspect(apgdriver, settings), target(settings), settings)
     assert [one for one in computed.notes if "time_in_queue" in one]
     assert all("DROP COLUMN" not in one for one in computed.statements)
 
@@ -220,5 +220,5 @@ async def test_an_untouched_database_needs_the_whole_schema(apgdriver: AsyncpgDr
     await Queries(apgdriver).uninstall()
 
     live = await inspect(apgdriver, settings)
-    statements = plan(live, rendered(settings), settings).statements
-    assert sum("CREATE TABLE" in one for one in statements) == len(rendered(settings).tables)
+    statements = plan(live, target(settings), settings).statements
+    assert sum("CREATE TABLE" in one for one in statements) == len(target(settings).tables)

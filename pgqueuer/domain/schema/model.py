@@ -16,7 +16,6 @@ from pgqueuer.domain.types import (
 
 ColumnKind = Literal["plain", "serial", "identity"]
 
-STATUS_TYPE = SqlType("{status_type}")
 TIMESTAMP = SqlType("timestamp with time zone")
 
 
@@ -42,8 +41,7 @@ class Column:
     """A table column, spelled as ``pg_catalog`` reports it.
 
     ``type`` follows ``format_type`` (``timestamp with time zone``) and
-    ``default`` follows ``pg_get_expr`` (``now()``). Either may carry the
-    ``{status_type}`` placeholder.
+    ``default`` follows ``pg_get_expr`` (``now()``).
     """
 
     name: ColumnName
@@ -155,41 +153,4 @@ def index(name: str, table: str, body: str, *, unique: bool = False) -> Index:
         table=TableName(table),
         unique=unique,
         body=SqlExpression(body),
-    )
-
-
-def resolve(schema: Schema, status_type: TypeName) -> Schema:
-    """Substitute the status enum placeholder throughout ``schema``.
-
-    Comparison passes the bare enum name, DDL rendering the qualified one.
-    """
-
-    def text(value: str) -> str:
-        return value.replace(STATUS_TYPE, status_type)
-
-    return Schema(
-        enums=schema.enums,
-        tables=tuple(
-            dataclasses.replace(
-                table,
-                columns=tuple(
-                    dataclasses.replace(
-                        entry,
-                        type=SqlType(text(entry.type)),
-                        default=(
-                            None if entry.default is None else SqlExpression(text(entry.default))
-                        ),
-                    )
-                    for entry in table.columns
-                ),
-            )
-            for table in schema.tables
-        ),
-        indexes=tuple(
-            dataclasses.replace(entry, body=SqlExpression(text(entry.body)))
-            for entry in schema.indexes
-        ),
-        functions=schema.functions,
-        triggers=schema.triggers,
-        namespace_exists=schema.namespace_exists,
     )

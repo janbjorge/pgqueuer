@@ -10,15 +10,15 @@ import pytest
 from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
-from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, resolve
+from pgqueuer.domain.schema.model import Column, Index, Plan, Schema
 from pgqueuer.domain.settings import DBSettings, Durability
-from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName, TypeName
+from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName
 
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
 
 
 def declared(settings: DBSettings) -> Schema:
-    return resolve(target(settings), TypeName(settings.qualified.queue_status_type))
+    return target(settings)
 
 
 def without_table(schema: Schema, name: str) -> Schema:

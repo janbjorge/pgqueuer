@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pgqueuer.domain.schema.model import STATUS_TYPE, TIMESTAMP, Index, Table, column, index
+from pgqueuer.domain.schema.model import TIMESTAMP, Index, Table, column, index
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import SqlType, TableName
 
@@ -20,7 +20,7 @@ def statistics_table(settings: DBSettings) -> Table:
             ),
             column("count", "bigint", not_null=True),
             column("priority", "integer", not_null=True),
-            column("status", STATUS_TYPE, not_null=True),
+            column("status", settings.queue_status_type, not_null=True),
             column("entrypoint", "text", not_null=True),
         ),
     )
