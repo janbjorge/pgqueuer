@@ -128,9 +128,14 @@ def plan_column_type(
 
 
 def skipped_widening(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
-    """Notes for id columns left narrow because ``widen_id`` is off."""
+    """Notes for an id column and its sequence, left narrow because ``widen_id`` is off.
+
+    The sequence gets its own note because widening the column does not widen
+    it, and the sequence is the half that runs out.
+    """
     if settings.widen_id:
         return []
+    qualified = settings.qualify(declared.name)
     found = {entry.name: entry for entry in installed.columns}
     notes = []
     for column in declared.columns:
@@ -140,9 +145,16 @@ def skipped_widening(installed: Table, declared: Table, settings: DBSettings) ->
         if classify(live_column, column, settings) is ColumnChange.widen_id:
             notes.append(
                 f"{declared.name}.{column.name} is still {live_column.type} and widening is "
-                f"disabled. Run ALTER TABLE {settings.qualify(declared.name)} "
+                f"disabled. Run ALTER TABLE {qualified} "
                 f"ALTER COLUMN {column.name} TYPE bigint out of band."
             )
+    if installed.id_sequence_type != declared.id_sequence_type:
+        notes.append(
+            f"The id sequence behind {declared.name} is still {installed.id_sequence_type} "
+            f"and widening is disabled. Widening the column leaves it capped: run "
+            f"ALTER SEQUENCE ... AS BIGINT on what "
+            f"pg_get_serial_sequence('{qualified}', 'id') returns."
+        )
     return notes
 
 
@@ -221,12 +233,36 @@ def plan_tables(live: Schema, declared: Schema, settings: DBSettings) -> list[st
     return statements
 
 
+def rewrite_note(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
+    """Warn before a retype, which is the one thing here that rewrites a table.
+
+    Asked through ``plan_column_type`` rather than by matching types again, so
+    a conversion the planner decided to skip is not announced.
+    """
+    found = {entry.name: entry for entry in installed.columns}
+    columns = [
+        column.name
+        for column in declared.columns
+        if (live_column := found.get(column.name)) is not None
+        and live_column.type != column.type
+        and plan_column_type(live_column, column, declared, settings)
+    ]
+    if not columns:
+        return []
+    return [
+        f"Upgrading {declared.name} rewrites it ({', '.join(columns)}). Postgres holds "
+        f"ACCESS EXCLUSIVE for the whole rewrite, blocking enqueues, dequeues and reads, "
+        f"for a time that scales with row count. Prefer a maintenance window."
+    ]
+
+
 def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     found = {entry.name: entry for entry in live.tables}
-    notes = durability_notes(live, declared)
+    notes = durability_notes(live, declared, settings)
     for table in declared.tables:
         installed = found.get(table.name)
         if installed is not None:
+            notes += rewrite_note(installed, table, settings)
             notes += skipped_widening(installed, table, settings)
     return notes
 
@@ -320,12 +356,13 @@ def plan_retired_types(live: Schema, settings: DBSettings) -> list[str]:
     ]
 
 
-def durability_notes(live: Schema, declared: Schema) -> list[str]:
+def durability_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     """Durability is never changed here; rewriting a table is ``pgq durability``."""
     found = {entry.name: entry for entry in live.tables}
+    level = settings.durability.value
     return [
         f"{table.name} is {'UNLOGGED' if found[table.name].unlogged else 'LOGGED'} but declared "
-        f"{'UNLOGGED' if table.unlogged else 'LOGGED'}. Run pgq durability to change it."
+        f"{'UNLOGGED' if table.unlogged else 'LOGGED'}. Run 'pgq durability {level}' to change it."
         for table in declared.tables
         if table.name in found and found[table.name].unlogged != table.unlogged
     ]

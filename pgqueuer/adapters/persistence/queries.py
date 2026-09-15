@@ -108,6 +108,15 @@ class Queries:
         """Drop every PgQueuer schema object. Destructive."""
         await self.driver.execute(self.qbe.build_uninstall_query())
 
+    async def schema_is_installed(self) -> bool:
+        """Whether any object this installation declares is already present.
+
+        Partial state counts: an interrupted install leaves the enum behind,
+        and :meth:`install` fails on that just as it does on a whole schema.
+        """
+        live = await schema_inspect.inspect(self.driver, self.qbe.settings)
+        return bool(live.tables or live.enums)
+
     async def plan_upgrade(self) -> models_schema.Plan:
         """What :meth:`upgrade` would do to this database, without doing it."""
         settings = self.qbe.settings

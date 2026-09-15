@@ -182,6 +182,11 @@ Anything it will not do on its own is printed as a `note:` line on stderr. A col
 older release left behind is reported, never dropped -- it holds data, and discarding it
 is your call. Worth reading the notes on the first upgrade after a long gap.
 
+One class of note is about what the upgrade *will* do: converting a column type rewrites
+the table under `ACCESS EXCLUSIVE`, blocking the queue for the duration. Only a database
+still on `int4` ids or the pre-v0.27 statistics enum hits it, and `pgq upgrade --plan`
+says so before you commit to the window.
+
 Concurrent upgrades serialize on an advisory lock. It is session-scoped, so hold schema
 changes on a single connection; see [`pgq upgrade`](../reference/cli.md#upgrade).
 
@@ -198,6 +203,7 @@ The database drivers read standard PostgreSQL environment variables:
 | `PGDATABASE` | Database name |
 | `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty; names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
 | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects (default: unset; objects are resolved via the connection's `search_path`) |
+| `PGQUEUER_DURABILITY` | Durability level the schema is declared at: `volatile`, `balanced`, or `durable` (default). `pgq upgrade` reports a table that differs; `pgq durability` changes it |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 
