@@ -235,7 +235,7 @@ def plan_tables(live: Schema, declared: Schema, settings: DBSettings) -> list[st
 
 def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     found = {entry.name: entry for entry in live.tables}
-    notes = durability_notes(live, declared)
+    notes = durability_notes(live, declared, settings)
     for table in declared.tables:
         installed = found.get(table.name)
         if installed is not None:
@@ -332,12 +332,13 @@ def plan_retired_types(live: Schema, settings: DBSettings) -> list[str]:
     ]
 
 
-def durability_notes(live: Schema, declared: Schema) -> list[str]:
+def durability_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     """Durability is never changed here; rewriting a table is ``pgq durability``."""
     found = {entry.name: entry for entry in live.tables}
+    level = settings.durability.value
     return [
         f"{table.name} is {'UNLOGGED' if found[table.name].unlogged else 'LOGGED'} but declared "
-        f"{'UNLOGGED' if table.unlogged else 'LOGGED'}. Run pgq durability to change it."
+        f"{'UNLOGGED' if table.unlogged else 'LOGGED'}. Run 'pgq durability {level}' to change it."
         for table in declared.tables
         if table.name in found and found[table.name].unlogged != table.unlogged
     ]

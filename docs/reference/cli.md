@@ -58,7 +58,6 @@ already current runs nothing and says so.
 
 - `--plan`: Print the statements this database needs and exit without applying
   them. Notes and the summary go to stderr, so stdout carries only SQL.
-- `--durability`: Adjust the durability level during the upgrade (same options as `install`).
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
 - `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
@@ -66,8 +65,15 @@ already current runs nothing and says so.
 ```bash
 pgq upgrade --plan          # what would change, nothing applied
 pgq upgrade                 # apply it
-pgq upgrade --durability durable
 ```
+
+`upgrade` never changes durability. Switching a table between `LOGGED` and
+`UNLOGGED` rewrites it, which does not belong in a command the deployment guide
+calls safe to run against a live database. A table whose durability differs
+from the declared level is reported as a `note:` and left alone; use
+[`pgq durability`](#durability) to change it. The declared level comes from
+`PGQUEUER_DURABILITY` (default `durable`), so an installation running
+`volatile` should set that variable for the notes to be accurate.
 
 Output goes to stderr: `PgQueuer schema is already up to date.`, or
 `Applied 3 statements.` Anything the upgrade will not do on its own is reported

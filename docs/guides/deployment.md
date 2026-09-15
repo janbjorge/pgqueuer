@@ -198,6 +198,7 @@ The database drivers read standard PostgreSQL environment variables:
 | `PGDATABASE` | Database name |
 | `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty; names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
 | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects (default: unset; objects are resolved via the connection's `search_path`) |
+| `PGQUEUER_DURABILITY` | Durability level the schema is declared at: `volatile`, `balanced`, or `durable` (default). `pgq upgrade` reports a table that differs; `pgq durability` changes it |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 
