@@ -165,15 +165,25 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 ## Schema migrations on deploy
 
 Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database. Migrations are additive and non-destructive:
+database and never drops a table or a column:
 
 ```bash
 # Deploy workflow
+pgq upgrade --plan   # optional: review the delta first
 pgq upgrade          # apply schema changes
 # then roll out new workers
 ```
 
-`pgq upgrade` is idempotent: running it multiple times produces no side effects.
+`pgq upgrade` compares the installed schema against what the release declares and applies
+the delta for *that* database, rather than replaying a migration history. Run again on a
+current database, it applies nothing and reports `PgQueuer schema is already up to date.`
+
+Anything it will not do on its own is printed as a `note:` line on stderr. A column an
+older release left behind is reported, never dropped -- it holds data, and discarding it
+is your call. Worth reading the notes on the first upgrade after a long gap.
+
+Concurrent upgrades serialize on an advisory lock. It is session-scoped, so hold schema
+changes on a single connection; see [`pgq upgrade`](../reference/cli.md#upgrade).
 
 ## Environment configuration
 

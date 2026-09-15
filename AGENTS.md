@@ -71,9 +71,24 @@ To use docker-compose instead: `docker compose up db populate` (and `docker comp
 pgq install              # Create tables, triggers, functions
 pgq sql install          # Emit SQL to stdout without connecting (pipe to psql, etc.)
 pgq uninstall            # Remove all PgQueuer objects
-pgq upgrade              # Apply migrations after a library upgrade
+pgq upgrade --plan       # Print the delta this database needs; apply nothing
+pgq upgrade              # Converge the schema onto the declaration
 pgq verify --expect present  # Check schema exists (exit 1 on mismatch)
 ```
+
+The schema is declared once, in `pgqueuer/domain/schema/` — **the only place to
+edit when the schema changes.** Install renders from it, upgrade diffs the
+catalog against it, and there is no migration list to append to (ADR-0016).
+
+Definitions use PostgreSQL's own spelling (`format_type`, `pg_get_expr`,
+`pg_get_indexdef`, `pg_proc.prosrc`) so comparison is string equality. Get one
+wrong and `test_schema_inspect.py` fails with the spelling to paste in. That
+test and `test_schema_convergence.py` (upgrades a fixture of every old release)
+keep the model honest; both must pass on PG 13–18.
+
+The planner never emits `DROP TABLE` or `DROP COLUMN`. A column the schema no
+longer declares goes in `retired()`: `NOT NULL` relaxed, drop left to the
+operator as a note.
 
 ### Additional Test Flags
 
@@ -101,7 +116,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `heartbeat.py`, `cache.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
   - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
-  - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`
+  - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`, `schema_ddl.py` (render the model as DDL), `schema_inspect.py` (read the installed schema), `schema_plan.py` (diff the two)
   - `inmemory/` — In-memory driver and queries for testing without Postgres
   - `tracing/` — Logfire, Sentry, OpenTelemetry integrations
   - `cli/` — CLI commands (run, install, dashboard, etc.)

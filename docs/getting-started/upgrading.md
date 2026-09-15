@@ -60,6 +60,25 @@ the column/sequence type) and safe to re-run.
     and the postgres.ai runbook
     [How to redefine a PK without downtime](https://github.com/postgres-ai/postgres-howtos/blob/main/0033_how_to_redefine_a_PK_without_downtime.md#the-whole-recipe).
 
+With `--no-widen-id`, `pgq upgrade` applies everything else and prints a `note:`
+naming each column it left narrow and the `ALTER TABLE` that widens it. The note
+reappears on every upgrade until you run it.
+
+### `time_in_queue` on databases from v0.18 and earlier
+
+`pgqueuer_statistics.time_in_queue` was `INTERVAL NOT NULL` and nothing has
+written it since v0.19. On a database that old, statistics aggregation failed
+twice over: the not-null constraint rejected the insert, and the unique index
+still keyed on the column, so nothing backed the `ON CONFLICT` target.
+
+`pgq upgrade` rebuilds the index and drops the `NOT NULL`. It does **not** drop
+the column -- that is data, and discarding it is your call. It prints a note
+instead, on every run, until you do:
+
+```sql
+ALTER TABLE pgqueuer_statistics DROP COLUMN time_in_queue;
+```
+
 ## 2. Async-only job handlers
 
 Synchronous job handlers are no longer accepted. Registering a plain `def`

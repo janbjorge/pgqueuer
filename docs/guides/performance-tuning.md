@@ -145,9 +145,9 @@ CREATE INDEX ON pgqueuer (updated ASC, id DESC)
 INCLUDE (id) WHERE status = 'picked';
 ```
 
-These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not drop them.
-(`pgq upgrade` additionally adds a `heartbeat`-based picked index on databases created by
-older versions.)
+These partial indexes are maintained by `pgq install` and `pgq upgrade`. Do not drop them:
+both commands render the same declaration, so an index you drop is one `pgq upgrade`
+will put back.
 
 ## Quick-reference checklist
 

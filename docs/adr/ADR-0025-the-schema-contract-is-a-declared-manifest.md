@@ -79,4 +79,5 @@ objects are declared today. See the
 
 - [ADR index and backlog](README.md)
 - [Schema manifest model](../design/schema-manifest.md)
-- [Schema revision markers reference](../reference/schema-revision.md)
+- [ADR-0016: schema upgrades are computed from the live
+  database](ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
