@@ -27,8 +27,19 @@ except ImportError:  # Source checkout without a build; the header says so.
 
 
 def rendered(settings: DBSettings) -> Schema:
-    """The target schema with the status enum qualified, as DDL must spell it."""
-    return resolve(target(settings), TypeName(settings.qualified.queue_status_type))
+    """The target schema, spelled as ``inspect`` reads it back: bare names.
+
+    One canonical value compares against the catalog. Qualification is a
+    rendering concern and happens in ``spelled``.
+    """
+    return resolve(target(settings), TypeName(settings.queue_status_type))
+
+
+def spelled(value: str, settings: DBSettings) -> str:
+    """Qualify the status enum, which the model holds bare, for use in DDL."""
+    if settings.db_schema is None:
+        return value
+    return value.replace(settings.queue_status_type, settings.qualified.queue_status_type)
 
 
 def column_type(entry: Column) -> str:
@@ -42,19 +53,19 @@ def column_type(entry: Column) -> str:
     assert_never(entry.kind)
 
 
-def render_column(entry: Column) -> str:
-    parts = [entry.name, column_type(entry)]
+def render_column(entry: Column, settings: DBSettings) -> str:
+    parts = [entry.name, spelled(column_type(entry), settings)]
     if entry.not_null:
         parts.append("NOT NULL")
     if entry.default is not None:
-        parts.append(f"DEFAULT {entry.default}")
+        parts.append(f"DEFAULT {spelled(entry.default, settings)}")
     if entry.primary_key:
         parts.append("PRIMARY KEY")
     return " ".join(parts)
 
 
 def render_table(entry: Table, settings: DBSettings, *, if_not_exists: bool = False) -> str:
-    body = [render_column(column) for column in entry.columns]
+    body = [render_column(column, settings) for column in entry.columns]
     body += [f"UNIQUE ({', '.join(unique.columns)})" for unique in entry.unique_constraints]
     persistence = "UNLOGGED TABLE" if entry.unlogged else "TABLE"
     guard = "IF NOT EXISTS " if if_not_exists else ""
@@ -66,7 +77,7 @@ def render_index(entry: Index, settings: DBSettings, *, if_not_exists: bool = Fa
     unique = "UNIQUE " if entry.unique else ""
     guard = "IF NOT EXISTS " if if_not_exists else ""
     table = settings.qualify(entry.table)
-    return f"CREATE {unique}INDEX {guard}{entry.name} ON {table} {entry.body};"
+    return f"CREATE {unique}INDEX {guard}{entry.name} ON {table} {spelled(entry.body, settings)};"
 
 
 def render_enum(entry: EnumType, settings: DBSettings) -> str:
@@ -192,11 +203,12 @@ def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None
         for column in table.columns:
             if column.kind != "plain":
                 continue
-            yield f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {render_column(column)};"
+            rendered_column = render_column(column, settings)
+            yield f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {rendered_column};"
             if column.default is not None:
                 yield (
-                    f"ALTER TABLE {qualified} "
-                    f"ALTER COLUMN {column.name} SET DEFAULT {column.default};"
+                    f"ALTER TABLE {qualified} ALTER COLUMN {column.name} "
+                    f"SET DEFAULT {spelled(column.default, settings)};"
                 )
 
 
