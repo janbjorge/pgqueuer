@@ -200,6 +200,7 @@ def test_cli_upgrade_reports_converged_and_plans_the_delta(dsn: str) -> None:
     assert planned.exit_code == 0, planned.stdout
     assert planned.stdout.count("CREATE INDEX") == 1
     assert name in planned.stdout
+    assert planned.stdout.startswith("-- pgqueuer ")
     assert "Would apply 1 statement." in planned.stderr
 
     applied = runner.invoke(app, ["upgrade"], env=env)

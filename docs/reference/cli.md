@@ -52,7 +52,10 @@ already current runs nothing and says so.
 **Options:**
 
 - `--plan`: Print the statements this database needs and exit without applying
-  them. Notes and the summary go to stderr, so stdout carries only SQL.
+  them. Notes and the summary go to stderr, so stdout carries only SQL, headed
+  by a comment naming the release and warning that the delta belongs to this
+  database. A converged database prints nothing at all. See
+  [`pgq sql upgrade`](#sql) for the artifact to check in.
 - `--durability`: Adjust the durability level during the upgrade (same options as `install`).
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
@@ -145,8 +148,11 @@ sqitch, or Alembic.
 - `sql upgrade`: SQL to migrate an existing installation to the current version.
   Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`. Since it
   cannot see the database, it re-states every object behind `IF NOT EXISTS`
-  rather than emitting a delta; use [`pgq upgrade --plan`](#upgrade) when you
-  have a connection and want only what is missing.
+  rather than emitting a delta. That makes it the version-portable artifact:
+  the same script for every database on this release, which is what a migration
+  tool wants checked in. For the delta one particular database needs, use
+  [`pgq upgrade --plan`](#upgrade) -- but read it rather than filing it, since
+  it is only valid for the database it was computed from.
 - `sql durability <level>`: SQL to switch table durability without data loss.
 - `sql autovac [--rollback]`: SQL for recommended autovacuum settings.
 

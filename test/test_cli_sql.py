@@ -3,9 +3,10 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from pgqueuer.adapters.cli import cli
+from pgqueuer.adapters.cli import cli, sql_cmd
 from pgqueuer.adapters.cli.cli import app
 from pgqueuer.domain.schema.model import Plan
+from pgqueuer.domain.settings import DBSettings
 
 SQL_COMMANDS = [
     (["sql", "install"], "CREATE TYPE"),
@@ -87,6 +88,21 @@ def test_sql_upgrade_widen_id_option() -> None:
     assert "ALTER SEQUENCE %s AS BIGINT" in with_widen
     assert "ALTER COLUMN id TYPE BIGINT" not in without_widen
     assert "ALTER SEQUENCE %s AS BIGINT" not in without_widen
+
+
+def test_a_rendered_plan_is_headed_and_empty_when_there_is_nothing_to_do() -> None:
+    """A plan redirected to a file has to say which database it came from.
+
+    Empty in, empty out: a converged database leaves an empty file rather than
+    one holding a stray newline.
+    """
+    settings = DBSettings()
+    assert sql_cmd.render_plan((), settings) == ""
+
+    rendered = sql_cmd.render_plan(("ALTER TABLE pgqueuer ADD COLUMN slot bigint;",), settings)
+    assert rendered.startswith("-- pgqueuer ")
+    assert "'pgq sql upgrade'" in rendered
+    assert rendered.endswith("ALTER TABLE pgqueuer ADD COLUMN slot bigint;")
 
 
 def test_sql_autovac_rollback_option() -> None:
