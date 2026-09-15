@@ -105,6 +105,19 @@ class Schema:
 
 
 @dataclasses.dataclass(frozen=True)
+class Plan:
+    """What an upgrade would do to reach the declaration.
+
+    ``statements`` are applied in order, one per round trip. ``notes`` are for
+    the operator: things the upgrade will not do on its own, such as dropping a
+    column that still holds data.
+    """
+
+    statements: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+
+
+@dataclasses.dataclass(frozen=True)
 class Retired:
     """Objects earlier releases created that the current schema does not.
 
