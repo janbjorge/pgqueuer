@@ -9,6 +9,8 @@ back from ``pg_catalog`` as what the model declares -- the property
 
 from __future__ import annotations
 
+from typing import Generator
+
 from typing_extensions import assert_never
 
 from pgqueuer.domain.schema.declaration import retired, target
@@ -23,7 +25,7 @@ from pgqueuer.domain.schema.model import (
     resolve,
 )
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import TypeName
+from pgqueuer.domain.types import IndexName, TableName, TypeName
 
 try:
     from pgqueuer._version import version as VERSION
@@ -65,18 +67,20 @@ def render_column(entry: Column) -> str:
     return " ".join(parts)
 
 
-def render_table(entry: Table, settings: DBSettings) -> str:
+def render_table(entry: Table, settings: DBSettings, *, if_not_exists: bool = False) -> str:
     body = [render_column(column) for column in entry.columns]
     body += [f"UNIQUE ({', '.join(unique.columns)})" for unique in entry.unique_constraints]
     persistence = "UNLOGGED TABLE" if entry.unlogged else "TABLE"
+    guard = "IF NOT EXISTS " if if_not_exists else ""
     lines = ",\n".join(f"    {line}" for line in body)
-    return f"CREATE {persistence} {settings.qualify(entry.name)} (\n{lines}\n);"
+    return f"CREATE {persistence} {guard}{settings.qualify(entry.name)} (\n{lines}\n);"
 
 
-def render_index(entry: Index, settings: DBSettings) -> str:
+def render_index(entry: Index, settings: DBSettings, *, if_not_exists: bool = False) -> str:
     unique = "UNIQUE " if entry.unique else ""
+    guard = "IF NOT EXISTS " if if_not_exists else ""
     table = settings.qualify(entry.table)
-    return f"CREATE {unique}INDEX {entry.name} ON {table} {entry.body};"
+    return f"CREATE {unique}INDEX {guard}{entry.name} ON {table} {entry.body};"
 
 
 def render_enum(entry: EnumType, settings: DBSettings) -> str:
@@ -84,10 +88,11 @@ def render_enum(entry: EnumType, settings: DBSettings) -> str:
     return f"CREATE TYPE {settings.qualify(entry.name)} AS ENUM ({labels});"
 
 
-def render_function(entry: Function, settings: DBSettings) -> str:
+def render_function(entry: Function, settings: DBSettings, *, replace: bool = False) -> str:
     """``body`` is ``pg_proc.prosrc``: exactly what sits between the dollar quotes."""
+    create = "CREATE OR REPLACE FUNCTION" if replace else "CREATE FUNCTION"
     return (
-        f"CREATE FUNCTION {settings.qualify(entry.name)}() RETURNS TRIGGER AS "
+        f"{create} {settings.qualify(entry.name)}() RETURNS TRIGGER AS "
         f"$${entry.body}$$ LANGUAGE plpgsql;"
     )
 
@@ -147,3 +152,205 @@ def render_uninstall(settings: DBSettings) -> str:
         f"DROP TYPE IF EXISTS {settings.qualify(name)};" for name in retired(settings).types
     ]
     return "\n".join(statements)
+
+
+def redefined_indexes(settings: DBSettings) -> tuple[IndexName, ...]:
+    """Indexes whose definition changed after they first shipped.
+
+    ``CREATE INDEX IF NOT EXISTS`` cannot redefine an index that already exists
+    under the same name, and an offline script cannot see which shape is
+    installed, so these are dropped first and rebuilt unconditionally. Naming
+    them by hand is the price of converging without a connection; the planner
+    works this out from the catalog instead.
+    """
+    return (
+        # #668 widened this to a 4-column composite, then it was reverted to
+        # the constant-key worklist index the aggregation actually uses.
+        IndexName(f"{settings.queue_table_log}_not_aggregated"),
+        # Keyed on date_trunc('sec', time_in_queue) before v0.19, which no
+        # longer matches the aggregation's ON CONFLICT specification, and on
+        # PostgreSQL 14+ every older install still spells the UTC truncation
+        # AT TIME ZONE where the declaration says timezone().
+        IndexName(f"{settings.statistics_table}_unique_count"),
+    )
+
+
+def converge_namespace(settings: DBSettings) -> Generator[str, None, None]:
+    if settings.db_schema:
+        yield f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema};"
+
+
+def converge_enums(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
+    """Create each enum if absent, then add every label it should carry.
+
+    ``CREATE TYPE`` has no ``IF NOT EXISTS``, hence the exception block. Labels
+    are added one statement at a time because a value added by ``ALTER TYPE``
+    cannot be used in the transaction that added it.
+    """
+    for entry in schema.enums:
+        yield (
+            f"DO $$\nBEGIN\n    {render_enum(entry, settings)}\n"
+            f"EXCEPTION\n    WHEN duplicate_object THEN NULL;\nEND $$;"
+        )
+        for label in entry.labels:
+            yield f"ALTER TYPE {settings.qualify(entry.name)} ADD VALUE IF NOT EXISTS '{label}';"
+
+
+def retirement_note(table: Table, settings: DBSettings) -> str:
+    """Comment naming the retired columns on *table*, empty when it has none.
+
+    Reported, never dropped: the column holds data an operator may still want,
+    and a schema diff is no reason to destroy it.
+    """
+    gone = [entry for entry in retired(settings).columns if entry.table == table.name]
+    if not gone:
+        return ""
+    lines = ["-- No longer used by PgQueuer. Drop when you no longer need the data:"]
+    lines += [
+        f"--   ALTER TABLE {settings.qualify(table.name)} DROP COLUMN {entry.column};"
+        for entry in gone
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
+    """Create absent tables whole, then add absent columns to existing ones.
+
+    Only plain columns are added: a table that exists already has its
+    ``id``, and ``ADD COLUMN`` cannot introduce a serial primary key to one.
+    ``SET DEFAULT`` is catalog-only, so re-stating it costs nothing and
+    converges a default whose spelling drifted.
+    """
+    for table in schema.tables:
+        qualified = settings.qualify(table.name)
+        yield retirement_note(table, settings) + render_table(table, settings, if_not_exists=True)
+        for column in table.columns:
+            if column.kind != "plain":
+                continue
+            yield f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {render_column(column)};"
+            if column.default is not None:
+                yield (
+                    f"ALTER TABLE {qualified} "
+                    f"ALTER COLUMN {column.name} SET DEFAULT {column.default};"
+                )
+
+
+def converge_retired_columns(settings: DBSettings) -> Generator[str, None, None]:
+    """Relax NOT NULL on columns the current schema no longer writes.
+
+    ``pgqueuer_statistics.time_in_queue`` is ``INTERVAL NOT NULL`` on installs
+    from v0.18 and earlier, and nothing has supplied a value for it since. Every
+    statistics insert on such a database fails on the not-null constraint. The
+    column is not dropped -- it holds data -- so the constraint is what gives.
+    """
+    for entry in retired(settings).columns:
+        yield f"""DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns
+               WHERE table_schema = {settings.schema_expr}
+                 AND table_name = '{entry.table}'
+                 AND column_name = '{entry.column}') THEN
+        ALTER TABLE {settings.qualify(entry.table)}
+            ALTER COLUMN {entry.column} DROP NOT NULL;
+    END IF;
+END $$;"""
+
+
+def converge_statistics_status(settings: DBSettings) -> Generator[str, None, None]:
+    """Move the statistics status column off its own pre-v0.27 enum.
+
+    Runs after the labels are in place, and before the old type is dropped.
+    """
+    status = settings.qualified.queue_status_type
+    yield (
+        f"ALTER TABLE {settings.qualified.statistics_table} "
+        f"ALTER COLUMN status TYPE {status} USING status::TEXT::{status};"
+    )
+
+
+def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
+    gone = retired(settings).indexes + redefined_indexes(settings)
+    for name in gone:
+        yield f"DROP INDEX IF EXISTS {settings.qualify(name)};"
+    for entry in schema.indexes:
+        yield render_index(entry, settings, if_not_exists=True)
+
+
+def converge_routines(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
+    for function in schema.functions:
+        yield render_function(function, settings, replace=True)
+    for trigger in schema.triggers:
+        yield f"DROP TRIGGER IF EXISTS {trigger.name} ON {settings.qualify(trigger.table)};"
+        yield render_trigger(trigger, settings)
+
+
+def widen_id_column(table: TableName, settings: DBSettings) -> str:
+    """DO-guard on data_type keeps re-runs a no-op. *table* is a bare name."""
+    return f"""DO $$
+BEGIN
+    IF (SELECT data_type FROM information_schema.columns
+        WHERE table_schema = {settings.schema_expr}
+          AND table_name = '{table}'
+          AND column_name = 'id') = 'integer' THEN
+        ALTER TABLE {settings.qualify(table)} ALTER COLUMN id TYPE BIGINT;
+    END IF;
+END $$;"""
+
+
+def widen_id_sequence(table: TableName, settings: DBSettings) -> str:
+    """Widen a legacy int4 SERIAL sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+
+    ALTER SEQUENCE ... AS BIGINT is a cheap, idempotent no-op when the
+    sequence is already BIGINT, so no data_type guard is needed. *table* is
+    a bare name; pg_get_serial_sequence returns a qualified sequence name.
+    """
+    return f"""DO $$
+DECLARE
+    seq TEXT := pg_get_serial_sequence('{settings.qualify(table)}', 'id');
+BEGIN
+    IF seq IS NOT NULL THEN
+        EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
+    END IF;
+END $$;"""
+
+
+def converge_id_width(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
+    """Widen int4 id columns to BIGINT on pre-existing installs (issue #671).
+
+    int4 SERIAL caps lifetime ids at ~2.1B; once exceeded inserts fail. ALTER
+    TYPE takes an ACCESS EXCLUSIVE lock and rewrites the table, so it blocks
+    briefly -- gated by settings.widen_id so an operator can widen a large
+    table out of band instead.
+    """
+    if not settings.widen_id:
+        return
+    for table in schema.tables:
+        if any(column.kind == "serial" for column in table.columns):
+            yield widen_id_column(table.name, settings)
+            yield widen_id_sequence(table.name, settings)
+
+
+def render_converge(settings: DBSettings) -> Generator[str, None, None]:
+    """Statements that bring any earlier schema up to the declaration.
+
+    The offline counterpart to the computed plan: it can create what is absent
+    and re-state what is cheap to re-state, but it cannot see what is
+    installed, so it cannot retype a column or rebuild an index it has not
+    been told about. A connection gets the exact delta instead.
+
+    Order is deliberate. Enum labels precede the statistics retype that needs
+    them; the retype precedes dropping the type it moves off. Columns are
+    added before the indexes that reference them, and the retired type goes
+    last because a column may still be using it until then.
+    """
+    schema = rendered(settings)
+    yield from converge_namespace(settings)
+    yield from converge_enums(schema, settings)
+    yield from converge_tables(schema, settings)
+    yield from converge_retired_columns(settings)
+    yield from converge_statistics_status(settings)
+    yield from converge_indexes(schema, settings)
+    yield from converge_routines(schema, settings)
+    yield from converge_id_width(schema, settings)
+    for name in retired(settings).types:
+        yield f"DROP TYPE IF EXISTS {settings.qualify(name)};"
