@@ -41,9 +41,9 @@ class UniqueConstraint(NamedTuple):
 class Column:
     """A table column, spelled as ``pg_catalog`` reports it.
 
-    ``type`` uses ``format_type`` spelling (``timestamp with time zone``, not
-    ``TIMESTAMPTZ``) and ``default`` uses ``pg_get_expr`` spelling (``now()``,
-    ``false``). Either may contain the ``{status_type}`` placeholder.
+    ``type`` follows ``format_type`` (``timestamp with time zone``) and
+    ``default`` follows ``pg_get_expr`` (``now()``). Either may carry the
+    ``{status_type}`` placeholder.
     """
 
     name: ColumnName
@@ -108,9 +108,8 @@ class Schema:
 class Plan:
     """What an upgrade would do to reach the declaration.
 
-    ``statements`` are applied in order, one per round trip. ``notes`` are for
-    the operator: things the upgrade will not do on its own, such as dropping a
-    column that still holds data.
+    ``statements`` apply in order, one per round trip. ``notes`` are what the
+    upgrade will not do on its own, such as dropping a column holding data.
     """
 
     statements: tuple[str, ...] = ()
@@ -139,11 +138,7 @@ def column(
     kind: ColumnKind = "plain",
     primary_key: bool = False,
 ) -> Column:
-    """Build a :class:`Column` from plain strings.
-
-    Keeps the table declarations reading as DDL. The domain types are applied
-    at this boundary, so every consumer of the model still gets them.
-    """
+    """Build a :class:`Column` from plain strings, so declarations read as DDL."""
     return Column(
         name=ColumnName(name),
         type=SqlType(sql_type),

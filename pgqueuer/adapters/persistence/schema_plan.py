@@ -1,15 +1,10 @@
-"""Compute what a database is missing relative to the declaration.
+"""Diff the installed schema against the declaration and emit only the delta.
 
-The offline converge script in :mod:`schema_ddl` re-states everything and lets
-``IF NOT EXISTS`` sort out what was already there. With a connection there is a
-better answer: read the catalog, compare, and emit only what is actually
-absent. An already-converged database yields an empty plan, which is what lets
-``pgq upgrade`` say "already up to date" and mean it.
-
-What is absent gets created, what differs gets converted, and what an
-earlier release left behind gets cleaned up -- except a retired column, which
-holds data and is reported rather than dropped. A conversion the planner does
-not recognise raises rather than guessing at a cast.
+Absent objects are created, changed ones converted, and what earlier releases
+left behind is cleaned up -- except a retired column, which holds data and is
+reported rather than dropped. An unrecognised conversion raises rather than
+guessing at a cast. A converged database yields an empty plan, which is what
+lets ``pgq upgrade`` say "already up to date" and mean it.
 """
 
 from __future__ import annotations
@@ -26,6 +21,7 @@ from pgqueuer.adapters.persistence.schema_ddl import (
     render_index,
     render_table,
     render_trigger,
+    spelled,
     widen_id_sequence,
 )
 from pgqueuer.domain.errors import SchemaDriftError
@@ -42,10 +38,10 @@ def plan_namespace(live: Schema, settings: DBSettings) -> list[str]:
 
 
 def plan_enums(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
-    """Create absent enums whole; add absent labels to the ones that exist.
+    """Create absent enums; add absent labels one statement at a time.
 
-    A label added by ``ALTER TYPE`` cannot be used in the transaction that
-    added it, so each is its own statement and the caller must not batch them.
+    A value added by ``ALTER TYPE`` cannot be used in the transaction that
+    added it, so the caller must not batch them.
     """
     found = {entry.name: entry for entry in live.enums}
     statements: list[str] = []
@@ -63,15 +59,15 @@ def plan_enums(live: Schema, declared: Schema, settings: DBSettings) -> list[str
 
 
 def plan_columns(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
-    """Add the columns *declared* has and *installed* lacks.
+    """Add absent columns, skipping serial and identity ones.
 
-    Serial and identity columns are skipped: a table that exists already has
-    its id, and ``ADD COLUMN`` cannot introduce a serial primary key to one.
+    A table that exists already has its id, and ``ADD COLUMN`` cannot add a
+    serial primary key to one.
     """
     present = {entry.name for entry in installed.columns}
     qualified = settings.qualify(declared.name)
     return [
-        f"ALTER TABLE {qualified} ADD COLUMN {render_column(column)};"
+        f"ALTER TABLE {qualified} ADD COLUMN {render_column(column, settings)};"
         for column in declared.columns
         if column.kind == "plain" and column.name not in present
     ]
@@ -86,15 +82,10 @@ class ColumnChange(Enum):
 
 
 def classify(installed: Column, declared: Column, settings: DBSettings) -> ColumnChange:
-    """Name the conversion between two spellings of the same column.
-
-    Only the two conversions PgQueuer has actually shipped are recognised.
-    Anything else is unsupported, and the caller refuses rather than inventing
-    a cast that could lose data.
-    """
+    """Only the two conversions PgQueuer has shipped are recognised."""
     if installed.type == SqlType("integer") and declared.type == SqlType("bigint"):
         return ColumnChange.widen_id
-    if declared.type == SqlType(settings.qualified.queue_status_type):
+    if declared.type == SqlType(settings.queue_status_type):
         return ColumnChange.into_status_enum
     return ColumnChange.unsupported
 
@@ -107,8 +98,7 @@ def plan_column_type(
 ) -> list[str]:
     """Convert a column whose installed type is not the declared one.
 
-    A kind change is never converted: turning a plain column into a serial one,
-    or the reverse, is a data question rather than a DDL one.
+    A kind change is a data question rather than a DDL one, so it is refused.
     """
     qualified = settings.qualify(table.name)
     drift = SchemaDriftError(
@@ -122,7 +112,7 @@ def plan_column_type(
 
     change = classify(installed, declared, settings)
     if change is ColumnChange.widen_id:
-        # ACCESS EXCLUSIVE and a table rewrite, so it is opt-out (issue #671).
+        # Rewrites the table under ACCESS EXCLUSIVE, so it is opt-out.
         if not settings.widen_id:
             return []
         return [f"ALTER TABLE {qualified} ALTER COLUMN {declared.name} TYPE bigint;"]
@@ -162,11 +152,10 @@ def plan_column_constraints(
     table: Table,
     settings: DBSettings,
 ) -> list[str]:
-    """Bring NOT NULL and DEFAULT into line. Both are catalog-only changes.
+    """Bring NOT NULL and DEFAULT into line; both are catalog-only changes.
 
-    ``SET NOT NULL`` scans the table and fails if a null is already there,
-    which is the correct outcome: the declaration says the column cannot be
-    null, and PgQueuer must not silently fabricate a value.
+    ``SET NOT NULL`` fails on an existing null, which is the correct outcome:
+    PgQueuer must not fabricate a value to satisfy its own declaration.
     """
     qualified = settings.qualify(table.name)
     statements: list[str] = []
@@ -174,7 +163,11 @@ def plan_column_constraints(
         verb = "SET NOT NULL" if declared.not_null else "DROP NOT NULL"
         statements.append(f"ALTER TABLE {qualified} ALTER COLUMN {declared.name} {verb};")
     if installed.default != declared.default:
-        change = "DROP DEFAULT" if declared.default is None else f"SET DEFAULT {declared.default}"
+        change = (
+            "DROP DEFAULT"
+            if declared.default is None
+            else f"SET DEFAULT {spelled(declared.default, settings)}"
+        )
         statements.append(f"ALTER TABLE {qualified} ALTER COLUMN {declared.name} {change};")
     return statements
 
@@ -193,11 +186,10 @@ def plan_changed_columns(installed: Table, declared: Table, settings: DBSettings
 
 
 def plan_sequence(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
-    """Widen the id sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+    """Widen the id sequence, which ``ALTER COLUMN TYPE`` leaves capped.
 
-    The statement resolves the sequence through ``pg_get_serial_sequence``
-    rather than assuming ``<table>_id_seq``: the catalog reading gives the
-    sequence's type, not its name, and a sequence can have been renamed.
+    Resolved through ``pg_get_serial_sequence`` rather than assuming
+    ``<table>_id_seq``: the catalog gives the sequence's type, not its name.
     """
     if installed.id_sequence_type == declared.id_sequence_type or not settings.widen_id:
         return []
@@ -242,10 +234,7 @@ def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[st
 def plan_indexes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     """Create absent indexes; drop and rebuild the ones defined differently.
 
-    An index whose body or uniqueness has changed cannot be altered into
-    shape, and ``CREATE INDEX IF NOT EXISTS`` will not redefine one that
-    already holds the name. Live indexes PgQueuer does not declare are left
-    alone: they are somebody else's.
+    A live index PgQueuer does not declare is somebody else's, and is left alone.
     """
     found = {entry.name: entry for entry in live.indexes}
     statements: list[str] = []
@@ -287,13 +276,8 @@ def plan_routines(live: Schema, declared: Schema, settings: DBSettings) -> list[
 def plan_retired(live: Schema, settings: DBSettings) -> Plan:
     """Clean up what earlier releases created and this one does not declare.
 
-    Indexes and types are dropped outright. A retired column is not: it holds
-    data, so the constraint that stops the current code inserting is relaxed
-    and the drop is left to the operator as a note.
-
-    Every statement is conditional on the object actually being there. A
-    database that has already been cleaned up must plan nothing, or no upgrade
-    could ever report itself converged.
+    Conditional on the object being there: a database already cleaned up must
+    plan nothing, or no upgrade could report itself converged.
     """
     gone = retired(settings)
     tables = {entry.name: entry for entry in live.tables}
@@ -327,7 +311,7 @@ def plan_retired(live: Schema, settings: DBSettings) -> Plan:
 
 
 def plan_retired_types(live: Schema, settings: DBSettings) -> list[str]:
-    """Last of all: a column may still reference one until its retype has run."""
+    """Last of all: a column references one until its retype has run."""
     present = {entry.name for entry in live.enums}
     return [
         f"DROP TYPE IF EXISTS {settings.qualify(name)};"
@@ -350,18 +334,10 @@ def durability_notes(live: Schema, declared: Schema) -> list[str]:
 def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
     """Statements bringing *live* up to *declared*, in dependency order.
 
-    The schema holds the enums, the enums are referenced by table columns, the
-    columns are referenced by indexes, and the trigger needs its function.
-
-    Within that, two orderings are load-bearing. Column work precedes index
-    work, so ``ALTER COLUMN TYPE`` never rebuilds an index that is about to be
-    dropped anyway. Retired types come last, because a column may still be
-    using one until its retype has run.
-
-    Nothing here drops a table or a column. An object present in the database
-    but absent from the declaration is somebody else's and is left alone;
-    retirement is planned only against the explicit list, and a retired column
-    is reported rather than dropped.
+    Column work precedes index work so ``ALTER COLUMN TYPE`` never rebuilds an
+    index about to be dropped; retired types come last, since a column may
+    still reference one. Nothing here drops a table or a column: an object the
+    declaration does not name is somebody else's.
     """
     gone = plan_retired(live, settings)
     statements = (
@@ -378,11 +354,9 @@ def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
 
 
 def advisory_key(settings: DBSettings) -> int:
-    """Stable lock number for one installation.
+    """Lock number for one installation, keyed on the qualified queue table.
 
-    Derived from the qualified queue table, so two PgQueuer installations in
-    one database upgrade independently. ``zlib.crc32`` rather than ``hash()``:
-    string hashing is randomised per process, and two upgrades running at once
-    have to arrive at the same number.
+    ``zlib.crc32`` rather than ``hash()``: string hashing is randomised per
+    process, and two concurrent upgrades must arrive at the same number.
     """
     return zlib.crc32(settings.qualified.queue_table.encode())

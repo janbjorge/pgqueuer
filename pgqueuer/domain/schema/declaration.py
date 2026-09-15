@@ -51,11 +51,7 @@ def target(settings: DBSettings) -> Schema:
 
 
 def retired(settings: DBSettings) -> Retired:
-    """Objects earlier releases left behind, named so upgrade can clean up.
-
-    ``time_in_queue`` is reported rather than dropped, since a ``DROP COLUMN``
-    would destroy data an operator may still read.
-    """
+    """Objects earlier releases left behind, named so upgrade can clean up."""
     return Retired(
         indexes=(IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),),
         types=(TypeName(settings.legacy_statistics_status_type),),

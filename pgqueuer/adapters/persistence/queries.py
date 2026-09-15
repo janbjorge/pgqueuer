@@ -109,11 +109,7 @@ class Queries:
         await self.driver.execute(self.qbe.build_uninstall_query())
 
     async def plan_upgrade(self) -> models_schema.Plan:
-        """What :meth:`upgrade` would do to this database, without doing it.
-
-        Read-only. An empty ``statements`` means the installed schema already
-        matches the declaration.
-        """
+        """What :meth:`upgrade` would do to this database, without doing it."""
         settings = self.qbe.settings
         live = await schema_inspect.inspect(self.driver, settings)
         return schema_plan.plan(live, schema_ddl.rendered(settings), settings)
@@ -122,14 +118,9 @@ class Queries:
     async def schema_lock(self) -> AsyncIterator[None]:
         """Serialize upgrades of this installation against each other.
 
-        Session-scoped rather than transaction-scoped, because the statements
-        deliberately are not in one transaction: a label added by ``ALTER TYPE``
-        cannot be used in the transaction that added it.
-
-        The guarantee holds on a single-connection driver, which is what
-        ``pgq upgrade`` builds. On a pool driver successive statements may land
-        on different connections, and a session lock taken on one of them does
-        not cover the rest.
+        Session-scoped, since the statements cannot share a transaction, so it
+        only binds one connection: over a pool the statements may land on
+        others and escape it. ``pgq upgrade`` uses a single connection.
         """
         key = schema_plan.advisory_key(self.qbe.settings)
         await self.driver.execute("SELECT pg_advisory_lock($1)", key)
@@ -142,11 +133,8 @@ class Queries:
         """Converge the installed schema onto the declaration; return what ran.
 
         One statement per round trip, never batched: ``ALTER TYPE ... ADD
-        VALUE`` and the statements that use the new label cannot share a
-        transaction.
-
-        The plan is computed inside the lock, so what is returned is what was
-        applied rather than what a second look would find.
+        VALUE`` and the statements using the new label cannot share a
+        transaction. Planned inside the lock, so the result is what was applied.
         """
         async with self.schema_lock():
             computed = await self.plan_upgrade()
@@ -157,11 +145,9 @@ class Queries:
         return computed
 
     async def upgrade(self) -> None:
-        """Converge the installed schema onto the declaration.
+        """Converge the schema, returning nothing for ``SchemaManagementPort``.
 
-        Returns nothing, to keep the shape ``SchemaManagementPort`` declares.
-        Callers holding a concrete ``Queries`` and wanting to report on the
-        upgrade should use :meth:`apply_upgrade`.
+        Use :meth:`apply_upgrade` to see what it did.
         """
         await self.apply_upgrade()
 

@@ -60,6 +60,19 @@ async def test_a_converged_database_plans_nothing(apgdriver: AsyncpgDriver) -> N
     assert (await queries.plan_upgrade()).statements == ()
 
 
+async def test_a_scoped_install_plans_nothing(apgdriver: AsyncpgDriver) -> None:
+    """The declaration is compared bare, as the catalog reports it.
+
+    Comparing it qualified re-planned the whole schema on every upgrade, status
+    column rewrite included, for anyone using ``db_schema``.
+    """
+    await apgdriver.execute("CREATE SCHEMA IF NOT EXISTS scoped_plan;")
+    queries = queries_for(apgdriver, DBSettings(db_schema="scoped_plan", prefix="iso_"))
+    await queries.install()
+
+    assert (await queries.plan_upgrade()).statements == ()
+
+
 async def test_upgrade_applies_exactly_what_it_planned(apgdriver: AsyncpgDriver) -> None:
     settings = DBSettings()
     name = f"{settings.queue_table}_ep_ea_idx"
