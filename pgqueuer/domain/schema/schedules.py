@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pgqueuer.domain.schema.model import (
-    STATUS_TYPE,
     TIMESTAMP,
     Table,
     UniqueConstraint,
@@ -12,6 +11,7 @@ from pgqueuer.domain.types import ColumnName, SqlType, TableName
 
 
 def schedules_table(settings: DBSettings) -> Table:
+    status = settings.queue_status_type
     return Table(
         name=TableName(settings.schedules_table),
         unlogged=settings.durability.config.schedules_table == "UNLOGGED",
@@ -28,6 +28,6 @@ def schedules_table(settings: DBSettings) -> Table:
             column("updated", TIMESTAMP, not_null=True, default="now()"),
             column("next_run", TIMESTAMP, not_null=True, default="now()"),
             column("last_run", TIMESTAMP),
-            column("status", STATUS_TYPE, default=f"'queued'::{STATUS_TYPE}"),
+            column("status", status, default=f"'queued'::{status}"),
         ),
     )

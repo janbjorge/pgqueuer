@@ -17,7 +17,6 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import (
     qb,
     query_helpers,
-    schema_ddl,
     schema_inspect,
     schema_plan,
     sqlstate,
@@ -26,6 +25,7 @@ from pgqueuer.adapters.persistence.query_helpers import cell, merge_tracing_head
 from pgqueuer.core.logconfig import logger
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as models_schema
+from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -112,7 +112,7 @@ class Queries:
         """What :meth:`upgrade` would do to this database, without doing it."""
         settings = self.qbe.settings
         live = await schema_inspect.inspect(self.driver, settings)
-        return schema_plan.plan(live, schema_ddl.rendered(settings), settings)
+        return schema_plan.plan(live, target(settings), settings)
 
     @asynccontextmanager
     async def schema_lock(self) -> AsyncIterator[None]:

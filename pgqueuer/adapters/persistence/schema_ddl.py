@@ -15,24 +15,14 @@ from pgqueuer.domain.schema.model import (
     Schema,
     Table,
     Trigger,
-    resolve,
 )
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import IndexName, TableName, TypeName
+from pgqueuer.domain.types import IndexName, TableName
 
 try:
     from pgqueuer._version import version as VERSION
 except ImportError:  # Source checkout without a build; the header says so.
     VERSION = "0.0.0"
-
-
-def rendered(settings: DBSettings) -> Schema:
-    """The target schema, spelled as ``inspect`` reads it back: bare names.
-
-    One canonical value compares against the catalog. Qualification is a
-    rendering concern and happens in ``spelled``.
-    """
-    return resolve(target(settings), TypeName(settings.queue_status_type))
 
 
 def spelled(value: str, settings: DBSettings) -> str:
@@ -112,7 +102,7 @@ def provenance(settings: DBSettings) -> str:
 
 def render_install(settings: DBSettings, *, create_schema: bool = True) -> str:
     """Every object the current release declares, in dependency order."""
-    schema = rendered(settings)
+    schema = target(settings)
     statements = [provenance(settings)]
     if create_schema and settings.db_schema:
         statements.append(f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema};")
@@ -126,7 +116,7 @@ def render_install(settings: DBSettings, *, create_schema: bool = True) -> str:
 
 def render_uninstall(settings: DBSettings) -> str:
     """Drop what install created, dependents first, plus the retired types."""
-    schema = rendered(settings)
+    schema = target(settings)
     statements = [
         f"DROP TRIGGER IF EXISTS {entry.name} ON {settings.qualify(entry.table)};"
         for entry in schema.triggers
@@ -304,7 +294,7 @@ def render_converge(settings: DBSettings) -> Generator[str, None, None]:
     before the retype that uses them, columns before the indexes over them, and
     the retired type last, since a column references it until the retype runs.
     """
-    schema = rendered(settings)
+    schema = target(settings)
     yield from converge_namespace(settings)
     yield from converge_enums(schema, settings)
     yield from converge_tables(schema, settings)
