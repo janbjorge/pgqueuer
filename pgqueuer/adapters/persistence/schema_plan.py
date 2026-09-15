@@ -21,6 +21,7 @@ from pgqueuer.adapters.persistence.schema_ddl import (
     render_index,
     render_table,
     render_trigger,
+    spelled,
     widen_id_sequence,
 )
 from pgqueuer.domain.errors import SchemaDriftError
@@ -66,7 +67,7 @@ def plan_columns(installed: Table, declared: Table, settings: DBSettings) -> lis
     present = {entry.name for entry in installed.columns}
     qualified = settings.qualify(declared.name)
     return [
-        f"ALTER TABLE {qualified} ADD COLUMN {render_column(column)};"
+        f"ALTER TABLE {qualified} ADD COLUMN {render_column(column, settings)};"
         for column in declared.columns
         if column.kind == "plain" and column.name not in present
     ]
@@ -84,7 +85,7 @@ def classify(installed: Column, declared: Column, settings: DBSettings) -> Colum
     """Only the two conversions PgQueuer has shipped are recognised."""
     if installed.type == SqlType("integer") and declared.type == SqlType("bigint"):
         return ColumnChange.widen_id
-    if declared.type == SqlType(settings.qualified.queue_status_type):
+    if declared.type == SqlType(settings.queue_status_type):
         return ColumnChange.into_status_enum
     return ColumnChange.unsupported
 
@@ -162,7 +163,11 @@ def plan_column_constraints(
         verb = "SET NOT NULL" if declared.not_null else "DROP NOT NULL"
         statements.append(f"ALTER TABLE {qualified} ALTER COLUMN {declared.name} {verb};")
     if installed.default != declared.default:
-        change = "DROP DEFAULT" if declared.default is None else f"SET DEFAULT {declared.default}"
+        change = (
+            "DROP DEFAULT"
+            if declared.default is None
+            else f"SET DEFAULT {spelled(declared.default, settings)}"
+        )
         statements.append(f"ALTER TABLE {qualified} ALTER COLUMN {declared.name} {change};")
     return statements
 
