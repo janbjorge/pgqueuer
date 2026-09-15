@@ -128,9 +128,14 @@ def plan_column_type(
 
 
 def skipped_widening(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
-    """Notes for id columns left narrow because ``widen_id`` is off."""
+    """Notes for an id column and its sequence, left narrow because ``widen_id`` is off.
+
+    The sequence gets its own note because widening the column does not widen
+    it, and the sequence is the half that runs out.
+    """
     if settings.widen_id:
         return []
+    qualified = settings.qualify(declared.name)
     found = {entry.name: entry for entry in installed.columns}
     notes = []
     for column in declared.columns:
@@ -140,9 +145,16 @@ def skipped_widening(installed: Table, declared: Table, settings: DBSettings) ->
         if classify(live_column, column, settings) is ColumnChange.widen_id:
             notes.append(
                 f"{declared.name}.{column.name} is still {live_column.type} and widening is "
-                f"disabled. Run ALTER TABLE {settings.qualify(declared.name)} "
+                f"disabled. Run ALTER TABLE {qualified} "
                 f"ALTER COLUMN {column.name} TYPE bigint out of band."
             )
+    if installed.id_sequence_type != declared.id_sequence_type:
+        notes.append(
+            f"The id sequence behind {declared.name} is still {installed.id_sequence_type} "
+            f"and widening is disabled. Widening the column leaves it capped: run "
+            f"ALTER SEQUENCE ... AS BIGINT on what "
+            f"pg_get_serial_sequence('{qualified}', 'id') returns."
+        )
     return notes
 
 

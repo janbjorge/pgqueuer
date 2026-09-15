@@ -61,8 +61,10 @@ the column/sequence type) and safe to re-run.
     [How to redefine a PK without downtime](https://github.com/postgres-ai/postgres-howtos/blob/main/0033_how_to_redefine_a_PK_without_downtime.md#the-whole-recipe).
 
 With `--no-widen-id`, `pgq upgrade` applies everything else and prints a `note:`
-naming each column it left narrow and the `ALTER TABLE` that widens it. The note
-reappears on every upgrade until you run it.
+for each narrow id column and a second for the sequence behind it. Widen both:
+`ALTER TABLE ... ALTER COLUMN id TYPE bigint` leaves the sequence capped at
+int4, and the sequence is the half that runs out. The notes reappear on every
+upgrade until you do.
 
 ### `time_in_queue` on databases from v0.18 and earlier
 
