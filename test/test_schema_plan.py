@@ -235,6 +235,59 @@ def test_a_narrow_id_is_reported_when_widening_is_disabled() -> None:
     assert "still integer" in computed.notes[0]
 
 
+def narrow_sequence(schema: Schema, table: str) -> Schema:
+    """Leave the id sequence behind *table* at its pre-BIGINT width."""
+    return dataclasses.replace(
+        schema,
+        tables=tuple(
+            dataclasses.replace(entry, id_sequence_type=SqlType("integer"))
+            if entry.name == table
+            else entry
+            for entry in schema.tables
+        ),
+    )
+
+
+def test_a_narrow_sequence_is_widened_when_enabled() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = narrow_sequence(schema, settings.queue_table)
+
+    assert "ALTER SEQUENCE" in "".join(plan(live, schema, settings).statements)
+
+
+def test_a_narrow_sequence_is_reported_when_widening_is_disabled() -> None:
+    """Widening the column leaves the sequence capped, so it is reported on its own."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = narrow_sequence(schema, settings.queue_table)
+
+    computed = plan(live, schema, settings)
+    assert computed.statements == ()
+    assert len(computed.notes) == 1
+    assert "ALTER SEQUENCE" in computed.notes[0]
+
+
+def test_a_narrow_column_and_sequence_are_both_reported() -> None:
+    """Following a note that named only the column is what leaves a database half-widened."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = narrow_sequence(
+        changed_column(
+            schema,
+            settings.queue_table,
+            "id",
+            lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+        ),
+        settings.queue_table,
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 2
+    assert any("ALTER COLUMN id TYPE bigint" in note for note in notes)
+    assert any("ALTER SEQUENCE" in note for note in notes)
+
+
 def test_a_legacy_status_type_is_cast_through_text() -> None:
     settings = DBSettings()
     schema = declared(settings)
