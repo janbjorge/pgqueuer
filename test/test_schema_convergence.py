@@ -6,8 +6,8 @@ tag and never regenerated -- the point is what those databases actually look
 like in the field, not what we would install for them today.
 
 ``test_schema_inspect.py`` proves a *fresh* install matches the model. These
-prove the other entry point: what a database that has been around since v0.18
-looks like after ``pgq upgrade``, and what still does not work there.
+prove the other entry point: a database that has been around since v0.18 and
+has been upgraded ever since lands in exactly the same place.
 """
 
 from __future__ import annotations
@@ -30,42 +30,12 @@ from test.helpers import collapse, declared_schema
 RELEASES_DIR = Path(__file__).parent / "schema_releases"
 RELEASES = sorted(path.stem for path in RELEASES_DIR.glob("*.sql"))
 
-# Objects the append-only upgrade stream leaves differing from the declaration.
-# A subset check, not equality: PostgreSQL 13 normalises the two timezone
-# spellings to one, so it reaches the declaration where 14+ does not.
-#
-#   pgqueuer_statistics.created / _unique_count
-#       Installs before this release wrote DATE_TRUNC('sec', NOW() at time
-#       zone 'UTC'). PostgreSQL 14+ reports back the syntax that was written,
-#       so those databases read as AT TIME ZONE where the model says
-#       timezone(). Same meaning, different text, and upgrade redefines
-#       neither.
-#
-#   pgqueuer_log (v0.18 only)
-#       The upgrade stream creates it UNLOGGED unconditionally, ignoring
-#       settings.durability, which install respects.
-#
-# On v0.18 the statistics index additionally still keys on time_in_queue, and
-# that one is not cosmetic: see test_upgraded_release_aggregates_statistics.
-# Shrinking this set to empty is what ADR-0016's computed planner is for.
-UNREPAIRED = {
-    "column pgqueuer_statistics.created",
-    "index pgqueuer_statistics_unique_count",
-    "table pgqueuer_log",
-}
-
-# The v0.18 statistics index keys on date_trunc('sec', time_in_queue) as well,
-# so it cannot back the aggregation's ON CONFLICT specification, and nothing in
-# the upgrade stream rebuilds it.
-AGGREGATION_BROKEN = "v0.18.10"
-
 
 class Gap(NamedTuple):
     """One declared object the live schema does not match.
 
-    ``target`` names the object and nothing else, so the expected-drift set
-    stays stable across PostgreSQL versions; ``detail`` carries the spelling
-    for the failure message.
+    ``target`` names the object, ``detail`` carries the spelling found, so a
+    failure says which object drifted and what it looks like now.
     """
 
     target: str
@@ -174,21 +144,18 @@ async def upgraded(driver: AsyncpgDriver, release: str) -> Queries:
 
 
 @pytest.mark.parametrize("release", RELEASES)
-async def test_upgrade_leaves_only_the_known_drift(
-    apgdriver: AsyncpgDriver,
-    release: str,
-) -> None:
-    """Every declared object is reached, bar the drift UNREPAIRED names.
+async def test_upgrade_reaches_the_declaration(apgdriver: AsyncpgDriver, release: str) -> None:
+    """Upgrading any release reaches every object the model declares.
 
-    A new entry in the failure output means the upgrade stream fell further
-    behind the declaration -- the failure mode this schema model exists to
-    make impossible.
+    Install and upgrade are rendered from the same declaration, so there is
+    nothing left for them to disagree about. A failure here names the object
+    and the spelling found.
     """
     settings = DBSettings()
     await upgraded(apgdriver, release)
 
-    gaps = shortfall(collapse(await inspect(apgdriver, settings)), declared_schema(settings))
-    assert [gap for gap in gaps if gap.target not in UNREPAIRED] == []
+    live = collapse(await inspect(apgdriver, settings))
+    assert shortfall(live, declared_schema(settings)) == []
 
 
 @pytest.mark.parametrize("release", RELEASES)
@@ -215,12 +182,11 @@ async def test_upgraded_release_aggregates_statistics(
 ) -> None:
     """Folding the log into statistics needs the unique index to match.
 
-    v0.18 raises ``there is no unique or exclusion constraint matching the ON
-    CONFLICT specification``: its index still keys on ``time_in_queue``.
+    Two things used to break this on a v0.18 database: the unique index still
+    keyed on ``time_in_queue``, so no index backed the ``ON CONFLICT``
+    specification, and the column itself was ``NOT NULL`` with nothing left to
+    fill it. Converging rebuilds the index and relaxes the constraint.
     """
-    if release == AGGREGATION_BROKEN:
-        pytest.xfail("v0.18 statistics index still keys on time_in_queue")
-
     queries = await upgraded(apgdriver, release)
     await queries.enqueue(["ep"], [b"x"], [0])
     await queries.aggregate_logs()
