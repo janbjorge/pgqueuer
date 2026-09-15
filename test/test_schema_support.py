@@ -88,6 +88,24 @@ async def test_fresh_install_round_trip_in_schema(apgdriver: db.Driver) -> None:
     assert len(rows) == 1
 
 
+async def test_dedupe_skip_infers_the_index_in_a_schema(apgdriver: db.Driver) -> None:
+    """The ON CONFLICT arbiter names the status enum, which a schema'd install qualifies.
+
+    PostgreSQL raises outright when it cannot match an arbiter to an index, so
+    a second enqueue returning None is the proof that inference still holds.
+    """
+    await queries.Queries(apgdriver).uninstall()
+
+    settings = DBSettings(db_schema=SCHEMA, prefix="iso_")
+    q = queries_for(apgdriver, settings)
+    await q.install()
+
+    (first,) = await q.enqueue("ep", b"x", 0, dedupe_key="same", on_conflict="skip")
+    (second,) = await q.enqueue("ep", b"y", 0, dedupe_key="same", on_conflict="skip")
+    assert first is not None
+    assert second is None
+
+
 async def test_widen_id_in_schema_with_prefix(apgdriver: db.Driver) -> None:
     """The widen-id migration targets the configured schema, not the search_path."""
     await queries.Queries(apgdriver).uninstall()
