@@ -40,11 +40,21 @@ pgq sql upgrade > migrations/V2__pgqueuer_upgrade.sql
 ```
 
 `sql upgrade` never connects, so it re-states every object behind `IF NOT EXISTS`.
-With a connection, `pgq upgrade --plan` prints the exact delta and applies nothing:
+That is what makes it the right thing to check in: it is a property of the
+release, identical for every database, and reproducible from the version alone.
+
+`pgq upgrade --plan` is the other half. It connects, prints the exact delta
+this database needs, and applies nothing:
 
 ```bash
-pgq upgrade --plan > migrations/V2__pgqueuer_upgrade.sql
+pgq upgrade --plan          # review before applying
 ```
+
+Read it, do not file it. The plan is computed from one database's catalog, so
+it is only valid for that database -- capture it against staging and apply it
+to production and you are assuming production drifted the same way. The output
+carries a header saying so. Use `sql upgrade` for the file your migration tool
+keeps, and `--plan` to see what `pgq upgrade` is about to do here.
 
 ## Uninstallation
 

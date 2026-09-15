@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Sequence
 
 import typer
 from typing_extensions import Annotated
@@ -69,6 +70,24 @@ def render_upgrade(settings: qb.DBSettings) -> str:
     return "\n\n".join(
         inspect.cleandoc(statement).strip() for statement in qbe.build_upgrade_queries()
     )
+
+
+def render_plan(statements: Sequence[str], settings: qb.DBSettings) -> str:
+    """A computed plan as a file: header first, so it cannot be mistaken for a migration.
+
+    Empty when there is nothing to do, so a redirect leaves an empty file
+    rather than one holding a stray newline.
+    """
+    if not statements:
+        return ""
+    header = (
+        f"{schema_ddl.provenance(settings)}\n"
+        "-- Computed from this database's catalog: the delta for this database\n"
+        "-- only. Replaying it elsewhere assumes the other database drifted the\n"
+        "-- same way. For a script that suits any installation of this release,\n"
+        "-- use 'pgq sql upgrade'."
+    )
+    return "\n\n".join([header, *statements])
 
 
 def render_durability(settings: qb.DBSettings) -> str:

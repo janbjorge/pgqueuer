@@ -404,7 +404,12 @@ def report_upgrade(applied: schema_model.Plan, planned_only: bool) -> None:
     typer.secho(f"{verb} {count} statement{'' if count == 1 else 's'}.", err=True)
 
 
-@app.command(help="Apply upgrades to the existing PgQueuer database schema.")
+@app.command(
+    help=(
+        "Bring the schema up to what this release declares. "
+        "Use --plan to see the delta this database needs without applying it."
+    )
+)
 def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(
@@ -435,8 +440,8 @@ def upgrade(
         # The one failure here addressed to an operator rather than a developer.
         typer.secho(f"error: {drift}", err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from None
-    if plan:
-        typer.echo("\n\n".join(applied.statements))
+    if plan and (rendered := sql_cmd.render_plan(applied.statements, settings)):
+        typer.echo(rendered)
     report_upgrade(applied, planned_only=plan)
 
 
