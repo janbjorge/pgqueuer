@@ -101,7 +101,14 @@ def uninstall() -> None:
     typer.echo(render_uninstall(qb.DBSettings()))
 
 
-@sql_app.command(help="SQL to migrate an existing installation to the current version.")
+@sql_app.command(
+    help=(
+        "SQL to migrate an existing installation to the current version. "
+        "Cannot see the database, so it re-states every object and relies on "
+        "IF NOT EXISTS. For the exact delta a given database needs, use "
+        "'pgq upgrade --plan', which connects."
+    )
+)
 def upgrade(
     durability: DurabilityOption = qb.Durability.durable,
     widen_id: WidenIdOption = True,
