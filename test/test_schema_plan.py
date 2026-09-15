@@ -417,6 +417,43 @@ def test_a_retired_index_is_dropped_only_when_present() -> None:
     assert plan(schema, schema, settings).statements == ()
 
 
+def test_a_rewrite_is_announced_before_it_runs() -> None:
+    """The plan carries an ACCESS EXCLUSIVE rewrite; the operator should hear it first."""
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 1
+    assert "ACCESS EXCLUSIVE" in notes[0]
+    assert settings.queue_table in notes[0]
+
+
+def test_a_skipped_rewrite_is_not_announced() -> None:
+    """--no-widen-id emits no ALTER, so there is no rewrite to warn about."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    assert not any("ACCESS EXCLUSIVE" in note for note in plan(live, schema, settings).notes)
+
+
+def test_a_converged_database_is_warned_about_nothing() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    assert plan(schema, schema, settings).notes == ()
+
+
 def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     settings = DBSettings()
     schema = declared(settings)

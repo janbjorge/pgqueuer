@@ -80,6 +80,18 @@ Output goes to stderr: `PgQueuer schema is already up to date.`, or
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
 
+A `note:` also lands before an upgrade that rewrites a table. Converting a
+column type is the only thing here that does, and Postgres holds
+`ACCESS EXCLUSIVE` for the whole rewrite, blocking enqueues, dequeues and
+reads. Run `--plan` first on any database old enough to still be on `int4` ids
+or the pre-v0.27 statistics enum:
+
+```
+note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
+      the whole rewrite, blocking enqueues, dequeues and reads, for a time that
+      scales with row count. Prefer a maintenance window.
+```
+
 !!! note "Concurrency"
     Upgrades of one installation serialize on a session advisory lock, keyed on
     the qualified queue table and held across planning and applying. Two

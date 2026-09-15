@@ -233,12 +233,36 @@ def plan_tables(live: Schema, declared: Schema, settings: DBSettings) -> list[st
     return statements
 
 
+def rewrite_note(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
+    """Warn before a retype, which is the one thing here that rewrites a table.
+
+    Asked through ``plan_column_type`` rather than by matching types again, so
+    a conversion the planner decided to skip is not announced.
+    """
+    found = {entry.name: entry for entry in installed.columns}
+    columns = [
+        column.name
+        for column in declared.columns
+        if (live_column := found.get(column.name)) is not None
+        and live_column.type != column.type
+        and plan_column_type(live_column, column, declared, settings)
+    ]
+    if not columns:
+        return []
+    return [
+        f"Upgrading {declared.name} rewrites it ({', '.join(columns)}). Postgres holds "
+        f"ACCESS EXCLUSIVE for the whole rewrite, blocking enqueues, dequeues and reads, "
+        f"for a time that scales with row count. Prefer a maintenance window."
+    ]
+
+
 def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
     found = {entry.name: entry for entry in live.tables}
     notes = durability_notes(live, declared, settings)
     for table in declared.tables:
         installed = found.get(table.name)
         if installed is not None:
+            notes += rewrite_note(installed, table, settings)
             notes += skipped_widening(installed, table, settings)
     return notes
 
