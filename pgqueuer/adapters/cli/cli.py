@@ -378,11 +378,7 @@ def uninstall(
 
 
 def report_upgrade(applied: schema_model.Plan, planned_only: bool) -> None:
-    """Summary and notes on stderr; the plan itself, if asked for, on stdout.
-
-    Keeping the split means ``pgq upgrade --plan > migration.sql`` yields SQL
-    and nothing else.
-    """
+    """Summary and notes on stderr, so ``--plan`` can be redirected as SQL."""
     for note in applied.notes:
         typer.secho(f"note: {note}", err=True)
     if not applied.statements:
@@ -405,11 +401,7 @@ def upgrade(
     plan: bool = typer.Option(
         False,
         "--plan",
-        help=(
-            "Print the statements this database actually needs and exit without "
-            "applying them. Unlike 'pgq sql upgrade', which cannot see the "
-            "database and re-states the whole schema, this is the exact delta."
-        ),
+        help="Print the exact delta this database needs and exit without applying it.",
     ),
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     widen_id: sql_cmd.WidenIdOption = True,

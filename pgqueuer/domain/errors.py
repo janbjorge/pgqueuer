@@ -47,11 +47,7 @@ class FailingListenerError(PgqException):
 
 
 class SchemaDriftError(PgqException):
-    """Raised when an upgrade meets a schema change it cannot safely convert.
-
-    The planner refuses rather than guessing at a cast that could lose data.
-    Apply the change by hand and re-run the upgrade.
-    """
+    """Raised when an upgrade meets a schema change it cannot safely convert."""
 
     def __init__(
         self,

@@ -1,9 +1,7 @@
-"""Shape checks for the DDL renderer.
+"""Renderer shape checks for what reading the catalog back cannot show.
 
-That the rendered DDL is *correct* is proved in ``test_schema_inspect.py``:
-install, read the catalog back, compare to the model. These tests cover the
-parts the catalog cannot show -- the settings-driven switches and the
-column-constraint spellings PostgreSQL rewrites away on the way in.
+``test_schema_inspect.py`` proves the DDL is correct; these cover the settings
+switches and the spellings PostgreSQL rewrites on the way in.
 """
 
 from __future__ import annotations

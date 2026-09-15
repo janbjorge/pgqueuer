@@ -1,13 +1,8 @@
-"""Upgrading a database installed by an old release must reach the target schema.
+"""Upgrading a database installed by an old release must reach the declaration.
 
-Each fixture under ``schema_releases/`` is the verbatim install DDL of a
-release whose schema differed from the one before it, generated once from the
-tag and never regenerated -- the point is what those databases actually look
-like in the field, not what we would install for them today.
-
-``test_schema_inspect.py`` proves a *fresh* install matches the model. These
-prove the other entry point: a database that has been around since v0.18 and
-has been upgraded ever since lands in exactly the same place.
+Each fixture under ``schema_releases/`` is verbatim install DDL generated once
+from its tag and never regenerated: what those databases look like in the
+field, not what we would install for them today.
 """
 
 from __future__ import annotations
@@ -34,11 +29,7 @@ RELEASES = sorted(path.stem for path in RELEASES_DIR.glob("*.sql"))
 
 
 class Gap(NamedTuple):
-    """One declared object the live schema does not match.
-
-    ``target`` names the object, ``detail`` carries the spelling found, so a
-    failure says which object drifted and what it looks like now.
-    """
+    """One declared object the live schema does not match, and how it reads."""
 
     target: str
     detail: str
@@ -120,9 +111,8 @@ def routine_gaps(live: Schema, declared: Schema) -> list[Gap]:
 def shortfall(live: Schema, declared: Schema) -> list[Gap]:
     """What *declared* asks for that *live* lacks, or spells differently.
 
-    Containment, not equality: an upgraded database legitimately keeps objects
-    the current release no longer declares. ``time_in_queue`` holds data, and
-    dropping a column to satisfy a diff would destroy it.
+    Containment, not equality: an upgraded database keeps ``time_in_queue``,
+    which holds data no diff is allowed to destroy.
     """
     return (
         enum_gaps(live, declared)
@@ -147,12 +137,7 @@ async def upgraded(driver: AsyncpgDriver, release: str) -> Queries:
 
 @pytest.mark.parametrize("release", RELEASES)
 async def test_upgrade_reaches_the_declaration(apgdriver: AsyncpgDriver, release: str) -> None:
-    """Upgrading any release reaches every object the model declares.
-
-    Install and upgrade are rendered from the same declaration, so there is
-    nothing left for them to disagree about. A failure here names the object
-    and the spelling found.
-    """
+    """Upgrading any release reaches every object the model declares."""
     settings = DBSettings()
     await upgraded(apgdriver, release)
 
@@ -184,10 +169,8 @@ async def test_upgraded_release_aggregates_statistics(
 ) -> None:
     """Folding the log into statistics needs the unique index to match.
 
-    Two things used to break this on a v0.18 database: the unique index still
-    keyed on ``time_in_queue``, so no index backed the ``ON CONFLICT``
-    specification, and the column itself was ``NOT NULL`` with nothing left to
-    fill it. Converging rebuilds the index and relaxes the constraint.
+    Broken twice over on a v0.18 database: nothing backed the ``ON CONFLICT``
+    target, and ``time_in_queue`` was ``NOT NULL`` with nothing to fill it.
     """
     queries = await upgraded(apgdriver, release)
     await queries.enqueue(["ep"], [b"x"], [0])
@@ -211,12 +194,8 @@ async def test_upgrade_is_rerunnable(apgdriver: AsyncpgDriver, release: str) -> 
 async def test_nothing_is_left_to_do_after_upgrade(apgdriver: AsyncpgDriver, release: str) -> None:
     """The planner, run against the real catalog, has no statement left to emit.
 
-    ``shortfall`` above compares two models; this compares what the planner
-    would actually do. Both must agree the database is converged.
-
-    Notes are not statements and do not count. A v0.18 database keeps
-    ``time_in_queue`` by design, so the note offering to drop it is still
-    there, and will be until an operator acts on it.
+    Notes do not count: the offer to drop ``time_in_queue`` stands until an
+    operator acts on it.
     """
     settings = DBSettings()
     await upgraded(apgdriver, release)
