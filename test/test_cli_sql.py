@@ -89,6 +89,19 @@ def test_sql_upgrade_widen_id_option() -> None:
     assert "ALTER SEQUENCE %s AS BIGINT" not in without_widen
 
 
+def test_upgrade_takes_no_durability_option() -> None:
+    """It never applied one: switching LOGGED/UNLOGGED rewrites the table.
+
+    ``pgq sql upgrade`` keeps the flag, since the offline script renders the
+    tables it may have to create.
+    """
+    rejected = CliRunner().invoke(app, ["upgrade", "--durability", "volatile"])
+    assert rejected.exit_code != 0
+    assert "No such option" in rejected.output
+
+    assert CliRunner().invoke(app, ["sql", "upgrade", "-d", "volatile"]).exit_code == 0
+
+
 def test_sql_autovac_rollback_option() -> None:
     result = CliRunner().invoke(app, ["sql", "autovac", "--rollback"])
     assert "RESET" in result.output

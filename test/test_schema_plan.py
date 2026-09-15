@@ -11,7 +11,7 @@ from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, resolve
-from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.settings import DBSettings, Durability
 from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName, TypeName
 
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
@@ -433,3 +433,15 @@ def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     computed = plan(live, schema, settings)
     assert computed.statements == ()
     assert "pgq durability" in computed.notes[0]
+
+
+def test_a_durability_note_names_the_level_to_pass() -> None:
+    """``pgq durability`` takes a required argument, so the note has to carry it."""
+    settings = DBSettings(durability=Durability.volatile)
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        tables=tuple(dataclasses.replace(entry, unlogged=False) for entry in schema.tables),
+    )
+
+    assert "'pgq durability volatile'" in plan(live, schema, settings).notes[0]

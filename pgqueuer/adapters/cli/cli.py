@@ -418,10 +418,9 @@ def upgrade(
         "--plan",
         help="Print the exact delta this database needs and exit without applying it.",
     ),
-    durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability, widen_id=widen_id)
+    settings = qb.DBSettings(widen_id=widen_id)
     if dry_run:
         emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))
         return
