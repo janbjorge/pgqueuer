@@ -165,15 +165,35 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 ## Schema migrations on deploy
 
 Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database. Migrations are additive and non-destructive:
+database and never drops a table or a column:
 
 ```bash
 # Deploy workflow
+pgq upgrade --plan   # optional: review the delta first
 pgq upgrade          # apply schema changes
 # then roll out new workers
 ```
 
-`pgq upgrade` is idempotent: running it multiple times produces no side effects.
+`pgq upgrade` reads the installed schema from `pg_catalog` and compares it against what
+the release declares, so it applies the delta for *that* database rather than replaying a
+migration history. Running it again on a current database applies nothing and reports
+`PgQueuer schema is already up to date.`
+
+Anything it will not do on its own is printed as a `note:` line on stderr. A column an
+older release left behind is reported, never dropped -- it holds data, and the decision to
+discard it is yours. Worth reading the notes on the first upgrade after a long gap.
+
+!!! note "Advisory lock, and its limit on a pool"
+    `pgq upgrade` holds a session advisory lock, keyed on the qualified queue table, across
+    both planning and applying. Two upgrades of the same installation serialize; two
+    installations in one database do not block each other.
+
+    The statements cannot run in a single transaction, because PostgreSQL forbids using a
+    new enum value in the transaction that added it. The lock is therefore session-scoped,
+    and a session lock only binds the connection that took it. `pgq upgrade` uses a single
+    connection, so this holds. If you call `Queries.upgrade()` yourself over a **pool**
+    driver, successive statements may land on different connections and the lock will not
+    cover them -- use a dedicated connection for schema changes.
 
 ## Environment configuration
 

@@ -43,16 +43,51 @@ pgq uninstall
 
 ### `upgrade`
 
-Apply database schema upgrades.
+Bring the database schema up to what this PgQueuer release declares.
+
+The schema is read from `pg_catalog` and compared against the declaration, so
+only the statements this particular database needs are run. A database that is
+already current runs nothing and says so.
 
 **Options:**
 
+- `--plan`: Print the statements this database needs and exit without applying
+  them. Notes and the summary go to stderr, so stdout carries only SQL.
 - `--durability`: Adjust the durability level during the upgrade (same options as `install`).
+- `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
+  [Upgrading](../getting-started/upgrading.md).
 - `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
 
 ```bash
+pgq upgrade --plan          # what would change, nothing applied
+pgq upgrade                 # apply it
 pgq upgrade --durability durable
 ```
+
+Output goes to stderr: `PgQueuer schema is already up to date.`, or
+`Applied 3 statements.` Anything the upgrade will not do on its own is reported
+as a `note:` line -- a column an older release left behind, for instance, is
+never dropped for you.
+
+!!! info "`upgrade --plan` and `sql upgrade` are not the same script"
+    `pgq upgrade --plan` connects and prints the exact delta. [`pgq sql
+    upgrade`](#sql) never connects, so it cannot know what is installed and
+    instead re-states every object behind `IF NOT EXISTS`. Both converge a
+    database; only the first tells you what is actually missing.
+
+!!! note "Concurrency"
+    `pgq upgrade` takes a session advisory lock keyed on the qualified queue
+    table, so two upgrades of the same installation serialize and two different
+    installations in one database do not block each other. The lock is held
+    across both planning and applying.
+
+    The statements deliberately are not run in a single transaction, because
+    PostgreSQL forbids using a new enum value in the transaction that added it.
+    That makes the lock session-scoped, and a session lock is only a real
+    guarantee on a single connection -- which is what `pgq upgrade` uses. If you
+    call `Queries.upgrade()` yourself over a **pool** driver, successive
+    statements may land on different connections and the lock will not cover
+    them.
 
 ---
 
@@ -117,7 +152,10 @@ sqitch, or Alembic.
   `--create-schema/--no-create-schema` like `install`.
 - `sql uninstall`: SQL to drop all PgQueuer objects.
 - `sql upgrade`: SQL to migrate an existing installation to the current version.
-  Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`.
+  Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`. Since it
+  cannot see the database, it re-states every object behind `IF NOT EXISTS`
+  rather than emitting a delta; use [`pgq upgrade --plan`](#upgrade) when you
+  have a connection and want only what is missing.
 - `sql durability <level>`: SQL to switch table durability without data loss.
 - `sql autovac [--rollback]`: SQL for recommended autovacuum settings.
 

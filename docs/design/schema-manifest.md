@@ -3,8 +3,7 @@
 What the library declares it needs from the database, and how a worker
 turns that into a startup decision. The *why* lives in
 [ADR-0025](../adr/ADR-0025-the-schema-contract-is-a-declared-manifest.md).
-Sub-model of the [system design](README.md); the operator view is the
-[schema revision markers reference](../reference/schema-revision.md).
+Sub-model of the [system design](README.md).
 
 ## Flow
 
@@ -118,8 +117,15 @@ Objects are matched by kind, name and parent. A dropped object is
 therefore caught, but an altered one is not: a column retyped, a
 constraint dropped, an index recreated over different columns under the
 same name, or a replaced function body all satisfy the manifest.
-Detecting those needs the declaration to carry each object's shape,
-which it does not today.
+Detecting those needs the declaration to carry each object's shape.
+
+The schema model in `pgqueuer/domain/schema/` does carry it, and
+`pgq upgrade` compares against it object by object, so an altered object
+is caught and converged there. See
+[ADR-0016](../adr/ADR-0016-schema-upgrades-are-computed-from-the-live-database.md).
+The two are not the same mechanism: the manifest answers "may this worker
+start", cheaply and at startup, while the schema model answers "what would
+make this database current", and needs a full catalog read to do it.
 
 ## Invariants
 

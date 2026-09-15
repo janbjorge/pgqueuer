@@ -71,9 +71,26 @@ To use docker-compose instead: `docker compose up db populate` (and `docker comp
 pgq install              # Create tables, triggers, functions
 pgq sql install          # Emit SQL to stdout without connecting (pipe to psql, etc.)
 pgq uninstall            # Remove all PgQueuer objects
-pgq upgrade              # Apply migrations after a library upgrade
+pgq upgrade --plan       # Print the delta this database needs; apply nothing
+pgq upgrade              # Converge the schema onto the declaration
 pgq verify --expect present  # Check schema exists (exit 1 on mismatch)
 ```
+
+The schema is declared once, in `pgqueuer/domain/schema/` — **the only place to
+edit when the schema changes.** Install is rendered from it; upgrade reads
+`pg_catalog` and applies the difference. There is no migration list to append
+to (ADR-0016).
+
+Definitions are stored in PostgreSQL's own spelling (`format_type`,
+`pg_get_expr`, `pg_get_indexdef`, `pg_proc.prosrc`) so comparison is string
+equality. Get a spelling wrong and `test_schema_inspect.py` fails with the one
+Postgres reports — paste that in. That test, plus
+`test_schema_convergence.py` (which upgrades a fixture of every old release), is
+what keeps the model honest. Both must pass on the PG 13–18 matrix.
+
+The planner never emits `DROP TABLE` or `DROP COLUMN`. A column the schema no
+longer declares is listed in `retired()`, has its `NOT NULL` relaxed, and is
+reported to the operator as a note.
 
 ### Additional Test Flags
 
@@ -101,7 +118,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `heartbeat.py`, `cache.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
   - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
-  - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`
+  - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`, `schema_ddl.py` (render the model as DDL), `schema_inspect.py` (read the installed schema), `schema_plan.py` (diff the two)
   - `inmemory/` — In-memory driver and queries for testing without Postgres
   - `tracing/` — Logfire, Sentry, OpenTelemetry integrations
   - `cli/` — CLI commands (run, install, dashboard, etc.)
