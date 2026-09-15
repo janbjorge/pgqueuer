@@ -69,25 +69,16 @@ Output goes to stderr: `PgQueuer schema is already up to date.`, or
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
 
-!!! info "`upgrade --plan` and `sql upgrade` are not the same script"
-    `pgq upgrade --plan` connects and prints the exact delta. [`pgq sql
-    upgrade`](#sql) never connects, so it cannot know what is installed and
-    instead re-states every object behind `IF NOT EXISTS`. Both converge a
-    database; only the first tells you what is actually missing.
-
 !!! note "Concurrency"
-    `pgq upgrade` takes a session advisory lock keyed on the qualified queue
-    table, so two upgrades of the same installation serialize and two different
-    installations in one database do not block each other. The lock is held
-    across both planning and applying.
+    Upgrades of one installation serialize on a session advisory lock, keyed on
+    the qualified queue table and held across planning and applying. Two
+    installations in one database do not block each other.
 
-    The statements deliberately are not run in a single transaction, because
-    PostgreSQL forbids using a new enum value in the transaction that added it.
-    That makes the lock session-scoped, and a session lock is only a real
-    guarantee on a single connection -- which is what `pgq upgrade` uses. If you
-    call `Queries.upgrade()` yourself over a **pool** driver, successive
-    statements may land on different connections and the lock will not cover
-    them.
+    The statements cannot share a transaction, because PostgreSQL forbids using
+    a new enum value in the transaction that added it. That makes the lock
+    session-scoped, so it only binds the connection that took it -- `pgq
+    upgrade` uses one. Calling `Queries.upgrade()` over a **pool** driver can
+    spread the statements across connections the lock does not cover.
 
 ---
 

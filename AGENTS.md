@@ -77,20 +77,18 @@ pgq verify --expect present  # Check schema exists (exit 1 on mismatch)
 ```
 
 The schema is declared once, in `pgqueuer/domain/schema/` — **the only place to
-edit when the schema changes.** Install is rendered from it; upgrade reads
-`pg_catalog` and applies the difference. There is no migration list to append
-to (ADR-0016).
+edit when the schema changes.** Install renders from it, upgrade diffs the
+catalog against it, and there is no migration list to append to (ADR-0016).
 
-Definitions are stored in PostgreSQL's own spelling (`format_type`,
-`pg_get_expr`, `pg_get_indexdef`, `pg_proc.prosrc`) so comparison is string
-equality. Get a spelling wrong and `test_schema_inspect.py` fails with the one
-Postgres reports — paste that in. That test, plus
-`test_schema_convergence.py` (which upgrades a fixture of every old release), is
-what keeps the model honest. Both must pass on the PG 13–18 matrix.
+Definitions use PostgreSQL's own spelling (`format_type`, `pg_get_expr`,
+`pg_get_indexdef`, `pg_proc.prosrc`) so comparison is string equality. Get one
+wrong and `test_schema_inspect.py` fails with the spelling to paste in. That
+test and `test_schema_convergence.py` (upgrades a fixture of every old release)
+keep the model honest; both must pass on PG 13–18.
 
 The planner never emits `DROP TABLE` or `DROP COLUMN`. A column the schema no
-longer declares is listed in `retired()`, has its `NOT NULL` relaxed, and is
-reported to the operator as a note.
+longer declares goes in `retired()`: `NOT NULL` relaxed, drop left to the
+operator as a note.
 
 ### Additional Test Flags
 

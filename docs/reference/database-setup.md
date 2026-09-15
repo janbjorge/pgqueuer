@@ -34,10 +34,8 @@ pgq sql install | psql -v ON_ERROR_STOP=1
 pgq sql upgrade > migrations/V2__pgqueuer_upgrade.sql
 ```
 
-Because `pgq sql` never connects, `sql upgrade` cannot know what a given database
-already has and re-states every object behind `IF NOT EXISTS`. When you do have a
-connection, `pgq upgrade --plan` prints the exact delta for that database and applies
-nothing:
+`sql upgrade` never connects, so it re-states every object behind `IF NOT EXISTS`.
+With a connection, `pgq upgrade --plan` prints the exact delta and applies nothing:
 
 ```bash
 pgq upgrade --plan > migrations/V2__pgqueuer_upgrade.sql

@@ -119,13 +119,12 @@ constraint dropped, an index recreated over different columns under the
 same name, or a replaced function body all satisfy the manifest.
 Detecting those needs the declaration to carry each object's shape.
 
-The schema model in `pgqueuer/domain/schema/` does carry it, and
-`pgq upgrade` compares against it object by object, so an altered object
-is caught and converged there. See
-[ADR-0016](../adr/ADR-0016-schema-upgrades-are-computed-from-the-live-database.md).
-The two are not the same mechanism: the manifest answers "may this worker
-start", cheaply and at startup, while the schema model answers "what would
-make this database current", and needs a full catalog read to do it.
+The schema model in `pgqueuer/domain/schema/` does carry it, so `pgq
+upgrade` catches an altered object and converges it
+([ADR-0016](../adr/ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)).
+The two are not one mechanism: the manifest answers "may this worker
+start" cheaply at startup, the schema model answers "what would make this
+database current" and reads the whole catalog to do it.
 
 ## Invariants
 
