@@ -10,9 +10,16 @@ import pytest
 from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
-from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, resolve
+from pgqueuer.domain.schema.model import Column, EnumType, Index, Plan, Schema, resolve
 from pgqueuer.domain.settings import DBSettings, Durability
-from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName, TypeName
+from pgqueuer.domain.types import (
+    ColumnName,
+    IndexName,
+    SqlExpression,
+    SqlType,
+    TableName,
+    TypeName,
+)
 
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
 
@@ -151,12 +158,9 @@ def test_absent_index_is_created() -> None:
     assert statements[0].startswith(f"CREATE INDEX {gone} ON")
 
 
-def test_the_planner_only_ever_adds() -> None:
-    """An invariant, not a convention.
-
-    Checked on the leading keyword: the notify trigger fires on TRUNCATE, so
-    its DDL carries the word without being destructive.
-    """
+def test_a_database_missing_objects_is_only_ever_added_to() -> None:
+    """Checked on the leading keyword: the notify trigger fires on TRUNCATE, so
+    its DDL carries the word without being destructive."""
     settings = DBSettings()
     schema = declared(settings)
     databases = (
@@ -170,6 +174,61 @@ def test_the_planner_only_ever_adds() -> None:
         for statement in plan(live, schema, settings).statements:
             assert statement.split()[0] in {"CREATE", "ALTER"}
             assert " DROP " not in statement
+
+
+def test_retirement_drops_indexes_and_types_but_never_data() -> None:
+    """The invariant that matters, on a database reaching every retirement branch.
+
+    Retirement does emit DROP; what it must never emit is a statement that
+    destroys rows. Fed the retired index, type and column at once, so the
+    assertion can actually fail.
+    """
+    settings = DBSettings()
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        indexes=schema.indexes
+        + (
+            Index(
+                name=IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),
+                table=TableName(settings.queue_table),
+                unique=False,
+                body=SqlExpression("USING btree (heartbeat, id DESC)"),
+            ),
+        ),
+        enums=schema.enums
+        + (
+            EnumType(
+                name=TypeName(settings.legacy_statistics_status_type),
+                labels=("exception", "successful"),
+            ),
+        ),
+        tables=tuple(
+            dataclasses.replace(
+                entry,
+                columns=entry.columns
+                + (
+                    Column(
+                        name=ColumnName("time_in_queue"),
+                        type=SqlType("interval"),
+                        not_null=True,
+                    ),
+                ),
+            )
+            if entry.name == settings.statistics_table
+            else entry
+            for entry in schema.tables
+        ),
+    )
+
+    computed = plan(live, schema, settings)
+
+    assert any(one.startswith("DROP INDEX") for one in computed.statements)
+    assert any(one.startswith("DROP TYPE") for one in computed.statements)
+    for statement in computed.statements:
+        assert "DROP TABLE" not in statement
+        assert "DROP COLUMN" not in statement
+    assert any("time_in_queue" in note for note in computed.notes)
 
 
 def test_serial_columns_are_never_added_to_an_existing_table() -> None:

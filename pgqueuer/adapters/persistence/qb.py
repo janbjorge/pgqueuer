@@ -19,7 +19,6 @@ from pgqueuer.domain.types import (
     QueueEntrypoint,
     QueueManagerId,
     SortOrder,
-    TableName,
 )
 
 # Re-export for backward compatibility within the adapter layer
@@ -54,12 +53,6 @@ class QueryBuilderEnvironment:
     def build_upgrade_queries(self) -> Generator[str, None, None]:
         """Statements converging any earlier schema onto the declaration."""
         yield from schema_ddl.render_converge(self.settings)
-
-    def build_widen_id_column_query(self, table: str) -> str:
-        return schema_ddl.widen_id_column(TableName(table), self.settings)
-
-    def build_widen_id_sequence_query(self, table: str) -> str:
-        return schema_ddl.widen_id_sequence(TableName(table), self.settings)
 
     def build_table_has_column_query(self) -> str:
         return f"""SELECT EXISTS (
