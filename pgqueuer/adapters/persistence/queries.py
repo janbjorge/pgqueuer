@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING, Literal, overload
 
@@ -14,9 +14,18 @@ if TYPE_CHECKING:
 from pydantic_core import to_json
 from typing_extensions import assert_never
 
-from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
+from pgqueuer.adapters.persistence import (
+    qb,
+    query_helpers,
+    schema_ddl,
+    schema_inspect,
+    schema_plan,
+    sqlstate,
+)
 from pgqueuer.adapters.persistence.query_helpers import cell, merge_tracing_headers
+from pgqueuer.core.logconfig import logger
 from pgqueuer.domain import errors, models, types
+from pgqueuer.domain.schema import model as models_schema
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -99,10 +108,49 @@ class Queries:
         """Drop every PgQueuer schema object. Destructive."""
         await self.driver.execute(self.qbe.build_uninstall_query())
 
+    async def plan_upgrade(self) -> models_schema.Plan:
+        """What :meth:`upgrade` would do to this database, without doing it.
+
+        Read-only. An empty ``statements`` means the installed schema already
+        matches the declaration.
+        """
+        settings = self.qbe.settings
+        live = await schema_inspect.inspect(self.driver, settings)
+        return schema_plan.plan(live, schema_ddl.rendered(settings), settings)
+
+    @asynccontextmanager
+    async def schema_lock(self) -> AsyncIterator[None]:
+        """Serialize upgrades of this installation against each other.
+
+        Session-scoped rather than transaction-scoped, because the statements
+        deliberately are not in one transaction: a label added by ``ALTER TYPE``
+        cannot be used in the transaction that added it.
+
+        The guarantee holds on a single-connection driver, which is what
+        ``pgq upgrade`` builds. On a pool driver successive statements may land
+        on different connections, and a session lock taken on one of them does
+        not cover the rest.
+        """
+        key = schema_plan.advisory_key(self.qbe.settings)
+        await self.driver.execute("SELECT pg_advisory_lock($1)", key)
+        try:
+            yield
+        finally:
+            await self.driver.execute("SELECT pg_advisory_unlock($1)", key)
+
     async def upgrade(self) -> None:
-        """Apply pending schema migrations one statement at a time."""
-        for query in self.qbe.build_upgrade_queries():
-            await self.driver.execute(query)
+        """Converge the installed schema onto the declaration.
+
+        One statement per round trip, never batched: ``ALTER TYPE ... ADD
+        VALUE`` and the statements that use the new label cannot share a
+        transaction.
+        """
+        async with self.schema_lock():
+            computed = await self.plan_upgrade()
+            for statement in computed.statements:
+                await self.driver.execute(statement)
+        for note in computed.notes:
+            logger.warning("%s", note)
 
     async def alter_durability(self) -> None:
         """Switch table durability mode without data loss."""

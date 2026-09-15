@@ -14,6 +14,7 @@ not recognise raises rather than guessing at a cast.
 
 from __future__ import annotations
 
+import zlib
 from enum import Enum
 
 from typing_extensions import assert_never
@@ -25,6 +26,7 @@ from pgqueuer.adapters.persistence.schema_ddl import (
     render_index,
     render_table,
     render_trigger,
+    widen_id_sequence,
 )
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import retired
@@ -191,11 +193,15 @@ def plan_changed_columns(installed: Table, declared: Table, settings: DBSettings
 
 
 def plan_sequence(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
-    """Widen the id sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1."""
+    """Widen the id sequence; ALTER COLUMN TYPE leaves it capped at 2^31-1.
+
+    The statement resolves the sequence through ``pg_get_serial_sequence``
+    rather than assuming ``<table>_id_seq``: the catalog reading gives the
+    sequence's type, not its name, and a sequence can have been renamed.
+    """
     if installed.id_sequence_type == declared.id_sequence_type or not settings.widen_id:
         return []
-    sequence = settings.qualify(f"{declared.name}_id_seq")
-    return [f"ALTER SEQUENCE IF EXISTS {sequence} AS {declared.id_sequence_type};"]
+    return [widen_id_sequence(declared.name, settings)]
 
 
 def plan_constraints(installed: Table, declared: Table, settings: DBSettings) -> list[str]:
@@ -369,3 +375,14 @@ def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
     )
     notes = table_notes(live, declared, settings) + list(gone.notes)
     return Plan(statements=tuple(statements), notes=tuple(notes))
+
+
+def advisory_key(settings: DBSettings) -> int:
+    """Stable lock number for one installation.
+
+    Derived from the qualified queue table, so two PgQueuer installations in
+    one database upgrade independently. ``zlib.crc32`` rather than ``hash()``:
+    string hashing is randomised per process, and two upgrades running at once
+    have to arrive at the same number.
+    """
+    return zlib.crc32(settings.qualified.queue_table.encode())
