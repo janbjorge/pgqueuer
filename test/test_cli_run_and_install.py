@@ -153,6 +153,41 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     invoke_ok(["verify", "--expect", "absent"], base_env)
 
 
+def test_cli_install_refuses_an_installed_database(dsn: str) -> None:
+    """Re-running install used to surface a raw DuplicateObjectError traceback.
+
+    The dsn fixture arrives with PgQueuer already installed, which is the state
+    a provisioning script that runs install twice would find.
+    """
+    env = os.environ.copy()
+    env.update(env_from_dsn(dsn))
+
+    result = CliRunner().invoke(app, ["install"], env=env)
+
+    assert result.exit_code == 1
+    assert "already installed" in result.stderr
+    assert "pgq upgrade" in result.stderr
+
+
+def test_cli_upgrade_reports_drift_without_a_traceback(dsn: str) -> None:
+    """Drift is the one failure here addressed to an operator, not a developer.
+
+    It used to arrive on line 145 of a rich traceback through uvloop and asyncpg.
+    """
+    env = os.environ.copy()
+    env.update(env_from_dsn(dsn))
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        table = DBSettings().queue_table
+        connection.execute(f"ALTER TABLE {table} ALTER COLUMN payload TYPE text".encode())
+
+    result = CliRunner().invoke(app, ["upgrade"], env=env)
+
+    assert result.exit_code == 1
+    assert "Traceback" not in result.stderr
+    assert "no supported conversion" in result.stderr
+    assert result.stdout.strip() == ""
+
+
 @pytest.mark.parametrize(
     ("extra_args", "expected"),
     [
@@ -200,6 +235,7 @@ def test_cli_upgrade_reports_converged_and_plans_the_delta(dsn: str) -> None:
     assert planned.exit_code == 0, planned.stdout
     assert planned.stdout.count("CREATE INDEX") == 1
     assert name in planned.stdout
+    assert planned.stdout.startswith("-- pgqueuer ")
     assert "Would apply 1 statement." in planned.stderr
 
     applied = runner.invoke(app, ["upgrade"], env=env)

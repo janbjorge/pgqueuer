@@ -25,6 +25,11 @@ pgq install --durability balanced
 On success, a confirmation is written to stderr; stdout stays empty. To preview or
 capture the SQL instead of executing it, use [`pgq sql install`](#sql).
 
+`install` creates objects from nothing. Pointed at a database that already has
+this installation it refuses and exits `1`, naming the prefix and schema it
+found. For a command that is safe to run repeatedly -- including against an
+empty database, where it installs everything -- use [`pgq upgrade`](#upgrade).
+
 ---
 
 ### `uninstall`
@@ -43,16 +48,67 @@ pgq uninstall
 
 ### `upgrade`
 
-Apply database schema upgrades.
+Bring the database schema up to what this PgQueuer release declares.
+
+The schema is read from `pg_catalog` and compared against the declaration, so
+only the statements this particular database needs are run. A database that is
+already current runs nothing and says so.
 
 **Options:**
 
-- `--durability`: Adjust the durability level during the upgrade (same options as `install`).
+- `--plan`: Print the statements this database needs and exit without applying
+  them. Notes and the summary go to stderr, so stdout carries only SQL, headed
+  by a comment naming the release and warning that the delta belongs to this
+  database. A converged database prints nothing at all. See
+  [`pgq sql upgrade`](#sql) for the artifact to check in.
+- `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
+  [Upgrading](../getting-started/upgrading.md).
 - `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
 
 ```bash
-pgq upgrade --durability durable
+pgq upgrade --plan          # what would change, nothing applied
+pgq upgrade                 # apply it
 ```
+
+`upgrade` never changes durability. Switching a table between `LOGGED` and
+`UNLOGGED` rewrites it, which does not belong in a command the deployment guide
+calls safe to run against a live database. A table whose durability differs
+from the declared level is reported as a `note:` and left alone; use
+[`pgq durability`](#durability) to change it. The declared level comes from
+`PGQUEUER_DURABILITY` (default `durable`), so an installation running
+`volatile` should set that variable for the notes to be accurate.
+
+Output goes to stderr: `PgQueuer schema is already up to date.`, or
+`Applied 3 statements.` Anything the upgrade will not do on its own is reported
+as a `note:` line -- a column an older release left behind, for instance, is
+never dropped for you.
+
+A `note:` also lands before an upgrade that rewrites a table. Converting a
+column type is the only thing here that does, and Postgres holds
+`ACCESS EXCLUSIVE` for the whole rewrite, blocking enqueues, dequeues and
+reads. Run `--plan` first on any database old enough to still be on `int4` ids
+or the pre-v0.27 statistics enum:
+
+```
+note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
+      the whole rewrite, blocking enqueues, dequeues and reads, for a time that
+      scales with row count. Prefer a maintenance window.
+```
+
+A column whose installed type the planner has no conversion for stops the
+upgrade rather than guessing at a cast. It exits `1` with one line on stderr
+naming the column and both types; alter it by hand and re-run.
+
+!!! note "Concurrency"
+    Upgrades of one installation serialize on a session advisory lock, keyed on
+    the qualified queue table and held across planning and applying. Two
+    installations in one database do not block each other.
+
+    The statements cannot share a transaction, because PostgreSQL forbids using
+    a new enum value in the transaction that added it. That makes the lock
+    session-scoped, so it only binds the connection that took it -- `pgq
+    upgrade` uses one. Calling `Queries.upgrade()` over a **pool** driver can
+    spread the statements across connections the lock does not cover.
 
 ---
 
@@ -117,7 +173,13 @@ sqitch, or Alembic.
   `--create-schema/--no-create-schema` like `install`.
 - `sql uninstall`: SQL to drop all PgQueuer objects.
 - `sql upgrade`: SQL to migrate an existing installation to the current version.
-  Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`.
+  Accepts `--durability` and `--widen-id/--no-widen-id` like `upgrade`. Since it
+  cannot see the database, it re-states every object behind `IF NOT EXISTS`
+  rather than emitting a delta. That makes it the version-portable artifact:
+  the same script for every database on this release, which is what a migration
+  tool wants checked in. For the delta one particular database needs, use
+  [`pgq upgrade --plan`](#upgrade) -- but read it rather than filing it, since
+  it is only valid for the database it was computed from.
 - `sql durability <level>`: SQL to switch table durability without data loss.
 - `sql autovac [--rollback]`: SQL for recommended autovacuum settings.
 

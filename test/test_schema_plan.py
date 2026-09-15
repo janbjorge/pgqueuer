@@ -11,7 +11,7 @@ from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Column, Index, Plan, Schema
-from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.settings import DBSettings, Durability
 from pgqueuer.domain.types import IndexName, SqlExpression, SqlType, TableName
 
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
@@ -235,6 +235,59 @@ def test_a_narrow_id_is_reported_when_widening_is_disabled() -> None:
     assert "still integer" in computed.notes[0]
 
 
+def narrow_sequence(schema: Schema, table: str) -> Schema:
+    """Leave the id sequence behind *table* at its pre-BIGINT width."""
+    return dataclasses.replace(
+        schema,
+        tables=tuple(
+            dataclasses.replace(entry, id_sequence_type=SqlType("integer"))
+            if entry.name == table
+            else entry
+            for entry in schema.tables
+        ),
+    )
+
+
+def test_a_narrow_sequence_is_widened_when_enabled() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    live = narrow_sequence(schema, settings.queue_table)
+
+    assert "ALTER SEQUENCE" in "".join(plan(live, schema, settings).statements)
+
+
+def test_a_narrow_sequence_is_reported_when_widening_is_disabled() -> None:
+    """Widening the column leaves the sequence capped, so it is reported on its own."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = narrow_sequence(schema, settings.queue_table)
+
+    computed = plan(live, schema, settings)
+    assert computed.statements == ()
+    assert len(computed.notes) == 1
+    assert "ALTER SEQUENCE" in computed.notes[0]
+
+
+def test_a_narrow_column_and_sequence_are_both_reported() -> None:
+    """Following a note that named only the column is what leaves a database half-widened."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = narrow_sequence(
+        changed_column(
+            schema,
+            settings.queue_table,
+            "id",
+            lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+        ),
+        settings.queue_table,
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 2
+    assert any("ALTER COLUMN id TYPE bigint" in note for note in notes)
+    assert any("ALTER SEQUENCE" in note for note in notes)
+
+
 def test_a_legacy_status_type_is_cast_through_text() -> None:
     settings = DBSettings()
     schema = declared(settings)
@@ -364,6 +417,43 @@ def test_a_retired_index_is_dropped_only_when_present() -> None:
     assert plan(schema, schema, settings).statements == ()
 
 
+def test_a_rewrite_is_announced_before_it_runs() -> None:
+    """The plan carries an ACCESS EXCLUSIVE rewrite; the operator should hear it first."""
+    settings = DBSettings()
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 1
+    assert "ACCESS EXCLUSIVE" in notes[0]
+    assert settings.queue_table in notes[0]
+
+
+def test_a_skipped_rewrite_is_not_announced() -> None:
+    """--no-widen-id emits no ALTER, so there is no rewrite to warn about."""
+    settings = DBSettings(widen_id=False)
+    schema = declared(settings)
+    live = changed_column(
+        schema,
+        settings.queue_table,
+        "id",
+        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
+    )
+
+    assert not any("ACCESS EXCLUSIVE" in note for note in plan(live, schema, settings).notes)
+
+
+def test_a_converged_database_is_warned_about_nothing() -> None:
+    settings = DBSettings()
+    schema = declared(settings)
+    assert plan(schema, schema, settings).notes == ()
+
+
 def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     settings = DBSettings()
     schema = declared(settings)
@@ -380,3 +470,15 @@ def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     computed = plan(live, schema, settings)
     assert computed.statements == ()
     assert "pgq durability" in computed.notes[0]
+
+
+def test_a_durability_note_names_the_level_to_pass() -> None:
+    """``pgq durability`` takes a required argument, so the note has to carry it."""
+    settings = DBSettings(durability=Durability.volatile)
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        tables=tuple(dataclasses.replace(entry, unlogged=False) for entry in schema.tables),
+    )
+
+    assert "'pgq durability volatile'" in plan(live, schema, settings).notes[0]

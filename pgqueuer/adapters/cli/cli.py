@@ -18,7 +18,7 @@ from typing_extensions import AsyncGenerator, assert_never
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
-from pgqueuer.domain import models, types
+from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
 from pgqueuer.ports.driver import Driver
 
@@ -281,6 +281,12 @@ async def fetch_and_display(
         await asyncio.sleep(interval.total_seconds())
 
 
+def located(settings: qb.DBSettings) -> str:
+    """Which installation a message is about, when several share a database."""
+    where = settings.db_schema or "the connection's search_path"
+    return f"prefix={settings.prefix!r}, schema={where}"
+
+
 @app.command(help="Install the necessary database schema for PgQueuer.")
 def install(
     ctx: Context,
@@ -298,11 +304,20 @@ def install(
         emit_deprecated_dry_run(ctx, sql_cmd.render_install(settings, create_schema))
         return
 
-    async def run() -> None:
+    async def run() -> bool:
         async with yield_queries(ctx, settings) as q:
+            if await q.schema_is_installed():
+                return False
             await q.install(create_schema=create_schema)
+            return True
 
-    asyncio_run(run())
+    if not asyncio_run(run()):
+        typer.secho(
+            f"PgQueuer is already installed ({located(settings)}). "
+            "Run 'pgq upgrade' to bring it up to date.",
+            err=True,
+        )
+        raise typer.Exit(1)
     typer.secho(f"Installed PgQueuer schema (durability={durability.value}).", err=True)
 
 
@@ -389,7 +404,12 @@ def report_upgrade(applied: schema_model.Plan, planned_only: bool) -> None:
     typer.secho(f"{verb} {count} statement{'' if count == 1 else 's'}.", err=True)
 
 
-@app.command(help="Apply upgrades to the existing PgQueuer database schema.")
+@app.command(
+    help=(
+        "Bring the schema up to what this release declares. "
+        "Use --plan to see the delta this database needs without applying it."
+    )
+)
 def upgrade(
     ctx: Context,
     dry_run: bool = typer.Option(
@@ -403,10 +423,9 @@ def upgrade(
         "--plan",
         help="Print the exact delta this database needs and exit without applying it.",
     ),
-    durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability, widen_id=widen_id)
+    settings = qb.DBSettings(widen_id=widen_id)
     if dry_run:
         emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))
         return
@@ -415,9 +434,14 @@ def upgrade(
         async with yield_queries(ctx, settings) as q:
             return await q.plan_upgrade() if plan else await q.apply_upgrade()
 
-    applied = asyncio_run(run())
-    if plan:
-        typer.echo("\n\n".join(applied.statements))
+    try:
+        applied = asyncio_run(run())
+    except errors.SchemaDriftError as drift:
+        # The one failure here addressed to an operator rather than a developer.
+        typer.secho(f"error: {drift}", err=True, fg=typer.colors.RED)
+        raise typer.Exit(1) from None
+    if plan and (rendered := sql_cmd.render_plan(applied.statements, settings)):
+        typer.echo(rendered)
     report_upgrade(applied, planned_only=plan)
 
 

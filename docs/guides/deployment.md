@@ -165,15 +165,30 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 ## Schema migrations on deploy
 
 Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database. Migrations are additive and non-destructive:
+database and never drops a table or a column:
 
 ```bash
 # Deploy workflow
+pgq upgrade --plan   # optional: review the delta first
 pgq upgrade          # apply schema changes
 # then roll out new workers
 ```
 
-`pgq upgrade` is idempotent: running it multiple times produces no side effects.
+`pgq upgrade` compares the installed schema against what the release declares and applies
+the delta for *that* database, rather than replaying a migration history. Run again on a
+current database, it applies nothing and reports `PgQueuer schema is already up to date.`
+
+Anything it will not do on its own is printed as a `note:` line on stderr. A column an
+older release left behind is reported, never dropped -- it holds data, and discarding it
+is your call. Worth reading the notes on the first upgrade after a long gap.
+
+One class of note is about what the upgrade *will* do: converting a column type rewrites
+the table under `ACCESS EXCLUSIVE`, blocking the queue for the duration. Only a database
+still on `int4` ids or the pre-v0.27 statistics enum hits it, and `pgq upgrade --plan`
+says so before you commit to the window.
+
+Concurrent upgrades serialize on an advisory lock. It is session-scoped, so hold schema
+changes on a single connection; see [`pgq upgrade`](../reference/cli.md#upgrade).
 
 ## Environment configuration
 
@@ -188,6 +203,7 @@ The database drivers read standard PostgreSQL environment variables:
 | `PGDATABASE` | Database name |
 | `PGQUEUER_PREFIX` | Prefix prepended to table/channel names (default: empty; names default to `pgqueuer`, `ch_pgqueuer`, etc.) |
 | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects (default: unset; objects are resolved via the connection's `search_path`) |
+| `PGQUEUER_DURABILITY` | Durability level the schema is declared at: `volatile`, `balanced`, or `durable` (default). `pgq upgrade` reports a table that differs; `pgq durability` changes it |
 
 Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
 
