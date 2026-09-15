@@ -19,9 +19,11 @@ from typing import NamedTuple
 
 import pytest
 
+from pgqueuer.adapters.persistence.schema_ddl import rendered
 from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.domain.schema.model import Schema, Table
+from pgqueuer.domain.schema.model import Plan, Schema, Table
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -203,3 +205,27 @@ async def test_upgrade_is_rerunnable(apgdriver: AsyncpgDriver, release: str) -> 
 
     await queries.upgrade()
     assert collapse(await inspect(apgdriver, settings)) == once
+
+
+@pytest.mark.parametrize("release", RELEASES)
+async def test_nothing_is_absent_after_upgrade(apgdriver: AsyncpgDriver, release: str) -> None:
+    """The planner, run against the real catalog, finds nothing left to create.
+
+    ``shortfall`` above compares two models; this compares what the planner
+    would actually emit. Both must agree that the database is converged.
+    """
+    settings = DBSettings()
+    await upgraded(apgdriver, release)
+
+    live = await inspect(apgdriver, settings)
+    assert plan(live, rendered(settings), settings) == Plan()
+
+
+async def test_an_untouched_database_needs_the_whole_schema(apgdriver: AsyncpgDriver) -> None:
+    """The other end of the range: uninstall, and every object is planned."""
+    settings = DBSettings()
+    await Queries(apgdriver).uninstall()
+
+    live = await inspect(apgdriver, settings)
+    statements = plan(live, rendered(settings), settings).statements
+    assert sum("CREATE TABLE" in one for one in statements) == len(rendered(settings).tables)
