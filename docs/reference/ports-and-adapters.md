@@ -162,7 +162,7 @@ pgqueuer/
     executors.py              # AbstractEntrypointExecutor, EntrypointExecutor
     listeners.py              # EventRouter, PGNoticeEventListener
     buffers.py                # TimedOverflowBuffer and typed variants
-    heartbeat.py, cache.py, tm.py, logconfig.py, completion.py
+    heartbeat.py, tm.py, logconfig.py, completion.py
 
   adapters/
     drivers/
@@ -186,7 +186,7 @@ root: `pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`, `pgqueuer.sm`,
 `pgqueuer.executors`, `pgqueuer.errors`, `pgqueuer.applications`,
 `pgqueuer.factories`, `pgqueuer.types`, and `pgqueuer.models`.
 
-Internal-only modules (`buffers`, `cache`, `cli`, `completion`, `heartbeat`,
+Internal-only modules (`buffers`, `cli`, `completion`, `heartbeat`,
 `listeners`, `logconfig`, `qb`, `query_helpers`, `supervisor`, `tm`, `tracing`)
 were exposed at the package root in pre-v1 releases. In v1.0.0 those shims were
 removed; import from the canonical location under `pgqueuer.core.*`,

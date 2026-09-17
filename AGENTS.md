@@ -113,7 +113,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `buffers.py` — Batched async buffers for heartbeats, job status logs
   - `listeners.py` — PG NOTIFY event routing
   - `tm.py` — `TaskManager` for background task lifecycle
-  - `heartbeat.py`, `cache.py`, `helpers.py`, `logconfig.py`
+  - `heartbeat.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
   - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
   - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`, `schema_ddl.py` (render the model as DDL), `schema_inspect.py` (read the installed schema), `schema_plan.py` (diff the two)

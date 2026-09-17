@@ -14,6 +14,13 @@ tags, so a section is written once and never revisited.
 
 ---
 
+## v1.4.1
+
+### Removed
+
+- Internal `TTLCache` (`pgqueuer.core.cache`). Drain shutdown probes
+  `queued_work` directly; the 250ms TTL no longer gates that check.
+
 ## v1.4.0
 
 ### Schema change: capacity slots for `concurrency_limit`
