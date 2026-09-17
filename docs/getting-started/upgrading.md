@@ -288,6 +288,9 @@ imported from any of these paths, update to the canonical location:
 | `pgqueuer.tm` | `pgqueuer.core.tm` |
 | `pgqueuer.tracing` | `pgqueuer.ports.tracing` + `pgqueuer.adapters.tracing.*` |
 
+`pgqueuer.core.cache` (`TTLCache`) was later removed; drain shutdown probes
+`queued_work` directly.
+
 Public API shims (`pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`,
 `pgqueuer.sm`, `pgqueuer.executors`, `pgqueuer.errors`, `pgqueuer.applications`,
 `pgqueuer.factories`, `pgqueuer.types`, `pgqueuer.models`) are **unchanged**.

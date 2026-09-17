@@ -14,7 +14,6 @@ import anyio
 
 from pgqueuer.core import (
     buffers,
-    cache,
     executors,
     heartbeat,
     listeners,
@@ -319,7 +318,6 @@ class QueueManager:
         self,
         mode: types.QueueExecutionMode,
         task_manager: tm.TaskManager,
-        cached_queued_work: cache.TTLCache[int],
     ) -> None:
         """In drain mode, shut down once the queue is empty and all tasks have finished.
 
@@ -332,10 +330,8 @@ class QueueManager:
             return
         if task_manager.tasks:
             await asyncio.sleep(0)
-        if task_manager.tasks or (await cached_queued_work()) != 0:
+        if task_manager.tasks:
             return
-        # The cached count may predate a RetryRequested re-queue that landed
-        # within the TTL window; confirm with an uncached read before exiting.
         if await self.queries.queued_work(list(self.entrypoint_registry.keys())) == 0:
             self.shutdown.set()
 
@@ -447,11 +443,6 @@ class QueueManager:
                 ),
             )
 
-            cached_queued_work = cache.TTLCache.create(
-                ttl=timedelta(seconds=0.250),
-                on_expired=lambda: self.queries.queued_work(list(self.entrypoint_registry.keys())),
-            )
-
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(
                     batch_size, max_concurrent_tasks, heartbeat_timeout
@@ -467,7 +458,7 @@ class QueueManager:
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
 
-                await self._maybe_drain_shutdown(mode, task_manager, cached_queued_work)
+                await self._maybe_drain_shutdown(mode, task_manager)
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )

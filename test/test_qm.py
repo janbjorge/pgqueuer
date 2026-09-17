@@ -10,9 +10,7 @@ import pytest
 
 from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryQueries
-from pgqueuer.core.cache import TTLCache
 from pgqueuer.core.tm import TaskManager
-from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -415,7 +413,7 @@ async def test_shutdown_mid_batch_leaves_no_stranded_picked_jobs(
     assert sum(x.count for x in await queries.queue_size()) == 0
 
 
-async def test_drain_shutdown_ignores_stale_cached_queued_work(
+async def test_drain_shutdown_skips_when_queue_has_work(
     queries: InMemoryQueries,
 ) -> None:
     qm = QueueManager(queries)
@@ -424,21 +422,12 @@ async def test_drain_shutdown_ignores_stale_cached_queued_work(
     async def fetch(job: Job) -> None:
         pass
 
-    cached = TTLCache.create(
-        ttl=timedelta(hours=1),
-        on_expired=lambda: qm.queries.queued_work([QueueEntrypoint("fetch")]),
-    )
-    assert await cached() == 0
-
-    # A job enqueued after the cache refresh (e.g. a RetryRequested re-queue)
-    # must block drain shutdown even though the cached count still reads 0.
     await qm.queries.enqueue(["fetch"], [None], [0])
-
-    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager(), cached)
+    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager())
     assert not qm.shutdown.is_set()
 
 
-async def test_drain_shutdown_sets_shutdown_when_queue_confirmed_empty(
+async def test_drain_shutdown_sets_shutdown_when_queue_empty(
     queries: InMemoryQueries,
 ) -> None:
     qm = QueueManager(queries)
@@ -447,10 +436,25 @@ async def test_drain_shutdown_sets_shutdown_when_queue_confirmed_empty(
     async def fetch(job: Job) -> None:
         pass
 
-    cached = TTLCache.create(
-        ttl=timedelta(hours=1),
-        on_expired=lambda: qm.queries.queued_work([QueueEntrypoint("fetch")]),
-    )
-
-    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager(), cached)
+    await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager())
     assert qm.shutdown.is_set()
+
+
+async def test_drain_shutdown_skips_while_tasks_are_in_flight(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        pass
+
+    task_manager = TaskManager()
+    blocker = asyncio.Event()
+    task_manager.add(asyncio.create_task(blocker.wait()))
+    try:
+        await qm._maybe_drain_shutdown(QueueExecutionMode.drain, task_manager)
+        assert not qm.shutdown.is_set()
+    finally:
+        blocker.set()
+        await task_manager.gather_tasks()
