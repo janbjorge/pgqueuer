@@ -265,11 +265,41 @@ USING ranked
 WHERE folded.id = ranked.id AND ranked.position > 1;"""
 
 
+def drop_redefined_index(entry: Index, settings: DBSettings) -> str:
+    """Drop an existing index only when its catalog definition is stale."""
+    unique = "TRUE" if entry.unique else "FALSE"
+    body = spelled(entry.body, settings).replace("'", "''")
+    return f"""DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_index index_info
+        JOIN pg_class index_class ON index_class.oid = index_info.indexrelid
+        JOIN pg_class table_class ON table_class.oid = index_info.indrelid
+        JOIN pg_namespace namespace ON namespace.oid = index_class.relnamespace
+        WHERE namespace.nspname = {settings.schema_expr}
+          AND index_class.relname = '{entry.name}'
+          AND (
+              table_class.relname IS DISTINCT FROM '{entry.table}'
+              OR index_info.indisunique IS DISTINCT FROM {unique}
+              OR substring(
+                  pg_get_indexdef(index_info.indexrelid)
+                  FROM position(' USING ' IN pg_get_indexdef(index_info.indexrelid)) + 1
+              ) IS DISTINCT FROM '{body}'
+          )
+    ) THEN
+        DROP INDEX {settings.qualify(entry.name)};
+    END IF;
+END $$;"""
+
+
 def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
-    gone = retired(settings).indexes + redefined_indexes(settings)
-    for name in gone:
+    for name in retired(settings).indexes:
         yield f"DROP INDEX IF EXISTS {settings.qualify(name)};"
+    changed = set(redefined_indexes(settings))
     for entry in schema.indexes:
+        if entry.name in changed:
+            yield drop_redefined_index(entry, settings)
         yield render_index(entry, settings, if_not_exists=True)
 
 
