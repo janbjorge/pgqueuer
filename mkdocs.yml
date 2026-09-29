@@ -4,6 +4,10 @@ site_url: https://janbjorge.github.io/pgqueuer/
 repo_url: https://github.com/janbjorge/pgqueuer
 repo_name: janbjorge/pgqueuer
 edit_uri: edit/main/docs/
+exclude_docs: |
+  agent-guide.md
+hooks:
+  - tools/mkdocs_agent_guide.py
 theme:
   name: material
   logo: favicon.svg

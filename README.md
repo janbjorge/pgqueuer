@@ -8,6 +8,12 @@
 
 PgQueuer turns PostgreSQL into a fast, reliable background job processor. Jobs live in the same database as your application data. One stack, full ACID guarantees, and no separate message broker to run.
 
+If you already run an AI coding agent, let it handle the onboarding. Paste this prompt:
+
+```text
+Help me understand and set up PgQueuer. Read https://janbjorge.github.io/pgqueuer/agent-guide.md first, then walk me through it step by step.
+```
+
 ## Features
 
 - 💡 **Minimal footprint**: one `pip install`; bring your existing PostgreSQL connection and start enqueueing
