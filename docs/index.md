@@ -15,6 +15,18 @@ full ACID guarantees, zero additional infrastructure.
 
 ---
 
+## Let an agent introduce you
+
+If you already run an AI coding agent, paste this prompt:
+
+```text
+Help me understand and set up PgQueuer. Read https://janbjorge.github.io/pgqueuer/agent-guide.md first, then walk me through it step by step.
+```
+
+The guide covers PgQueuer's concepts, setup, configuration, and common fixes, so your agent can answer from the docs instead of improvising.
+
+---
+
 ## Why PostgreSQL?
 
 If you're already running PostgreSQL, it can do double duty as your job queue.
