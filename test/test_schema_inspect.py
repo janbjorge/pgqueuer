@@ -38,3 +38,13 @@ async def test_missing_namespace_is_reported(apgdriver: AsyncpgDriver) -> None:
     schema = await inspect(apgdriver, settings)
     assert schema.namespace_exists is False
     assert schema.tables == ()
+
+
+async def test_a_table_owning_no_sequence_is_inspected(apgdriver: AsyncpgDriver) -> None:
+    """OWNED BY NONE leaves the default in place but the table without a sequence."""
+    settings = DBSettings()
+    await apgdriver.execute(f"ALTER SEQUENCE {settings.schedules_table}_id_seq OWNED BY NONE")
+    queries = Queries(apgdriver)
+
+    assert await queries.schema_is_installed()
+    assert (await queries.plan_upgrade()).statements == ()

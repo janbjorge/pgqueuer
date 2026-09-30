@@ -25,6 +25,9 @@ tags, so a section is written once and never revisited.
   `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
   into one per bucket, `count` summed, before the index is built; `pgq sql
   upgrade` does the same.
+- `pgq upgrade` and `pgq install` no longer crash with `KeyError` when a
+  table's id sequence is not owned by it (for example after `ALTER SEQUENCE ...
+  OWNED BY NONE`). There is no sequence to widen, so none is planned.
 
 ### Removed
 

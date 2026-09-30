@@ -57,7 +57,8 @@ class Table:
     name: TableName
     columns: tuple[Column, ...]
     unlogged: bool
-    id_sequence_type: SqlType
+    # None when the table owns no sequence, e.g. after OWNED BY NONE.
+    id_sequence_type: SqlType | None
     unique_constraints: tuple[UniqueConstraint, ...] = ()
 
 
