@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pgqueuer.domain.schema.model import TIMESTAMP, Index, Table, column, index
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import SqlType, TableName
+from pgqueuer.domain.types import IndexName, SqlType, TableName
 
 
 def statistics_table(settings: DBSettings) -> Table:
@@ -26,13 +26,25 @@ def statistics_table(settings: DBSettings) -> Table:
     )
 
 
+def unique_count_name(settings: DBSettings) -> IndexName:
+    return IndexName(f"{settings.statistics_table}_unique_count")
+
+
+# Columns of ``{statistics_table}_unique_count``: one row per bucket. Rows that
+# collide on it are one bucket split in two, so an upgrade folds them together
+# before it builds the index, and both read the key from here.
+UNIQUE_COUNT_KEY = (
+    "priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint"
+)
+
+
 def statistics_indexes(settings: DBSettings) -> tuple[Index, ...]:
     stats = settings.statistics_table
     return (
         index(
-            f"{stats}_unique_count",
+            unique_count_name(settings),
             stats,
-            "USING btree (priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint)",  # noqa: E501
+            f"USING btree ({UNIQUE_COUNT_KEY})",
             unique=True,
         ),
     )

@@ -7,10 +7,12 @@ from typing import Callable
 
 import pytest
 
-from pgqueuer.adapters.persistence.schema_plan import plan
+from pgqueuer.adapters.persistence.schema_ddl import collapse_statistics
+from pgqueuer.adapters.persistence.schema_plan import plan, rebuild_name
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Column, EnumType, Index, Plan, Schema
+from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import DBSettings, Durability
 from pgqueuer.domain.types import (
     ColumnName,
@@ -412,11 +414,9 @@ def test_not_null_and_default_are_brought_into_line() -> None:
     )
 
 
-def test_a_redefined_index_is_dropped_before_it_is_rebuilt() -> None:
-    settings = DBSettings()
-    schema = declared(settings)
-    name = f"{settings.queue_table_log}_not_aggregated"
-    live = dataclasses.replace(
+def redefined(schema: Schema, name: str) -> Schema:
+    """*schema* with index *name* installed under a stale definition."""
+    return dataclasses.replace(
         schema,
         indexes=tuple(
             dataclasses.replace(entry, body=SqlExpression("USING btree (created)"))
@@ -426,9 +426,52 @@ def test_a_redefined_index_is_dropped_before_it_is_rebuilt() -> None:
         ),
     )
 
-    statements = plan(live, schema, settings).statements
-    assert statements[0] == f"DROP INDEX IF EXISTS {name};"
-    assert statements[1].startswith(f"CREATE INDEX {name} ON")
+
+def without_index(schema: Schema, name: str) -> Schema:
+    return dataclasses.replace(
+        schema,
+        indexes=tuple(entry for entry in schema.indexes if entry.name != name),
+    )
+
+
+def test_a_redefined_index_is_built_before_the_old_one_is_dropped() -> None:
+    """A build that fails, on a duplicate say, must leave the old index standing."""
+    settings = DBSettings()
+    schema = declared(settings)
+    name = f"{settings.queue_table_log}_not_aggregated"
+    replacement = rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
+
+    assert plan(redefined(schema, name), schema, settings).statements == (
+        f"DROP INDEX IF EXISTS {replacement};",
+        f"CREATE INDEX {replacement} ON {settings.queue_table_log} USING btree ((1)) "
+        "WHERE (NOT aggregated);",
+        f"DROP INDEX IF EXISTS {name};",
+        f"ALTER INDEX {replacement} RENAME TO {name};",
+    )
+
+
+def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
+    """Where an upgrade that dropped the index and failed to rebuild it left off."""
+    settings = DBSettings()
+    schema = declared(settings)
+    name = f"{settings.statistics_table}_unique_count"
+
+    assert plan(without_index(schema, name), schema, settings).statements == (
+        collapse_statistics(settings),
+        f"CREATE UNIQUE INDEX {name} ON {settings.statistics_table} "
+        f"USING btree ({UNIQUE_COUNT_KEY});",
+    )
+
+
+def test_only_the_statistics_index_folds_rows() -> None:
+    """Every other unique index guards jobs; a duplicate there is a failure, not a fold."""
+    settings = DBSettings()
+    schema = declared(settings)
+    for entry in schema.indexes:
+        if entry.name == f"{settings.statistics_table}_unique_count":
+            continue
+        statements = plan(redefined(schema, entry.name), schema, settings).statements
+        assert collapse_statistics(settings) not in statements, entry.name
 
 
 def test_a_changed_function_body_is_replaced_not_recreated() -> None:

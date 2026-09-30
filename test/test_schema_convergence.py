@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
-from pathlib import Path
 from typing import NamedTuple
 
 import pytest
@@ -22,9 +21,8 @@ from pgqueuer.domain.schema.model import Schema, Table
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
-from test.helpers import collapse, declared_schema
+from test.helpers import RELEASES_DIR, collapse, declared_schema, install_release
 
-RELEASES_DIR = Path(__file__).parent / "schema_releases"
 RELEASES = sorted(path.stem for path in RELEASES_DIR.glob("*.sql"))
 
 
@@ -120,12 +118,6 @@ def shortfall(live: Schema, declared: Schema) -> list[Gap]:
         + index_gaps(live, declared)
         + routine_gaps(live, declared)
     )
-
-
-async def install_release(driver: AsyncpgDriver, release: str) -> None:
-    """Replace the template schema with the one *release* shipped."""
-    await Queries(driver).uninstall()
-    await driver.execute((RELEASES_DIR / f"{release}.sql").read_text())
 
 
 async def upgraded(driver: AsyncpgDriver, release: str) -> Queries:
