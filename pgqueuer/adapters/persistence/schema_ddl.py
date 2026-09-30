@@ -16,6 +16,7 @@ from pgqueuer.domain.schema.model import (
     Table,
     Trigger,
 )
+from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import IndexName, TableName
 
@@ -240,6 +241,30 @@ BEGIN
 END $$;"""
 
 
+def collapse_statistics(settings: DBSettings) -> str:
+    """Fold statistics rows sharing a bucket into one, so the unique index can build.
+
+    Before v0.19 the bucket also keyed on ``time_in_queue``, so a database with
+    history holds several rows per bucket. Summing ``count`` into the oldest is
+    what the aggregation upsert would have done. A no-op on a clean table.
+    """
+    stats = settings.qualified.statistics_table
+    return f"""WITH ranked AS (
+    SELECT id,
+           sum(count) OVER bucket AS total,
+           row_number() OVER (bucket ORDER BY id) AS position
+    FROM {stats}
+    WINDOW bucket AS (PARTITION BY {UNIQUE_COUNT_KEY})
+), merged AS (
+    UPDATE {stats} AS kept SET count = ranked.total
+    FROM ranked
+    WHERE kept.id = ranked.id AND ranked.position = 1 AND kept.count <> ranked.total
+)
+DELETE FROM {stats} AS folded
+USING ranked
+WHERE folded.id = ranked.id AND ranked.position > 1;"""
+
+
 def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
     gone = retired(settings).indexes + redefined_indexes(settings)
     for name in gone:
@@ -302,8 +327,9 @@ def render_converge(settings: DBSettings) -> Generator[str, None, None]:
 
     Blind to what is installed, so it creates and re-states rather than diffing;
     a connection gets the exact delta instead. Order is load-bearing: labels
-    before the retype that uses them, columns before the indexes over them, and
-    the retired type last, since a column references it until the retype runs.
+    before the retype that uses them, columns before the indexes over them,
+    duplicate statistics folded before their unique index, and the retired type
+    last, since a column references it until the retype runs.
     """
     schema = target(settings)
     yield from converge_namespace(settings)
@@ -311,6 +337,7 @@ def render_converge(settings: DBSettings) -> Generator[str, None, None]:
     yield from converge_tables(schema, settings)
     yield from converge_retired_columns(settings)
     yield from converge_statistics_status(settings)
+    yield collapse_statistics(settings)
     yield from converge_indexes(schema, settings)
     yield from converge_routines(schema, settings)
     yield from converge_id_width(schema, settings)

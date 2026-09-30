@@ -7,6 +7,7 @@ from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.queries import Queries
+from test.helpers import install_release
 
 
 async def apply_converge_script(driver: AsyncpgDriver, settings: DBSettings) -> None:
@@ -64,3 +65,30 @@ async def test_the_script_still_converges_a_legacy_status_type(
         settings.statistics_table,
     )
     assert cell(rows[0], "udt_name", str) == settings.queue_status_type
+
+
+async def test_the_script_folds_split_statistics_buckets(apgdriver: AsyncpgDriver) -> None:
+    """Offline, like online, the unique index cannot build over split buckets."""
+    settings = DBSettings()
+    await install_release(apgdriver, "v0.18.10")
+    await apgdriver.execute(
+        """
+        INSERT INTO pgqueuer_statistics
+            (created, count, priority, time_in_queue, status, entrypoint)
+        VALUES
+            ('2024-01-01 00:00:00.100+00', 1, 0, '1 second', 'successful', 'split'),
+            ('2024-01-01 00:00:00.200+00', 2, 0, '2 seconds', 'successful', 'split'),
+            ('2024-01-01 00:00:00.000+00', 5, 0, '1 second', 'successful', 'alone')
+        """
+    )
+
+    await apply_converge_script(apgdriver, settings)
+    await apply_converge_script(apgdriver, settings)
+
+    rows = await apgdriver.fetch(
+        "SELECT entrypoint, count FROM pgqueuer_statistics ORDER BY entrypoint"
+    )
+    assert [(cell(row, "entrypoint", str), cell(row, "count", int)) for row in rows] == [
+        ("alone", 5),
+        ("split", 3),
+    ]

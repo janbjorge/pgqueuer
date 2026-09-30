@@ -12,8 +12,7 @@ from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.queries import Queries
-from test.helpers import queries_for
-from test.test_schema_convergence import install_release
+from test.helpers import install_release, queries_for
 
 
 async def advisory_locks_held(driver: AsyncpgDriver, settings: DBSettings) -> int:
