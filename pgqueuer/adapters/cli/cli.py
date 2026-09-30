@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import functools
+import json
 import os
 import sys
 from dataclasses import dataclass
@@ -670,10 +671,26 @@ def queue(
 def failed(
     ctx: Context,
     limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the jobs as a JSON array on stdout. Payloads are reported by size only.",
+    ),
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx, qb.DBSettings()) as q:
             jobs = await q.list_failed_jobs(limit=limit)
+            if as_json:
+                print(
+                    json.dumps(
+                        [
+                            j.model_dump(mode="json", exclude={"payload"})
+                            | {"payload_bytes": len(j.payload) if j.payload else 0}
+                            for j in jobs
+                        ]
+                    )
+                )
+                return
             if not jobs:
                 print("No failed jobs.")
                 return
