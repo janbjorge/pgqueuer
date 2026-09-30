@@ -13,11 +13,15 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
 from pgqueuer.adapters.connections import create_asyncpg_pool
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 from pgqueuer.adapters.persistence.qb import (
     DBSettings,
+    QueryBuilderEnvironment,
     QueryQueueBuilder,
     QuerySchedulerBuilder,
 )
+from pgqueuer.adapters.persistence.queries import Queries
+from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain.settings import ConnectionSettings
 
 
@@ -29,6 +33,14 @@ class PgQueuerDatabase:
         self.settings = settings
         self.qbq = QueryQueueBuilder(settings)
         self.qbs = QuerySchedulerBuilder(settings)
+        self.insights = InsightsService(
+            Queries(
+                AsyncpgPoolDriver(pool),
+                qbe=QueryBuilderEnvironment(settings),
+                qbq=self.qbq,
+                qbs=self.qbs,
+            )
+        )
 
     async def fetch(self, sql: str, *args: object) -> list[dict[str, object]]:
         async with self.pool.acquire() as conn:
@@ -358,9 +370,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
         If you see stale jobs, cross-reference the queue_manager_id with
         active_workers to check if that worker is still alive.
         """
-        d = _db(ctx)
-        interval = _parse_interval(threshold)
-        return await d.fetch(d.qbq.build_stale_jobs_query(), interval, limit)
+        jobs = await _db(ctx).insights.stale_jobs(_parse_interval(threshold), limit)
+        return [j.model_dump() for j in jobs]
 
     @mcp.tool()
     async def active_workers(ctx: Ctx) -> list[dict[str, object]]:
@@ -390,8 +401,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - No workers at all but queue_size shows 'queued' jobs: workers
             are not running or cannot connect.
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbq.build_active_workers_query())
+        return [w.model_dump() for w in await _db(ctx).insights.active_workers()]
 
     @mcp.tool()
     async def queue_age(ctx: Ctx) -> list[dict[str, object]]:
@@ -410,7 +420,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - avg_age_seconds:    average age of all queued jobs for this entrypoint
 
         This tool takes no parameters. Returns one row per entrypoint that
-        has queued jobs, ordered by oldest_age_seconds descending (worst first).
+        has queued jobs, ordered by entrypoint.
         An empty result means no jobs are waiting — the queue is fully caught up.
 
         Diagnosis patterns:
@@ -420,8 +430,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - Both count and age are high: sustained backlog, need more workers
             or faster processing.
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbq.build_queue_age_query())
+        return [a.model_dump() for a in await _db(ctx).insights.queue_age()]
 
     @mcp.tool()
     async def schema_info(ctx: Ctx) -> list[dict[str, object]]:
