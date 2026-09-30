@@ -287,13 +287,19 @@ entrypoints registered with `on_failure="hold"`: see [Holding Failed Jobs](../gu
 **Options:**
 
 - `-n` / `--limit <number>` *(default: 25)*: Maximum number of jobs to display.
+- `--json`: Print the jobs as a JSON array on stdout instead of a table.
 
 ```bash
 pgq failed
 pgq failed -n 100
+pgq failed --json
 ```
 
 Output: job ID, entrypoint, attempt count, creation time, and payload size.
+
+With `--json`, each element carries the job's fields with ISO-8601 timestamps.
+The payload is replaced by `payload_bytes`, its size, because payloads are
+arbitrary bytes. No held jobs prints `[]` and exits `0`.
 
 ---
 
