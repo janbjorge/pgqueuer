@@ -12,6 +12,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Callable, Coroutine, TypeVar
 
 import typer
+from pydantic_core import to_json
 from tabulate import tabulate
 from typer import Context
 from typing_extensions import AsyncGenerator, assert_never
@@ -19,6 +20,7 @@ from typing_extensions import AsyncGenerator, assert_never
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
+from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
 from pgqueuer.ports.driver import Driver
@@ -725,6 +727,54 @@ def requeue(
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
+
+    asyncio_run(run())
+
+
+@app.command(help="List picked jobs whose heartbeat is older than the threshold.")
+def stale(
+    ctx: Context,
+    threshold: float = typer.Option(
+        300,
+        "-t",
+        "--threshold",
+        help="Seconds since the last heartbeat before a picked job counts as stale.",
+    ),
+    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
+    as_json: bool = typer.Option(False, "--json", help="Print the jobs as a JSON array on stdout."),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            jobs = await InsightsService(q).stale_jobs(timedelta(seconds=threshold), limit)
+            if as_json:
+                print(to_json(jobs).decode())
+                return
+            if not jobs:
+                print("No stale jobs.")
+                return
+            rows = [
+                [
+                    j.id,
+                    j.entrypoint,
+                    j.queue_manager_id,
+                    j.heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
+                    round(j.seconds_since_heartbeat),
+                ]
+                for j in jobs
+            ]
+            print(
+                tabulate(
+                    rows,
+                    headers=[
+                        "ID",
+                        "Entrypoint",
+                        "Queue manager",
+                        "Heartbeat",
+                        "Seconds since heartbeat",
+                    ],
+                    tablefmt=tablefmt(),
+                )
+            )
 
     asyncio_run(run())
 
