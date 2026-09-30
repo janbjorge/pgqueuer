@@ -309,6 +309,19 @@ def narrow_sequence(schema: Schema, table: str) -> Schema:
     )
 
 
+@pytest.mark.parametrize("widen_id", [True, False])
+def test_a_table_owning_no_sequence_plans_nothing(widen_id: bool) -> None:
+    """No sequence to widen, and none to report as narrow."""
+    settings = DBSettings(widen_id=widen_id)
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        tables=tuple(dataclasses.replace(entry, id_sequence_type=None) for entry in schema.tables),
+    )
+
+    assert plan(live, schema, settings) == Plan()
+
+
 def test_a_narrow_sequence_is_widened_when_enabled() -> None:
     settings = DBSettings()
     schema = declared(settings)

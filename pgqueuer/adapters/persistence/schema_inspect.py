@@ -320,7 +320,7 @@ def build_tables(
             Table(
                 name=TableName(name),
                 unlogged=rows[0].unlogged,
-                id_sequence_type=sequence_types[name],
+                id_sequence_type=sequence_types.get(name),
                 unique_constraints=unique.get(name, ()),
                 columns=tuple(build_column(row, primary_keys, db_schema) for row in rows),
             )

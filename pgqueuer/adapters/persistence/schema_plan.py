@@ -151,7 +151,7 @@ def skipped_widening(installed: Table, declared: Table, settings: DBSettings) ->
                 f"disabled. Run ALTER TABLE {qualified} "
                 f"ALTER COLUMN {column.name} TYPE bigint out of band."
             )
-    if installed.id_sequence_type != declared.id_sequence_type:
+    if installed.id_sequence_type not in (None, declared.id_sequence_type):
         notes.append(
             f"The id sequence behind {declared.name} is still {installed.id_sequence_type} "
             f"and widening is disabled. Widening the column leaves it capped: run "
@@ -205,8 +205,9 @@ def plan_sequence(installed: Table, declared: Table, settings: DBSettings) -> li
 
     Resolved through ``pg_get_serial_sequence`` rather than assuming
     ``<table>_id_seq``: the catalog gives the sequence's type, not its name.
+    A table owning no sequence has none to widen.
     """
-    if installed.id_sequence_type == declared.id_sequence_type or not settings.widen_id:
+    if installed.id_sequence_type in (None, declared.id_sequence_type) or not settings.widen_id:
         return []
     return [widen_id_sequence(declared.name, settings)]
 
