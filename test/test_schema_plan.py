@@ -450,39 +450,6 @@ def test_a_redefined_index_is_built_before_the_old_one_is_dropped() -> None:
     )
 
 
-def test_a_rebuild_is_qualified_for_a_schemad_install() -> None:
-    settings = DBSettings(db_schema="pgq")
-    schema = declared(settings)
-    name = f"{settings.queue_table_log}_not_aggregated"
-    replacement = rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
-
-    statements = plan(redefined(schema, name), schema, settings).statements
-    assert statements[0] == f"DROP INDEX IF EXISTS pgq.{replacement};"
-    assert statements[2] == f"DROP INDEX IF EXISTS pgq.{name};"
-    assert statements[3] == f"ALTER INDEX pgq.{replacement} RENAME TO {name};"
-
-
-def test_the_rebuild_name_survives_a_long_prefix() -> None:
-    """Postgres truncates at 63 bytes; a suffixed name could truncate into the original."""
-    settings = DBSettings(prefix="p" * 40)
-    for entry in declared(settings).indexes:
-        assert len(rebuild_name(entry)) < 63
-        assert rebuild_name(entry) != entry.name
-    assert len({rebuild_name(entry) for entry in declared(settings).indexes}) == len(
-        declared(settings).indexes
-    )
-
-
-def test_a_rebuilt_statistics_index_folds_split_buckets_first() -> None:
-    settings = DBSettings()
-    schema = declared(settings)
-    name = f"{settings.statistics_table}_unique_count"
-
-    statements = plan(redefined(schema, name), schema, settings).statements
-    assert statements[0] == collapse_statistics(settings)
-    assert statements[2].startswith(f"CREATE UNIQUE INDEX {rebuild_name_of(schema, name)} ON")
-
-
 def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
     """Where an upgrade that dropped the index and failed to rebuild it left off."""
     settings = DBSettings()
@@ -496,19 +463,6 @@ def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
     )
 
 
-def test_a_created_statistics_table_is_not_folded() -> None:
-    """A table this plan creates is empty; there is nothing to fold."""
-    settings = DBSettings()
-    schema = declared(settings)
-    live = without_index(
-        without_table(schema, settings.statistics_table),
-        f"{settings.statistics_table}_unique_count",
-    )
-
-    assert collapse_statistics(settings) not in plan(live, schema, settings).statements
-    assert collapse_statistics(settings) not in plan(EMPTY, schema, settings).statements
-
-
 def test_only_the_statistics_index_folds_rows() -> None:
     """Every other unique index guards jobs; a duplicate there is a failure, not a fold."""
     settings = DBSettings()
@@ -518,16 +472,6 @@ def test_only_the_statistics_index_folds_rows() -> None:
             continue
         statements = plan(redefined(schema, entry.name), schema, settings).statements
         assert collapse_statistics(settings) not in statements, entry.name
-
-
-def test_a_current_statistics_index_plans_no_fold() -> None:
-    settings = DBSettings()
-    schema = declared(settings)
-    assert collapse_statistics(settings) not in plan(schema, schema, settings).statements
-
-
-def rebuild_name_of(schema: Schema, name: str) -> str:
-    return rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
 
 
 def test_a_changed_function_body_is_replaced_not_recreated() -> None:

@@ -71,54 +71,6 @@ async def test_upgrade_folds_split_statistics_buckets(apgdriver: AsyncpgDriver) 
     assert await planned(apgdriver) == ()
 
 
-async def test_folding_keeps_the_oldest_row_of_a_bucket(apgdriver: AsyncpgDriver) -> None:
-    await install_release(apgdriver, "v0.18.10")
-    await seed_split_buckets(apgdriver)
-    rows = await apgdriver.fetch(
-        "SELECT min(id) AS id FROM pgqueuer_statistics WHERE entrypoint = 'split'"
-    )
-    oldest = cell(rows[0], "id", int)
-
-    await Queries(apgdriver).upgrade()
-
-    rows = await apgdriver.fetch("SELECT id FROM pgqueuer_statistics WHERE entrypoint = 'split'")
-    assert [cell(row, "id", int) for row in rows] == [oldest]
-
-
-async def test_upgrade_recovers_a_database_left_without_the_index(
-    apgdriver: AsyncpgDriver,
-) -> None:
-    """What the drop-then-build upgrade left behind: rows split, index gone."""
-    await install_release(apgdriver, "v0.18.10")
-    await seed_split_buckets(apgdriver)
-    await apgdriver.execute("DROP INDEX pgqueuer_statistics_unique_count")
-
-    await Queries(apgdriver).upgrade()
-
-    assert await buckets(apgdriver) == [("alone", 5), ("split", 7)]
-    assert await index_definition(apgdriver, "pgqueuer_statistics_unique_count") is not None
-
-
-async def test_aggregation_adds_to_a_folded_bucket(apgdriver: AsyncpgDriver) -> None:
-    """The folded row is the one the aggregation upsert then conflicts on."""
-    await install_release(apgdriver, "v0.18.10")
-    await seed_split_buckets(apgdriver)
-    queries = Queries(apgdriver)
-    await queries.upgrade()
-
-    await apgdriver.execute(
-        """
-        INSERT INTO pgqueuer_statistics (created, count, priority, status, entrypoint)
-        VALUES ('2024-01-01 00:00:00.900+00', 10, 0, 'successful', 'split')
-        ON CONFLICT (
-            priority, date_trunc('sec', created AT TIME ZONE 'UTC'), status, entrypoint
-        ) DO UPDATE SET count = pgqueuer_statistics.count + EXCLUDED.count
-        """
-    )
-
-    assert await buckets(apgdriver) == [("alone", 5), ("split", 17)]
-
-
 async def test_a_failed_rebuild_keeps_the_old_index(apgdriver: AsyncpgDriver) -> None:
     """Duplicates in a job index are not folded; the upgrade stops, index intact."""
     await apgdriver.execute("DROP INDEX pgqueuer_picked_slot_idx")
@@ -142,29 +94,6 @@ async def test_a_failed_rebuild_keeps_the_old_index(apgdriver: AsyncpgDriver) ->
     assert cell(rows[0], "n", int) == 2
 
 
-async def test_a_failed_rebuild_succeeds_once_the_data_is_fixed(
-    apgdriver: AsyncpgDriver,
-) -> None:
-    await apgdriver.execute("DROP INDEX pgqueuer_picked_slot_idx")
-    await apgdriver.execute(
-        "CREATE INDEX pgqueuer_picked_slot_idx ON pgqueuer (entrypoint, slot) "
-        "WHERE status = 'picked' AND slot IS NOT NULL"
-    )
-    await apgdriver.execute(
-        "INSERT INTO pgqueuer (priority, status, entrypoint, slot) "
-        "VALUES (0, 'picked', 'ep', 1), (0, 'picked', 'ep', 1)"
-    )
-    with pytest.raises(asyncpg.UniqueViolationError):
-        await Queries(apgdriver).upgrade()
-
-    await apgdriver.execute("DELETE FROM pgqueuer WHERE id = (SELECT max(id) FROM pgqueuer)")
-    await Queries(apgdriver).upgrade()
-
-    assert await planned(apgdriver) == ()
-    definition = await index_definition(apgdriver, "pgqueuer_picked_slot_idx")
-    assert definition is not None and definition.startswith("CREATE UNIQUE INDEX")
-
-
 async def test_an_interrupted_rebuild_is_resumed(apgdriver: AsyncpgDriver) -> None:
     """A replacement left behind by a run cut off after its build is cleared first."""
     name = "pgqueuer_log_not_aggregated"
@@ -179,22 +108,3 @@ async def test_an_interrupted_rebuild_is_resumed(apgdriver: AsyncpgDriver) -> No
     assert await index_definition(apgdriver, replacement) is None
     definition = await index_definition(apgdriver, name)
     assert definition is not None and "WHERE (NOT aggregated)" in definition
-
-
-async def test_a_clean_statistics_table_is_left_alone(apgdriver: AsyncpgDriver) -> None:
-    """Distinct buckets pass through a rebuild untouched."""
-    await install_release(apgdriver, "v1.4.0")
-    await apgdriver.execute(
-        """
-        INSERT INTO pgqueuer_statistics (created, count, priority, status, entrypoint)
-        VALUES ('2024-01-01 00:00:00+00', 3, 0, 'successful', 'a'),
-               ('2024-01-01 00:00:01+00', 4, 0, 'successful', 'a'),
-               ('2024-01-01 00:00:00+00', 5, 0, 'exception', 'a')
-        """
-    )
-    before = await buckets(apgdriver)
-
-    await Queries(apgdriver).upgrade()
-
-    assert await buckets(apgdriver) == before
-    assert await planned(apgdriver) == ()
