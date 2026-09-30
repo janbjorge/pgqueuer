@@ -587,6 +587,23 @@ def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     assert "pgq durability" in computed.notes[0]
 
 
+def test_a_durability_note_offers_matching_the_setting() -> None:
+    """An UNLOGGED install upgraded without PGQUEUER_DURABILITY is usually intended.
+
+    The note must not offer the table rewrite as the only way out.
+    """
+    settings = DBSettings()
+    schema = declared(settings)
+    live = dataclasses.replace(
+        schema,
+        tables=tuple(dataclasses.replace(entry, unlogged=True) for entry in schema.tables),
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == len(schema.tables)
+    assert all("set PGQUEUER_DURABILITY to match" in note for note in notes)
+
+
 def test_a_durability_note_names_the_level_to_pass() -> None:
     """``pgq durability`` takes a required argument, so the note has to carry it."""
     settings = DBSettings(durability=Durability.volatile)

@@ -28,6 +28,10 @@ tags, so a section is written once and never revisited.
 - `pgq upgrade` and `pgq install` no longer crash with `KeyError` when a
   table's id sequence is not owned by it (for example after `ALTER SEQUENCE ...
   OWNED BY NONE`). There is no sequence to widen, so none is planned.
+- The `pgq upgrade` note for a table whose durability differs from
+  `PGQUEUER_DURABILITY` now offers setting the variable to match, not only
+  `pgq durability`, which rewrites the table. Without the variable a volatile
+  install was told to go durable on every upgrade.
 
 ### Removed
 
