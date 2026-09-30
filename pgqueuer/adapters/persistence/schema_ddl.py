@@ -138,7 +138,8 @@ def render_uninstall(settings: DBSettings) -> str:
 def redefined_indexes(settings: DBSettings) -> tuple[IndexName, ...]:
     """Indexes redefined after they shipped, which ``IF NOT EXISTS`` cannot fix.
 
-    Offline they are dropped and rebuilt by name; the planner reads the catalog.
+    Offline one is dropped and rebuilt only when its catalog definition differs
+    from the declaration; the planner reads the catalog.
     """
     return (
         # Shipped briefly as a 4-column composite before the revert.

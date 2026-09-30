@@ -84,6 +84,32 @@ async def test_the_script_rebuilds_a_stale_redefined_index(
     assert "USING btree ((1)) WHERE (NOT aggregated)" in definition
 
 
+async def test_the_script_rebuilds_a_stale_unique_count_index_once(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """The ON CONFLICT arbiter is restored, and a re-apply leaves it alone.
+
+    The second apply catches a compare that never matches its own CREATE,
+    which would drop the index on every later run.
+    """
+    settings = DBSettings()
+    name = f"{settings.statistics_table}_unique_count"
+    await apgdriver.execute(f"DROP INDEX {name};")
+    await apgdriver.execute(
+        f"CREATE UNIQUE INDEX {name} ON {settings.statistics_table} "
+        "(priority, DATE_TRUNC('sec', created at time zone 'UTC'), status, entrypoint);"
+    )
+
+    await apply_converge_script(apgdriver, settings)
+
+    assert "timezone('UTC'::text, created)" in await index_definition(apgdriver, name)
+    rebuilt = await relfilenode(apgdriver, name)
+
+    await apply_converge_script(apgdriver, settings)
+
+    assert await relfilenode(apgdriver, name) == rebuilt
+
+
 async def test_the_script_still_converges_a_legacy_status_type(
     apgdriver: AsyncpgDriver,
 ) -> None:
