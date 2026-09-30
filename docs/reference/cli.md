@@ -365,6 +365,32 @@ with `--json` and exits `0`.
 
 ---
 
+### `backlog`
+
+Show, per entrypoint, how many jobs are in `queued` status and how long they
+have waited since they were enqueued. A growing oldest age means workers are
+not keeping up with that entrypoint.
+
+Age is measured from each job's `created` time. Jobs whose `execute_after` is
+still in the future are counted too, so a queue with scheduled jobs can show a
+backlog before any of them is due.
+
+**Options:**
+
+- `--json`: Print one object per entrypoint as a JSON array on stdout instead
+  of a table.
+
+```bash
+pgq backlog
+pgq backlog --json
+```
+
+Output: entrypoint, queued count, oldest creation time, and the oldest and
+average age in seconds, sorted by entrypoint. No queued jobs prints `[]` with
+`--json` and exits `0`.
+
+---
+
 ### `run`
 
 Start a `QueueManager` to process jobs.

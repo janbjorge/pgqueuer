@@ -822,6 +822,49 @@ def workers(
     asyncio_run(run())
 
 
+@app.command(help="Show how many jobs wait in 'queued' per entrypoint, and how old they are.")
+def backlog(
+    ctx: Context,
+    as_json: bool = typer.Option(
+        False, "--json", help="Print one object per entrypoint as a JSON array on stdout."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            ages = await InsightsService(q).queue_age()
+            if as_json:
+                print(to_json(ages).decode())
+                return
+            if not ages:
+                print("No queued jobs.")
+                return
+            rows = [
+                [
+                    a.entrypoint,
+                    a.queued_count,
+                    a.oldest_created.strftime("%Y-%m-%d %H:%M:%S"),
+                    round(a.oldest_age_seconds),
+                    round(a.avg_age_seconds),
+                ]
+                for a in ages
+            ]
+            print(
+                tabulate(
+                    rows,
+                    headers=[
+                        "Entrypoint",
+                        "Queued",
+                        "Oldest created",
+                        "Oldest age (s)",
+                        "Average age (s)",
+                    ],
+                    tablefmt=tablefmt(),
+                )
+            )
+
+    asyncio_run(run())
+
+
 @app.command(help="Alter the logging durability for PgQueuer tables.")
 def durability(
     ctx: Context,
