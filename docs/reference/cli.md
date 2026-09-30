@@ -319,6 +319,31 @@ pgq requeue 42 43 44
 
 ---
 
+### `stale`
+
+List jobs in `picked` status whose heartbeat is older than a threshold. A stale
+job usually means its worker crashed, was killed, or is hanging.
+
+**Options:**
+
+- `-t` / `--threshold <seconds>` *(default: 300)*: How old the last heartbeat
+  must be before a picked job counts as stale.
+- `-n` / `--limit <number>` *(default: 25)*: Maximum number of jobs to display.
+- `--json`: Print the jobs as a JSON array on stdout instead of a table.
+
+```bash
+pgq stale
+pgq stale -t 1800
+pgq stale --json
+```
+
+Output: job ID, entrypoint, queue manager ID, last heartbeat, and seconds since
+that heartbeat, oldest heartbeat first. With `--json`, each element also carries
+the job's priority, status, and timestamps, in ISO-8601. No stale jobs prints
+`[]` and exits `0`.
+
+---
+
 ### `run`
 
 Start a `QueueManager` to process jobs.
