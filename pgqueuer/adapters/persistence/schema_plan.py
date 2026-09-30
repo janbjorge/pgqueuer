@@ -400,8 +400,10 @@ def durability_notes(live: Schema, declared: Schema, settings: DBSettings) -> li
     found = {entry.name: entry for entry in live.tables}
     level = settings.durability.value
     return [
-        f"{table.name} is {'UNLOGGED' if found[table.name].unlogged else 'LOGGED'} but declared "
-        f"{'UNLOGGED' if table.unlogged else 'LOGGED'}. Run 'pgq durability {level}' to change it."
+        f"{table.name} is {'UNLOGGED' if found[table.name].unlogged else 'LOGGED'}, but "
+        f"PGQUEUER_DURABILITY={level} declares it {'UNLOGGED' if table.unlogged else 'LOGGED'}. "
+        f"If the table is as intended, set PGQUEUER_DURABILITY to match; to change the table, "
+        f"run 'pgq durability {level}'."
         for table in declared.tables
         if table.name in found and found[table.name].unlogged != table.unlogged
     ]
