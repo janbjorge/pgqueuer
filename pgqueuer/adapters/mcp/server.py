@@ -125,8 +125,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - Many 'picked' jobs with stale heartbeats: workers may be stuck
             (use stale_jobs to investigate).
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbq.build_queue_size_query())
+        return [s.model_dump() for s in await _db(ctx).insights.queue_size()]
 
     @mcp.tool()
     async def queue_table_info(
@@ -330,8 +329,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
             the worker executing this schedule may be stuck.
           - last_run is null: the schedule has never executed since registration.
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbs.build_peek_schedule_query())
+        return [s.model_dump() for s in await _db(ctx).insights.schedules()]
 
     @mcp.tool()
     async def stale_jobs(
@@ -463,8 +461,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
         will be truncated after an unclean PostgreSQL shutdown (crash, OOM kill).
         Production systems typically use 'balanced' or 'durable' durability.
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbq.build_schema_info_query())
+        return [t.model_dump() for t in await _db(ctx).insights.schema_info()]
 
 
 def create_mcp_server(
