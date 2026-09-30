@@ -28,6 +28,7 @@ def test_cli_queue_dedupe_key_and_on_conflict(dsn: str, pgdriver: db.SyncDriver)
 
     result = runner.invoke(app, ["queue", "ep", "payload", "--dedupe-key", "k"], env=env)
     assert result.exit_code == 1, result.output
-    assert "duplicate dedupe_key" in result.output
+    assert "duplicate dedupe_key" in result.stderr
+    assert result.stdout == ""
 
     assert sum(x.count for x in queries.SyncQueries(pgdriver).queue_size()) == 1

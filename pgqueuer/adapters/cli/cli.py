@@ -658,7 +658,7 @@ def queue(
         elif on_conflict is OnConflictChoice.SKIP:
             print(f"Skipped: duplicate dedupe_key {dedupe_key!r}.")
         elif on_conflict is OnConflictChoice.RAISE:
-            print(f"Error: duplicate dedupe_key {dedupe_key!r}.")
+            typer.secho(f"Error: duplicate dedupe_key {dedupe_key!r}.", err=True)
             raise typer.Exit(code=1)
         else:
             assert_never(on_conflict)
