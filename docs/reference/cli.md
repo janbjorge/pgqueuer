@@ -461,6 +461,32 @@ See `examples/consumer.py` in the repository for a working example.
 
 ---
 
+## Exit codes
+
+Scripts and agents should branch on the exit code, not on output text. The
+text output of commands is meant for humans and may change between releases.
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success. Also returned when there is nothing to report (e.g. `pgq failed` with no held jobs). |
+| `1` | The command ran and reported a failure, or an unhandled error occurred. See below. |
+| `2` | Usage error: unknown command, unknown option, or a missing required option. Nothing was sent to the database. |
+
+Code `1` is returned for:
+
+- `install`: PgQueuer is already installed in the target schema.
+- `verify`: at least one object is missing (`--expect present`) or unexpected
+  (`--expect absent`).
+- `upgrade`: the live schema has drifted from what this release can upgrade.
+- `queue`: a duplicate `--dedupe-key` with `--on-conflict raise`.
+- Any unhandled error, such as a refused database connection. A traceback is
+  printed to stderr.
+
+Code `1` does not distinguish these cases. Read stderr to tell a reported
+failure from an unhandled error.
+
+---
+
 ## Global options
 
 All commands accept the following connection options:
