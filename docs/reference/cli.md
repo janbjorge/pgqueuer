@@ -344,6 +344,27 @@ the job's priority, status, and timestamps, in ISO-8601. No stale jobs prints
 
 ---
 
+### `workers`
+
+List queue managers that currently hold picked jobs, one row per
+`queue_manager_id`. A running worker with nothing picked does not appear.
+
+**Options:**
+
+- `--json`: Print the workers as a JSON array on stdout instead of a table.
+
+```bash
+pgq workers
+pgq workers --json
+```
+
+Output: queue manager ID, number of picked jobs, oldest and newest heartbeat
+among those jobs, and the entrypoints they belong to. An old oldest heartbeat
+points at a stuck job; [`pgq stale`](#stale) lists it. No workers prints `[]`
+with `--json` and exits `0`.
+
+---
+
 ### `run`
 
 Start a `QueueManager` to process jobs.

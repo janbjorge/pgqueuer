@@ -779,6 +779,49 @@ def stale(
     asyncio_run(run())
 
 
+@app.command(help="List queue managers currently holding picked jobs.")
+def workers(
+    ctx: Context,
+    as_json: bool = typer.Option(
+        False, "--json", help="Print the workers as a JSON array on stdout."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx, qb.DBSettings()) as q:
+            active = await InsightsService(q).active_workers()
+            if as_json:
+                print(to_json(active).decode())
+                return
+            if not active:
+                print("No workers are holding picked jobs.")
+                return
+            rows = [
+                [
+                    w.queue_manager_id,
+                    w.active_jobs,
+                    w.oldest_heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
+                    w.newest_heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
+                    ", ".join(w.entrypoints),
+                ]
+                for w in active
+            ]
+            print(
+                tabulate(
+                    rows,
+                    headers=[
+                        "Queue manager",
+                        "Picked jobs",
+                        "Oldest heartbeat",
+                        "Newest heartbeat",
+                        "Entrypoints",
+                    ],
+                    tablefmt=tablefmt(),
+                )
+            )
+
+    asyncio_run(run())
+
+
 @app.command(help="Alter the logging durability for PgQueuer tables.")
 def durability(
     ctx: Context,
