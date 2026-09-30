@@ -9,12 +9,14 @@ lets ``pgq upgrade`` say "already up to date" and mean it.
 
 from __future__ import annotations
 
+import dataclasses
 import zlib
 from enum import Enum
 
 from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence.schema_ddl import (
+    collapse_statistics,
     render_column,
     render_enum,
     render_function,
@@ -26,9 +28,10 @@ from pgqueuer.adapters.persistence.schema_ddl import (
 )
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import retired
-from pgqueuer.domain.schema.model import Column, Plan, Schema, Table
+from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, Table
+from pgqueuer.domain.schema.statistics import unique_count_name
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import SqlType
+from pgqueuer.domain.types import IndexName, SqlType
 
 
 def plan_namespace(live: Schema, settings: DBSettings) -> list[str]:
@@ -267,8 +270,41 @@ def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[st
     return notes
 
 
+def rebuild_name(index: Index) -> IndexName:
+    """Fixed width, so a long prefix cannot truncate it into the name it replaces."""
+    return IndexName(f"pgq_rebuild_{zlib.crc32(index.name.encode()):08x}")
+
+
+def plan_rebuild(index: Index, settings: DBSettings) -> list[str]:
+    """Build the new definition beside the old, and only then swap it in.
+
+    If the build fails, on a duplicate for instance, the old index is still
+    there. The first DROP clears a replacement left behind by an interrupted
+    run, which would otherwise fail the build on its name.
+    """
+    replacement = dataclasses.replace(index, name=rebuild_name(index))
+    return [
+        f"DROP INDEX IF EXISTS {settings.qualify(replacement.name)};",
+        render_index(replacement, settings),
+        f"DROP INDEX IF EXISTS {settings.qualify(index.name)};",
+        f"ALTER INDEX {settings.qualify(replacement.name)} RENAME TO {index.name};",
+    ]
+
+
+def plan_collapse(index: Index, live: Schema, settings: DBSettings) -> list[str]:
+    """Fold split statistics buckets before their unique index is built.
+
+    Only for a table that is already there: a table this plan creates is empty.
+    """
+    if index.name != unique_count_name(settings):
+        return []
+    if index.table not in {entry.name for entry in live.tables}:
+        return []
+    return [collapse_statistics(settings)]
+
+
 def plan_indexes(live: Schema, declared: Schema, settings: DBSettings) -> list[str]:
-    """Create absent indexes; drop and rebuild the ones defined differently.
+    """Create absent indexes; rebuild the ones defined differently.
 
     A live index PgQueuer does not declare is somebody else's, and is left alone.
     """
@@ -278,9 +314,11 @@ def plan_indexes(live: Schema, declared: Schema, settings: DBSettings) -> list[s
         installed = found.get(index.name)
         if installed == index:
             continue
-        if installed is not None:
-            statements.append(f"DROP INDEX IF EXISTS {settings.qualify(index.name)};")
-        statements.append(render_index(index, settings))
+        statements += plan_collapse(index, live, settings)
+        if installed is None:
+            statements.append(render_index(index, settings))
+        else:
+            statements += plan_rebuild(index, settings)
     return statements
 
 

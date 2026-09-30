@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from itertools import count
+from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
 
@@ -149,3 +150,12 @@ def collapse(schema: Schema) -> Schema:
 def declared_schema(settings: qb.DBSettings) -> Schema:
     """The target model, normalised the same way ``collapse`` reads."""
     return collapse(target(settings))
+
+
+RELEASES_DIR = Path(__file__).parent / "schema_releases"
+
+
+async def install_release(driver: db.Driver, release: str) -> None:
+    """Replace the template schema with the one *release* shipped."""
+    await Queries(driver).uninstall()
+    await driver.execute((RELEASES_DIR / f"{release}.sql").read_text())

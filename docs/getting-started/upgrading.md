@@ -73,7 +73,10 @@ written it since v0.19. On a database that old, statistics aggregation failed
 twice over: the not-null constraint rejected the insert, and the unique index
 still keyed on the column, so nothing backed the `ON CONFLICT` target.
 
-`pgq upgrade` rebuilds the index and drops the `NOT NULL`. It does **not** drop
+`pgq upgrade` rebuilds the index and drops the `NOT NULL`. Rows that differed
+only by `time_in_queue` share a bucket under the new key, so the upgrade folds
+each bucket into its oldest row, summing `count`, before it builds the index --
+what aggregation would have done had the index been right all along. It does **not** drop
 the column -- that is data, and discarding it is your call. It prints a note
 instead, on every run, until you do:
 
