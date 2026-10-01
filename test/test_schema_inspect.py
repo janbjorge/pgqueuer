@@ -27,8 +27,20 @@ async def test_durability_round_trips(apgdriver: AsyncpgDriver, durability: str)
     assert collapse(await inspect(apgdriver, settings)) == declared_schema(settings)
 
 
-async def test_prefixed_and_schema_scoped_install(apgdriver: AsyncpgDriver) -> None:
-    settings = DBSettings(prefix="acme_", db_schema="billing")
+@pytest.mark.parametrize(
+    "settings",
+    [
+        pytest.param(DBSettings(prefix="acme_", db_schema="billing"), id="scoped"),
+        pytest.param(
+            DBSettings(prefix="acme_", db_schema="billing", queue_status_type="status"),
+            id="enum-named-like-its-column",
+        ),
+    ],
+)
+async def test_prefixed_and_schema_scoped_install(
+    apgdriver: AsyncpgDriver,
+    settings: DBSettings,
+) -> None:
     await queries_for(apgdriver, settings).install()
     assert collapse(await inspect(apgdriver, settings)) == declared_schema(settings)
 

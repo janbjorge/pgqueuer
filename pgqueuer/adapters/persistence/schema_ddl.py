@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Generator
 
 from typing_extensions import assert_never
@@ -27,10 +28,17 @@ except ImportError:  # Source checkout without a build; the header says so.
 
 
 def spelled(value: str, settings: DBSettings) -> str:
-    """Qualify the status enum, which the model holds bare, for use in DDL."""
+    """Qualify the status enum, which the model holds bare, for use in DDL.
+
+    Only a whole column type or a ``::`` cast names the enum; a column whose
+    name it matches, ``status`` for one, stays bare.
+    """
     if settings.db_schema is None:
         return value
-    return value.replace(settings.queue_status_type, settings.qualified.queue_status_type)
+    bare, qualified = settings.queue_status_type, settings.qualified.queue_status_type
+    if value == bare:
+        return qualified
+    return re.sub(rf"::{re.escape(bare)}(?!\w)", f"::{qualified}", value)
 
 
 def column_type(entry: Column) -> str:
