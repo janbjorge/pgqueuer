@@ -32,6 +32,10 @@ tags, so a section is written once and never revisited.
   `PGQUEUER_DURABILITY` now offers setting the variable to match, not only
   `pgq durability`, which rewrites the table. Without the variable a volatile
   install was told to go durable on every upgrade.
+- With `PGQUEUER_SCHEMA` set, a status enum named like a column it types
+  (`PGQUEUER_QUEUE_STATUS_TYPE=status`) no longer gets that column
+  schema-qualified too. Install, upgrade and `enqueue(on_conflict="skip")`
+  rendered `app.status = ...` and failed with a syntax error.
 
 ### Removed
 

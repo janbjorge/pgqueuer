@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from pgqueuer.adapters.persistence.schema_ddl import render_install, render_uninstall
+from pgqueuer.adapters.persistence.schema_ddl import render_install, render_uninstall, spelled
 from pgqueuer.domain.settings import DBSettings, Durability
 
 
@@ -58,3 +58,26 @@ def test_uninstall_drops_dependents_first_and_the_retired_type() -> None:
     kinds = [line.split()[1] for line in lines]
     assert kinds == ["TRIGGER", "FUNCTION"] + ["TABLE"] * 4 + ["TYPE"] * 2
     assert "DROP TYPE IF EXISTS pgqueuer_statistics_status;" in lines
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("status", "billing.status"),
+        ("'queued'::status", "'queued'::billing.status"),
+        ("(status = 'queued'::status)", "(status = 'queued'::billing.status)"),
+        ("'queued'::status_history", "'queued'::status_history"),
+        ("status_history", "status_history"),
+    ],
+)
+def test_spelled_qualifies_the_enum_and_not_a_column_sharing_its_name(
+    value: str,
+    expected: str,
+) -> None:
+    settings = DBSettings(db_schema="billing", queue_status_type="status")
+    assert spelled(value, settings) == expected
+
+
+def test_spelled_leaves_an_unscoped_install_bare() -> None:
+    settings = DBSettings(queue_status_type="status")
+    assert spelled("(status = 'queued'::status)", settings) == "(status = 'queued'::status)"
