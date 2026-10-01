@@ -427,7 +427,21 @@ def upgrade(
         help="Print the exact delta this database needs and exit without applying it.",
     ),
     widen_id: sql_cmd.WidenIdOption = True,
+    durability: qb.Durability | None = typer.Option(
+        None,
+        "--durability",
+        "-d",
+        hidden=True,
+        help="Deprecated and ignored: upgrade never changes durability.",
+    ),
 ) -> None:
+    if durability is not None:
+        typer.secho(
+            "Warning: --durability is ignored by upgrade and will be removed in v2.0; "
+            "use 'pgq durability' to change it.",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
     settings = qb.DBSettings(widen_id=widen_id)
     if dry_run:
         emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))

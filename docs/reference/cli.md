@@ -64,6 +64,8 @@ already current runs nothing and says so.
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
 - `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
+- `--durability` *(deprecated)*: Accepted for older scripts, warns, and is
+  ignored. See below.
 
 ```bash
 pgq upgrade --plan          # what would change, nothing applied
