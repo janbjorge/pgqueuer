@@ -123,6 +123,10 @@ It is written without seeing the database, so it re-states every object behind
   is checked when it starts listening, which holds one connection for good,
   instead of at construction. The MCP server reads through it and never
   listens, so it keeps working with `PGQUEUER_POOL_MAX_SIZE=1`.
+- With `PGQUEUER_SCHEMA` set, the web dashboard's overview, entrypoints, jobs,
+  job detail and system pages read that schema's tables. They named the bare
+  table and failed with `UndefinedTableError` when the schema was not on
+  `search_path`.
 
 ### Removed
 

@@ -957,7 +957,7 @@ class QueryQueueBuilder:
                 created,
                 LAG(status) OVER w AS prev_status,
                 LAG(created) OVER w AS prev_created
-            FROM {self.settings.queue_table_log}
+            FROM {self.qualified.queue_table_log}
             WHERE created > NOW() - $1::interval
             WINDOW w AS (PARTITION BY job_id ORDER BY created, id)
         ), durations AS (
@@ -986,17 +986,17 @@ class QueryQueueBuilder:
             entrypoint,
             status,
             SUM(count) AS count
-        FROM {self.settings.statistics_table}
+        FROM {self.qualified.statistics_table}
         WHERE created > NOW() - $1::interval
         GROUP BY bucket, entrypoint, status
         ORDER BY bucket
         """
 
     def build_queue_job_by_id_query(self) -> str:
-        return f"SELECT * FROM {self.settings.queue_table} WHERE id = $1::bigint"
+        return f"SELECT * FROM {self.qualified.queue_table} WHERE id = $1::bigint"
 
     def build_job_log_history_query(self) -> str:
-        return f"""SELECT * FROM {self.settings.queue_table_log}
+        return f"""SELECT * FROM {self.qualified.queue_table_log}
         WHERE job_id = $1::bigint
         ORDER BY created ASC, id ASC
         LIMIT $2
@@ -1004,12 +1004,12 @@ class QueryQueueBuilder:
 
     def build_unaggregated_log_count_query(self) -> str:
         return f"""SELECT COUNT(*) AS unaggregated
-        FROM {self.settings.queue_table_log}
+        FROM {self.qualified.queue_table_log}
         WHERE NOT aggregated
         """
 
     def build_browse_queue_query(self) -> str:
-        return f"""SELECT * FROM {self.settings.queue_table}
+        return f"""SELECT * FROM {self.qualified.queue_table}
         WHERE ($3::text[] IS NULL OR status::text = ANY($3::text[]))
           AND ($4::text[] IS NULL OR entrypoint = ANY($4::text[]))
         ORDER BY priority DESC, id ASC
