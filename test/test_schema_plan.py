@@ -411,6 +411,36 @@ def test_a_kind_change_refuses() -> None:
         plan(live, schema, settings)
 
 
+@pytest.mark.parametrize(
+    ("edit", "expected"),
+    [
+        pytest.param(
+            lambda entry: dataclasses.replace(entry, kind="identity"),
+            "pgqueuer.id is identity in the database but declared serial",
+            id="kind",
+        ),
+        pytest.param(
+            lambda entry: dataclasses.replace(entry, primary_key=False),
+            "pgqueuer.id is not the primary key",
+            id="primary-key",
+        ),
+    ],
+)
+def test_a_difference_without_a_statement_is_noted(
+    edit: Callable[[Column], Column],
+    expected: str,
+) -> None:
+    """Nothing is planned for it, so it must not pass for converged."""
+    settings = DBSettings()
+    schema = declared(settings)
+
+    result = plan(changed_column(schema, settings.queue_table, "id", edit), schema, settings)
+
+    assert result.statements == ()
+    assert len(result.notes) == 1
+    assert result.notes[0].startswith(expected)
+
+
 def test_not_null_and_default_are_brought_into_line() -> None:
     settings = DBSettings()
     schema = declared(settings)
