@@ -17,7 +17,7 @@ from pgqueuer.domain.schema.model import (
     Table,
     Trigger,
 )
-from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
+from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY, unique_count_name
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import IndexName, TableName
 
@@ -154,7 +154,7 @@ def redefined_indexes(settings: DBSettings) -> tuple[IndexName, ...]:
         IndexName(f"{settings.queue_table_log}_not_aggregated"),
         # Keyed on time_in_queue before v0.19, and PG 14+ keeps the older
         # AT TIME ZONE spelling where the declaration says timezone().
-        IndexName(f"{settings.statistics_table}_unique_count"),
+        unique_count_name(settings),
     )
 
 

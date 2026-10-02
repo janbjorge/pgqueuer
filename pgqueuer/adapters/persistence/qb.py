@@ -9,6 +9,7 @@ from typing_extensions import assert_never
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
 from pgqueuer.domain.schema.queue import dedupe_predicate
+from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import (
     DBSettings,
     Durability,
@@ -791,12 +792,7 @@ class QueryQueueBuilder:
         INSERT INTO {stats} (count, created, entrypoint, priority, status)
         SELECT count, created, entrypoint, priority, status
         FROM log_aggregation
-        ON CONFLICT (
-            priority,
-            date_trunc('sec', created AT TIME ZONE 'UTC'),
-            status,
-            entrypoint
-        ) DO UPDATE SET
+        ON CONFLICT ({UNIQUE_COUNT_KEY}) DO UPDATE SET
             count = {stats}.count + EXCLUDED.count
         """  # noqa
 
