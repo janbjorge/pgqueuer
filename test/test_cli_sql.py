@@ -75,8 +75,10 @@ def test_sql_install_respects_prefix_and_schema(monkeypatch: pytest.MonkeyPatch)
     assert "CREATE SCHEMA" not in no_create.output
 
 
-def test_sql_install_durability_option() -> None:
-    result = CliRunner().invoke(app, ["sql", "install", "-d", "volatile"])
+@pytest.mark.parametrize("command", ["install", "upgrade"])
+def test_sql_install_durability_option(command: str) -> None:
+    result = CliRunner().invoke(app, ["sql", command, "-d", "volatile"])
+    assert result.exit_code == 0, result.output
     assert "CREATE UNLOGGED TABLE" in result.output
 
 
@@ -88,13 +90,6 @@ def test_sql_upgrade_widen_id_option() -> None:
     assert "ALTER SEQUENCE %s AS BIGINT" in with_widen
     assert "ALTER COLUMN id TYPE BIGINT" not in without_widen
     assert "ALTER SEQUENCE %s AS BIGINT" not in without_widen
-
-
-def test_sql_upgrade_takes_a_durability_option() -> None:
-    """``pgq sql upgrade`` keeps the flag, since the offline script renders the
-    tables it may have to create.
-    """
-    assert CliRunner().invoke(app, ["sql", "upgrade", "-d", "volatile"]).exit_code == 0
 
 
 def test_a_rendered_plan_is_headed_and_empty_when_there_is_nothing_to_do() -> None:

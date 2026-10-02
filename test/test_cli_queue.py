@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from typer.testing import CliRunner
 
 from pgqueuer import db, queries
@@ -11,8 +9,7 @@ from test.helpers import env_from_dsn
 
 def test_cli_queue_dedupe_key_and_on_conflict(dsn: str, pgdriver: db.SyncDriver) -> None:
     runner = CliRunner()
-    env = os.environ.copy()
-    env.update(env_from_dsn(dsn))
+    env = env_from_dsn(dsn)
 
     result = runner.invoke(app, ["queue", "ep", "payload", "--dedupe-key", "k"], env=env)
     assert result.exit_code == 0, result.output
