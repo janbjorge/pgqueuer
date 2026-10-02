@@ -98,10 +98,6 @@ class AsyncpgPoolDriver(Driver):
         self._pool = pool
         self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
         self._lock = asyncio.Lock()
-        if self._pool.get_max_size() < 2:
-            raise RuntimeError(
-                "Pool max size must be greater than 2 to ensure connections are available."
-            )
 
     async def fetch(
         self,
@@ -127,6 +123,11 @@ class AsyncpgPoolDriver(Driver):
     ) -> None:
         async with self._lock:
             if self._listener_connection is None:
+                # The listener keeps this connection; queries need at least one more.
+                if self._pool.get_max_size() < 2:
+                    raise RuntimeError(
+                        "Pool max size must be greater than 2 to ensure connections are available."
+                    )
                 self._listener_connection = await self._pool.acquire()
 
             await self._listener_connection.add_listener(

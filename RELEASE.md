@@ -119,6 +119,10 @@ It is written without seeing the database, so it re-states every object behind
   for v1.4.0 keep working. It never applied a level and still does not: it
   prints a deprecation warning and is ignored. It will be removed in v2.0. Use
   `pgq durability` to change a table's durability.
+- `AsyncpgPoolDriver` accepts a one-connection pool. Its two-connection minimum
+  is checked when it starts listening, which holds one connection for good,
+  instead of at construction. The MCP server reads through it and never
+  listens, so it keeps working with `PGQUEUER_POOL_MAX_SIZE=1`.
 
 ### Removed
 
