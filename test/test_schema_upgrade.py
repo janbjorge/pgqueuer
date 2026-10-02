@@ -108,3 +108,39 @@ async def test_two_installations_do_not_block_each_other(apgdriver: AsyncpgDrive
     await queries_for(apgdriver, other).install()
     await queries_for(apgdriver, other).upgrade()
     assert await advisory_locks_held(apgdriver, other) == 0
+
+
+@pytest.mark.parametrize(
+    ("ours_present", "expected"),
+    [
+        pytest.param(True, (), id="ours-present"),
+        pytest.param(
+            False,
+            (
+                "CREATE TRIGGER tg_pgqueuer_changed\n"
+                "AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON pgqueuer\n"
+                "EXECUTE FUNCTION fn_pgqueuer_changed();",
+            ),
+            id="ours-missing",
+        ),
+    ],
+)
+async def test_a_same_named_trigger_on_another_table_is_not_ours(
+    apgdriver: AsyncpgDriver,
+    ours_present: bool,
+    expected: tuple[str, ...],
+) -> None:
+    """Trigger names are per table; another installation's must not stand in for ours."""
+    other = DBSettings(
+        queue_table="other_q",
+        queue_table_log="other_q_log",
+        statistics_table="other_q_stats",
+        schedules_table="other_q_sched",
+        queue_status_type="other_q_status",
+        function="other_fn",
+    )
+    await queries_for(apgdriver, other).install()
+    if not ours_present:
+        await apgdriver.execute("DROP TRIGGER tg_pgqueuer_changed ON pgqueuer")
+
+    assert (await Queries(apgdriver).plan_upgrade()).statements == expected
