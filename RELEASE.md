@@ -36,6 +36,10 @@ tags, so a section is written once and never revisited.
   (`PGQUEUER_QUEUE_STATUS_TYPE=status`) no longer gets that column
   schema-qualified too. Install, upgrade and `enqueue(on_conflict="skip")`
   rendered `app.status = ...` and failed with a syntax error.
+- `pgq upgrade --durability` (and `-d`) is accepted again, so scripts written
+  for v1.4.0 keep working. It never applied a level and still does not: it
+  prints a deprecation warning and is ignored. It will be removed in v2.0. Use
+  `pgq durability` to change a table's durability.
 
 ### Removed
 
