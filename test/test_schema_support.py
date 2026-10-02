@@ -162,6 +162,23 @@ async def test_schema_info_respects_db_schema(apgdriver: db.Driver) -> None:
     }
 
 
+async def test_dashboard_queries_respect_db_schema(apgdriver: db.Driver) -> None:
+    await queries.Queries(apgdriver).uninstall()
+
+    settings = DBSettings(db_schema=SCHEMA, prefix="iso_")
+    q = queries_for(apgdriver, settings)
+    await q.install()
+    (job_id,) = await q.enqueue("ep", None)
+
+    assert [job.id for job in await q.browse_queue()] == [job_id]
+    assert await q.queue_job_by_id(job_id) is not None
+    assert len(await q.job_log_history(job_id)) == 1
+    assert await q.unaggregated_log_count() == 1
+    assert await q.job_duration_percentiles(timedelta(hours=1)) == []
+    (bucket,) = await q.throughput_timeseries(timedelta(hours=1))
+    assert bucket.count == 1
+
+
 async def test_install_without_create_schema(apgdriver: db.Driver) -> None:
     """install(create_schema=False) requires a pre-existing schema."""
     await queries.Queries(apgdriver).uninstall()
