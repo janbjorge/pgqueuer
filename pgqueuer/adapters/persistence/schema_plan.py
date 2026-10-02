@@ -268,6 +268,31 @@ def table_notes(live: Schema, declared: Schema, settings: DBSettings) -> list[st
         if installed is not None:
             notes += rewrite_note(installed, table, settings)
             notes += skipped_widening(installed, table, settings)
+            notes += unconverted_columns(installed, table)
+    return notes
+
+
+def unconverted_columns(installed: Table, declared: Table) -> list[str]:
+    """Report what the planner has no statement for, rather than calling it current.
+
+    A kind change alongside a type change already raises in ``plan_column_type``.
+    """
+    found = {entry.name: entry for entry in installed.columns}
+    notes = []
+    for column in declared.columns:
+        live_column = found.get(column.name)
+        if live_column is None:
+            continue
+        if live_column.type == column.type and live_column.kind != column.kind:
+            notes.append(
+                f"{declared.name}.{column.name} is {live_column.kind} in the database but "
+                f"declared {column.kind}. Upgrade does not convert it; change it by hand."
+            )
+        if column.primary_key and not live_column.primary_key:
+            notes.append(
+                f"{declared.name}.{column.name} is not the primary key, which PgQueuer "
+                f"declares it to be. Upgrade does not add one; add it by hand."
+            )
     return notes
 
 

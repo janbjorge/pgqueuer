@@ -97,6 +97,9 @@ It is written without seeing the database, so it re-states every object behind
   when both use the same trigger name on different tables. It used to drop and
   recreate the trigger on the queue table, losing change notifications in
   between.
+- `pgq upgrade` reports a missing primary key, or a column changed between
+  serial and identity, as a `note:`. It has no statement for either and used
+  to call such a database up to date.
 - Upgrading a v0.18 database with statistics history no longer fails on
   `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
   into one per bucket, `count` summed, before the index is built; `pgq sql
