@@ -144,3 +144,25 @@ async def test_a_same_named_trigger_on_another_table_is_not_ours(
         await apgdriver.execute("DROP TRIGGER tg_pgqueuer_changed ON pgqueuer")
 
     assert (await Queries(apgdriver).plan_upgrade()).statements == expected
+
+
+async def test_statistics_created_default_preserves_the_instant(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """Omitting created stores this second's instant in a non-UTC session.
+
+    ``timezone('UTC', now())`` is a timestamp without time zone. Storing it
+    reads that wall clock in the session TimeZone and shifts the instant.
+    """
+    table = DBSettings().statistics_table
+    await apgdriver.execute("BEGIN")
+    await apgdriver.execute("SELECT set_config('TimeZone', 'America/New_York', true)")
+    rows = await apgdriver.fetch(
+        f"""
+        INSERT INTO {table} (count, priority, status, entrypoint)
+        VALUES (1, 0, 'successful', 'created-default')
+        RETURNING created = date_trunc('sec', now()) AS correct
+        """
+    )
+    await apgdriver.execute("COMMIT")
+    assert cell(rows[0], "correct", bool) is True
