@@ -7,6 +7,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from pgqueuer.adapters.persistence.query_helpers import cell
+from pgqueuer.adapters.persistence.schema_plan import rebuild_name
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.schema.model import (
     Column,
@@ -224,7 +225,11 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
     """Read the installed schema, spelled as ``pg_catalog`` reports it."""
     declared, gone = target(settings), retired(settings)
     table_names = [table.name for table in declared.tables]
-    index_names = [index.name for index in declared.indexes] + list(gone.indexes)
+    index_names = [
+        *(index.name for index in declared.indexes),
+        *(rebuild_name(index) for index in declared.indexes),
+        *gone.indexes,
+    ]
     type_names = [enum.name for enum in declared.enums] + list(gone.types)
     queries = CatalogQueries(settings)
 

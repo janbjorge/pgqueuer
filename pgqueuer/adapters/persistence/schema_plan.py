@@ -292,6 +292,17 @@ def plan_rebuild(index: Index, settings: DBSettings) -> list[str]:
     ]
 
 
+def plan_create(index: Index, leftover: Index | None, settings: DBSettings) -> list[str]:
+    """Create an absent index, or finish a rebuild cut off between its drop and rename.
+
+    A leftover replacement from an older declaration is dropped, not renamed in.
+    """
+    if leftover is not None and dataclasses.replace(leftover, name=index.name) == index:
+        return [f"ALTER INDEX {settings.qualify(leftover.name)} RENAME TO {index.name};"]
+    stale = [] if leftover is None else [f"DROP INDEX {settings.qualify(leftover.name)};"]
+    return [*stale, render_index(index, settings)]
+
+
 def plan_collapse(index: Index, live: Schema, settings: DBSettings) -> list[str]:
     """Fold split statistics buckets before their unique index is built.
 
@@ -317,7 +328,7 @@ def plan_indexes(live: Schema, declared: Schema, settings: DBSettings) -> list[s
             continue
         statements += plan_collapse(index, live, settings)
         if installed is None:
-            statements.append(render_index(index, settings))
+            statements += plan_create(index, found.get(rebuild_name(index)), settings)
         else:
             statements += plan_rebuild(index, settings)
     return statements
