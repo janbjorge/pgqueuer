@@ -52,10 +52,6 @@ class QueryBuilderEnvironment:
     def build_uninstall_query(self) -> str:
         return schema_ddl.render_uninstall(self.settings)
 
-    def build_upgrade_queries(self) -> Generator[str, None, None]:
-        """Statements converging any earlier schema onto the declaration."""
-        yield from schema_ddl.render_converge(self.settings)
-
     def build_table_has_column_query(self) -> str:
         return f"""SELECT EXISTS (
         SELECT FROM information_schema.columns

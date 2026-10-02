@@ -18,7 +18,7 @@ from typer import Context
 from typing_extensions import AsyncGenerator, assert_never
 
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
-from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.adapters.persistence import qb, queries, schema_ddl
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
@@ -304,7 +304,9 @@ def install(
 ) -> None:
     settings = qb.DBSettings(durability=durability)
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_install(settings, create_schema))
+        emit_deprecated_dry_run(
+            ctx, schema_ddl.render_install(settings, create_schema=create_schema)
+        )
         return
 
     async def run() -> bool:
@@ -384,7 +386,7 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_uninstall(qb.DBSettings()))
+        emit_deprecated_dry_run(ctx, schema_ddl.render_uninstall(qb.DBSettings()))
         return
 
     async def run() -> None:
