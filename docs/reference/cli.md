@@ -97,6 +97,10 @@ note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
       scales with row count. Prefer a maintenance window.
 ```
 
+Rebuilding an index whose definition differs from the declared one does not
+rewrite the table, but the build holds a `SHARE` lock that blocks writes to it,
+so it gets a `note:` too.
+
 A column whose installed type the planner has no conversion for stops the
 upgrade rather than guessing at a cast. It exits `1` with one line on stderr
 naming the column and both types; alter it by hand and re-run.

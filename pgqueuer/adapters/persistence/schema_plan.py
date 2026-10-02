@@ -292,6 +292,18 @@ def plan_rebuild(index: Index, settings: DBSettings) -> list[str]:
     ]
 
 
+def rebuild_notes(live: Schema, declared: Schema) -> list[str]:
+    """Warn before a rebuild: the build blocks writes to its table until it finishes."""
+    found = {entry.name: entry for entry in live.indexes}
+    return [
+        f"Upgrading rebuilds {index.name}. Postgres holds a SHARE lock on {index.table} "
+        f"for the whole build, blocking writes to it, for a time that scales with row "
+        f"count. Prefer a maintenance window."
+        for index in declared.indexes
+        if (installed := found.get(index.name)) is not None and installed != index
+    ]
+
+
 def plan_create(index: Index, leftover: Index | None, settings: DBSettings) -> list[str]:
     """Create an absent index, or finish a rebuild cut off between its drop and rename.
 
@@ -438,7 +450,7 @@ def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
         + plan_routines(live, declared, settings)
         + plan_retired_types(live, settings)
     )
-    notes = table_notes(live, declared, settings) + list(gone.notes)
+    notes = table_notes(live, declared, settings) + rebuild_notes(live, declared) + list(gone.notes)
     return Plan(statements=tuple(statements), notes=tuple(notes))
 
 

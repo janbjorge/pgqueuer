@@ -29,7 +29,8 @@ Depending on how old and how hand-edited a database is, an upgrade can now:
 - add missing labels, tables, columns, indexes, the trigger function and the
   trigger, and create everything on an empty database;
 - rebuild an index whose definition differs from the declared one. The build
-  takes a `SHARE` lock and blocks writes to that table while it runs;
+  takes a `SHARE` lock and blocks writes to that table while it runs, and the
+  upgrade prints a `note:` first;
 - convert `int4` id columns and sequences to `BIGINT` (still gated by
   `--widen-id/--no-widen-id`) and move the statistics `status` column off the
   pre-v0.27 enum. Both rewrite the table under `ACCESS EXCLUSIVE`, and the

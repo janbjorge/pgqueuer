@@ -463,6 +463,37 @@ def test_a_redefined_index_is_built_before_the_old_one_is_dropped() -> None:
     )
 
 
+def test_a_rebuild_is_announced_before_it_runs() -> None:
+    """The build blocks writes to the table; the operator should hear it first."""
+    settings = DBSettings()
+    schema = declared(settings)
+    name = f"{settings.queue_table}_ep_ea_idx"
+
+    notes = plan(redefined(schema, name), schema, settings).notes
+    assert len(notes) == 1
+    assert name in notes[0]
+    assert f"SHARE lock on {settings.queue_table}" in notes[0]
+
+
+def test_finishing_a_cut_off_rebuild_is_not_announced() -> None:
+    """Renaming the leftover in builds nothing, so there is nothing to warn about."""
+    settings = DBSettings()
+    schema = declared(settings)
+    name = f"{settings.queue_table}_ep_ea_idx"
+    replacement = rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
+    live = dataclasses.replace(
+        schema,
+        indexes=tuple(
+            dataclasses.replace(entry, name=replacement) if entry.name == name else entry
+            for entry in schema.indexes
+        ),
+    )
+
+    result = plan(live, schema, settings)
+    assert result.statements == (f"ALTER INDEX {replacement} RENAME TO {name};",)
+    assert result.notes == ()
+
+
 def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
     """Where an upgrade that dropped the index and failed to rebuild it left off."""
     settings = DBSettings()
