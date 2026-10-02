@@ -157,8 +157,10 @@ leaves open.
     producers); permanent key uniqueness vs. in-flight window.
   - Consequences: dedupe survives producer races; recurring jobs can reuse
     keys; "already ran yesterday" dedupe is out of scope.
-  - Pointers: partial unique index built in
-    `pgqueuer/adapters/persistence/qb.py`; `OnConflict` in domain types.
+  - Pointers: partial unique index declared in
+    `pgqueuer/domain/schema/queue.py` (`dedupe_predicate`) and reused as the
+    enqueue `ON CONFLICT` arbiter in `pgqueuer/adapters/persistence/qb.py`;
+    `OnConflict` in domain types.
   - Not covered: the index definition itself.
 
 - [ ] **ADR-0012: Entrypoints must be async**
@@ -218,10 +220,9 @@ leaves open.
     install and upgrade cannot drift because they are one artifact.
     Planning the exact upgrade needs a connection; the offline script is a
     weaker superset. Retirement is an explicit list, never inferred.
-  - Pointers: model and plan in `pgqueuer/domain/schema.py`; inspection,
-    rendering and planning in `pgqueuer/adapters/persistence/`; opt-out
-    knob for the one table-rewriting change (`widen_id` in
-    `pgqueuer/domain/settings.py`).
+  - Pointers: model in `pgqueuer/domain/schema/`; inspection, rendering
+    and planning in `pgqueuer/adapters/persistence/`; opt-out knob for the
+    id widening (`widen_id` in `pgqueuer/domain/settings.py`).
   - Not covered: the model's field layout, the catalog queries, statement
     ordering, CLI flag spellings.
 

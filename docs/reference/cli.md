@@ -180,7 +180,7 @@ sqitch, or Alembic.
 - `sql uninstall`: SQL to drop all PgQueuer objects.
 - `sql upgrade`: SQL to migrate an existing installation to the current version.
   Accepts `--widen-id/--no-widen-id` like `upgrade`, plus `--durability`, which
-  `upgrade` does not take: the offline script renders the tables it may have to
+  `upgrade` ignores: the offline script renders the tables it may have to
   create, while a connected upgrade never changes durability. Since it
   cannot see the database, it re-states every object behind `IF NOT EXISTS`
   rather than emitting a delta. That makes it the version-portable artifact:
