@@ -120,6 +120,7 @@ class TestInsightsService:
         stale = await service.stale_jobs(timedelta(seconds=-1))
         assert len(stale) == 1
         assert stale[0].seconds_since_heartbeat >= 0
+        assert len(await service.stale_jobs(timedelta(0))) == 1
 
     async def test_job_and_history(self, queries: InMemoryQueries) -> None:
         (job_id,) = await queries.enqueue("ep", b"payload")

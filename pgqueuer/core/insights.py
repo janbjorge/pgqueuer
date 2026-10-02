@@ -63,7 +63,9 @@ class InsightsService:
         threshold: timedelta | None = None,
         limit: int = 100,
     ) -> list[models.StaleJob]:
-        return await self.repository.stale_jobs(threshold or DEFAULT_STALE_THRESHOLD, limit)
+        if threshold is None:
+            threshold = DEFAULT_STALE_THRESHOLD
+        return await self.repository.stale_jobs(threshold, limit)
 
     async def exception_logs(self, limit: int = 100) -> list[models.Log]:
         return await self.repository.exception_logs(limit)
