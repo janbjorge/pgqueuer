@@ -87,6 +87,11 @@ It is written without seeing the database, so it re-states every object behind
 - `pgq upgrade` rebuilds a redefined index beside the old one and swaps it in
   only once the build succeeds. It used to drop first, so a failed build left
   the database without the index and every rerun failed the same way.
+- An upgrade cut off after dropping the old index but before renaming the new
+  one is finished by the next upgrade, which renames the leftover
+  `pgq_rebuild_*` index into place. It used to build the index again beside
+  it, leaving two identical indexes, so a unique violation could name the
+  leftover and `dequeue` would raise instead of returning an empty batch.
 - Upgrading a v0.18 database with statistics history no longer fails on
   `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
   into one per bucket, `count` summed, before the index is built; `pgq sql

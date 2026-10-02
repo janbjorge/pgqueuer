@@ -108,3 +108,40 @@ async def test_an_interrupted_rebuild_is_resumed(apgdriver: AsyncpgDriver) -> No
     assert await index_definition(apgdriver, replacement) is None
     definition = await index_definition(apgdriver, name)
     assert definition is not None and "WHERE (NOT aggregated)" in definition
+
+
+@pytest.mark.parametrize(
+    ("leftover", "expected"),
+    [
+        pytest.param(
+            "ALTER INDEX {name} RENAME TO {replacement}",
+            ("ALTER INDEX {replacement} RENAME TO {name};",),
+            id="built-then-cut-off",
+        ),
+        pytest.param(
+            "DROP INDEX {name}; CREATE INDEX {replacement} ON pgqueuer_log (job_id)",
+            (
+                "DROP INDEX {replacement};",
+                "CREATE INDEX {name} ON pgqueuer_log USING btree ((1)) WHERE (NOT aggregated);",
+            ),
+            id="stale-definition",
+        ),
+    ],
+)
+async def test_a_rebuild_cut_off_after_its_drop_is_finished(
+    apgdriver: AsyncpgDriver,
+    leftover: str,
+    expected: tuple[str, ...],
+) -> None:
+    """Only the replacement remains; a current one is renamed in, a stale one replaced."""
+    name = "pgqueuer_log_not_aggregated"
+    replacement = replacement_for(name)
+    await apgdriver.execute(leftover.format(name=name, replacement=replacement))
+
+    assert await planned(apgdriver) == tuple(
+        line.format(name=name, replacement=replacement) for line in expected
+    )
+    await Queries(apgdriver).upgrade()
+
+    assert await planned(apgdriver) == ()
+    assert await index_definition(apgdriver, replacement) is None
