@@ -54,7 +54,6 @@ class IndexRow(BaseModel):
 
 class ConstraintRow(BaseModel):
     tbl: str
-    name: str
     kind: str
     columns: list[str]
 
@@ -124,7 +123,7 @@ class CatalogQueries:
 
     def constraints(self) -> str:
         return f"""
-        SELECT tbl.relname AS tbl, con.conname AS name, con.contype::text AS kind,
+        SELECT tbl.relname AS tbl, con.contype::text AS kind,
                array_agg(att.attname ORDER BY keys.ordinality) AS columns
         FROM pg_constraint con
         JOIN pg_class tbl ON tbl.oid = con.conrelid
@@ -205,13 +204,9 @@ def column_kind(row: ColumnRow) -> ColumnKind:
     return "plain"
 
 
-async def namespace_present(
-    driver: Driver,
-    queries: CatalogQueries,
-    settings: DBSettings,
-) -> bool:
-    rows = await driver.fetch(queries.namespace(), settings.db_schema)
-    return bool(rows) and cell(rows[0], "present", bool)
+async def namespace_present(driver: Driver, queries: CatalogQueries) -> bool:
+    rows = await driver.fetch(queries.namespace(), queries.settings.db_schema)
+    return cell(rows[0], "present", bool)
 
 
 R = TypeVar("R", bound=BaseModel)
@@ -233,7 +228,7 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
     type_names = [enum.name for enum in declared.enums] + list(gone.types)
     queries = CatalogQueries(settings)
 
-    if settings.db_schema is not None and not await namespace_present(driver, queries, settings):
+    if settings.db_schema is not None and not await namespace_present(driver, queries):
         return Schema((), (), (), (), (), namespace_exists=False)
 
     columns = await rows_of(driver, ColumnRow, queries.columns(), table_names)
