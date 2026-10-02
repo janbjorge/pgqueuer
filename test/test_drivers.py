@@ -244,3 +244,13 @@ async def test_no_autocommit_raises(dsn: str) -> None:
     with pytest.raises(RuntimeError):
         async with await psycopg.AsyncConnection.connect(conninfo=dsn) as conn:
             PsycopgDriver(conn)
+
+
+async def test_a_one_connection_pool_queries_but_cannot_listen(dsn: str) -> None:
+    """A listener holds a connection for good, so only listening needs a second one."""
+    async with asyncpg.create_pool(dsn=dsn, min_size=1, max_size=1) as pool:
+        driver = AsyncpgPoolDriver(pool)
+        assert await driver.fetch("SELECT 1 AS one") == [{"one": 1}]
+
+        with pytest.raises(RuntimeError, match="Pool max size"):
+            await driver.add_listener(Channel("ch_one_connection"), lambda _: None)
