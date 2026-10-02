@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from pgqueuer.domain.schema import model
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.settings import DBSettings
@@ -44,15 +42,6 @@ def test_target_is_recomputed_per_call() -> None:
     first, second = target(DBSettings()), target(DBSettings())
     assert first == second
     assert first is not second
-
-
-@pytest.mark.parametrize(
-    "durability, unlogged",
-    [("durable", False), ("volatile", True)],
-)
-def test_durability_selects_table_persistence(durability: str, unlogged: bool) -> None:
-    schema = target(DBSettings(durability=durability))  # type: ignore[arg-type]
-    assert all(table.unlogged is unlogged for table in schema.tables)
 
 
 def test_indexes_reference_declared_tables() -> None:

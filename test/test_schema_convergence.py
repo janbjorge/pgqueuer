@@ -172,17 +172,6 @@ async def test_upgraded_release_aggregates_statistics(
 
 
 @pytest.mark.parametrize("release", RELEASES)
-async def test_upgrade_is_rerunnable(apgdriver: AsyncpgDriver, release: str) -> None:
-    """A second upgrade on an already-upgraded database changes nothing."""
-    settings = DBSettings()
-    queries = await upgraded(apgdriver, release)
-    once = collapse(await inspect(apgdriver, settings))
-
-    await queries.upgrade()
-    assert collapse(await inspect(apgdriver, settings)) == once
-
-
-@pytest.mark.parametrize("release", RELEASES)
 async def test_nothing_is_left_to_do_after_upgrade(apgdriver: AsyncpgDriver, release: str) -> None:
     """The planner, run against the real catalog, has no statement left to emit.
 

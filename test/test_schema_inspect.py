@@ -19,7 +19,7 @@ async def test_fresh_install_inspects_equal_to_target(apgdriver: AsyncpgDriver) 
     assert collapse(await inspect(apgdriver, settings)) == declared_schema(settings)
 
 
-@pytest.mark.parametrize("durability", ["durable", "volatile"])
+@pytest.mark.parametrize("durability", ["balanced", "volatile"])
 async def test_durability_round_trips(apgdriver: AsyncpgDriver, durability: str) -> None:
     settings = DBSettings(durability=durability)  # type: ignore[arg-type]
     await Queries(apgdriver).uninstall()
