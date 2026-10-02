@@ -435,8 +435,8 @@ def durability_notes(live: Schema, declared: Schema, settings: DBSettings) -> li
 def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
     """Statements bringing *live* up to *declared*, in dependency order.
 
-    Column work precedes index work so ``ALTER COLUMN TYPE`` never rebuilds an
-    index about to be dropped; retired types come last, since a column may
+    Column work precedes index work so an index never covers a column the plan
+    has yet to add or retype; retired types come last, since a column may
     still reference one. Nothing here drops a table or a column: an object the
     declaration does not name is somebody else's.
     """
