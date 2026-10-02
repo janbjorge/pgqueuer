@@ -93,6 +93,10 @@ It is written without seeing the database, so it re-states every object behind
   `pgq_rebuild_*` index into place. It used to build the index again beside
   it, leaving two identical indexes, so a unique violation could name the
   leftover and `dequeue` would raise instead of returning an empty batch.
+- `pgq upgrade` no longer mistakes another installation's trigger for its own
+  when both use the same trigger name on different tables. It used to drop and
+  recreate the trigger on the queue table, losing change notifications in
+  between.
 - Upgrading a v0.18 database with statistics history no longer fails on
   `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
   into one per bucket, `count` summed, before the index is built; `pgq sql

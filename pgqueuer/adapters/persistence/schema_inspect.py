@@ -258,6 +258,7 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
                 function=FunctionName(row.function),
             )
             for row in triggers
+            if row.tbl in table_names
         ),
     )
 
