@@ -14,7 +14,73 @@ tags, so a section is written once and never revisited.
 
 ---
 
-## v1.4.1
+## v1.5.0
+
+### Changed: `pgq upgrade` computes what each database needs
+
+`pgq upgrade` no longer replays a fixed list of statements. It reads the
+installed schema from `pg_catalog`, compares it with the schema this release
+declares, and runs only the difference. A database that is already current runs
+nothing and says `PgQueuer schema is already up to date.` (ADR-0016).
+
+Run `pgq upgrade --plan` first to see the statements without applying them.
+Depending on how old and how hand-edited a database is, an upgrade can now:
+
+- add missing labels, tables, columns, indexes, the trigger function and the
+  trigger, and create everything on an empty database;
+- rebuild an index whose definition differs from the declared one. The build
+  takes a `SHARE` lock and blocks writes to that table while it runs;
+- convert `int4` id columns and sequences to `BIGINT` (still gated by
+  `--widen-id/--no-widen-id`) and move the statistics `status` column off the
+  pre-v0.27 enum. Both rewrite the table under `ACCESS EXCLUSIVE`, and the
+  upgrade prints a `note:` first;
+- reset `NOT NULL` and `DEFAULT` on PgQueuer's own columns to the declared
+  values, reverting changes made to them by hand;
+- drop the retired `pgqueuer_heartbeat_id_id1_idx` index and the
+  `pgqueuer_statistics_status` enum, and relax `NOT NULL` on the retired
+  `time_in_queue` column. That column is reported with a `note:`, never dropped.
+
+Durability is never changed by `pgq upgrade`; a mismatch with
+`PGQUEUER_DURABILITY` is reported as a `note:`. A column type the upgrade has no
+conversion for stops it with exit code `1` and one line naming the column,
+instead of guessing at a cast. Upgrades of one installation serialize on an
+advisory lock; over a pool driver that lock does not cover every connection.
+
+`pgq sql upgrade` still prints a script for operators who apply DDL themselves.
+It is written without seeing the database, so it re-states every object behind
+`IF NOT EXISTS` and covers less than the connected upgrade.
+
+### Added
+
+- `pgq upgrade --plan` prints the exact statements this database needs, headed
+  by a comment, and applies nothing. Notes and the summary go to stderr.
+- `pgq upgrade` reports what it did (`Applied 3 statements.`) and prints
+  `note:` lines for anything it will not do on its own.
+- `pgq stale` lists picked jobs whose heartbeat is older than `--threshold`
+  seconds (default 300).
+- `pgq workers` lists queue managers currently holding picked jobs.
+- `pgq backlog` shows how many jobs wait in `queued` per entrypoint, and how old
+  they are.
+- `--json` on `pgq failed`, `pgq stale`, `pgq workers` and `pgq backlog`.
+  `pgq failed --json` reports payloads by size (`payload_bytes`) only.
+- `Queries.plan_upgrade()`, `Queries.apply_upgrade()` and
+  `Queries.schema_is_installed()`. `Queries.upgrade()` now logs its notes as
+  warnings.
+- The CLI exit codes are documented, and an onboarding guide for coding agents
+  is published in the docs.
+
+### Changed
+
+- `pgq install` refuses a database that already has this installation, even a
+  partial one, and exits `1` naming the prefix and schema. It used to fail with
+  a raw `DuplicateObjectError` traceback. Use `pgq upgrade`, which also installs
+  into an empty database.
+- `pgq queue` prints the duplicate `dedupe_key` error on stderr instead of
+  stdout.
+- The MCP `queue_age` tool returns its rows ordered by entrypoint, not by oldest
+  job first.
+- `pgq upgrade` no longer lists `--durability` in its help. The flag is still
+  accepted and ignored; see Fixed.
 
 ### Fixed
 
