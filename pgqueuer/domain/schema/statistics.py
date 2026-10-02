@@ -16,7 +16,8 @@ def statistics_table(settings: DBSettings) -> Table:
                 "created",
                 TIMESTAMP,
                 not_null=True,
-                default="date_trunc('sec'::text, timezone('UTC'::text, now()))",
+                # timezone() yields timestamp; assigning it shifts a non-UTC session.
+                default="date_trunc('sec'::text, now())",
             ),
             column("count", "bigint", not_null=True),
             column("priority", "integer", not_null=True),

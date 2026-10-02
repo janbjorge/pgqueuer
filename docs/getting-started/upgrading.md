@@ -84,6 +84,33 @@ instead, on every run, until you do:
 ALTER TABLE pgqueuer_statistics DROP COLUMN time_in_queue;
 ```
 
+### Statistics `created` preserves the instant (#807)
+
+Inserts that omit `created` stored a shifted instant whenever the session
+`TimeZone` was not UTC. The old default,
+
+```sql
+date_trunc('sec', timezone('UTC', now()))
+```
+
+truncates a `timestamp without time zone`. PostgreSQL then reads that wall
+clock in the session `TimeZone` while assigning it to the
+`timestamp with time zone` column, so `America/New_York`, `Asia/Tokyo`, or
+`Asia/Kathmandu` records a different moment than `now()`. Log aggregation does
+not take this path: it inserts `date_trunc('sec', created)` itself. Only
+inserts that leave `created` out were affected.
+
+Run `pgq upgrade`. It is required. It replaces that default with
+`date_trunc('sec', now())`, which stays `timestamp with time zone` and keeps
+the instant. The alteration is catalog-only: statistics rows stay in place and
+the unique index is not rebuilt. A fresh `pgq install` already has the
+corrected default.
+
+Rows already stored stay as they are. A stored instant does not record which
+session `TimeZone` wrote it, and aggregation or an explicit `created` may
+already hold the right instant, so shifting history would guess. `pgq upgrade`
+changes the default for later inserts only.
+
 ## 2. Async-only job handlers
 
 Synchronous job handlers are no longer accepted. Registering a plain `def`
