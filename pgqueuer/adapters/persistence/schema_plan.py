@@ -1,11 +1,4 @@
-"""Diff the installed schema against the declaration and emit only the delta.
-
-Absent objects are created, changed ones converted, and what earlier releases
-left behind is cleaned up -- except a retired column, which holds data and is
-reported rather than dropped. An unrecognised conversion raises rather than
-guessing at a cast. A converged database yields an empty plan, which is what
-lets ``pgq upgrade`` say "already up to date" and mean it.
-"""
+"""Diff the installed schema against the declaration and emit only the delta."""
 
 from __future__ import annotations
 
@@ -205,7 +198,6 @@ def plan_sequence(installed: Table, declared: Table, settings: DBSettings) -> li
 
     Resolved through ``pg_get_serial_sequence`` rather than assuming
     ``<table>_id_seq``: the catalog gives the sequence's type, not its name.
-    A table owning no sequence has none to widen.
     """
     if installed.id_sequence_type in (None, declared.id_sequence_type) or not settings.widen_id:
         return []

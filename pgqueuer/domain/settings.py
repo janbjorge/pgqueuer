@@ -211,9 +211,8 @@ class DBSettings(BaseSettings):
         default=Durability.durable, validation_alias=name_env_alias("durability")
     )
 
-    # When True, `pgq upgrade` widens legacy int4 id columns/sequences to BIGINT
-    # (issue #671). The widen takes an ACCESS EXCLUSIVE lock and rewrites each
-    # table; set False to skip it and apply the widening out-of-band.
+    # When True, `pgq upgrade` widens legacy int4 id columns/sequences to BIGINT, which takes an
+    # ACCESS EXCLUSIVE lock and rewrites each table; set False to skip it and apply it out-of-band.
     widen_id: bool = Field(default=True, validation_alias=name_env_alias("widen_id"))
 
     @field_validator("prefix")

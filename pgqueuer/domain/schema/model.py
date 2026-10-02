@@ -108,7 +108,8 @@ class Plan:
     """What an upgrade would do to reach the declaration.
 
     ``statements`` apply in order, one per round trip. ``notes`` are what the
-    upgrade will not do on its own, such as dropping a column holding data.
+    upgrade will not do on its own, such as dropping a column holding data,
+    and the locks it takes.
     """
 
     statements: tuple[str, ...] = ()

@@ -31,9 +31,8 @@ def unique_count_name(settings: DBSettings) -> IndexName:
     return IndexName(f"{settings.statistics_table}_unique_count")
 
 
-# Columns of ``{statistics_table}_unique_count``: one row per bucket. Rows that
-# collide on it are one bucket split in two, so an upgrade folds them together
-# before it builds the index, and both read the key from here.
+# Columns of ``{statistics_table}_unique_count``: one row per bucket. Rows that collide
+# on it are one bucket split in two, so an upgrade folds them before it builds the index.
 UNIQUE_COUNT_KEY = (
     "priority, date_trunc('sec'::text, timezone('UTC'::text, created)), status, entrypoint"
 )
