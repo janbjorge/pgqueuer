@@ -256,8 +256,9 @@ summary here:
 - Job lifecycle model: statuses, retries, cancellation, and completion
   tracking in one place.
 - Scheduling model: schedule ownership, cadence, and cron semantics.
-- Namespace & migration model: durability policies and the migration
-  stream (the installed objects themselves are covered by the
+- Namespace & migration model: durability policies and the
+  [computed upgrade](../adr/ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
+  (the installed objects themselves are covered by the
   [schema manifest model](schema-manifest.md)).
 - Observability model: the log/statistics pipeline, dashboard, metrics,
   and the MCP read surface.

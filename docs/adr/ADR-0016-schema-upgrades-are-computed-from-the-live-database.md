@@ -41,8 +41,9 @@ PgQueuer does not name, reports a retired column rather than dropping
 it, and raises on a change it does not recognise.
 
 Rendering needs no connection, so an offline script is still produced
-for operators who apply DDL themselves. It converges absent objects but
-cannot retype or redefine one.
+for operators who apply DDL themselves. It creates absent objects and
+re-states the rest; the few retypes and index redefinitions it performs
+are hand-kept, catalog-guarded statements, not computed from a diff.
 
 ## Consequences
 

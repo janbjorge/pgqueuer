@@ -290,7 +290,7 @@ The grandfathered `tracing.TRACER` is the sole legacy exception; add no more, an
 ### Error Handling
 
 - Custom exceptions inherit from `PgqException` (in `pgqueuer/domain/errors.py`)
-- Hierarchy: `PgqException > RetryException > MaxRetriesExceeded | MaxTimeExceeded`; also `DuplicateJobError`, `FailingListenerError`
+- Hierarchy: `PgqException > RetryException > RetryRequested`; also `DuplicateJobError`, `FailingListenerError`, `SchemaDriftError`
 - Use `logconfig.logger.exception(...)` for logging errors in job dispatch
 - Use `contextlib.suppress(...)` for non-critical errors
 - Use `pytest.raises` in tests for expected exceptions
