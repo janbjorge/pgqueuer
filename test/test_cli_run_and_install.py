@@ -105,8 +105,7 @@ def test_cli_install_upgrade_uninstall_cycle(dsn: str) -> None:
     runner = CliRunner()
 
     # Build base PG* env for each CLI invocation
-    base_env = os.environ.copy()
-    base_env.update(env_from_dsn(dsn))
+    base_env = env_from_dsn(dsn)
 
     # Helper to invoke and assert success
     def invoke_ok(args: list[str], env: dict[str, str]) -> str:
@@ -159,8 +158,7 @@ def test_cli_install_refuses_an_installed_database(dsn: str) -> None:
     The dsn fixture arrives with PgQueuer already installed, which is the state
     a provisioning script that runs install twice would find.
     """
-    env = os.environ.copy()
-    env.update(env_from_dsn(dsn))
+    env = env_from_dsn(dsn)
 
     result = CliRunner().invoke(app, ["install"], env=env)
 
@@ -174,8 +172,7 @@ def test_cli_upgrade_reports_drift_without_a_traceback(dsn: str) -> None:
 
     It used to arrive on line 145 of a rich traceback through uvloop and asyncpg.
     """
-    env = os.environ.copy()
-    env.update(env_from_dsn(dsn))
+    env = env_from_dsn(dsn)
     with psycopg.connect(dsn, autocommit=True) as connection:
         table = DBSettings().queue_table
         connection.execute(f"ALTER TABLE {table} ALTER COLUMN payload TYPE text".encode())
@@ -201,8 +198,7 @@ def test_cli_upgrade_ignores_a_durability_flag(
 
     No ``note:`` means the declared level stayed durable rather than volatile.
     """
-    env = os.environ.copy()
-    env.update(env_from_dsn(dsn))
+    env = env_from_dsn(dsn)
 
     result = CliRunner().invoke(app, ["upgrade", *extra_args], env=env)
 
@@ -237,14 +233,9 @@ def test_cli_run_forwards_heartbeat_timeout(
 
 
 def test_cli_upgrade_reports_converged_and_plans_the_delta(dsn: str) -> None:
-    """`pgq upgrade` says what it did; `--plan` says what it would do.
-
-    The summary and any notes go to stderr, so `pgq upgrade --plan` can be
-    redirected straight into a migration file without picking up prose.
-    """
+    """`pgq upgrade` reports what it did on stderr; `--plan` prints only the delta on stdout."""
     runner = CliRunner()
-    env = os.environ.copy()
-    env.update(env_from_dsn(dsn))
+    env = env_from_dsn(dsn)
 
     converged = runner.invoke(app, ["upgrade"], env=env)
     assert converged.exit_code == 0, converged.stdout
