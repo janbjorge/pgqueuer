@@ -4,8 +4,12 @@ from typing import Awaitable, Callable
 
 import pytest
 
-from pgqueuer.core.buffers import HeartbeatBuffer
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core import buffers, heartbeat
+from pgqueuer.core.buffers import HeartbeatBuffer, HeartbeatSink
 from pgqueuer.core.heartbeat import Heartbeat
+from pgqueuer.core.qm import QueueManager
+from pgqueuer.domain.models import Job
 from pgqueuer.types import JobId
 
 
@@ -126,3 +130,37 @@ async def test_heartbeat_keeps_buffer_ticking() -> None:
     async with Heartbeat(JobId(1), timedelta(seconds=0.1), hbuf):
         await asyncio.sleep(0.35)
     assert hbuf.received >= 3  # ~1 beat per 0.1 s
+
+
+async def test_cadence_keeps_a_live_job_through_one_failed_flush(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """beat + 1.2 * 2 * flush <= 0.8 T; see docs/guides/heartbeat.md."""
+    heartbeat_timeout = timedelta(seconds=1)
+    beats = list[timedelta]()
+    flushes = list[timedelta]()
+
+    def spy_heartbeat(job_id: JobId, interval: timedelta, buffer: HeartbeatBuffer) -> Heartbeat:
+        beats.append(interval)
+        return Heartbeat(job_id, interval, buffer)
+
+    def spy_buffer(
+        *, max_size: int, timeout: timedelta, repository: HeartbeatSink
+    ) -> HeartbeatBuffer:
+        flushes.append(timeout)
+        return HeartbeatBuffer(max_size=max_size, timeout=timeout, repository=repository)
+
+    monkeypatch.setattr(heartbeat, "Heartbeat", spy_heartbeat)
+    monkeypatch.setattr(buffers, "HeartbeatBuffer", spy_buffer)
+    qm = QueueManager(InMemoryQueries(driver=InMemoryDriver()))
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        qm.shutdown.set()
+
+    await qm.queries.enqueue(["fetch"], [None], [0])
+    await qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=heartbeat_timeout)
+
+    (beat,) = beats
+    (flush,) = flushes
+    assert beat + 1.2 * 2 * flush <= 0.8 * heartbeat_timeout
