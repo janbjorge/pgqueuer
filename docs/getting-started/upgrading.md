@@ -227,7 +227,7 @@ Two semantics changed:
   the dequeue SQL query. `concurrency_limit=5` caps at 5 concurrent jobs
   across the entire fleet, not 5 per worker.
 - `heartbeat_timeout` is a single global value applied to all entrypoints
-  (default 30 seconds). Heartbeats are sent automatically at half the timeout.
+  (default 30 seconds). Heartbeats are sent automatically at a quarter of the timeout.
   If you had varying per-entrypoint timers, pick the maximum.
 
 RPS rate limiting was inherently flaky (observed RPS diverged from actual
