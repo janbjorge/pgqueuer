@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import functools
 import random
 import uuid
 from collections.abc import MutableMapping
@@ -144,6 +145,16 @@ class QueueManager:
 
     def get_context(self, job_id: types.JobId) -> models.Context:
         return self.job_context[job_id]
+
+    def drop_context(
+        self,
+        job_id: types.JobId,
+        context: models.Context,
+        task: asyncio.Task[None],
+    ) -> None:
+        """Forget *context* once its dispatch task ends, even if it died before cleaning up."""
+        if self.job_context.get(job_id) is context:
+            del self.job_context[job_id]
 
     def register_executor(
         self,
@@ -447,13 +458,17 @@ class QueueManager:
                 async for job in self.fetch_jobs(
                     batch_size, max_concurrent_tasks, heartbeat_timeout
                 ):
-                    self.job_context[job.id] = models.Context(
+                    # A late heartbeat lets our own dequeue re-pick a job still running here.
+                    if job.id in self.job_context:
+                        continue
+                    context = models.Context(
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,
                     )
-                    task_manager.add(
-                        asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
-                    )
+                    self.job_context[job.id] = context
+                    task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
+                    task.add_done_callback(functools.partial(self.drop_context, job.id, context))
+                    task_manager.add(task)
 
                     with contextlib.suppress(asyncio.QueueEmpty):
                         notice_event_listener.get_nowait()
