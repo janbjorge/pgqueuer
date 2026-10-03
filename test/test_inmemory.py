@@ -11,7 +11,7 @@ import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.types import HealthCheckId, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import HealthCheckId, OnConflict, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
@@ -39,6 +39,25 @@ async def test_enqueue_batch(queries: InMemoryQueries) -> None:
     )
     assert len(ids) == 3
     assert ids[0] < ids[1] < ids[2]
+
+
+@pytest.mark.parametrize("on_conflict", ("raise", "skip"))
+async def test_enqueue_rejects_short_payload_without_partial_insert(
+    queries: InMemoryQueries, on_conflict: OnConflict
+) -> None:
+    with pytest.raises(ValueError, match="payload"):
+        if on_conflict == "skip":
+            await queries.enqueue(
+                ["a", "b"], [b"first"], [1, 2], dedupe_key=["a", "b"], on_conflict=on_conflict
+            )
+        else:
+            await queries.enqueue(
+                ["a", "b"], [b"first"], [1, 2], dedupe_key=["a", "b"], on_conflict=on_conflict
+            )
+
+    assert await queries.queue_size() == []
+    assert await queries.queue_log() == []
+    assert await queries.enqueue("a", b"first", dedupe_key="a") == [1]
 
 
 async def test_enqueue_returns_ids_with_priority(queries: InMemoryQueries) -> None:
