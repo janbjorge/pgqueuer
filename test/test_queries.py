@@ -24,6 +24,26 @@ async def test_queries_put(apgdriver: db.Driver, N: int) -> None:
     assert sum(x.count for x in await q.queue_size()) == N
 
 
+async def test_enqueue_rejects_short_payload_without_null_padding(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+    await q.enqueue("existing", b"keep")
+
+    with pytest.raises(ValueError, match="payload"):
+        await q.enqueue(["a", "b"], [b"first"], [1, 2])
+
+    assert sum(x.count for x in await q.queue_size()) == 1
+
+
+def test_sync_enqueue_rejects_short_payload_without_null_padding(pgdriver: db.SyncDriver) -> None:
+    q = queries.SyncQueries(pgdriver)
+    q.enqueue("existing", b"keep")
+
+    with pytest.raises(ValueError, match="payload"):
+        q.enqueue(["a", "b"], [b"first"], [1, 2])
+
+    assert sum(x.count for x in q.queue_size()) == 1
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queries_next_jobs(
     apgdriver: db.Driver,

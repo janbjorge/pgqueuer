@@ -34,6 +34,30 @@ def test_normalize_single_entrypoint() -> None:
     assert result == expected
 
 
+@pytest.mark.parametrize(
+    "parameter", ("payload", "priority", "execute_after", "dedupe_key", "headers")
+)
+@pytest.mark.parametrize("length", (0, 1, 3))
+def test_normalize_rejects_mismatched_batch_lengths(parameter: str, length: int) -> None:
+    values: dict[str, Any] = {
+        "entrypoint": ["task1", "task2"],
+        "payload": [b"data1", b"data2"],
+        "priority": [1, 2],
+        "execute_after": [timedelta(seconds=10), None],
+        "dedupe_key": ["key1", None],
+        "headers": [{"source": "test"}, None],
+    }
+    values[parameter] = [values[parameter][0]] * length
+
+    with pytest.raises(ValueError, match=parameter):
+        normalize_enqueue_params(**values)
+
+
+def test_normalize_empty_batch() -> None:
+    result = normalize_enqueue_params(entrypoint=[], payload=[], priority=[])
+    assert result == NormedEnqueueParam([], [], [], [], [], [])
+
+
 def test_normalize_multiple_entrypoints() -> None:
     result = normalize_enqueue_params(
         entrypoint=["task1", "task2"],
