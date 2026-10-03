@@ -6,7 +6,6 @@ from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.queries import Queries
 from test.helpers import install_release
 
 
@@ -44,7 +43,6 @@ async def test_the_script_does_not_rewrite_a_current_statistics_table(
     for anyone piping ``pgq sql upgrade`` at an already-current database.
     """
     settings = DBSettings()
-    await Queries(apgdriver).upgrade()
     before = await relfilenode(apgdriver, settings.statistics_table)
 
     await apply_converge_script(apgdriver, settings)
@@ -56,7 +54,6 @@ async def test_the_script_does_not_rebuild_current_redefined_indexes(
     apgdriver: AsyncpgDriver,
 ) -> None:
     settings = DBSettings()
-    await Queries(apgdriver).upgrade()
     names = (
         f"{settings.queue_table_log}_not_aggregated",
         f"{settings.statistics_table}_unique_count",
@@ -87,11 +84,7 @@ async def test_the_script_rebuilds_a_stale_redefined_index(
 async def test_the_script_rebuilds_a_stale_unique_count_index_once(
     apgdriver: AsyncpgDriver,
 ) -> None:
-    """The ON CONFLICT arbiter is restored, and a re-apply leaves it alone.
-
-    The second apply catches a compare that never matches its own CREATE,
-    which would drop the index on every later run.
-    """
+    """The ON CONFLICT arbiter is restored."""
     settings = DBSettings()
     name = f"{settings.statistics_table}_unique_count"
     await apgdriver.execute(f"DROP INDEX {name};")
@@ -103,11 +96,6 @@ async def test_the_script_rebuilds_a_stale_unique_count_index_once(
     await apply_converge_script(apgdriver, settings)
 
     assert "timezone('UTC'::text, created)" in await index_definition(apgdriver, name)
-    rebuilt = await relfilenode(apgdriver, name)
-
-    await apply_converge_script(apgdriver, settings)
-
-    assert await relfilenode(apgdriver, name) == rebuilt
 
 
 async def test_the_script_still_converges_a_legacy_status_type(

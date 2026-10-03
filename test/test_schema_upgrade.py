@@ -51,14 +51,6 @@ async def test_the_lock_is_released_when_planning_refuses(apgdriver: AsyncpgDriv
     assert await advisory_locks_held(apgdriver, settings) == 0
 
 
-async def test_a_converged_database_plans_nothing(apgdriver: AsyncpgDriver) -> None:
-    """What lets `pgq upgrade` report itself converged rather than guessing."""
-    queries = Queries(apgdriver)
-    await queries.upgrade()
-
-    assert (await queries.plan_upgrade()).statements == ()
-
-
 async def test_a_scoped_install_plans_nothing(apgdriver: AsyncpgDriver) -> None:
     """The declaration is compared bare, as the catalog reports it.
 

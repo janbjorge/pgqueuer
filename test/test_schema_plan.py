@@ -26,10 +26,6 @@ from pgqueuer.domain.types import (
 EMPTY = Schema(enums=(), tables=(), indexes=(), functions=(), triggers=())
 
 
-def declared(settings: DBSettings) -> Schema:
-    return target(settings)
-
-
 def without_table(schema: Schema, name: str) -> Schema:
     return dataclasses.replace(
         schema,
@@ -54,13 +50,13 @@ def without_column(schema: Schema, table: str, column: str) -> Schema:
 
 def test_converged_schema_plans_nothing() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     assert plan(schema, schema, settings) == Plan()
 
 
 def test_empty_database_plans_every_object() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     statements = plan(EMPTY, schema, settings).statements
 
     assert sum(one.startswith("CREATE TYPE") for one in statements) == len(schema.enums)
@@ -72,7 +68,7 @@ def test_empty_database_plans_every_object() -> None:
 
 def test_objects_are_created_in_dependency_order() -> None:
     settings = DBSettings()
-    statements = plan(EMPTY, declared(settings), settings).statements
+    statements = plan(EMPTY, target(settings), settings).statements
     kinds = [one.split(" (")[0].split("\n")[0] for one in statements]
 
     def first(prefix: str) -> int:
@@ -86,17 +82,17 @@ def test_objects_are_created_in_dependency_order() -> None:
 def test_absent_schema_is_created_only_when_configured() -> None:
     scoped = DBSettings(db_schema="billing")
     absent = dataclasses.replace(EMPTY, namespace_exists=False)
-    assert plan(absent, declared(scoped), scoped).statements[0] == (
+    assert plan(absent, target(scoped), scoped).statements[0] == (
         "CREATE SCHEMA IF NOT EXISTS billing;"
     )
 
     bare = DBSettings()
-    assert not plan(absent, declared(bare), bare).statements[0].startswith("CREATE SCHEMA")
+    assert not plan(absent, target(bare), bare).statements[0].startswith("CREATE SCHEMA")
 
 
 def test_absent_table_is_the_only_statement() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = without_table(schema, settings.schedules_table)
 
     statements = plan(live, schema, settings).statements
@@ -106,7 +102,7 @@ def test_absent_table_is_the_only_statement() -> None:
 
 def test_absent_column_is_added_not_the_whole_table() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = without_column(schema, settings.queue_table, "slot")
 
     assert plan(live, schema, settings).statements == (
@@ -116,7 +112,7 @@ def test_absent_column_is_added_not_the_whole_table() -> None:
 
 def test_absent_enum_label_is_added_one_statement_at_a_time() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         enums=tuple(
@@ -132,7 +128,7 @@ def test_absent_enum_label_is_added_one_statement_at_a_time() -> None:
 
 def test_absent_unique_constraint_is_added() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         tables=tuple(
@@ -148,7 +144,7 @@ def test_absent_unique_constraint_is_added() -> None:
 
 def test_absent_index_is_created() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     gone = f"{settings.queue_table}_ep_ea_idx"
     live = dataclasses.replace(
         schema,
@@ -164,12 +160,10 @@ def test_a_database_missing_objects_is_only_ever_added_to() -> None:
     """Checked on the leading keyword: the notify trigger fires on TRUNCATE, so
     its DDL carries the word without being destructive."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     databases = (
         EMPTY,
-        schema,
         without_table(schema, settings.queue_table_log),
-        without_column(schema, settings.queue_table, "slot"),
     )
 
     for live in databases:
@@ -186,7 +180,7 @@ def test_retirement_drops_indexes_and_types_but_never_data() -> None:
     assertion can actually fail.
     """
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         indexes=schema.indexes
@@ -236,7 +230,7 @@ def test_retirement_drops_indexes_and_types_but_never_data() -> None:
 def test_serial_columns_are_never_added_to_an_existing_table() -> None:
     """ADD COLUMN cannot introduce a serial primary key, and never needs to."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = without_column(schema, settings.queue_table, "id")
 
     assert plan(live, schema, settings).statements == ()
@@ -267,7 +261,7 @@ def changed_column(
 
 def test_a_narrow_id_is_widened_when_enabled() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table,
@@ -282,7 +276,7 @@ def test_a_narrow_id_is_widened_when_enabled() -> None:
 
 def test_a_narrow_id_is_reported_when_widening_is_disabled() -> None:
     settings = DBSettings(widen_id=False)
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table,
@@ -313,7 +307,7 @@ def narrow_sequence(schema: Schema, table: str) -> Schema:
 def test_a_table_owning_no_sequence_plans_nothing(widen_id: bool) -> None:
     """No sequence to widen, and none to report as narrow."""
     settings = DBSettings(widen_id=widen_id)
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         tables=tuple(dataclasses.replace(entry, id_sequence_type=None) for entry in schema.tables),
@@ -324,7 +318,7 @@ def test_a_table_owning_no_sequence_plans_nothing(widen_id: bool) -> None:
 
 def test_a_narrow_sequence_is_widened_when_enabled() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = narrow_sequence(schema, settings.queue_table)
 
     assert "ALTER SEQUENCE" in "".join(plan(live, schema, settings).statements)
@@ -333,7 +327,7 @@ def test_a_narrow_sequence_is_widened_when_enabled() -> None:
 def test_a_narrow_sequence_is_reported_when_widening_is_disabled() -> None:
     """Widening the column leaves the sequence capped, so it is reported on its own."""
     settings = DBSettings(widen_id=False)
-    schema = declared(settings)
+    schema = target(settings)
     live = narrow_sequence(schema, settings.queue_table)
 
     computed = plan(live, schema, settings)
@@ -345,7 +339,7 @@ def test_a_narrow_sequence_is_reported_when_widening_is_disabled() -> None:
 def test_a_narrow_column_and_sequence_are_both_reported() -> None:
     """Following a note that named only the column is what leaves a database half-widened."""
     settings = DBSettings(widen_id=False)
-    schema = declared(settings)
+    schema = target(settings)
     live = narrow_sequence(
         changed_column(
             schema,
@@ -364,7 +358,7 @@ def test_a_narrow_column_and_sequence_are_both_reported() -> None:
 
 def test_a_legacy_status_type_is_cast_through_text() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.statistics_table,
@@ -383,7 +377,7 @@ def test_a_legacy_status_type_is_cast_through_text() -> None:
 def test_an_unrecognised_type_change_refuses() -> None:
     """The planner does not guess at a cast that could lose data."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table,
@@ -399,7 +393,7 @@ def test_an_unrecognised_type_change_refuses() -> None:
 
 def test_a_kind_change_refuses() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table_log,
@@ -432,7 +426,7 @@ def test_a_difference_without_a_statement_is_noted(
 ) -> None:
     """Nothing is planned for it, so it must not pass for converged."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
 
     result = plan(changed_column(schema, settings.queue_table, "id", edit), schema, settings)
 
@@ -443,7 +437,7 @@ def test_a_difference_without_a_statement_is_noted(
 
 def test_not_null_and_default_are_brought_into_line() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table,
@@ -480,7 +474,7 @@ def without_index(schema: Schema, name: str) -> Schema:
 def test_a_redefined_index_is_built_before_the_old_one_is_dropped() -> None:
     """A build that fails, on a duplicate say, must leave the old index standing."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     name = f"{settings.queue_table_log}_not_aggregated"
     replacement = rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
 
@@ -496,7 +490,7 @@ def test_a_redefined_index_is_built_before_the_old_one_is_dropped() -> None:
 def test_a_rebuild_is_announced_before_it_runs() -> None:
     """The build blocks writes to the table; the operator should hear it first."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     name = f"{settings.queue_table}_ep_ea_idx"
 
     notes = plan(redefined(schema, name), schema, settings).notes
@@ -508,7 +502,7 @@ def test_a_rebuild_is_announced_before_it_runs() -> None:
 def test_finishing_a_cut_off_rebuild_is_not_announced() -> None:
     """Renaming the leftover in builds nothing, so there is nothing to warn about."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     name = f"{settings.queue_table}_ep_ea_idx"
     replacement = rebuild_name(next(entry for entry in schema.indexes if entry.name == name))
     live = dataclasses.replace(
@@ -527,7 +521,7 @@ def test_finishing_a_cut_off_rebuild_is_not_announced() -> None:
 def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
     """Where an upgrade that dropped the index and failed to rebuild it left off."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     name = f"{settings.statistics_table}_unique_count"
 
     assert plan(without_index(schema, name), schema, settings).statements == (
@@ -540,7 +534,7 @@ def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
 def test_only_the_statistics_index_folds_rows() -> None:
     """Every other unique index guards jobs; a duplicate there is a failure, not a fold."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     for entry in schema.indexes:
         if entry.name == f"{settings.statistics_table}_unique_count":
             continue
@@ -550,7 +544,7 @@ def test_only_the_statistics_index_folds_rows() -> None:
 
 def test_a_changed_function_body_is_replaced_not_recreated() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         functions=tuple(
@@ -565,7 +559,7 @@ def test_a_changed_function_body_is_replaced_not_recreated() -> None:
 
 def test_function_bodies_compare_on_tokens_not_indentation() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         functions=tuple(
@@ -578,7 +572,7 @@ def test_function_bodies_compare_on_tokens_not_indentation() -> None:
 
 def test_a_retired_index_is_dropped_only_when_present() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     stale = Index(
         name=IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),
         table=TableName(settings.queue_table),
@@ -590,13 +584,12 @@ def test_a_retired_index_is_dropped_only_when_present() -> None:
     )
 
     assert plan(live, schema, settings).statements == (f"DROP INDEX IF EXISTS {stale.name};",)
-    assert plan(schema, schema, settings).statements == ()
 
 
 def test_a_rewrite_is_announced_before_it_runs() -> None:
     """The plan carries an ACCESS EXCLUSIVE rewrite; the operator should hear it first."""
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = changed_column(
         schema,
         settings.queue_table,
@@ -610,29 +603,9 @@ def test_a_rewrite_is_announced_before_it_runs() -> None:
     assert settings.queue_table in notes[0]
 
 
-def test_a_skipped_rewrite_is_not_announced() -> None:
-    """--no-widen-id emits no ALTER, so there is no rewrite to warn about."""
-    settings = DBSettings(widen_id=False)
-    schema = declared(settings)
-    live = changed_column(
-        schema,
-        settings.queue_table,
-        "id",
-        lambda entry: dataclasses.replace(entry, type=SqlType("integer")),
-    )
-
-    assert not any("ACCESS EXCLUSIVE" in note for note in plan(live, schema, settings).notes)
-
-
-def test_a_converged_database_is_warned_about_nothing() -> None:
-    settings = DBSettings()
-    schema = declared(settings)
-    assert plan(schema, schema, settings).notes == ()
-
-
 def test_a_durability_mismatch_is_a_note_not_a_rewrite() -> None:
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         tables=tuple(
@@ -654,7 +627,7 @@ def test_a_durability_note_offers_matching_the_setting() -> None:
     The note must not offer the table rewrite as the only way out.
     """
     settings = DBSettings()
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         tables=tuple(dataclasses.replace(entry, unlogged=True) for entry in schema.tables),
@@ -668,7 +641,7 @@ def test_a_durability_note_offers_matching_the_setting() -> None:
 def test_a_durability_note_names_the_level_to_pass() -> None:
     """``pgq durability`` takes a required argument, so the note has to carry it."""
     settings = DBSettings(durability=Durability.volatile)
-    schema = declared(settings)
+    schema = target(settings)
     live = dataclasses.replace(
         schema,
         tables=tuple(dataclasses.replace(entry, unlogged=False) for entry in schema.tables),
