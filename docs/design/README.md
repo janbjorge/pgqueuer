@@ -249,6 +249,12 @@ for jobs: row-lock claim plus heartbeat-based staleness recovery (ADR-0022).
 - [Schema manifest model](schema-manifest.md): the objects an
   installation declares, how they depend on each other, and how a worker
   turns that declaration into a startup verdict (ADR-0025).
+- [Schema upgrade model](schema-upgrade.md): how the declaration is
+  compared with the catalog, what each difference plans, statement
+  order, the index rebuild protocol, and the offline script (ADR-0016).
+- [SQL naming model](sql-naming.md): how statements get object names,
+  the bare, qualified and namespace spellings, what is bound versus
+  interpolated, and the definitions statements restate.
 
 Planned split-outs once a section outgrows this document; each keeps a
 summary here:
@@ -256,9 +262,9 @@ summary here:
 - Job lifecycle model: statuses, retries, cancellation, and completion
   tracking in one place.
 - Scheduling model: schedule ownership, cadence, and cron semantics.
-- Namespace & migration model: durability policies and the
-  [computed upgrade](../adr/ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
-  (the installed objects themselves are covered by the
-  [schema manifest model](schema-manifest.md)).
+- Durability model: durability levels, which tables they make
+  unlogged, and how `pgq durability` changes them (namespaces are in the
+  [SQL naming model](sql-naming.md), upgrades in the
+  [schema upgrade model](schema-upgrade.md)).
 - Observability model: the log/statistics pipeline, dashboard, metrics,
   and the MCP read surface.

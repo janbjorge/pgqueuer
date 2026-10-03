@@ -5,6 +5,13 @@ turns that into a startup decision. The *why* lives in
 [ADR-0025](../adr/ADR-0025-the-schema-contract-is-a-declared-manifest.md).
 Sub-model of the [system design](README.md).
 
+This document describes the target design. Revisions, severity and the
+verdict are not built yet. Today `QueueManager.verify_structure` checks
+hand-listed tables, columns, enum labels and indexes by name and refuses
+to start when one is missing, `SchedulerManager.run` checks only that the
+schedules and log tables exist, and `pgq verify` checks the tables, the
+function and the trigger.
+
 ## Flow
 
 ```
