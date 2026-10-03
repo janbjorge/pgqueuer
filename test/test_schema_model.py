@@ -28,7 +28,7 @@ def test_every_object_carries_the_prefix() -> None:
 
 
 def test_no_object_name_is_schema_qualified() -> None:
-    """Names are bare; inspect() strips the qualifier so comparison lines up."""
+    """Names are bare, as pg_catalog stores them, so comparison lines up."""
     for name in all_names(target(CUSTOM)):
         assert "." not in name, name
 

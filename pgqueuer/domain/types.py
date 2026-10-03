@@ -44,8 +44,7 @@ CronExpression = NewType("CronExpression", str)
 ScheduleId = NewType("ScheduleId", int)
 
 
-# Schema objects, named bare: inspect() strips the schema qualifier so a
-# declared name compares to an installed one directly.
+# Schema objects, bare as pg_catalog stores them, so declared and installed names compare directly.
 TableName = NewType("TableName", str)
 ColumnName = NewType("ColumnName", str)
 IndexName = NewType("IndexName", str)

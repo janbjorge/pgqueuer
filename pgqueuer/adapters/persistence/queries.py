@@ -627,7 +627,7 @@ class Queries:
         return cell(rows[0], "eta", timedelta)
 
     async def queue_age(self) -> list[models.QueueAgeStats]:
-        """Backlog age of queued jobs per entrypoint, oldest first."""
+        """Backlog age of queued jobs per entrypoint, ordered by entrypoint."""
         return [
             models.QueueAgeStats.model_validate(row)
             for row in await self.driver.fetch(self.qbq.build_queue_age_query())
