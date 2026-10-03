@@ -1,7 +1,11 @@
 import asyncio
 import asyncio.selector_events
+import contextlib
 from collections import Counter, defaultdict
+from collections.abc import AsyncIterator, Generator
 from datetime import datetime, timedelta
+
+import pytest
 
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence.query_helpers import cell
@@ -254,12 +258,20 @@ async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> 
     assert calls[jid] == 1
 
 
-async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
+async def test_job_not_retried_while_running(
+    apgdriver: db.Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Job should not be retried while still running (issue #430)."""
     retry_timer = timedelta(seconds=0.1)
     waiter = asyncio.Event()
     calls = 0
     qm = QueueManager(queries.Queries(apgdriver))
+
+    async def no_heartbeat(job_ids: list[JobId]) -> None:
+        return None
+
+    # No heartbeat lands, so the running job goes stale and the worker's own dequeue re-picks it.
+    monkeypatch.setattr(qm.queries, "update_heartbeat", no_heartbeat)
 
     @qm.entrypoint("fetch")
     async def fetch(job: Job) -> None:
@@ -282,6 +294,46 @@ async def test_job_not_retried_while_running(apgdriver: db.Driver) -> None:
 
     # Expect only a single execution
     assert calls == 1
+
+
+async def test_job_reruns_after_its_dispatch_dies_before_it_starts(apgdriver: db.Driver) -> None:
+    """A dispatch that fails before running the job must not block its re-pick."""
+    ran = asyncio.Event()
+
+    class FailFirstSpan:
+        def __init__(self) -> None:
+            self.spans = 0
+
+        def trace_publish(self, entrypoints: list[str]) -> Generator[dict[str, object], None, None]:
+            for _ in entrypoints:
+                yield {}
+
+        @contextlib.asynccontextmanager
+        async def trace_process(self, job: Job) -> AsyncIterator[None]:
+            self.spans += 1
+            if self.spans == 1:
+                raise RuntimeError("span failed")
+            yield
+
+    qm = QueueManager(queries.Queries(apgdriver), tracer=FailFirstSpan())
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        ran.set()
+
+    await qm.queries.enqueue(["fetch"], [None], [0])
+
+    async def stopper() -> None:
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(ran.wait(), timeout=3)
+        qm.shutdown.set()
+
+    await asyncio.gather(
+        qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=timedelta(seconds=0.2)),
+        stopper(),
+    )
+
+    assert ran.is_set()
 
 
 async def test_retry_reclaims_stale_picked_job_after_crash(apgdriver: db.Driver) -> None:
