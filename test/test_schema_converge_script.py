@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pgqueuer.adapters.persistence import qb
+from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
@@ -12,7 +12,7 @@ from test.helpers import install_release
 
 async def apply_converge_script(driver: AsyncpgDriver, settings: DBSettings) -> None:
     """One statement per round trip, as ``pgq sql upgrade | psql`` would."""
-    for statement in qb.QueryBuilderEnvironment(settings=settings).build_upgrade_queries():
+    for statement in schema_ddl.render_converge(settings):
         await driver.execute(statement)
 
 

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Sequence
 
 import typer
@@ -57,19 +56,8 @@ DurabilityArgument = Annotated[
 ]
 
 
-def render_install(settings: qb.DBSettings, create_schema: bool) -> str:
-    return schema_ddl.render_install(settings, create_schema=create_schema)
-
-
-def render_uninstall(settings: qb.DBSettings) -> str:
-    return schema_ddl.render_uninstall(settings)
-
-
 def render_upgrade(settings: qb.DBSettings) -> str:
-    qbe = qb.QueryBuilderEnvironment(settings)
-    return "\n\n".join(
-        inspect.cleandoc(statement).strip() for statement in qbe.build_upgrade_queries()
-    )
+    return "\n\n".join(schema_ddl.render_converge(settings))
 
 
 def render_plan(statements: Sequence[str], settings: qb.DBSettings) -> str:
@@ -92,19 +80,16 @@ def render_plan(statements: Sequence[str], settings: qb.DBSettings) -> str:
 
 def render_durability(settings: qb.DBSettings) -> str:
     qbe = qb.QueryBuilderEnvironment(settings)
-    return "\n\n".join(
-        inspect.cleandoc(statement).strip() for statement in qbe.build_alter_durability_query()
-    )
+    return "\n\n".join(qbe.build_alter_durability_query())
 
 
 def render_autovac(rollback: bool) -> str:
     qbe = qb.QueryBuilderEnvironment()
-    query = (
+    return (
         qbe.build_optimize_autovacuum_rollback_query()
         if rollback
         else qbe.build_optimize_autovacuum_query()
     )
-    return inspect.cleandoc(query).strip()
 
 
 @sql_app.command(help="SQL to create the PgQueuer schema.")
@@ -112,12 +97,13 @@ def install(
     durability: DurabilityOption = qb.Durability.durable,
     create_schema: CreateSchemaOption = True,
 ) -> None:
-    typer.echo(render_install(qb.DBSettings(durability=durability), create_schema))
+    settings = qb.DBSettings(durability=durability)
+    typer.echo(schema_ddl.render_install(settings, create_schema=create_schema))
 
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
 def uninstall() -> None:
-    typer.echo(render_uninstall(qb.DBSettings()))
+    typer.echo(schema_ddl.render_uninstall(qb.DBSettings()))
 
 
 @sql_app.command(
