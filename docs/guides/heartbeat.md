@@ -29,9 +29,9 @@ WHERE status = 'picked'
 
 The `heartbeat_timeout` parameter on `pgq.run()` / `QueueManager.run()` sets the
 duration after which a picked job with a stale heartbeat becomes eligible for
-re-pickup by any available worker. Heartbeats are sent automatically at half
-this interval, so a crashed or stalled worker's jobs recover without operator
-action:
+re-pickup by any available worker. Heartbeats are sent automatically at a
+quarter of this interval, so a crashed or stalled worker's jobs recover
+without operator action:
 
 ```python
 from datetime import timedelta

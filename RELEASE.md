@@ -82,6 +82,11 @@ It is written without seeing the database, so it re-states every object behind
   job first.
 - `pgq upgrade` no longer lists `--durability` in its help. The flag is still
   accepted and ignored; see Fixed.
+- A running job's heartbeat is sent every quarter of `heartbeat_timeout` and
+  flushed every eighth, instead of every half and quarter. A database or
+  event-loop stall now has to last about half the timeout, instead of about a
+  fifth, before another worker can re-pick a job that is still running. Workers
+  write about twice as many (batched) heartbeat updates.
 
 ### Fixed
 

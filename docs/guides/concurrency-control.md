@@ -70,4 +70,4 @@ Two parameters on `pgq.run()` control job processing timing:
   Default: 30 seconds.
 - **`heartbeat_timeout`**: Duration after which a picked job with a stale heartbeat
   becomes eligible for re-pickup by another worker. Heartbeats are sent automatically
-  at half this interval. Default: 30 seconds.
+  at a quarter of this interval. Default: 30 seconds.

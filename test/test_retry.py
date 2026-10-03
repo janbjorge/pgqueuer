@@ -69,7 +69,7 @@ async def test_heartbeat_keeps_job_alive(apgdriver: db.Driver) -> None:
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:
         heartbeats[context.id].append(await fetch_db_heartbeat(context.id))
-        # Wait long enough for at least one heartbeat to fire (interval = timeout/2)
+        # Wait long enough for at least one heartbeat to fire (interval = timeout/4)
         await asyncio.sleep(heartbeat_timeout.total_seconds())
         heartbeats[context.id].append(await fetch_db_heartbeat(context.id))
         await event.wait()
@@ -94,7 +94,7 @@ async def test_heartbeat_keeps_job_alive(apgdriver: db.Driver) -> None:
 
 
 async def test_heartbeat_no_updates(apgdriver: db.Driver) -> None:
-    retry_timer = timedelta(seconds=0.100)
+    retry_timer = timedelta(seconds=0.4)
     event = asyncio.Event()
     qm = QueueManager(queries.Queries(apgdriver))
     heartbeats = defaultdict[JobId, list[datetime]](list)
@@ -229,6 +229,35 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
     leeway = retry_timer / 10
     for sample in samples:
         assert sample - leeway < retry_timer, (sample, retry_timer, sample - retry_timer)
+
+
+async def test_first_heartbeat_leaves_half_the_timeout_as_slack(
+    apgdriver: db.Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    heartbeat_timeout = timedelta(seconds=2)
+    loop = asyncio.get_running_loop()
+    qm = QueueManager(queries.Queries(apgdriver))
+    started = list[float]()
+    written = list[float]()
+    update_heartbeat = qm.queries.update_heartbeat
+
+    async def record(job_ids: list[JobId]) -> None:
+        written.append(loop.time())
+        await update_heartbeat(job_ids)
+
+    monkeypatch.setattr(qm.queries, "update_heartbeat", record)
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        started.append(loop.time())
+        while not written:
+            await asyncio.sleep(0.01)
+        qm.shutdown.set()
+
+    await qm.queries.enqueue(["fetch"], [None], [0])
+    await qm.run(dequeue_timeout=timedelta(seconds=0), heartbeat_timeout=heartbeat_timeout)
+
+    assert written[0] - started[0] < heartbeat_timeout.total_seconds() / 2
 
 
 async def test_retry_timer_honours_serialized_dispatch(apgdriver: db.Driver) -> None:

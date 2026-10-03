@@ -399,7 +399,7 @@ class QueueManager:
         likewise enforced in SQL, so batches keep their full size regardless
         of the tightest registered limit.
         ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
-        heartbeats are emitted at half this interval.
+        heartbeats are emitted at a quarter of this interval.
         ``log_aggregation_interval`` drives a background task that folds
         ``pgqueuer_log`` into ``pgqueuer_statistics`` on a timer instead of only
         on stats reads; pass ``timedelta(0)`` to disable (pure on-demand).
@@ -422,7 +422,7 @@ class QueueManager:
                 # Flush will be mainly driven by timeouts, but allow flush if
                 # backlog becomes too large.
                 max_size=batch_size**2,
-                timeout=heartbeat_timeout / 4,
+                timeout=heartbeat_timeout / 8,
                 repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
@@ -512,7 +512,7 @@ class QueueManager:
             trace_context,
             heartbeat.Heartbeat(
                 job.id,
-                heartbeat_timeout / 2,
+                heartbeat_timeout / 4,
                 hbuff,
             ),
         ):
