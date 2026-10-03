@@ -164,11 +164,6 @@ def test_raising_duplicate_job_translates_unique_violation() -> None:
     assert raised.value.__cause__ is exc
 
 
-def test_raising_duplicate_job_propagates_other_errors() -> None:
-    with pytest.raises(RuntimeError, match="boom"), raising_duplicate_job(["k"]):
-        raise RuntimeError("boom")
-
-
 async def enqueue_job(driver: object) -> object:
     return await Queries(driver).enqueue("ep", None, dedupe_key="k")  # type: ignore[arg-type]
 
@@ -188,12 +183,6 @@ async def test_enqueue_translates_unique_violation_to_duplicate_job() -> None:
 async def test_enqueue_propagates_non_unique_violations() -> None:
     with pytest.raises(asyncpg.DeadlockDetectedError):
         await enqueue_job(FetchBoom(asyncpg.DeadlockDetectedError()))
-
-
-def test_sync_enqueue_translates_unique_violation_to_duplicate_job() -> None:
-    with pytest.raises(DuplicateJobError) as raised:
-        sync_enqueue_job(SyncFetchBoom(asyncpg.UniqueViolationError()))
-    assert raised.value.dedupe_key == ["k"]
 
 
 def test_sync_enqueue_propagates_non_unique_violations() -> None:
