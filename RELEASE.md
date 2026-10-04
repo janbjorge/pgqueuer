@@ -133,6 +133,9 @@ It is written without seeing the database, so it re-states every object behind
   job detail and system pages read that schema's tables. They named the bare
   table and failed with `UndefinedTableError` when the schema was not on
   `search_path`.
+- A worker no longer starts a second copy of a job it is still running when that
+  job's heartbeat reaches the database late. Its next dequeue re-picked the job
+  as stale and ran it again in the same process.
 
 ### Removed
 
