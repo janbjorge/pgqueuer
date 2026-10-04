@@ -380,11 +380,7 @@ def plan_routines(live: Schema, declared: Schema, settings: DBSettings) -> list[
     for trigger in declared.triggers:
         if triggers.get(trigger.name) == trigger:
             continue
-        if trigger.name in triggers:
-            statements.append(
-                f"DROP TRIGGER IF EXISTS {trigger.name} ON {settings.qualify(trigger.table)};"
-            )
-        statements.append(render_trigger(trigger, settings))
+        statements.append(render_trigger(trigger, settings, replace=trigger.name in triggers))
     return statements
 
 

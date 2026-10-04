@@ -148,8 +148,6 @@ jobs:
             postgres-version: "16"
           # All remaining PG versions × Python 3.12 (anchor)
           - python-version: "3.12"
-            postgres-version: "13"
-          - python-version: "3.12"
             postgres-version: "14"
           - python-version: "3.12"
             postgres-version: "15"
