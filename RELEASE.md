@@ -12,6 +12,16 @@
 
 ---
 
+## v1.6.0
+
+### Removed
+
+- Releases no longer publish the `ghcr.io/janbjorge/pgqueuer-web` and
+  `ghcr.io/janbjorge/pgqueuer-prometheus` Docker images. The tags already
+  pushed, `1.5.0` and `latest`, stay pullable but get no newer versions. Build
+  from `tools/web/Dockerfile` and `tools/prometheus/Dockerfile` instead; see
+  the Docker images guide.
+
 ## v1.5.0
 
 ### Changed: `pgq upgrade` computes what each database needs

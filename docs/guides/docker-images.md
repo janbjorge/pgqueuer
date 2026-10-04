@@ -1,15 +1,28 @@
 # Docker Images
 
-Pre-built, multi-arch (`linux/amd64` + `linux/arm64`) images for the web dashboard
-and the standalone Prometheus exporter are published to the GitHub Container
-Registry on every release, tagged to match the PyPI version:
+The repository ships Dockerfiles for the web dashboard and the standalone
+Prometheus exporter. Releases no longer publish them, so build them yourself:
 
-| Image | Source | Tags |
-|---|---|---|
-| `ghcr.io/janbjorge/pgqueuer-web` | `tools/web/Dockerfile` | `vX.Y.Z`, `latest` |
-| `ghcr.io/janbjorge/pgqueuer-prometheus` | `tools/prometheus/Dockerfile` | `vX.Y.Z`, `latest` |
+| Image | Dockerfile |
+|---|---|
+| Web dashboard | `tools/web/Dockerfile` |
+| Prometheus exporter | `tools/prometheus/Dockerfile` |
 
-Pin to a version tag in production; `latest` tracks the newest non-prerelease.
+The images published up to v1.5.0 stay on the GitHub Container Registry as
+`ghcr.io/janbjorge/pgqueuer-web` and `ghcr.io/janbjorge/pgqueuer-prometheus`,
+tagged `1.5.0` and `latest`, but get no newer versions.
+
+## Building
+
+From the repository root:
+
+```bash
+docker build -f tools/web/Dockerfile -t pgqueuer-web .
+docker build -f tools/prometheus/Dockerfile -t pgqueuer-prometheus .
+```
+
+Both install `pgqueuer` from PyPI, the newest release unless you pin one with
+`--build-arg PGQUEUER_VERSION=X.Y.Z`.
 
 ## Web dashboard
 
@@ -21,7 +34,7 @@ docker run -p 8080:8080 \
   -e PGDATABASE=your-database \
   -e PGQUEUER_WEB_USER=admin \
   -e PGQUEUER_WEB_PASSWORD=change-me \
-  ghcr.io/janbjorge/pgqueuer-web:latest
+  pgqueuer-web
 ```
 
 Connection settings follow the same rules as `pgq web`: either `PGQUEUER_DSN`
@@ -43,7 +56,7 @@ docker run -p 8000:8000 \
   -e PGUSER=your-username \
   -e PGPASSWORD=your-password \
   -e PGDATABASE=your-database \
-  ghcr.io/janbjorge/pgqueuer-prometheus:latest
+  pgqueuer-prometheus
 ```
 
 Metrics are served at `http://localhost:8000/metrics`.
@@ -57,6 +70,8 @@ Metrics are served at `http://localhost:8000/metrics`.
 
 ## Docker Compose
 
+With the compose file at the repository root:
+
 ```yaml
 services:
   db:
@@ -67,7 +82,9 @@ services:
       POSTGRES_DB: pgqueuer
 
   web:
-    image: ghcr.io/janbjorge/pgqueuer-web:latest
+    build:
+      context: .
+      dockerfile: tools/web/Dockerfile
     ports:
       - "8080:8080"
     environment:
@@ -81,7 +98,9 @@ services:
       - db
 
   prometheus-exporter:
-    image: ghcr.io/janbjorge/pgqueuer-prometheus:latest
+    build:
+      context: .
+      dockerfile: tools/prometheus/Dockerfile
     ports:
       - "8000:8000"
     environment:
@@ -94,19 +113,3 @@ services:
 ```
 
 A working example lives at `tools/web/docker-compose.yml`.
-
-## Building locally
-
-Both images build from the repo without registry access, useful for testing
-Dockerfile changes before a release:
-
-```bash
-docker build -f tools/web/Dockerfile -t pgqueuer-web .
-docker build -f tools/prometheus/Dockerfile -t pgqueuer-prometheus .
-```
-
-## Multi-arch builds in CI
-
-Images are built for `linux/amd64` and `linux/arm64` via `docker/build-push-action`
-with QEMU emulation in `.github/workflows/release.yml`, triggered on the same
-`release: created` event as the PyPI publish step.
