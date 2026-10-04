@@ -18,58 +18,113 @@
 
 - Reads the installed schema from `pg_catalog`, compares it with the schema
   this release declares, and runs only the difference (ADR-0016). A current
-  database runs nothing: `PgQueuer schema is already up to date.`
-- Run `pgq upgrade --plan` first to preview the statements.
-- Depending on how old and hand-edited a database is, an upgrade can:
-  - add missing labels, tables, columns, indexes, the trigger function and the
-    trigger, or install everything into an empty database;
-  - rebuild an index whose definition differs from the declared one. Takes a
-    `SHARE` lock that blocks writes to the table; prints a `note:` first;
-  - widen `int4` id columns and sequences to `BIGINT` (still gated by
-    `--widen-id/--no-widen-id`) and move statistics `status` off the pre-v0.27
-    enum. Both rewrite the table under `ACCESS EXCLUSIVE`; prints a `note:`
-    first;
-  - reset `NOT NULL` and `DEFAULT` on PgQueuer's own columns, reverting hand
+  database runs nothing: `PgQueuer schema is already up to date.` v1.4.0 re-ran
+  a fixed script every time, which rewrote `pgqueuer_statistics` under
+  `ACCESS EXCLUSIVE` and dropped and rebuilt `pgqueuer_log_not_aggregated`.
+- Run `pgq upgrade --plan` first. It prints the statements and the `note:`
+  lines (index rebuilds, table rewrites) and applies nothing. A plain
+  `pgq upgrade` prints its notes only after it has applied.
+- Every database coming from v1.4.0 gets:
+  - `ALTER TABLE pgqueuer_statistics ALTER COLUMN created SET DEFAULT
+    date_trunc('sec', now())`. Catalog only; stored rows are unchanged. The old
+    default stored the wrong instant when an insert left out `created` and the
+    session `TimeZone` was not UTC.
+  - on PostgreSQL 14+, a one-time rebuild of
+    `pgqueuer_statistics_unique_count`, because PostgreSQL stores v1.4.0's key
+    as `created AT TIME ZONE 'UTC'` and the declaration says
+    `timezone('UTC', created)`. It is preceded by a fold of duplicate
+    statistics buckets, a full scan that changes nothing on a v1.4.0 table. The
+    build holds a `SHARE` lock that blocks writes to `pgqueuer_statistics` for
+    a time that scales with row count.
+  - if it ever ran `pgq upgrade`, a drop of the retired
+    `pgqueuer_heartbeat_id_id1_idx`, which every `pgq upgrade` up to v1.4.0
+    created. Brief `ACCESS EXCLUSIVE` lock on `pgqueuer`.
+- Depending on its history, a database can also get:
+  - missing labels, tables, columns, indexes, the trigger function and the
+    trigger, or everything in an empty database;
+  - a rebuild of any other index whose definition differs from the declared
+    one (`SHARE` lock, reported as a `note:`). The replacement is built beside
+    the old index as `pgq_rebuild_*` and swapped in once the build succeeds, so
+    a failed build leaves the old index in place. An upgrade interrupted before
+    the swap is finished by the next one;
+  - `int4` id columns and sequences widened to `BIGINT` (still gated by
+    `--widen-id/--no-widen-id`) and statistics `status` moved off the pre-v0.27
+    enum. Both rewrite the table under `ACCESS EXCLUSIVE` (reported as a
+    `note:`). With `--no-widen-id`, each id column and sequence left narrow is
+    a `note:`; v1.4.0 skipped them silently;
+  - `NOT NULL` and `DEFAULT` reset on PgQueuer's own columns, reverting hand
     edits;
-  - drop the retired `pgqueuer_heartbeat_id_id1_idx` index and
-    `pgqueuer_statistics_status` enum, and relax `NOT NULL` on the retired
-    `time_in_queue` column (reported as a `note:`, never dropped).
-- Never changes durability; a mismatch with `PGQUEUER_DURABILITY` is a `note:`.
+  - the retired `pgqueuer_statistics_status` enum dropped, and `NOT NULL`
+    relaxed on the retired `time_in_queue` column (reported as a `note:`, never
+    dropped).
+- Notes also flag a missing primary key, or an id column whose kind (serial,
+  identity, plain) differs from the declared one, e.g. after its `nextval`
+  default was dropped. Nothing is planned for either, so the summary still
+  reads `already up to date`.
+- Never changes durability. A mismatch with `PGQUEUER_DURABILITY` is a `note:`
+  that offers setting the variable to match, or `pgq durability` (which
+  rewrites the table).
 - A column type it has no conversion for stops it with exit code `1` and one
-  line naming the column, instead of a guessed cast.
-- Upgrades of one installation serialize on an advisory lock. Over a pool
-  driver that lock does not cover every connection.
+  line naming the column; alter it by hand and re-run. v1.4.0 ignored such a
+  column.
+- Upgrades of one installation serialize on an advisory lock, which
+  `pgq upgrade` holds on its single connection. Over `AsyncpgPoolDriver` the
+  lock is released as soon as it is taken, so it serializes nothing.
 - `pgq sql upgrade` still prints a script for operators who apply DDL
   themselves. It can't see the database, so it re-states every object behind
-  `IF NOT EXISTS` and covers less than the connected upgrade.
+  `IF NOT EXISTS` and covers less than the connected upgrade. Compared with
+  v1.4.0's script:
+  - it no longer rewrites `pgqueuer_statistics` on every apply, and drops a
+    redefined index only when its definition differs;
+  - it drops and recreates the `tg_pgqueuer_changed` trigger on every apply.
+    Applied outside one transaction, changes made in between send no
+    notification;
+  - on PostgreSQL 14+, its first apply to a v1.4.0 database drops
+    `pgqueuer_statistics_unique_count` and then rebuilds it, not beside the old
+    one. Applied outside one transaction, log aggregation fails until the build
+    finishes. Every apply also re-runs the statistics fold, a full scan.
 
 ### Added
 
 - `pgq upgrade --plan` prints the statements this database needs, headed by a
   comment, and applies nothing. Notes and the summary go to stderr.
-- `pgq upgrade` reports what it did (`Applied 3 statements.`) and prints
-  `note:` lines for anything it won't do on its own.
 - `pgq stale`: picked jobs whose heartbeat is older than `--threshold` seconds
   (default 300).
 - `pgq workers`: queue managers currently holding picked jobs.
 - `pgq backlog`: count and age of `queued` jobs per entrypoint.
 - `--json` on `pgq failed`, `pgq stale`, `pgq workers` and `pgq backlog`.
   `pgq failed --json` reports payloads by size (`payload_bytes`) only.
-- `Queries.plan_upgrade()`, `Queries.apply_upgrade()` and
-  `Queries.schema_is_installed()`. `Queries.upgrade()` logs its notes as
-  warnings.
+- `Queries.plan_upgrade()`, `Queries.apply_upgrade()`,
+  `Queries.schema_is_installed()` and `Queries.schema_lock()` (the advisory
+  lock above). `Queries.upgrade()` logs its notes as warnings.
+- `SchemaDriftError` in `pgqueuer.domain.errors` (not re-exported from
+  `pgqueuer.errors`): raised by `Queries.upgrade()`, `plan_upgrade()` and
+  `apply_upgrade()` for a column type the planner can't convert.
 - Docs: CLI exit codes, and an onboarding guide for coding agents.
 
 ### Changed
 
+- `pgq upgrade` reports `Applied N statements.` or `PgQueuer schema is already
+  up to date.` instead of `Upgraded PgQueuer schema.` Scripts matching the old
+  line need updating.
+- `pgq upgrade --durability` / `-d` is deprecated: hidden from `--help`, prints
+  a warning, and is still ignored. It will be removed in v2.0; use
+  `pgq durability`.
 - `pgq install` refuses a database that already has this installation, even a
   partial one, and exits `1` naming the prefix and schema. Previously a raw
   `DuplicateObjectError` traceback. Use `pgq upgrade`, which also installs into
   an empty database.
+- `pgq sql install` output starts with a comment line naming the release,
+  prefix, schema and durability, so checked-in install SQL changes with every
+  release.
 - `pgq queue` prints the duplicate `dedupe_key` error on stderr, not stdout.
-- MCP `queue_age` orders rows by entrypoint, not by oldest job first.
-- `pgq upgrade --help` no longer lists `--durability`. The flag is still
-  accepted and ignored (see Fixed).
+- `enqueue()` rejects one value next to a list of entrypoints, which v1.4.0
+  accepted: `enqueue(["a", "b"], None, [0, 0])` now raises `ValueError` for
+  `payload`. Pass one value per job, e.g. `[None, None]`.
+- MCP `stale_jobs` and `queue_age` return numeric fields as JSON numbers, not
+  strings, on PostgreSQL 14+.
+- `InsightsService.stale_jobs(threshold=timedelta(0))` returns every picked
+  job. Previously a zero threshold fell back to the 5-minute default.
 - Workers flush queued heartbeats every eighth of `heartbeat_timeout`, not
   every quarter; each job still queues one every half. With latency under 0.2
   of the timeout, one failed heartbeat write no longer lets a worker re-pick a
@@ -78,41 +133,14 @@
 
 ### Fixed
 
-- `pgq upgrade` builds a redefined index beside the old one and swaps it in
-  only once the build succeeds. Previously it dropped first, so a failed build
-  left no index and every rerun failed the same way.
-- An upgrade interrupted between dropping the old index and renaming the new
-  one is finished by the next upgrade, which renames the leftover
-  `pgq_rebuild_*` index into place. Previously it built a second identical
-  index, so a unique violation could name the leftover and `dequeue` raised
-  instead of returning an empty batch.
-- `pgq upgrade` no longer takes another installation's trigger for its own when
-  both share a name on different tables. Previously it dropped and recreated
-  the queue table's trigger, losing change notifications in between.
-- `pgq upgrade` reports a missing primary key, or a column changed between
-  serial and identity, as a `note:`. It has no statement for either; previously
-  it called such a database up to date.
-- Upgrading a v0.18 database with statistics history no longer fails on
-  `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
-  into one per bucket, summing `count`, before the index build. `pgq sql
-  upgrade` does the same.
-- `pgq upgrade` and `pgq install` no longer raise `KeyError` when a table's id
-  sequence is not owned by it (e.g. after `ALTER SEQUENCE ... OWNED BY NONE`).
-  There is no sequence to widen, so none is planned.
-- The durability-mismatch note offers setting `PGQUEUER_DURABILITY` to match,
-  not only `pgq durability` (which rewrites the table). Previously a volatile
-  install without the variable was told to go durable on every upgrade.
-- With `PGQUEUER_SCHEMA` set and a status enum named like the column it types
-  (`PGQUEUER_QUEUE_STATUS_TYPE=status`), install, upgrade and
-  `enqueue(on_conflict="skip")` no longer render `app.status = ...` and fail
-  with a syntax error.
-- `pgq upgrade --durability` / `-d` is accepted again, so v1.4.0 scripts keep
-  working. It never applied a level and still doesn't: it prints a deprecation
-  warning and is ignored. It will be removed in v2.0; use `pgq durability`.
+- Upgrading a v0.18 database with statistics history now leaves log
+  aggregation working. Rows split on `time_in_queue` are folded into one per
+  bucket, summing `count`, before `pgqueuer_statistics_unique_count` is
+  rebuilt, and `NOT NULL` on `time_in_queue` is relaxed. v1.4.0 left the
+  pre-v0.19 index and the `NOT NULL` in place. `pgq sql upgrade` does the same.
 - `AsyncpgPoolDriver` accepts a one-connection pool. The two-connection minimum
   is checked when it starts listening (which holds one connection for good),
-  not at construction. The MCP server never listens, so it works with
-  `PGQUEUER_POOL_MAX_SIZE=1`.
+  not at construction.
 - With `PGQUEUER_SCHEMA` set, the dashboard's overview, entrypoints, jobs, job
   detail and system pages read that schema's tables. Previously
   `UndefinedTableError` when the schema was not on `search_path`.
@@ -128,6 +156,14 @@
 
 - Internal `TTLCache` (`pgqueuer.core.cache`). Drain shutdown probes
   `queued_work` directly, without the 250ms TTL.
+- `Queries.qbe.build_widen_id_column_query()` and
+  `build_widen_id_sequence_query()`. `pgq upgrade` plans the widening.
+- `QueryBuilderEnvironment.build_upgrade_queries()`. Use
+  `Queries.plan_upgrade()` / `apply_upgrade()`, or `pgq sql upgrade` for the
+  script.
+- MCP server: the `Tail`, `TimePeriod`, `StaleThreshold`, `Limit` and `Offset`
+  type aliases, and `PgQueuerDatabase.settings` / `.qbs`. Tool schemas are
+  unchanged.
 
 ## v1.4.0
 
