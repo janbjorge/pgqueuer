@@ -78,6 +78,27 @@ async def test_upgrade_applies_exactly_what_it_planned(apgdriver: AsyncpgDriver)
     assert (await queries.plan_upgrade()).statements == ()
 
 
+async def test_a_repointed_trigger_is_replaced_in_place(apgdriver: AsyncpgDriver) -> None:
+    settings = DBSettings()
+    await apgdriver.execute(
+        "CREATE FUNCTION fn_other() RETURNS TRIGGER AS $$BEGIN RETURN NULL; END;$$ "
+        "LANGUAGE plpgsql;"
+    )
+    await apgdriver.execute(
+        f"DROP TRIGGER {settings.trigger} ON {settings.queue_table};"
+        f"CREATE TRIGGER {settings.trigger} AFTER INSERT ON {settings.queue_table} "
+        "EXECUTE FUNCTION fn_other();"
+    )
+
+    queries = Queries(apgdriver)
+    planned = await queries.plan_upgrade()
+    assert len(planned.statements) == 1
+    assert planned.statements[0].startswith(f"CREATE OR REPLACE TRIGGER {settings.trigger}")
+
+    await queries.upgrade()
+    assert (await queries.plan_upgrade()).statements == ()
+
+
 async def test_retired_column_notes_reach_the_log(
     apgdriver: AsyncpgDriver,
     caplog: pytest.LogCaptureFixture,

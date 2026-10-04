@@ -93,9 +93,10 @@ def render_function(entry: Function, settings: DBSettings, *, replace: bool = Fa
     )
 
 
-def render_trigger(entry: Trigger, settings: DBSettings) -> str:
+def render_trigger(entry: Trigger, settings: DBSettings, *, replace: bool = False) -> str:
+    create = "CREATE OR REPLACE TRIGGER" if replace else "CREATE TRIGGER"
     return (
-        f"CREATE TRIGGER {entry.name}\n"
+        f"{create} {entry.name}\n"
         f"AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON {settings.qualify(entry.table)}\n"
         f"EXECUTE FUNCTION {settings.qualify(entry.function)}();"
     )

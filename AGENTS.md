@@ -84,7 +84,7 @@ Definitions use PostgreSQL's own spelling (`format_type`, `pg_get_expr`,
 `pg_get_indexdef`, `pg_proc.prosrc`) so comparison is string equality. Get one
 wrong and `test_schema_inspect.py` fails with the spelling to paste in. That
 test and `test_schema_convergence.py` (upgrades a fixture of every old release)
-keep the model honest; both must pass on PG 13–18.
+keep the model honest; both must pass on PG 14–18.
 
 The planner never emits `DROP TABLE` or `DROP COLUMN`. A column the schema no
 longer declares goes in `retired()`: `NOT NULL` relaxed, drop left to the
@@ -404,4 +404,4 @@ chore: bump ruff to 0.8 (#101)
 
 ## CI Matrix
 
-Python 3.10--3.14 x Postgres 13--18 on Ubuntu. Windows tests run only `test/windows/test_shutdown.py`.
+Python 3.10--3.14 x Postgres 14--18 on Ubuntu. Windows tests run only `test/windows/test_shutdown.py`.

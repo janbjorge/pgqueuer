@@ -16,6 +16,7 @@ from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import DBSettings, Durability
 from pgqueuer.domain.types import (
     ColumnName,
+    FunctionName,
     IndexName,
     SqlExpression,
     SqlType,
@@ -555,6 +556,22 @@ def test_a_changed_function_body_is_replaced_not_recreated() -> None:
     statements = plan(live, schema, settings).statements
     assert len(statements) == 1
     assert statements[0].startswith("CREATE OR REPLACE FUNCTION")
+
+
+def test_a_changed_trigger_is_replaced_not_recreated() -> None:
+    settings = DBSettings()
+    schema = target(settings)
+    live = dataclasses.replace(
+        schema,
+        triggers=tuple(
+            dataclasses.replace(entry, function=FunctionName("fn_other"))
+            for entry in schema.triggers
+        ),
+    )
+
+    statements = plan(live, schema, settings).statements
+    assert len(statements) == 1
+    assert statements[0].startswith("CREATE OR REPLACE TRIGGER")
 
 
 def test_function_bodies_compare_on_tokens_not_indentation() -> None:
