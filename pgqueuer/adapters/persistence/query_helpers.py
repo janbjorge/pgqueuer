@@ -54,6 +54,20 @@ def normalize_enqueue_params(
         else [headers]
     )
 
+    count = len(normed_entrypoint)
+    lengths = {
+        "payload": len(normed_payload),
+        "priority": len(normed_priority),
+        "execute_after": len(normed_execute_after),
+        "dedupe_key": len(normed_dedupe_key),
+        "headers": len(normed_headers),
+    }
+    for parameter, length in lengths.items():
+        if length != count:
+            raise ValueError(
+                f"Expected {count} values for {parameter} to match entrypoint, got {length}."
+            )
+
     return NormedEnqueueParam(
         priority=normed_priority,
         entrypoint=normed_entrypoint,
