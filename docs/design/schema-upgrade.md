@@ -104,13 +104,14 @@ one with a statement using the new label. A failure therefore leaves the
 earlier statements applied, and a rerun plans what remains. That is why
 every statement must be safe to be the last one that ran.
 
-The lock binds one connection; over a pool, statements can land
-elsewhere and escape it, which is why `pgq upgrade` uses a single
-connection. Two installations contend only when their qualified queue
-tables match, including same-named installations separated only by
-`search_path`. Notes are logged after the lock is released, and the CLI
-prints them as `note:` lines on stderr so `pgq upgrade --plan` keeps its
-SQL alone on stdout.
+The lock binds one connection, which is why `pgq upgrade` uses a single
+connection. Over `AsyncpgPoolDriver` it is not held at all: asyncpg runs
+`pg_advisory_unlock_all()` when a connection goes back to the pool,
+straight after the lock statement. Two installations contend only when
+their qualified queue tables match, including same-named installations
+separated only by `search_path`. Notes are logged after the lock is
+released, and the CLI prints them as `note:` lines on stderr so
+`pgq upgrade --plan` keeps its SQL alone on stdout.
 
 ## Index rebuild
 

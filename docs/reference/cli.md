@@ -85,8 +85,9 @@ Output goes to stderr: `PgQueuer schema is already up to date.`, or
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
 
-A `note:` also lands before an upgrade that rewrites a table. Converting a
-column type is the only thing here that does, and Postgres holds
+An upgrade that rewrites a table also gets a `note:`, but `pgq upgrade` prints
+its notes only after it has applied, so read them from `--plan`. Converting a
+column type is the only thing here that rewrites a table, and Postgres holds
 `ACCESS EXCLUSIVE` for the whole rewrite, blocking enqueues, dequeues and
 reads. Run `--plan` first on any database old enough to still be on `int4` ids
 or the pre-v0.27 statistics enum:
@@ -113,8 +114,10 @@ naming the column and both types; alter it by hand and re-run.
     The statements cannot share a transaction, because PostgreSQL forbids using
     a new enum value in the transaction that added it. That makes the lock
     session-scoped, so it only binds the connection that took it -- `pgq
-    upgrade` uses one. Calling `Queries.upgrade()` over a **pool** driver can
-    spread the statements across connections the lock does not cover.
+    upgrade` uses one. Over `AsyncpgPoolDriver` the lock is not held at all:
+    asyncpg runs `pg_advisory_unlock_all()` when the connection that took it
+    goes back to the pool, so `Queries.upgrade()` through a pool serializes
+    nothing.
 
 ---
 
