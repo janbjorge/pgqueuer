@@ -146,15 +146,9 @@ class QueueManager:
     def get_context(self, job_id: types.JobId) -> models.Context:
         return self.job_context[job_id]
 
-    def drop_context(
-        self,
-        job_id: types.JobId,
-        context: models.Context,
-        task: asyncio.Task[None],
-    ) -> None:
-        """Forget *context* once its dispatch task ends, even if it died before cleaning up."""
-        if self.job_context.get(job_id) is context:
-            del self.job_context[job_id]
+    def forget_job(self, job_id: types.JobId, task: asyncio.Task[None]) -> None:
+        """Drop *job_id*'s context once its dispatch task is done, however it ended."""
+        self.job_context.pop(job_id, None)
 
     def register_executor(
         self,
@@ -463,13 +457,12 @@ class QueueManager:
                     # A late heartbeat lets our own dequeue re-pick a job still running here.
                     if job.id in self.job_context:
                         continue
-                    context = models.Context(
+                    self.job_context[job.id] = models.Context(
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,
                     )
-                    self.job_context[job.id] = context
                     task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
-                    task.add_done_callback(functools.partial(self.drop_context, job.id, context))
+                    task.add_done_callback(functools.partial(self.forget_job, job.id))
                     task_manager.add(task)
 
                     with contextlib.suppress(asyncio.QueueEmpty):
@@ -578,5 +571,4 @@ class QueueManager:
                 canceled = ctx.cancellation.cancel_called
                 await jbuff.add((job, "canceled" if canceled else "successful", None))
             finally:
-                self.job_context.pop(job.id, None)
                 self.jobs_logged += 1
