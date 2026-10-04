@@ -1,8 +1,9 @@
 # Docker Images
 
 Pre-built, multi-arch (`linux/amd64` + `linux/arm64`) images for the web dashboard
-and the standalone Prometheus exporter are published to the GitHub Container
-Registry on every release, tagged to match the PyPI version:
+and the standalone Prometheus exporter were published to the GitHub Container
+Registry up to v1.5.0. Newer releases don't publish them; see
+[Building locally](#building-locally).
 
 | Image | Source | Tags |
 |---|---|---|
@@ -104,9 +105,3 @@ Dockerfile changes before a release:
 docker build -f tools/web/Dockerfile -t pgqueuer-web .
 docker build -f tools/prometheus/Dockerfile -t pgqueuer-prometheus .
 ```
-
-## Multi-arch builds in CI
-
-Images are built for `linux/amd64` and `linux/arm64` via `docker/build-push-action`
-with QEMU emulation in `.github/workflows/release.yml`, triggered on the same
-`release: created` event as the PyPI publish step.

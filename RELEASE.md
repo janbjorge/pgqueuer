@@ -12,6 +12,18 @@
 
 ---
 
+## v1.6.0
+
+### Removed
+
+- PostgreSQL 13 support. It reached end of life in November 2025, and CI now
+  tests PostgreSQL 14 to 18. If you run PostgreSQL 13, stay on v1.5.0.
+- Releases no longer publish the `ghcr.io/janbjorge/pgqueuer-web` and
+  `ghcr.io/janbjorge/pgqueuer-prometheus` Docker images. The tags already
+  pushed, `1.5.0` and `latest`, stay pullable but get no newer versions. Build
+  from `tools/web/Dockerfile` and `tools/prometheus/Dockerfile` instead; see
+  the Docker images guide.
+
 ## v1.5.0
 
 ### Changed: `pgq upgrade` computes what each database needs
