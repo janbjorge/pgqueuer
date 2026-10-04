@@ -1,28 +1,16 @@
 # Docker Images
 
-The repository ships Dockerfiles for the web dashboard and the standalone
-Prometheus exporter. Releases no longer publish them, so build them yourself:
+Pre-built, multi-arch (`linux/amd64` + `linux/arm64`) images for the web dashboard
+and the standalone Prometheus exporter were published to the GitHub Container
+Registry up to v1.5.0. Newer releases don't publish them; see
+[Building locally](#building-locally).
 
-| Image | Dockerfile |
-|---|---|
-| Web dashboard | `tools/web/Dockerfile` |
-| Prometheus exporter | `tools/prometheus/Dockerfile` |
+| Image | Source | Tags |
+|---|---|---|
+| `ghcr.io/janbjorge/pgqueuer-web` | `tools/web/Dockerfile` | `vX.Y.Z`, `latest` |
+| `ghcr.io/janbjorge/pgqueuer-prometheus` | `tools/prometheus/Dockerfile` | `vX.Y.Z`, `latest` |
 
-The images published up to v1.5.0 stay on the GitHub Container Registry as
-`ghcr.io/janbjorge/pgqueuer-web` and `ghcr.io/janbjorge/pgqueuer-prometheus`,
-tagged `1.5.0` and `latest`, but get no newer versions.
-
-## Building
-
-From the repository root:
-
-```bash
-docker build -f tools/web/Dockerfile -t pgqueuer-web .
-docker build -f tools/prometheus/Dockerfile -t pgqueuer-prometheus .
-```
-
-Both install `pgqueuer` from PyPI, the newest release unless you pin one with
-`--build-arg PGQUEUER_VERSION=X.Y.Z`.
+Pin to a version tag in production; `latest` tracks the newest non-prerelease.
 
 ## Web dashboard
 
@@ -34,7 +22,7 @@ docker run -p 8080:8080 \
   -e PGDATABASE=your-database \
   -e PGQUEUER_WEB_USER=admin \
   -e PGQUEUER_WEB_PASSWORD=change-me \
-  pgqueuer-web
+  ghcr.io/janbjorge/pgqueuer-web:latest
 ```
 
 Connection settings follow the same rules as `pgq web`: either `PGQUEUER_DSN`
@@ -56,7 +44,7 @@ docker run -p 8000:8000 \
   -e PGUSER=your-username \
   -e PGPASSWORD=your-password \
   -e PGDATABASE=your-database \
-  pgqueuer-prometheus
+  ghcr.io/janbjorge/pgqueuer-prometheus:latest
 ```
 
 Metrics are served at `http://localhost:8000/metrics`.
@@ -70,8 +58,6 @@ Metrics are served at `http://localhost:8000/metrics`.
 
 ## Docker Compose
 
-With the compose file at the repository root:
-
 ```yaml
 services:
   db:
@@ -82,9 +68,7 @@ services:
       POSTGRES_DB: pgqueuer
 
   web:
-    build:
-      context: .
-      dockerfile: tools/web/Dockerfile
+    image: ghcr.io/janbjorge/pgqueuer-web:latest
     ports:
       - "8080:8080"
     environment:
@@ -98,9 +82,7 @@ services:
       - db
 
   prometheus-exporter:
-    build:
-      context: .
-      dockerfile: tools/prometheus/Dockerfile
+    image: ghcr.io/janbjorge/pgqueuer-prometheus:latest
     ports:
       - "8000:8000"
     environment:
@@ -113,3 +95,13 @@ services:
 ```
 
 A working example lives at `tools/web/docker-compose.yml`.
+
+## Building locally
+
+Both images build from the repo without registry access, useful for testing
+Dockerfile changes before a release:
+
+```bash
+docker build -f tools/web/Dockerfile -t pgqueuer-web .
+docker build -f tools/prometheus/Dockerfile -t pgqueuer-prometheus .
+```
