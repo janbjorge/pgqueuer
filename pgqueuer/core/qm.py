@@ -411,7 +411,9 @@ class QueueManager:
                 # Flush will be mainly driven by timeouts, but allow flush if
                 # backlog becomes too large.
                 max_size=batch_size**2,
-                timeout=heartbeat_timeout / 4,
+                # With beats at T/2, T/8 keeps a live job within 0.8 T through one failed
+                # flush; see docs/guides/heartbeat.md.
+                timeout=heartbeat_timeout / 8,
                 repository=self.queries,
             ) as hbuff,
             tm.TaskManager() as task_manager,
