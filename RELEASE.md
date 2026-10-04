@@ -41,8 +41,8 @@ Depending on how old and how hand-edited a database is, an upgrade can now:
   `pgqueuer_statistics_status` enum, and relax `NOT NULL` on the retired
   `time_in_queue` column. That column is reported with a `note:`, never dropped.
 
-Durability is never changed by `pgq upgrade`; a mismatch with
-`PGQUEUER_DURABILITY` is reported as a `note:`. A column type the upgrade has no
+`pgq upgrade` never changes durability; it reports a mismatch with
+`PGQUEUER_DURABILITY` as a `note:`. A column type the upgrade has no
 conversion for stops it with exit code `1` and one line naming the column,
 instead of guessing at a cast. Upgrades of one installation serialize on an
 advisory lock; over a pool driver that lock does not cover every connection.
@@ -67,8 +67,8 @@ It is written without seeing the database, so it re-states every object behind
 - `Queries.plan_upgrade()`, `Queries.apply_upgrade()` and
   `Queries.schema_is_installed()`. `Queries.upgrade()` now logs its notes as
   warnings.
-- The CLI exit codes are documented, and an onboarding guide for coding agents
-  is published in the docs.
+- The docs list the CLI exit codes and include an onboarding guide for coding
+  agents.
 
 ### Changed
 
@@ -83,7 +83,7 @@ It is written without seeing the database, so it re-states every object behind
 - `pgq upgrade` no longer lists `--durability` in its help. The flag is still
   accepted and ignored; see Fixed.
 - A worker writes queued heartbeats every eighth of `heartbeat_timeout`, not
-  every quarter; each job still queues one every half. While latency stays
+  every quarter; each job still queues one every half of it. While latency stays
   under 0.2 of the timeout, one failed heartbeat write no longer lets a worker
   re-pick a job that is still running. Workers send about twice as many batched
   heartbeat `UPDATE`s; rows written per job are unchanged. The reasoning is in
@@ -94,11 +94,11 @@ It is written without seeing the database, so it re-states every object behind
 - `pgq upgrade` rebuilds a redefined index beside the old one and swaps it in
   only once the build succeeds. It used to drop first, so a failed build left
   the database without the index and every rerun failed the same way.
-- An upgrade cut off after dropping the old index but before renaming the new
-  one is finished by the next upgrade, which renames the leftover
-  `pgq_rebuild_*` index into place. It used to build the index again beside
-  it, leaving two identical indexes, so a unique violation could name the
-  leftover and `dequeue` would raise instead of returning an empty batch.
+- When an upgrade stops after dropping the old index but before renaming the
+  new one, the next upgrade renames the leftover `pgq_rebuild_*` index into
+  place. It used to build the index again beside it, leaving two identical
+  indexes, so a unique violation could name the leftover and `dequeue` would
+  raise instead of returning an empty batch.
 - `pgq upgrade` no longer mistakes another installation's trigger for its own
   when both use the same trigger name on different tables. It used to drop and
   recreate the trigger on the queue table, losing change notifications in
@@ -107,9 +107,9 @@ It is written without seeing the database, so it re-states every object behind
   serial and identity, as a `note:`. It has no statement for either and used
   to call such a database up to date.
 - Upgrading a v0.18 database with statistics history no longer fails on
-  `pgqueuer_statistics_unique_count`. Rows split on `time_in_queue` are folded
-  into one per bucket, `count` summed, before the index is built; `pgq sql
-  upgrade` does the same.
+  `pgqueuer_statistics_unique_count`. The upgrade folds rows split on
+  `time_in_queue` into one per bucket, summing `count`, before it builds the
+  index; `pgq sql upgrade` does the same.
 - `pgq upgrade` and `pgq install` no longer crash with `KeyError` when a
   table's id sequence is not owned by it (for example after `ALTER SEQUENCE ...
   OWNED BY NONE`). There is no sequence to widen, so none is planned.
@@ -136,6 +136,10 @@ It is written without seeing the database, so it re-states every object behind
 - A worker no longer starts a second copy of a job it is still running when that
   job's heartbeat reaches the database late. Its next dequeue re-picked the job
   as stale and ran it again in the same process.
+- `enqueue()` raises `ValueError` naming the argument when its batch lists
+  differ in length, and inserts nothing. PostgreSQL used to pad a short list
+  with `NULL`, so a short `payload` list queued jobs without a payload; the
+  in-memory adapter inserted the first jobs and then raised `IndexError`.
 
 ### Removed
 
