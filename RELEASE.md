@@ -136,6 +136,10 @@ It is written without seeing the database, so it re-states every object behind
 - A worker no longer starts a second copy of a job it is still running when that
   job's heartbeat reaches the database late. Its next dequeue re-picked the job
   as stale and ran it again in the same process.
+- `enqueue()` given batch lists of different lengths raises `ValueError` naming
+  the argument, before inserting anything. PostgreSQL used to pad a short list
+  with `NULL`, so a short `payload` list queued jobs without a payload; the
+  in-memory adapter inserted the first jobs and then raised `IndexError`.
 
 ### Removed
 
