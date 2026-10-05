@@ -27,6 +27,16 @@ Please follow these steps to have your contribution considered by the maintainer
 
 While the prerequisites above must be satisfied prior to having your pull request reviewed, the reviewer(s) may ask you to complete additional design work, tests, or other changes before your pull request can be ultimately accepted.
 
+### Agentic Contributions
+
+Issues and pull requests written mainly by an AI agent or coding assistant are welcome. They **must** carry the `Agentic` label.
+
+* Apply the `Agentic` label when you open the issue or pull request. If you don't have permission to set labels, write "Agentic" on the first line of the description and a maintainer will add the label.
+* A human is responsible for every agentic contribution. Read what the agent produced, check that it is correct, and be ready to answer review comments yourself.
+* Agentic pull requests follow the same rules as any other pull request, including the template, the style guides, and the local checks listed above.
+
+Maintainers may close agentic issues or pull requests that are missing the label.
+
 ## Style Guides
 
 ### Git Commit Messages
