@@ -101,11 +101,14 @@ class QueueManager:
         self.pending_health_check[health_check_event_id] = fut
         try:
             await self.queries.notify_health_check(health_check_event_id)
-            return await asyncio.wait_for(fut, timeout.total_seconds())
-        except (TimeoutError, asyncio.TimeoutError):
-            raise errors.FailingListenerError from None
+            done, _ = await asyncio.wait({fut}, timeout=timeout.total_seconds())
+            if not done:
+                raise errors.FailingListenerError
+            return fut.result()
         finally:
             self.pending_health_check.pop(health_check_event_id, None)
+            if not fut.done():
+                fut.cancel()
 
     async def _run_periodic_health_check(
         self,
