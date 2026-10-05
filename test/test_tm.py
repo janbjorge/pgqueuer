@@ -100,6 +100,29 @@ async def test_task_manager_no_log_on_cancel(
     assert len(caplog.messages) == 0
 
 
+async def test_task_manager_can_add_same_task_twice() -> None:
+    loop = asyncio.get_running_loop()
+    callback_errors: list[dict[str, object]] = []
+    previous_handler = loop.get_exception_handler()
+    loop.set_exception_handler(lambda _loop, context: callback_errors.append(context))
+
+    async def done() -> None:
+        return None
+
+    task = asyncio.create_task(done())
+    tm = TaskManager()
+    try:
+        tm.add(task)
+        tm.add(task)
+        await task
+        await asyncio.sleep(0)
+    finally:
+        loop.set_exception_handler(previous_handler)
+
+    assert not tm.tasks
+    assert not callback_errors
+
+
 async def test_cancel_on_exit_cancels_pending_task() -> None:
     async with cancel_on_exit(asyncio.create_task(asyncio.Event().wait())) as task:
         assert not task.done()
