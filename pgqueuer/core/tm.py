@@ -47,7 +47,7 @@ class TaskManager:
         """Track *task*; auto-remove and log on completion."""
         self.tasks.add(task)
         task.add_done_callback(self.log_unhandled_exception)
-        task.add_done_callback(self.tasks.remove)
+        task.add_done_callback(self.tasks.discard)
 
     async def gather_tasks(self, return_exceptions: bool = True) -> list[object]:
         """Await every tracked task and return per-task results/exceptions."""
