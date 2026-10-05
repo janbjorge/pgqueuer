@@ -362,6 +362,14 @@ PgQueuer follows **strict semantic versioning** (SemVer) from v1.0.0 onward:
 
 Never introduce a breaking change in a patch or minor release. If a change would break any public API (function signatures, class fields, import paths, CLI behavior, database schema), it requires a major version bump.
 
+## Issues and Pull Requests
+
+Every issue or pull request an agent writes **must** carry the `Agentic` label ("Issue or PR written mainly by an AI agent. Required on all agent-authored contributions."). See [CONTRIBUTING.md](CONTRIBUTING.md#agentic-contributions).
+
+- Apply the label when creating it, e.g. `gh pr create --label Agentic` or `gh issue create --label Agentic`.
+- If the label can't be set (no triage permission), put "Agentic" on the first line of the description so a maintainer can add it.
+- Fill in the issue or PR template like any other contribution.
+
 ## Commit Conventions
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
