@@ -67,6 +67,11 @@ class CompletionWatcher:
         init=False,
         repr=False,
     )
+    refresh_requested: bool = field(
+        default=False,
+        init=False,
+        repr=False,
+    )
 
     async def __aenter__(self) -> "CompletionWatcher":
         if self.refresh_interval is not None:
@@ -100,22 +105,28 @@ class CompletionWatcher:
 
     def _schedule_refresh_waiters(self) -> None:
         """(Re)arm debounce timer; coalesces multiple triggers into one query."""
+        self.refresh_requested = True
         if self.debounce_task and not self.debounce_task.done():
-            return  # timer already running
+            return  # the running task picks the request up
         self.debounce_task = asyncio.create_task(self._debounced())
         self.task_manager.add(self.debounce_task)
 
     async def _debounced(self) -> None:
-        """Sleep for the debounce interval, then run the consolidated check."""
+        """Sleep for the debounce interval, then run the consolidated check.
+
+        Repeats while triggers arrive, so at most one status query is in flight.
+        """
         try:
-            with suppress(TimeoutError, asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=self.debounce.total_seconds(),
-                )
+            while self.refresh_requested:
+                with suppress(TimeoutError, asyncio.TimeoutError):
+                    await asyncio.wait_for(
+                        self.shutdown.wait(),
+                        timeout=self.debounce.total_seconds(),
+                    )
+                self.refresh_requested = False
+                await self._refresh_waiters()
         finally:
             self.debounce_task = None
-        await self._refresh_waiters()
 
     def _is_relevant_event(self, payload: str | bytes | bytearray) -> None:
         """LISTEN/NOTIFY callback -- schedules a debounced change check."""

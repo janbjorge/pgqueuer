@@ -11,7 +11,7 @@ import pytest
 from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.completion import CompletionWatcher
-from pgqueuer.domain.types import JOB_STATUS, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -254,6 +254,65 @@ async def test_completion_exit_on_error_cancels_waiters(
         task.cancel()
         pytest.fail("exit hung on a pending waiter")
     assert task.result().cancelled()
+
+
+async def test_debounce_runs_one_query_at_a_time(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """NOTIFYs during a slow status query coalesce into one follow-up query (#900)."""
+    calls = 0
+    job_status = queries.job_status
+
+    async def slow_job_status(ids: list[JobId]) -> list[tuple[JobId, JOB_STATUS]]:
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0.2)
+        return await job_status(ids)
+
+    monkeypatch.setattr(queries, "job_status", slow_job_status)
+
+    async with CompletionWatcher(
+        driver,
+        queries=queries,
+        refresh_interval=None,
+        debounce=timedelta(milliseconds=10),
+    ):
+        for _ in range(20):
+            await queries.emit_table_changed("update")
+            await asyncio.sleep(0.02)
+
+    assert calls <= 3
+
+
+async def test_debounce_refreshes_after_notify_during_query(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A NOTIFY that lands during a status query still gets its own refresh."""
+    (jid,) = await queries.enqueue(["fetch"], [None], [0])
+    job_status = queries.job_status
+
+    async def stale_job_status(ids: list[JobId]) -> list[tuple[JobId, JOB_STATUS]]:
+        snapshot = await job_status(ids)
+        await asyncio.sleep(0.2)
+        return snapshot
+
+    monkeypatch.setattr(queries, "job_status", stale_job_status)
+
+    async with CompletionWatcher(
+        driver,
+        queries=queries,
+        refresh_interval=None,
+        debounce=timedelta(milliseconds=10),
+    ) as watcher:
+        waiter = watcher.wait_for(jid)
+        await asyncio.sleep(0.05)
+        await queries.mark_job_as_cancelled([jid])
+        await queries.emit_table_changed("delete")
+        assert await asyncio.wait_for(waiter, timeout=2) == "canceled"
 
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
