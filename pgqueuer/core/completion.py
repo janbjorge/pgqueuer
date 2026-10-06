@@ -78,7 +78,7 @@ class CompletionWatcher:
     async def __aexit__(self, *_: object) -> bool:
         self.shutdown.set()
         self._schedule_refresh_waiters()
-        await asyncio.gather(*chain.from_iterable(self.waiters.values()))
+        await asyncio.gather(*chain.from_iterable(self.waiters.values()), return_exceptions=True)
         await self.task_manager.gather_tasks()
         return False
 
