@@ -124,7 +124,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
 ### Import Rules (enforced by lint-imports)
 
 1. **Domain** (`pgqueuer/domain/`) must NOT import from adapters or core
-2. **Ports** (`pgqueuer/ports/`) must NOT import from adapters or core (one exception: `ports.driver -> core.tm`)
+2. **Ports** (`pgqueuer/ports/`) must NOT import from adapters or core
 3. **Core** (`pgqueuer/core/`) must NOT import from adapters (several temporary exceptions listed in `pyproject.toml`)
 
 Port protocols: `QueueRepositoryPort`, `ScheduleRepositoryPort`, `NotificationPort`, `SchemaManagementPort`. The `Queries` class satisfies all four via structural subtyping. Core code should depend on protocols, not `Queries` directly.
