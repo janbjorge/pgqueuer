@@ -110,9 +110,10 @@ class SchedulerManager:
 
         async with (
             self.queries.driver,
+            # Outside the TaskManager so it keeps beating until running schedules drain.
+            tm.cancel_on_exit(asyncio.create_task(self._heartbeat_loop())),
             tm.TaskManager() as task_manager,
         ):
-            task_manager.add(asyncio.create_task(self._heartbeat_loop()))
             while not self.shutdown.is_set():
                 scheduled = await self.queries.fetch_schedule(
                     {k: v.next_in() for k, v in self.registry.items()}
