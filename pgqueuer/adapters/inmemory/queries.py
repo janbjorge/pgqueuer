@@ -532,6 +532,9 @@ class InMemoryQueries:
             )
             self._next_log_id += 1
 
+        # Postgres runs the DELETE on every call, and its statement trigger always notifies.
+        await self.emit_table_changed("delete")
+
     async def retry_job(
         self,
         job: models.Job,

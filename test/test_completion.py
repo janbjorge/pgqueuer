@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
 import pytest
 
 from pgqueuer import db
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.completion import CompletionWatcher
-from pgqueuer.domain.types import JOB_STATUS
+from pgqueuer.domain.types import JOB_STATUS, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
-from pgqueuer.queries import Queries
+from pgqueuer.queries import EntrypointExecutionParameter, Queries
 from pgqueuer.types import QueueExecutionMode
 
 
@@ -99,6 +101,39 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
 
     assert len(waiters) == N
     assert all(w.result() == "deleted" for w in waiters)
+
+
+@pytest.mark.parametrize(
+    ("status", "resolves"),
+    (("successful", True), ("failed", False)),
+)
+async def test_completion_inmemory_log_jobs_notifies(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    status: JOB_STATUS,
+    resolves: bool,
+) -> None:
+    """In-memory log_jobs wakes the watcher without the poll (#901)."""
+    await queries.enqueue(["fetch"], [None], [0])
+    (job,) = await queries.dequeue(
+        batch_size=1,
+        entrypoints={QueueEntrypoint("fetch"): EntrypointExecutionParameter(0)},
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(minutes=10),
+    )
+
+    async with CompletionWatcher(
+        driver,
+        queries=queries,
+        refresh_interval=timedelta(minutes=10),
+    ) as watcher:
+        waiter = watcher.wait_for(job.id)
+        await asyncio.sleep(0.1)
+        await queries.log_jobs([(job, status, None)])
+        await asyncio.sleep(0.1)
+        assert waiter.done() is resolves
+        await queries.mark_job_as_cancelled([job.id])  # lets exit resolve a pending waiter
 
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
