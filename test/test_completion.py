@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -134,6 +135,40 @@ async def test_completion_inmemory_log_jobs_notifies(
         await asyncio.sleep(0.1)
         assert waiter.done() is resolves
         await queries.mark_job_as_cancelled([job.id])  # lets exit resolve a pending waiter
+
+
+async def test_completion_refresh_interval_none_disables_poll(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """refresh_interval=None runs without a poll task (#887)."""
+    (jid,) = await queries.enqueue(["fetch"], [None], [0])
+    await queries.mark_job_as_cancelled([jid])
+
+    with caplog.at_level(logging.ERROR):
+        async with CompletionWatcher(driver, queries=queries, refresh_interval=None) as watcher:
+            assert await watcher.wait_for(jid) == "canceled"
+
+    assert "Unhandled exception" not in caplog.text
+
+
+async def test_completion_refresh_interval_polls_for_lost_notify(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+) -> None:
+    """A set refresh_interval resolves a job whose NOTIFY never came."""
+    (jid,) = await queries.enqueue(["fetch"], [None], [0])
+
+    async with CompletionWatcher(
+        driver,
+        queries=queries,
+        refresh_interval=timedelta(milliseconds=50),
+    ) as watcher:
+        waiter = watcher.wait_for(jid)
+        await asyncio.sleep(0.1)
+        await queries.mark_job_as_cancelled([jid])  # emits no table_changed
+        assert await asyncio.wait_for(waiter, timeout=2) == "canceled"
 
 
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
