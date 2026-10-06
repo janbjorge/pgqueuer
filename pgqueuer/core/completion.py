@@ -75,11 +75,20 @@ class CompletionWatcher:
         self._schedule_refresh_waiters()
         return self
 
-    async def __aexit__(self, *_: object) -> bool:
-        self.shutdown.set()
+    async def __aexit__(self, exc_type: type[BaseException] | None, *_: object) -> bool:
+        if exc_type is not None:
+            for waiter in chain.from_iterable(self.waiters.values()):
+                waiter.cancel()
         self._schedule_refresh_waiters()
-        await asyncio.gather(*chain.from_iterable(self.waiters.values()), return_exceptions=True)
-        await self.task_manager.gather_tasks()
+        try:
+            await asyncio.gather(
+                *chain.from_iterable(self.waiters.values()),
+                return_exceptions=True,
+            )
+        finally:
+            # Set only now: the poll must keep running while a waiter's NOTIFY may be lost.
+            self.shutdown.set()
+            await self.task_manager.gather_tasks()
         return False
 
     def wait_for(self, jid: types.JobId) -> asyncio.Future[types.JOB_STATUS]:
