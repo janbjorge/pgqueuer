@@ -9,6 +9,7 @@ from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.queries import Queries
+from pgqueuer.core import logconfig
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -177,13 +178,19 @@ class PgQueuer:
             ),
             asyncio.create_task(self.sm.run()),
         ]
+        raised: BaseException | None = None
         try:
             await asyncio.gather(*tasks)
+        except BaseException as exc:
+            raised = exc
+            raise
         finally:
             self.shutdown.set()
             for t in tasks:
                 t.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            for outcome in await asyncio.gather(*tasks, return_exceptions=True):
+                if isinstance(outcome, Exception) and outcome is not raised:
+                    logconfig.logger.error("Manager failed during shutdown", exc_info=outcome)
 
     def entrypoint(
         self,

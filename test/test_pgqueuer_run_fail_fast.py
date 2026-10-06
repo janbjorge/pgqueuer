@@ -1,11 +1,12 @@
 import asyncio
+import logging
 
 import pytest
 
 from pgqueuer.applications import PgQueuer
 
 
-async def test_pgqueuer_run_propagates_scheduler_failure() -> None:
+async def test_pgqueuer_run_propagates_scheduler_failure(caplog: pytest.LogCaptureFixture) -> None:
     pgq = PgQueuer.in_memory()
     queue_cancelled = asyncio.Event()
 
@@ -22,14 +23,15 @@ async def test_pgqueuer_run_propagates_scheduler_failure() -> None:
     pgq.qm.run = queue_manager_run  # type: ignore[assignment]
     pgq.sm.run = scheduler_manager_run
 
-    with pytest.raises(RuntimeError, match="scheduler failure"):
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError, match="scheduler failure"):
         await pgq.run()
 
+    assert not caplog.records
     assert pgq.shutdown.is_set()
     assert queue_cancelled.is_set()
 
 
-async def test_pgqueuer_run_propagates_queue_failure() -> None:
+async def test_pgqueuer_run_propagates_queue_failure(caplog: pytest.LogCaptureFixture) -> None:
     pgq = PgQueuer.in_memory()
     scheduler_cancelled = asyncio.Event()
 
@@ -46,9 +48,10 @@ async def test_pgqueuer_run_propagates_queue_failure() -> None:
     pgq.qm.run = queue_manager_run  # type: ignore[assignment]
     pgq.sm.run = scheduler_manager_run
 
-    with pytest.raises(RuntimeError, match="queue failure"):
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError, match="queue failure"):
         await pgq.run()
 
+    assert not caplog.records
     assert pgq.shutdown.is_set()
     assert scheduler_cancelled.is_set()
 
@@ -77,7 +80,8 @@ async def test_pgqueuer_run_normal_shutdown_no_exception() -> None:
     assert pgq.shutdown.is_set()
 
 
-async def test_pgqueuer_run_both_fail_propagates_first() -> None:
+async def test_pgqueuer_run_both_fail_propagates_first(caplog: pytest.LogCaptureFixture) -> None:
+    """The error that is not raised gets logged (#898)."""
     pgq = PgQueuer.in_memory()
 
     async def queue_manager_run(**_kwargs: object) -> None:
@@ -91,10 +95,18 @@ async def test_pgqueuer_run_both_fail_propagates_first() -> None:
     pgq.qm.run = queue_manager_run  # type: ignore[assignment]
     pgq.sm.run = scheduler_manager_run
 
-    with pytest.raises(RuntimeError, match="(queue|scheduler) failure"):
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(RuntimeError, match="(queue|scheduler) failure") as raised,
+    ):
         await pgq.run()
 
     assert pgq.shutdown.is_set()
+    (record,) = caplog.records
+    assert record.exc_info is not None
+    logged = record.exc_info[1]
+    assert isinstance(logged, RuntimeError)
+    assert {str(logged), str(raised.value)} == {"queue failure", "scheduler failure"}
 
 
 async def test_pgqueuer_run_cancelled_externally() -> None:
