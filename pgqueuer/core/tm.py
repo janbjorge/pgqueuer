@@ -10,6 +10,23 @@ from pgqueuer.core import logconfig
 T = TypeVar("T")
 
 
+def discard_outcome(task: asyncio.Task[T]) -> None:
+    """Mark *task*'s exception as retrieved so asyncio does not log it."""
+    if not task.cancelled():
+        task.exception()
+
+
+async def cancel_and_wait(task: asyncio.Task[T]) -> None:
+    """Cancel *task*, wait until it is done, and discard its outcome.
+
+    ``asyncio.wait`` does not forward a cancel of the caller to *task*, so the
+    caller's own cancellation still propagates while *task* unwinds.
+    """
+    task.add_done_callback(discard_outcome)
+    task.cancel()
+    await asyncio.wait({task})
+
+
 @contextlib.asynccontextmanager
 async def cancel_on_exit(task: asyncio.Task[T]) -> AsyncGenerator[asyncio.Task[T], None]:
     """Yield *task*; on exit cancel it and discard its outcome.
@@ -20,9 +37,7 @@ async def cancel_on_exit(task: asyncio.Task[T]) -> AsyncGenerator[asyncio.Task[T
     try:
         yield task
     finally:
-        task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await task
+        await cancel_and_wait(task)
 
 
 @dataclasses.dataclass

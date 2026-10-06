@@ -7,7 +7,7 @@ from datetime import timedelta
 from typing import Callable, TypeAlias
 
 from pgqueuer.adapters.cli import factories
-from pgqueuer.core import applications, logconfig, qm, sm
+from pgqueuer.core import applications, logconfig, qm, sm, tm
 from pgqueuer.domain import types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
@@ -106,9 +106,7 @@ async def runit(
                 exc_info=exc,
             )
         finally:
-            forward_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await forward_task
+            await tm.cancel_and_wait(forward_task)
 
         # Clean completion (drain / signal) ends the supervisor; only failures restart.
         if shutdown.is_set() or not failed:

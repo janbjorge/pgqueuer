@@ -145,3 +145,32 @@ async def test_cancel_on_exit_leaves_completed_result() -> None:
     async with cancel_on_exit(asyncio.create_task(result())) as task:
         assert await task == 42
     assert task.result() == 42
+
+
+async def test_cancel_on_exit_propagates_caller_cancel() -> None:
+    """A cancel aimed at the caller while the child unwinds is not swallowed (#889)."""
+    unwinding = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow_to_unwind() -> None:
+        try:
+            await asyncio.Future()
+        finally:
+            unwinding.set()
+            await release.wait()
+
+    child = asyncio.create_task(slow_to_unwind())
+
+    async def caller() -> None:
+        async with cancel_on_exit(child):
+            pass
+
+    task = asyncio.create_task(caller())
+    await unwinding.wait()
+    task.cancel()
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        release.set()
+        await asyncio.wait({child})

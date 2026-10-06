@@ -109,6 +109,42 @@ async def test_no_heartbeat_when_job_completes_before_interval() -> None:
     assert hbuf.received == 0, f"Expected 0 heartbeat writes, got {hbuf.received}"
 
 
+async def test_heartbeat_exit_propagates_caller_cancel() -> None:
+    """A cancel aimed at the caller while the heartbeat finishes is not swallowed (#889)."""
+    adding = asyncio.Event()
+    release = asyncio.Event()
+
+    class BlockingBuffer(HeartbeatBuffer):
+        def __init__(self) -> None:
+            super().__init__(max_size=10, timeout=timedelta(seconds=0), repository=_FakeSink())
+
+        async def add(self, _: object) -> None:
+            adding.set()
+            await release.wait()
+
+    class _FakeSink:
+        async def update_heartbeat(self, _: list[JobId]) -> None:
+            pass
+
+    beat = Heartbeat(JobId(1), timedelta(milliseconds=10), BlockingBuffer())
+
+    async def caller() -> None:
+        async with beat:
+            await adding.wait()
+
+    task = asyncio.create_task(caller())
+    await adding.wait()
+    await asyncio.sleep(0.01)
+    task.cancel()
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        release.set()
+        assert beat.heartbeat_task is not None
+        await asyncio.wait({beat.heartbeat_task})
+
+
 async def test_heartbeat_keeps_buffer_ticking() -> None:
     class _NoopSink:
         async def update_heartbeat(self, _: list[JobId]) -> None:

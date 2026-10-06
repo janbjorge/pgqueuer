@@ -35,8 +35,10 @@ class Heartbeat:
     async def __aexit__(self, *_: object) -> None:
         self.shutdown.set()
         if self.heartbeat_task is not None:
-            with suppress(asyncio.CancelledError):
-                await self.heartbeat_task
+            # wait() keeps a cancel of the caller from being absorbed by the heartbeat task.
+            await asyncio.wait({self.heartbeat_task})
+            if not self.heartbeat_task.cancelled():
+                self.heartbeat_task.result()
 
     async def send_heartbeat(self) -> None:
         while not self.shutdown.is_set():
