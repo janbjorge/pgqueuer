@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import timedelta
 from typing import Any
 
 import anyio
 import async_timeout
+import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
@@ -122,11 +124,13 @@ async def test_inmemory_retry_job_writes_log_entry(queries: InMemoryQueries) -> 
 # ---------------------------------------------------------------------------
 
 
-async def test_retry_requested_requeues_and_succeeds() -> None:
+@pytest.mark.parametrize(("n_jobs", "batch_size"), ((1, 10), (2, 1)))
+async def test_retry_requested_requeues_and_succeeds(n_jobs: int, batch_size: int) -> None:
     """Handler raises RetryRequested once, then succeeds on the second execution.
 
     Because retry uses UPDATE (same row, same id), call_count tracks attempts
-    by job.id — the id is stable across retries.
+    by job.id — the id is stable across retries. With batch_size=1 our own
+    dequeue re-picks a retried row before its first dispatch has finished (#882).
     """
     pq = PgQueuer.in_memory()
     call_count: dict[int, int] = {}
@@ -137,23 +141,39 @@ async def test_retry_requested_requeues_and_succeeds() -> None:
         if call_count[job.id] == 1:
             raise RetryRequested(delay=timedelta(0), reason="transient failure")
 
-    await pq.qm.queries.enqueue("retry_ep", b"data", priority=0)
+    await pq.qm.queries.enqueue(["retry_ep"] * n_jobs, [b"data"] * n_jobs, [0] * n_jobs)
 
-    await pq.qm.run(
-        batch_size=10,
-        mode=QueueExecutionMode.drain,
-        max_concurrent_tasks=100,
-        dequeue_timeout=timedelta(seconds=1),
-    )
+    async with async_timeout.timeout(5):
+        await pq.qm.run(
+            batch_size=batch_size,
+            mode=QueueExecutionMode.drain,
+            max_concurrent_tasks=100,
+            dequeue_timeout=timedelta(seconds=1),
+        )
 
-    # Called exactly twice: first raises RetryRequested, second succeeds
-    assert sum(call_count.values()) == 2
+    # Each job is called exactly twice: first raises RetryRequested, second succeeds
+    assert sorted(call_count.values()) == [2] * n_jobs
 
     logs = await pq.qm.queries.queue_log()
-    assert sum(1 for log in logs if log.status == "successful") == 1
+    assert sum(1 for log in logs if log.status == "successful") == n_jobs
 
     # Queue is empty after success
     assert await pq.qm.queries.queue_size() == []
+
+
+async def test_forget_job_keeps_context_of_rerun(queries: InMemoryQueries) -> None:
+    """A finished dispatch does not drop the context of its job's re-run (#882)."""
+    qm = QueueManager(queries)
+    first, rerun = (Context(cancellation=anyio.CancelScope(), resources={}) for _ in range(2))
+    task = asyncio.create_task(asyncio.sleep(0))
+    await task
+
+    qm.job_context[JobId(1)] = rerun
+    qm.forget_job(JobId(1), first, task)
+    assert qm.job_context[JobId(1)] is rerun
+
+    qm.forget_job(JobId(1), rerun, task)
+    assert JobId(1) not in qm.job_context
 
 
 async def test_unhandled_exception_remains_terminal() -> None:

@@ -149,9 +149,18 @@ class QueueManager:
     def get_context(self, job_id: types.JobId) -> models.Context:
         return self.job_context[job_id]
 
-    def forget_job(self, job_id: types.JobId, task: asyncio.Task[None]) -> None:
-        """Drop *job_id*'s context once its dispatch task is done, however it ended."""
-        self.job_context.pop(job_id, None)
+    def forget_job(
+        self,
+        job_id: types.JobId,
+        context: models.Context,
+        task: asyncio.Task[None],
+    ) -> None:
+        """Drop *job_id*'s context once its dispatch task is done, however it ended.
+
+        A retried job may already be running again under a new context; that one is kept.
+        """
+        if self.job_context.get(job_id) is context:
+            del self.job_context[job_id]
 
     def register_executor(
         self,
@@ -460,12 +469,13 @@ class QueueManager:
                     # A late heartbeat lets our own dequeue re-pick a job still running here.
                     if job.id in self.job_context:
                         continue
-                    self.job_context[job.id] = models.Context(
+                    context = models.Context(
                         cancellation=anyio.CancelScope(),
                         resources=self.resources,
                     )
+                    self.job_context[job.id] = context
                     task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
-                    task.add_done_callback(functools.partial(self.forget_job, job.id))
+                    task.add_done_callback(functools.partial(self.forget_job, job.id, context))
                     task_manager.add(task)
 
                     with contextlib.suppress(asyncio.QueueEmpty):
@@ -537,6 +547,8 @@ class QueueManager:
                         "reason": retry_exc.reason,
                     },
                 )
+                # Release before re-queueing, or our own dequeue skips the re-picked row.
+                self.job_context.pop(job.id, None)
                 await self.queries.retry_job(job, retry_exc.delay, tbr)
             except asyncio.CancelledError:
                 logconfig.logger.debug(
