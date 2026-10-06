@@ -109,8 +109,8 @@ class SchedulerManager:
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 
         async with (
-            tm.TaskManager() as task_manager,
             self.queries.driver,
+            tm.TaskManager() as task_manager,
         ):
             task_manager.add(asyncio.create_task(self._heartbeat_loop()))
             while not self.shutdown.is_set():

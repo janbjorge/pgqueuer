@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import ScheduleId
@@ -188,6 +188,50 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
     )
 
     assert executed
+
+
+@pytest.mark.parametrize("fails", (False, True))
+async def test_scheduler_releases_schedule_before_driver_exit(mocker: Mock, fails: bool) -> None:
+    """In-flight schedules are released before the driver exits (#897)."""
+    events: list[str] = []
+
+    class RecordingDriver(InMemoryDriver):
+        async def __aexit__(self, *_: object) -> None:
+            events.append("driver exit")
+
+    queries = InMemoryQueries(driver=RecordingDriver())
+    scheduler = SchedulerManager(queries)
+    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
+    mocker.patch(
+        "pgqueuer.core.executors.croniter",
+        return_value=mocker.Mock(get_next=mocker.Mock(return_value=mocked_now.timestamp() - 60)),
+    )
+
+    started = asyncio.Event()
+
+    async def slow_task(schedule: Schedule) -> None:
+        started.set()
+        await asyncio.sleep(0.2)
+        if fails:
+            raise ValueError
+
+    scheduler.schedule("slow_task", "* * * * *")(slow_task)
+
+    release = queries.set_schedule_queued
+
+    async def recording_release(ids: set[ScheduleId]) -> None:
+        events.append("release")
+        await release(ids)
+
+    mocker.patch.object(queries, "set_schedule_queued", side_effect=recording_release)
+
+    run = asyncio.create_task(scheduler.run())
+    await started.wait()
+    scheduler.shutdown.set()
+    await run
+
+    assert events == ["release", "driver exit"]
 
 
 async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
