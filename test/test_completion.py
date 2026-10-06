@@ -171,6 +171,41 @@ async def test_completion_refresh_interval_polls_for_lost_notify(
         assert await asyncio.wait_for(waiter, timeout=2) == "canceled"
 
 
+async def test_completion_exit_with_cancelled_waiter(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+) -> None:
+    """Cancelling a pending waiter does not make exit raise (#884)."""
+    done_id, pending_id = await queries.enqueue(["fetch", "fetch"], [None, None], [0, 0])
+    await queries.mark_job_as_cancelled([done_id])
+
+    async with CompletionWatcher(driver, queries=queries) as watcher:
+        waiters = [watcher.wait_for(done_id), watcher.wait_for(pending_id)]
+        done, pending = await asyncio.wait(waiters, return_when=asyncio.FIRST_COMPLETED)
+        for fut in pending:
+            fut.cancel()
+
+    assert next(iter(done)).result() == "canceled"
+
+
+async def test_completion_exit_waits_for_uncancelled_waiter(apgdriver: db.Driver) -> None:
+    """Exit still waits for the waiters that were not cancelled."""
+    queries = Queries(apgdriver)
+    cancelled_id, waited_id = await queries.enqueue(["fetch", "fetch"], [None, None], [0, 0])
+
+    async def cancel_later() -> None:
+        await asyncio.sleep(0.1)
+        await queries.mark_job_as_cancelled([waited_id])
+
+    async with CompletionWatcher(apgdriver, queries=queries) as watcher:
+        watcher.wait_for(cancelled_id).cancel()
+        waiter = watcher.wait_for(waited_id)
+        canceller = asyncio.create_task(cancel_later())
+
+    assert waiter.result() == "canceled"
+    await canceller
+
+
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
 async def test_completion_is_terminal(apgdriver: db.Driver, status: JOB_STATUS) -> None:
     assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)
