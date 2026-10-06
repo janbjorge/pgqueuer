@@ -180,12 +180,22 @@ class SchedulerManager:
             )
 
     async def _heartbeat_loop(self) -> None:
-        """Send batched heartbeat updates for all active schedules."""
-        while not self.shutdown.is_set():
+        """Send batched heartbeat updates for all active schedules.
+
+        Runs past shutdown while dispatches are in flight; a schedule whose
+        heartbeat goes stale can be picked again and run twice.
+        """
+        while not self.shutdown.is_set() or self.active_heartbeat_ids:
             if self.active_heartbeat_ids:
-                await self.queries.update_schedule_heartbeat(
-                    set(self.active_heartbeat_ids),
-                )
+                try:
+                    await self.queries.update_schedule_heartbeat(
+                        set(self.active_heartbeat_ids),
+                    )
+                except Exception:
+                    logconfig.logger.exception("Failed to update schedule heartbeat")
+            if self.shutdown.is_set():
+                await asyncio.sleep(1.0)
+                continue
             with suppress(TimeoutError, asyncio.TimeoutError):
                 await asyncio.wait_for(
                     self.shutdown.wait(),
