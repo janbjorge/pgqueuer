@@ -23,6 +23,10 @@ async with CompletionWatcher(driver, queries=queries) as watcher:
     # status: "successful", "exception", "canceled", or "deleted"
 ```
 
+Leaving the `async with` block waits for every waiter that is still pending, and
+the refresh poll keeps running until they resolve. If the block exits with an
+exception or a cancellation, pending waiters are cancelled instead.
+
 ### Completion watcher state flow
 
 The watcher monitors a job's progression until it reaches a **terminal state**:

@@ -206,6 +206,56 @@ async def test_completion_exit_waits_for_uncancelled_waiter(apgdriver: db.Driver
     await canceller
 
 
+async def test_completion_exit_polls_for_lost_notify(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+) -> None:
+    """Exit keeps polling until a job whose NOTIFY never came resolves (#885)."""
+    (jid,) = await queries.enqueue(["fetch"], [None], [0])
+
+    async def cancel_later() -> None:
+        await asyncio.sleep(0.2)
+        await queries.mark_job_as_cancelled([jid])  # emits no table_changed
+
+    async def watch() -> asyncio.Future[JOB_STATUS]:
+        async with CompletionWatcher(
+            driver,
+            queries=queries,
+            refresh_interval=timedelta(milliseconds=50),
+        ) as watcher:
+            waiter = watcher.wait_for(jid)
+            canceller = asyncio.create_task(cancel_later())
+        await canceller
+        return waiter
+
+    waiter = await asyncio.wait_for(watch(), timeout=2)
+    assert waiter.result() == "canceled"
+
+
+@pytest.mark.parametrize("error", (ValueError, asyncio.CancelledError))
+async def test_completion_exit_on_error_cancels_waiters(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    error: type[BaseException],
+) -> None:
+    """An error in the body cancels pending waiters instead of waiting on them (#885)."""
+    (jid,) = await queries.enqueue(["fetch"], [None], [0])
+
+    async def watch() -> asyncio.Future[JOB_STATUS]:
+        with pytest.raises(error):
+            async with CompletionWatcher(driver, queries=queries) as watcher:
+                waiter = watcher.wait_for(jid)
+                raise error
+        return waiter
+
+    task = asyncio.create_task(watch())
+    done, _ = await asyncio.wait({task}, timeout=2)
+    if task not in done:
+        task.cancel()
+        pytest.fail("exit hung on a pending waiter")
+    assert task.result().cancelled()
+
+
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
 async def test_completion_is_terminal(apgdriver: db.Driver, status: JOB_STATUS) -> None:
     assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)
