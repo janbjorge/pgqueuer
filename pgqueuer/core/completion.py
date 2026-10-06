@@ -34,7 +34,7 @@ class CompletionWatcher:
 
     driver: Driver
     queries: QueueRepositoryPort = field(kw_only=True)
-    refresh_interval: timedelta = field(
+    refresh_interval: timedelta | None = field(
         default_factory=lambda: timedelta(seconds=5),
     )
 
@@ -69,7 +69,8 @@ class CompletionWatcher:
     )
 
     async def __aenter__(self) -> "CompletionWatcher":
-        self.task_manager.add(asyncio.create_task(self._poll_for_change()))
+        if self.refresh_interval is not None:
+            self.task_manager.add(asyncio.create_task(self._poll_for_change(self.refresh_interval)))
         await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
@@ -116,13 +117,13 @@ class CompletionWatcher:
         if evt.root.type == "table_changed_event":
             self._schedule_refresh_waiters()
 
-    async def _poll_for_change(self) -> None:
+    async def _poll_for_change(self, refresh_interval: timedelta) -> None:
         """Safety-net poller for missed NOTIFY events."""
         while not self.shutdown.is_set():
             try:
                 await asyncio.wait_for(
                     self.shutdown.wait(),
-                    timeout=self.refresh_interval.total_seconds(),
+                    timeout=refresh_interval.total_seconds(),
                 )
             except (TimeoutError, asyncio.TimeoutError):
                 self._schedule_refresh_waiters()
