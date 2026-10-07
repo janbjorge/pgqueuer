@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Annotated
 
 import typer
-from typing_extensions import Annotated
 
 from pgqueuer.adapters.persistence import qb, schema_ddl
 
