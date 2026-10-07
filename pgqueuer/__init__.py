@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pgqueuer.adapters.cli.supervisor import run
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.applications import PgQueuer
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
@@ -29,4 +30,5 @@ __all__ = [
     "QueueManager",
     "RetryRequested",
     "SchedulerManager",
+    "run",
 ]

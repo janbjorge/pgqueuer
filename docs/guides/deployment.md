@@ -32,6 +32,28 @@ async def main():
 pgq run myapp:main
 ```
 
+To start the same worker from your own code instead of the CLI, call `pgqueuer.run`. It
+takes the factory (or its `module:attr` path) and the same options as `pgq run`, as
+keyword arguments:
+
+```python
+import asyncio
+import pgqueuer
+
+asyncio.run(pgqueuer.run("myapp:main", batch_size=20))
+```
+
+Inside an application that already handles signals, pass your own `shutdown` event.
+`pgqueuer.run` then leaves SIGINT and SIGTERM alone and stops when the event is set:
+
+```python
+shutdown = asyncio.Event()
+worker = asyncio.create_task(pgqueuer.run(main, shutdown=shutdown))
+...
+shutdown.set()
+await worker
+```
+
 This is sufficient for most workloads. A single `QueueManager` handles multiple entrypoints
 concurrently via asyncio.
 
