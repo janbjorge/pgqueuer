@@ -601,13 +601,12 @@ def run(
         factory = functools.partial(factory, factory_args)
 
     asyncio_run(
-        supervisor.runit(
+        supervisor.run(
             factory,
             dequeue_timeout=timedelta(seconds=dequeue_timeout),
             batch_size=batch_size,
-            restart_delay=timedelta(seconds=restart_delay if restart_on_failure else 0),
+            restart_delay=timedelta(seconds=restart_delay),
             restart_on_failure=restart_on_failure,
-            shutdown=asyncio.Event(),
             mode=mode,
             max_concurrent_tasks=max_concurrent_tasks,
             shutdown_on_listener_failure=shutdown_on_listener_failure,
