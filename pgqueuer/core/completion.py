@@ -10,7 +10,7 @@ from itertools import chain
 from pgqueuer.core import tm
 from pgqueuer.domain import models, types
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.driver import Driver, ListenerRemover
 from pgqueuer.ports.repository import QueueRepositoryPort
 
 
@@ -94,6 +94,8 @@ class CompletionWatcher:
             # Set only now: the poll must keep running while a waiter's NOTIFY may be lost.
             self.shutdown.set()
             await self.task_manager.gather_tasks()
+            if isinstance(self.driver, ListenerRemover):
+                await self.driver.remove_listener(DBSettings().channel, self._is_relevant_event)
         return False
 
     def wait_for(self, jid: types.JobId) -> asyncio.Future[types.JOB_STATUS]:

@@ -315,6 +315,53 @@ async def test_debounce_refreshes_after_notify_during_query(
         assert await asyncio.wait_for(waiter, timeout=2) == "canceled"
 
 
+async def test_completion_exit_removes_listener(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A closed watcher stops reacting to NOTIFYs (#886)."""
+    for _ in range(3):
+        async with CompletionWatcher(driver, queries=queries, refresh_interval=None):
+            pass
+
+    calls = 0
+
+    async def counting_job_status(ids: list[JobId]) -> list[tuple[JobId, JOB_STATUS]]:
+        nonlocal calls
+        calls += 1
+        return []
+
+    monkeypatch.setattr(queries, "job_status", counting_job_status)
+    await queries.emit_table_changed("update")
+    await asyncio.sleep(0.1)
+
+    assert calls == 0
+
+
+async def test_completion_exit_keeps_other_watchers_listening(
+    driver: InMemoryDriver,
+    queries: InMemoryQueries,
+) -> None:
+    """Closing one watcher does not unhook another that is still open."""
+    await queries.enqueue(["fetch"], [None], [0])
+    (job,) = await queries.dequeue(
+        batch_size=1,
+        entrypoints={QueueEntrypoint("fetch"): EntrypointExecutionParameter(0)},
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(minutes=10),
+    )
+
+    async with CompletionWatcher(driver, queries=queries, refresh_interval=None) as open_watcher:
+        waiter = open_watcher.wait_for(job.id)
+        async with CompletionWatcher(driver, queries=queries, refresh_interval=None):
+            pass
+        await asyncio.sleep(0.1)
+        await queries.log_jobs([(job, "successful", None)])
+        assert await asyncio.wait_for(waiter, timeout=2) == "successful"
+
+
 @pytest.mark.parametrize("status", ("canceled", "deleted", "exception", "successful"))
 async def test_completion_is_terminal(apgdriver: db.Driver, status: JOB_STATUS) -> None:
     assert CompletionWatcher(apgdriver, queries=Queries(apgdriver))._is_terminal(status)
