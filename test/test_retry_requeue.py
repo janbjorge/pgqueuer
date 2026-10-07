@@ -21,7 +21,13 @@ from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import RetryException, RetryRequested
 from pgqueuer.domain.models import Context, Job, TracebackRecord
-from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueExecutionMode, QueueManagerId
+from pgqueuer.domain.types import (
+    JobId,
+    OnFailure,
+    QueueEntrypoint,
+    QueueExecutionMode,
+    QueueManagerId,
+)
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
@@ -201,6 +207,45 @@ async def test_unhandled_exception_remains_terminal() -> None:
 
     # Job removed from queue
     assert await pq.qm.queries.queue_size() == []
+
+
+@pytest.mark.parametrize(
+    ("on_failure", "status", "queue_status"),
+    (("delete", "exception", None), ("hold", "failed", "failed")),
+)
+async def test_failing_retry_job_records_the_job_as_failed(
+    monkeypatch: pytest.MonkeyPatch,
+    on_failure: OnFailure,
+    status: str,
+    queue_status: str | None,
+) -> None:
+    """A retry_job error goes down the failure path instead of leaving the row picked (#883)."""
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("retry_ep", on_failure=on_failure)
+    async def handler(job: Job) -> None:
+        raise RetryRequested
+
+    async def failing_retry_job(*_: object) -> None:
+        raise ConnectionError("retry write failed")
+
+    monkeypatch.setattr(pq.qm.queries, "retry_job", failing_retry_job)
+    await pq.qm.queries.enqueue("retry_ep", b"data", priority=0)
+
+    async with async_timeout.timeout(5):
+        await pq.qm.run(
+            batch_size=10,
+            mode=QueueExecutionMode.drain,
+            max_concurrent_tasks=100,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    (log,) = [log for log in await pq.qm.queries.queue_log() if log.status == status]
+    assert log.traceback is not None
+    assert log.traceback.exception_type == "ConnectionError"
+    assert [row.status for row in await pq.qm.queries.queue_size()] == (
+        [queue_status] if queue_status else []
+    )
 
 
 async def test_attempts_visible_to_handler_on_retry() -> None:

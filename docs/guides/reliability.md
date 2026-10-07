@@ -34,7 +34,8 @@ PgQueuer provides three complementary retry mechanisms.
 
 Raise `RetryRequested` from your handler to re-queue the job in the database. The job row is
 updated in-place: the `id`, `payload`, and all metadata are preserved. Any worker can pick
-up the retried job.
+up the retried job. If the re-queue write itself fails, the job is recorded as failed like
+any other handler error, following the entrypoint's `on_failure`.
 
 ```python
 from datetime import timedelta

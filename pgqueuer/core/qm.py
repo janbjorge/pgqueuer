@@ -498,6 +498,33 @@ class QueueManager:
                         return_when=asyncio.FIRST_COMPLETED,
                     )
 
+    async def log_failure(
+        self,
+        job: models.Job,
+        executor: executors.AbstractEntrypointExecutor,
+        exc: Exception,
+        jbuff: buffers.JobStatusLogBuffer,
+    ) -> None:
+        """Log *exc* and record *job* as failed, honouring the entrypoint's on_failure."""
+        logconfig.logger.exception(
+            "Exception while processing entrypoint/job-id: %s/%s",
+            job.entrypoint,
+            job.id,
+            exc_info=exc,
+        )
+        tbr = models.TracebackRecord.from_exception(
+            exc=exc,
+            job_id=job.id,
+            additional_context={
+                "entrypoint": job.entrypoint,
+                "queue_manager_id": self.queue_manager_id,
+            },
+        )
+        status: types.JOB_STATUS = (
+            "failed" if executor.parameters.on_failure == "hold" else "exception"
+        )
+        await jbuff.add((job, status, tbr))
+
     async def _dispatch(
         self,
         job: models.Job,
@@ -550,7 +577,10 @@ class QueueManager:
                 )
                 # Release before re-queueing, or our own dequeue skips the re-picked row.
                 self.job_context.pop(job.id, None)
-                await self.queries.retry_job(job, retry_exc.delay, tbr)
+                try:
+                    await self.queries.retry_job(job, retry_exc.delay, tbr)
+                except Exception as e:
+                    await self.log_failure(job, executor, e, jbuff)
             except asyncio.CancelledError:
                 logconfig.logger.debug(
                     "Job canceled mid-flight for entrypoint/id: %s/%s",
@@ -561,23 +591,7 @@ class QueueManager:
                 await asyncio.shield(jbuff.add((job, "canceled", None)))
                 raise
             except Exception as e:
-                logconfig.logger.exception(
-                    "Exception while processing entrypoint/job-id: %s/%s",
-                    job.entrypoint,
-                    job.id,
-                )
-                tbr = models.TracebackRecord.from_exception(
-                    exc=e,
-                    job_id=job.id,
-                    additional_context={
-                        "entrypoint": job.entrypoint,
-                        "queue_manager_id": self.queue_manager_id,
-                    },
-                )
-                status: types.JOB_STATUS = (
-                    "failed" if executor.parameters.on_failure == "hold" else "exception"
-                )
-                await jbuff.add((job, status, tbr))
+                await self.log_failure(job, executor, e, jbuff)
             else:
                 logconfig.logger.debug(
                     "Dispatching entrypoint/id: %s/%s - successful",
