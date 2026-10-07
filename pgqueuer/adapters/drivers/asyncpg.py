@@ -118,6 +118,7 @@ class AsyncpgPoolDriver(Driver):
         self._pool = pool
         self._listener_connection: asyncpg.pool.PoolConnectionProxy | None = None
         self._lock = asyncio.Lock()
+        self._entered = 0
 
     async def fetch(
         self,
@@ -170,9 +171,14 @@ class AsyncpgPoolDriver(Driver):
         return TaskManager()
 
     async def __aenter__(self) -> Self:
+        self._entered += 1
         return self
 
     async def __aexit__(self, *_: object) -> None:
+        # PgQueuer.run enters one driver from two managers; only the last exit may release.
+        self._entered -= 1
+        if self._entered > 0:
+            return
         async with self._lock:
             if self._listener_connection is not None:
                 await self._listener_connection.reset()
