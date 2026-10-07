@@ -555,7 +555,13 @@ class QueueManager:
             try:
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
-                    await executor.execute(job, ctx)
+                    try:
+                        await executor.execute(job, ctx)
+                    except Exception as e:
+                        # A TaskGroup wraps a child's RetryRequested in an ExceptionGroup.
+                        if (retry := errors.retry_request(e)) is not None and retry is not e:
+                            raise retry from e
+                        raise
             except errors.RetryRequested as retry_exc:
                 logconfig.logger.info(
                     "Retry requested for entrypoint/job-id: %s/%s (attempt=%d, delay=%s)",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -246,6 +247,81 @@ async def test_failing_retry_job_records_the_job_as_failed(
     assert [row.status for row in await pq.qm.queries.queue_size()] == (
         [queue_status] if queue_status else []
     )
+
+
+needs_exception_groups = pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="asyncio.TaskGroup and ExceptionGroup need Python 3.11"
+)
+
+
+async def raise_from_task_group(*errors: Exception) -> None:
+    async def fail(error: Exception) -> None:
+        raise error
+
+    async with asyncio.TaskGroup() as group:  # type: ignore[attr-defined,unused-ignore]
+        for error in errors:
+            group.create_task(fail(error))
+
+
+@needs_exception_groups
+@pytest.mark.parametrize(
+    ("with_other_error", "status"), ((False, "successful"), (True, "exception"))
+)
+async def test_retry_requested_from_task_group(with_other_error: bool, status: str) -> None:
+    """A TaskGroup of only RetryRequested retries the job; a mixed group fails it (#899)."""
+    pq = PgQueuer.in_memory()
+    calls = 0
+
+    @pq.entrypoint("group_ep")
+    async def handler(job: Job) -> None:
+        nonlocal calls
+        calls += 1
+        if job.attempts == 0:
+            other = [ValueError("boom")] if with_other_error else []
+            await raise_from_task_group(RetryRequested(), *other)
+
+    await pq.qm.queries.enqueue("group_ep", b"data", priority=0)
+
+    async with async_timeout.timeout(5):
+        await pq.qm.run(
+            batch_size=10,
+            mode=QueueExecutionMode.drain,
+            max_concurrent_tasks=100,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    assert calls == (1 if with_other_error else 2)
+    assert [log.status for log in await pq.qm.queries.queue_log()][-1] == status
+
+
+@needs_exception_groups
+async def test_database_retry_executor_honours_retry_from_task_group() -> None:
+    """A grouped RetryRequested stays an explicit retry, outside max_attempts (#899)."""
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint(
+        "group_retry_ep",
+        executor_factory=lambda params: DatabaseRetryEntrypointExecutor(
+            parameters=params,
+            max_attempts=1,
+            initial_delay=timedelta(0),
+        ),
+    )
+    async def handler(job: Job) -> None:
+        if job.attempts < 2:
+            await raise_from_task_group(RetryRequested())
+
+    await pq.qm.queries.enqueue("group_retry_ep", b"data", priority=0)
+
+    async with async_timeout.timeout(5):
+        await pq.qm.run(
+            batch_size=10,
+            mode=QueueExecutionMode.drain,
+            max_concurrent_tasks=100,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    assert [log.status for log in await pq.qm.queries.queue_log()][-1] == "successful"
 
 
 async def test_attempts_visible_to_handler_on_retry() -> None:
