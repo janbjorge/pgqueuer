@@ -9,7 +9,7 @@ import async_timeout
 import pytest
 
 from pgqueuer import db
-from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
@@ -351,6 +351,35 @@ async def test_max_concurrent_tasks(
         )
 
     assert len(picked_jobs) == max_concurrent_tasks
+
+
+@pytest.mark.parametrize("fails", (False, True))
+async def test_run_drains_jobs_before_driver_exit(fails: bool) -> None:
+    """In-flight jobs finish while the driver, and its LISTEN, is still open (#896)."""
+    events: list[str] = []
+
+    class RecordingDriver(InMemoryDriver):
+        async def __aexit__(self, *_: object) -> None:
+            events.append("driver exit")
+
+    qm = QueueManager(InMemoryQueries(driver=RecordingDriver()))
+    started = asyncio.Event()
+
+    @qm.entrypoint("slow")
+    async def slow(job: Job) -> None:
+        started.set()
+        await asyncio.sleep(0.2)
+        events.append("job done")
+        if fails:
+            raise ValueError
+
+    await qm.queries.enqueue(["slow"], [None], [0])
+    run = asyncio.create_task(qm.run(dequeue_timeout=timedelta(seconds=0.05)))
+    await started.wait()
+    qm.shutdown.set()
+    await asyncio.wait_for(run, timeout=5)
+
+    assert events == ["job done", "driver exit"]
 
 
 async def test_run_failure_leaves_no_pending_lifecycle_tasks(

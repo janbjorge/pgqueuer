@@ -433,8 +433,9 @@ class QueueManager:
                 timeout=heartbeat_timeout / 8,
                 repository=self.queries,
             ) as hbuff,
-            tm.TaskManager() as task_manager,
             self.queries.driver,
+            # Inside the driver so draining jobs can still receive cancel NOTIFYs.
+            tm.TaskManager() as task_manager,
             # Listed after the driver so they are cancelled before it closes;
             # a failing loop body must not leak tasks probing a closing driver.
             tm.cancel_on_exit(
