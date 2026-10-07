@@ -49,6 +49,13 @@ async def call_api(job: Job) -> None:
 | `delay` | `timedelta` | `timedelta(0)` | Time to wait before the next attempt |
 | `reason` | `str \| None` | `None` | Human-readable explanation (stored in the log) |
 
+### Raising from a TaskGroup
+
+On Python 3.11+, `RetryRequested` raised by a child of an `asyncio.TaskGroup` reaches
+PgQueuer wrapped in an `ExceptionGroup`. If every exception in the group is a
+`RetryRequested`, the job is retried with the longest delay among them. If the group also
+holds any other exception, the job fails as usual.
+
 ## Reading the attempt counter
 
 The `job.attempts` field tells you how many previous attempts have been made. On the first

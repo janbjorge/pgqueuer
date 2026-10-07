@@ -115,6 +115,8 @@ class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
         except errors.RetryRequested:
             raise
         except Exception as e:
+            if (retry := errors.retry_request(e)) is not None:
+                raise retry from e
             if job.attempts >= self.max_attempts:
                 raise
             delay = min(
