@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from typing_extensions import Self
@@ -12,6 +13,20 @@ from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
     import asyncpg
+
+
+@dataclass(frozen=True)
+class Relay:
+    """asyncpg listener that passes only the payload on to *callback*.
+
+    asyncpg removes listeners by equality, so remove_listener can pass a new Relay(callback).
+    """
+
+    callback: Callable[[str | bytes | bytearray], None]
+
+    def __call__(self, connection: object, pid: object, channel: object, payload: object) -> None:
+        if isinstance(payload, (str, bytes, bytearray)):
+            self.callback(payload)
 
 
 class AsyncpgDriver(Driver):
@@ -60,10 +75,15 @@ class AsyncpgDriver(Driver):
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
         async with self._lock:
-            await self._connection.add_listener(
-                channel,
-                lambda *x: callback(x[-1]),
-            )
+            await self._connection.add_listener(channel, Relay(callback))
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        async with self._lock:
+            await self._connection.remove_listener(channel, Relay(callback))
 
     @property
     def shutdown(self) -> asyncio.Event:
@@ -130,10 +150,16 @@ class AsyncpgPoolDriver(Driver):
                     )
                 self._listener_connection = await self._pool.acquire()
 
-            await self._listener_connection.add_listener(
-                channel,
-                lambda *x: callback(x[-1]),
-            )
+            await self._listener_connection.add_listener(channel, Relay(callback))
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        async with self._lock:
+            if self._listener_connection is not None:
+                await self._listener_connection.remove_listener(channel, Relay(callback))
 
     @property
     def shutdown(self) -> asyncio.Event:

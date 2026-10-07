@@ -36,6 +36,22 @@ class DiagnosticError(Protocol):
     def diag(self) -> object: ...
 
 
+@runtime_checkable
+class ListenerRemover(Protocol):
+    """Driver that can unregister a callback added with ``add_listener``.
+
+    Separate from ``Driver`` so existing custom drivers still satisfy ``Driver``.
+    """
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        """Stop delivering NOTIFY payloads on *channel* to *callback*."""
+        ...
+
+
 class TaskManagerPort(Protocol):
     """Protocol for managing background asyncio tasks."""
 

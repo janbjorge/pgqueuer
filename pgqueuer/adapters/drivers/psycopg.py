@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Callable
 from typing_extensions import Self
 
 from pgqueuer.core import logconfig
-from pgqueuer.core.tm import TaskManager
+from pgqueuer.core.tm import TaskManager, cancel_and_wait
 from pgqueuer.ports.driver import Driver, SyncDriver
 
 if TYPE_CHECKING:
@@ -40,6 +40,9 @@ class PsycopgDriver(Driver):
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._tm = TaskManager()
+        self._watchers: dict[
+            tuple[str, Callable[[str | bytes | bytearray], None]], asyncio.Task[None]
+        ] = {}
 
         if not self._connection.autocommit:
             raise RuntimeError(
@@ -105,12 +108,26 @@ class PsycopgDriver(Driver):
                             channel,
                         )
 
-        self._tm.add(
-            asyncio.create_task(
-                notify_watcher(),
-                name=f"notify_psycopg_watcher_{channel}",
-            )
+        watcher = asyncio.create_task(
+            notify_watcher(),
+            name=f"notify_psycopg_watcher_{channel}",
         )
+        self._tm.add(watcher)
+        self._watchers[(channel, callback)] = watcher
+
+    async def remove_listener(
+        self,
+        channel: str,
+        callback: Callable[[str | bytes | bytearray], None],
+    ) -> None:
+        watcher = self._watchers.pop((channel, callback), None)
+        if watcher is None:
+            return
+        await cancel_and_wait(watcher)
+
+        still_listening = any(listened == channel for listened, _ in self._watchers)
+        if not still_listening:
+            await self._connection.execute(f"UNLISTEN {channel}")
 
     async def __aenter__(self) -> Self:
         return self

@@ -36,6 +36,10 @@ class InMemoryDriver:
     ) -> None:
         self._listeners[channel].append(callback)
 
+    async def remove_listener(self, channel: str, callback: Callable[[str], None]) -> None:
+        if callback in self._listeners[channel]:
+            self._listeners[channel].remove(callback)
+
     @property
     def shutdown(self) -> asyncio.Event:
         return self._shutdown

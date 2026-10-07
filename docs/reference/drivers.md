@@ -32,6 +32,10 @@ Key methods:
 | `execute(query, *args)` | Run a statement and return a status string |
 | `add_listener(channel, callback)` | Subscribe to `LISTEN` notifications |
 | `notify(channel, payload)` | Send `NOTIFY` on a channel |
+| `remove_listener(channel, callback)` | Optional: unsubscribe a callback added with `add_listener` |
+
+`remove_listener` lives on the separate `ListenerRemover` protocol, so existing custom
+drivers still satisfy `Driver`. `CompletionWatcher` calls it on exit when a driver has it.
 
 `notify()` replaces the removed `build_notify_query()` helper. Each driver sends
 `NOTIFY` via its native parameterized API instead of the queries layer building
