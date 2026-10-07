@@ -40,9 +40,8 @@ class PsycopgDriver(Driver):
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._tm = TaskManager()
-        self._watchers: dict[
-            tuple[str, Callable[[str | bytes | bytearray], None]], asyncio.Task[None]
-        ] = {}
+        self._listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = {}
+        self._watcher: asyncio.Task[None] | None = None
 
         if not self._connection.autocommit:
             raise RuntimeError(
@@ -92,42 +91,50 @@ class PsycopgDriver(Driver):
     ) -> None:
         if not channel.isidentifier():
             raise ValueError(f"Invalid channel name: {channel!r}")
-        await self._connection.execute(f"LISTEN {channel}")
+        if channel not in self._listeners:
+            await self._connection.execute(f"LISTEN {channel}")
+            self._listeners[channel] = []
+        self._listeners[channel].append(callback)
 
-        async def notify_watcher() -> None:
-            while not self.shutdown.is_set():
-                async for note in self._connection.notifies(
-                    timeout=1.0,
-                    stop_after=1,
-                ):
+        if self._watcher is None:
+            self._watcher = asyncio.create_task(
+                self.watch_notifies(), name="notify_psycopg_watcher"
+            )
+            self._tm.add(self._watcher)
+
+    async def watch_notifies(self) -> None:
+        """Hand each NOTIFY to the callbacks of its channel.
+
+        One watcher per connection: psycopg gives each notification to a single notifies() reader.
+        """
+        while not self.shutdown.is_set():
+            async for note in self._connection.notifies(timeout=1.0, stop_after=1):
+                for callback in list(self._listeners.get(note.channel, [])):
                     try:
                         callback(note.payload)
                     except Exception:
                         logconfig.logger.exception(
                             "Unhandled error in NOTIFY callback for channel %s",
-                            channel,
+                            note.channel,
                         )
-
-        watcher = asyncio.create_task(
-            notify_watcher(),
-            name=f"notify_psycopg_watcher_{channel}",
-        )
-        self._tm.add(watcher)
-        self._watchers[(channel, callback)] = watcher
 
     async def remove_listener(
         self,
         channel: str,
         callback: Callable[[str | bytes | bytearray], None],
     ) -> None:
-        watcher = self._watchers.pop((channel, callback), None)
-        if watcher is None:
+        callbacks = self._listeners.get(channel, [])
+        if callback not in callbacks:
             return
-        await cancel_and_wait(watcher)
+        callbacks.remove(callback)
+        if callbacks:
+            return
 
-        still_listening = any(listened == channel for listened, _ in self._watchers)
-        if not still_listening:
-            await self._connection.execute(f"UNLISTEN {channel}")
+        del self._listeners[channel]
+        if not self._listeners and self._watcher is not None:
+            await cancel_and_wait(self._watcher)
+            self._watcher = None
+        await self._connection.execute(f"UNLISTEN {channel}")
 
     async def __aenter__(self) -> Self:
         return self
