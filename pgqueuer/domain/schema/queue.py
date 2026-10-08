@@ -58,6 +58,11 @@ def queue_indexes(settings: DBSettings) -> tuple[Index, ...]:
             f"USING btree (updated, id DESC) INCLUDE (id) WHERE (status = 'picked'::{status})",
         ),
         index(
+            f"{queue}_picked_heartbeat_idx",
+            queue,
+            f"USING btree (heartbeat) WHERE (status = 'picked'::{status})",
+        ),
+        index(
             f"{queue}_queue_manager_id_idx",
             queue,
             "USING btree (queue_manager_id) WHERE (queue_manager_id IS NOT NULL)",
