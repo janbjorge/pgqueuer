@@ -116,6 +116,10 @@ The adapter maintains job state using plain Python dictionaries:
 
 All are cleared when `uninstall()` is called or when the process exits.
 
+Statistics use one bucket per second, entrypoint, priority, and status, as in PostgreSQL.
+Repeated `log_statistics()` or `aggregate_logs()` calls accumulate new events in the same
+bucket without changing its position in the most-recent-first results.
+
 ### Notifications
 
 `InMemoryDriver` emulates PostgreSQL LISTEN/NOTIFY via in-process callbacks:
