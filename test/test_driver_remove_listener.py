@@ -158,3 +158,37 @@ async def test_psycopg_remove_listener_keeps_other_channels() -> None:
 
     assert on_b == ["1"]
     assert connection.executed == ["LISTEN a", "LISTEN b", "UNLISTEN a"]
+
+
+async def test_psycopg_keeps_listening_until_last_exit() -> None:
+    """A nested exit does not stop the shared watcher (#895)."""
+    connection = FakePsycopgConnection()
+    driver = PsycopgDriver(connection)  # type: ignore[arg-type]
+    received: list[str | bytes | bytearray] = []
+
+    async with driver:
+        await driver.add_listener("ch", received.append)
+        async with driver:
+            pass
+        await connection.notes.put(Notify("ch", "a"))
+        await asyncio.sleep(0.05)
+
+    assert received == ["a"]
+
+
+async def test_psycopg_driver_can_be_entered_again() -> None:
+    """After the last exit, entering again starts listening afresh (#895)."""
+    connection = FakePsycopgConnection()
+    driver = PsycopgDriver(connection)  # type: ignore[arg-type]
+    first: list[str | bytes | bytearray] = []
+    second: list[str | bytes | bytearray] = []
+
+    async with driver:
+        await driver.add_listener("ch", first.append)
+    async with driver:
+        await driver.add_listener("ch", second.append)
+        await connection.notes.put(Notify("ch", "a"))
+        await asyncio.sleep(0.05)
+
+    assert first == []
+    assert second == ["a"]

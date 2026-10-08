@@ -42,6 +42,7 @@ class PsycopgDriver(Driver):
         self._tm = TaskManager()
         self._listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = {}
         self._watcher: asyncio.Task[None] | None = None
+        self._entered = 0
 
         if not self._connection.autocommit:
             raise RuntimeError(
@@ -137,11 +138,21 @@ class PsycopgDriver(Driver):
         await self._connection.execute(f"UNLISTEN {channel}")
 
     async def __aenter__(self) -> Self:
+        if self._entered == 0:
+            self._shutdown.clear()
+        self._entered += 1
         return self
 
     async def __aexit__(self, *_: object) -> None:
+        # PgQueuer.run enters one driver from two managers; only the last exit may stop listening.
+        self._entered -= 1
+        if self._entered > 0:
+            return
         self.shutdown.set()
         await self.tm.gather_tasks()
+        # Start afresh on the next enter: add_listener then LISTENs and starts a new watcher.
+        self._watcher = None
+        self._listeners.clear()
 
 
 class SyncPsycopgDriver(SyncDriver):
