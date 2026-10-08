@@ -708,6 +708,19 @@ async def test_log_statistics_rebuilds_cleared_bucket(
     assert all(row.count == 1 for row in stats)
 
 
+async def test_log_statistics_last_excludes_bucket_at_cutoff(queries: InMemoryQueries) -> None:
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with time_machine.travel(start, tick=False):
+        await queries.enqueue("ep", None)
+        await queries.aggregate_logs()
+    with time_machine.travel(start + timedelta(seconds=5), tick=False):
+        inside = await queries.log_statistics(limit=None, last=timedelta(seconds=6))
+        at_cutoff = await queries.log_statistics(limit=None, last=timedelta(seconds=5))
+
+    assert [row.entrypoint for row in inside] == ["ep"]
+    assert at_cutoff == []
+
+
 # ---------------------------------------------------------------------------
 # job_status
 # ---------------------------------------------------------------------------
