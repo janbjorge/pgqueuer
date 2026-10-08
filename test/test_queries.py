@@ -855,6 +855,84 @@ async def test_enqueue_on_conflict_skip_concurrent(
     assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
 
 
+async def test_enqueue_on_conflict_update_priority_only_raises(
+    apgdriver: db.Driver,
+    pgdriver: db.SyncDriver,
+) -> None:
+    """A duplicate raises the active job's priority, and never lowers it (#679)."""
+    aq = queries.Queries(apgdriver)
+    (job_id,) = await aq.enqueue("ep", None, priority=1, dedupe_key="k")
+
+    bumped = await aq.enqueue("ep", None, 5, dedupe_key="k", on_conflict="update_priority")
+    assert bumped == [job_id]
+    assert [(x.priority, x.count) for x in await aq.queue_size()] == [(5, 1)]
+
+    lowered = await aq.enqueue("ep", None, 2, dedupe_key="k", on_conflict="update_priority")
+    assert lowered == [job_id]
+    assert [(x.priority, x.count) for x in await aq.queue_size()] == [(5, 1)]
+
+    sq = queries.SyncQueries(pgdriver)
+    assert sq.enqueue("ep", None, 9, dedupe_key="k", on_conflict="update_priority") == [job_id]
+    assert [(x.priority, x.count) for x in sq.queue_size()] == [(9, 1)]
+
+
+async def test_enqueue_on_conflict_update_priority_batch(apgdriver: db.Driver) -> None:
+    """New keys insert, an active key maps to its job, and only new jobs are logged (#679)."""
+    aq = queries.Queries(apgdriver)
+    (existing,) = await aq.enqueue("ep", None, dedupe_key="dup")
+
+    ids = await aq.enqueue(
+        ["ep", "ep", "ep", "ep"],
+        [None, None, None, None],
+        [3, 3, 3, 3],
+        dedupe_key=[None, "dup", None, "new"],
+        on_conflict="update_priority",
+    )
+
+    assert ids[1] == existing
+    assert len(set(ids)) == 4
+    assert sum(x.count for x in await aq.queue_size()) == 4
+    logged = [log.job_id for log in await aq.queue_log() if log.status == "queued"]
+    assert sorted(logged) == sorted([existing, ids[0], ids[2], ids[3]])
+
+
+async def test_enqueue_on_conflict_update_priority_rejects_repeated_key(
+    apgdriver: db.Driver,
+) -> None:
+    aq = queries.Queries(apgdriver)
+
+    with pytest.raises(ValueError, match="at most once"):
+        await aq.enqueue(
+            ["ep", "ep"],
+            [None, None],
+            [0, 0],
+            dedupe_key=["k", "k"],
+            on_conflict="update_priority",
+        )
+    assert await aq.queue_size() == []
+
+
+async def test_enqueue_on_conflict_update_priority_moves_job_ahead(apgdriver: db.Driver) -> None:
+    """The bumped job is dequeued first; once picked, a duplicate adds no job (#679)."""
+    aq = queries.Queries(apgdriver)
+    (job_id,) = await aq.enqueue("ep", None, priority=0, dedupe_key="k")
+    await aq.enqueue("ep", None, priority=1)
+    await aq.enqueue("ep", None, 10, dedupe_key="k", on_conflict="update_priority")
+
+    jobs = await aq.dequeue(
+        1,
+        {QueueEntrypoint("ep"): queries.EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert [job.id for job in jobs] == [job_id]
+
+    again = await aq.enqueue("ep", None, 20, dedupe_key="k", on_conflict="update_priority")
+    assert again == [job_id]
+    assert sum(x.count for x in await aq.queue_size()) == 2
+
+
 @pytest.mark.parametrize("limit", (None, 10))
 @pytest.mark.parametrize("last", (None, timedelta(minutes=5)))
 @pytest.mark.parametrize("N", (2, 10))

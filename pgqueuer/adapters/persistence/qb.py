@@ -585,13 +585,20 @@ class QueryQueueBuilder:
         """
 
     def build_enqueue_query(self, on_conflict: OnConflict = "raise") -> str:
+        # Restating the index predicate is what lets PostgreSQL infer the
+        # arbiter; spelled() qualifies the enum for a schema'd install.
+        predicate = schema_ddl.spelled(dedupe_predicate(self.settings), self.settings)
+        same_key = ""
         if on_conflict == "skip":
-            # Restating the index predicate is what lets PostgreSQL infer the
-            # arbiter; spelled() qualifies the enum for a schema'd install.
-            predicate = schema_ddl.spelled(dedupe_predicate(self.settings), self.settings)
             on_conflict_clause = f"""ON CONFLICT (dedupe_key)
                 WHERE {predicate}
                 DO NOTHING"""
+        elif on_conflict == "update_priority":
+            on_conflict_clause = f"""ON CONFLICT (dedupe_key)
+                WHERE {predicate}
+                DO UPDATE SET priority = GREATEST(job.priority, EXCLUDED.priority)"""
+            # An updated job keeps its own id, so it maps back to its input by key.
+            same_key = "OR i.dedupe_key = ins.dedupe_key"
         elif on_conflict == "raise":
             on_conflict_clause = ""
         else:
@@ -616,25 +623,27 @@ class QueryQueueBuilder:
                 t(priority, entrypoint, payload, execute_after, dedupe_key, headers, ord)
         ),
         inserted AS (
-            INSERT INTO {self.qualified.queue_table}
+            INSERT INTO {self.qualified.queue_table} AS job
             (id, priority, entrypoint, payload, execute_after, dedupe_key, headers, status)
             SELECT id, priority, entrypoint, payload, execute_after + NOW(),
                 dedupe_key, headers, 'queued'
             FROM input
             {on_conflict_clause}
-            RETURNING id, entrypoint, priority
+            RETURNING id, entrypoint, priority, dedupe_key
         ),
         logged AS (
             INSERT INTO {self.qualified.queue_table_log}
             (job_id, status, entrypoint, priority)
             SELECT id, 'queued', entrypoint, priority
             FROM inserted
+            -- A job whose priority was updated was queued before; log new jobs only.
+            WHERE id IN (SELECT id FROM input)
         )
         -- Join maps each surviving id back to its input ordinal. Rows skipped by
         -- ON CONFLICT are absent from `inserted`, so their positions never appear.
         SELECT i.ord AS ord, ins.id AS id
         FROM inserted ins
-        JOIN input i ON i.id = ins.id
+        JOIN input i ON i.id = ins.id {same_key}
         ORDER BY i.ord
         """
 

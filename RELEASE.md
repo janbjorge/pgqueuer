@@ -21,6 +21,9 @@
   few with a timed-out heartbeat; now it reads only those. `pgq upgrade` builds
   it with a plain `CREATE INDEX`, which blocks writes to `pgqueuer` for the
   build. Heartbeat updates now also write this index.
+- `enqueue(..., on_conflict="update_priority")`: a duplicate `dedupe_key` raises
+  the priority of the job that holds it, and never lowers it, instead of raising
+  `DuplicateJobError`. It returns that job's id. See the reliability guide.
 
 ### Removed
 

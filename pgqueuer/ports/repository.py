@@ -54,7 +54,7 @@ class QueueRepositoryPort(Protocol):
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload
@@ -80,7 +80,7 @@ class QueueRepositoryPort(Protocol):
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload

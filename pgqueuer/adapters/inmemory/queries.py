@@ -189,7 +189,7 @@ class InMemoryQueries:
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[JobId]: ...
 
     @overload
@@ -215,7 +215,7 @@ class InMemoryQueries:
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[JobId]: ...
 
     @overload
@@ -265,6 +265,8 @@ class InMemoryQueries:
                 seen.add(dk)
         elif on_conflict == "skip":
             pass  # Duplicates resolve per row in the insert loop below.
+        elif on_conflict == "update_priority":
+            query_helpers.reject_repeated_dedupe_keys(normed.dedupe_key)
         else:
             assert_never(on_conflict)
 
@@ -273,6 +275,15 @@ class InMemoryQueries:
 
         for i in range(len(normed.entrypoint)):
             dk = normed.dedupe_key[i]
+            if dk is not None and dk in self._dedupe_index and on_conflict == "update_priority":
+                job = self._jobs[self._dedupe_index[dk]]
+                if normed.priority[i] > job["priority"]:
+                    job["priority"] = normed.priority[i]
+                    if job["status"] == "queued":
+                        # The old heap entry goes stale; dequeue skips it.
+                        self._push_queued_job(job, now)
+                ids.append(JobId(job["id"]))
+                continue
             if dk is not None and dk in self._dedupe_index:
                 ids.append(None)
                 continue

@@ -78,6 +78,18 @@ def normalize_enqueue_params(
     )
 
 
+def reject_repeated_dedupe_keys(dedupe_key: list[str | None]) -> None:
+    """``on_conflict="update_priority"`` takes each dedupe key at most once per call.
+
+    PostgreSQL's ``ON CONFLICT DO UPDATE`` cannot update one row twice in a statement.
+    """
+    keys = [key for key in dedupe_key if key is not None]
+    if len(keys) != len(set(keys)):
+        raise ValueError(
+            "on_conflict='update_priority' needs each dedupe_key at most once per call"
+        )
+
+
 def cell(row: Mapping[str, object], key: str, kind: type[T]) -> T:
     """Return ``row[key]`` checked to be *kind*; driver rows arrive untyped."""
     value = row[key]
