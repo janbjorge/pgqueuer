@@ -768,7 +768,7 @@ class InMemoryQueries:
 
         if last is not None:
             cutoff = utc_now() - last
-            result = [r for r in result if r["created"] >= cutoff]
+            result = [r for r in result if r["created"] > cutoff]
 
         result.sort(key=lambda r: r["id"], reverse=True)
 
