@@ -632,6 +632,82 @@ async def test_log_statistics(queries: InMemoryQueries) -> None:
     assert any(s.entrypoint == "ep" for s in stats)
 
 
+@pytest.mark.parametrize("aggregate_between", (False, True))
+async def test_log_statistics_accumulates_existing_bucket(
+    queries: InMemoryQueries, aggregate_between: bool
+) -> None:
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+        await queries.aggregate_logs()
+        assert await queries.log_statistics(limit=None) == []
+        await queries.enqueue("ep", None)
+        first = await queries.log_statistics(limit=1)
+        assert len(first) == 1 and first[0].count == 1
+
+        await queries.enqueue(["ep", "ep"], [None, None], [0, 0])
+        if aggregate_between:
+            await queries.aggregate_logs()
+        stats = await queries.log_statistics(limit=1)
+
+        assert len(stats) == 1 and stats[0].count == 3
+        assert await queries.log_statistics(limit=None) == stats
+        await queries.aggregate_logs()
+        assert await queries.log_statistics(limit=None) == stats
+
+
+async def test_log_statistics_preserves_existing_bucket_order(queries: InMemoryQueries) -> None:
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+        await queries.enqueue("first", None)
+        await queries.log_statistics(limit=None)
+        await queries.enqueue("second", None)
+        await queries.log_statistics(limit=None)
+        await queries.enqueue("first", None)
+
+        latest = await queries.log_statistics(limit=1)
+        stats = await queries.log_statistics(limit=None)
+
+    assert len(latest) == 1 and latest[0].entrypoint == "second"
+    assert [row.entrypoint for row in stats] == ["second", "first"]
+    assert [row.count for row in stats] == [1, 2]
+
+
+async def test_log_statistics_keeps_distinct_bucket_dimensions(queries: InMemoryQueries) -> None:
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with time_machine.travel(start, tick=False):
+        ids = await queries.enqueue("ep", None)
+        await queries.log_statistics(limit=None)
+        await queries.enqueue(["other", "ep"], [None, None], [0, 1])
+        await queries.mark_job_as_cancelled(ids)
+        await queries.aggregate_logs()
+    with time_machine.travel(start + timedelta(seconds=1), tick=False):
+        await queries.enqueue("ep", None)
+        stats = await queries.log_statistics(limit=None)
+
+    assert len(stats) == 5
+    assert all(row.count == 1 for row in stats)
+    assert {row.entrypoint for row in stats} == {"ep", "other"}
+    assert {row.priority for row in stats} == {0, 1}
+    assert {row.status for row in stats} == {"queued", "canceled"}
+    assert {row.created for row in stats} == {start, start + timedelta(seconds=1)}
+
+
+@pytest.mark.parametrize("entrypoint", (None, "ep"))
+async def test_log_statistics_rebuilds_cleared_bucket(
+    queries: InMemoryQueries, entrypoint: str | None
+) -> None:
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+        await queries.enqueue(["ep", "other"], [None, None], [0, 0])
+        await queries.log_statistics(limit=None)
+        await queries.clear_statistics_log(entrypoint)
+        remaining = await queries.log_statistics(limit=None)
+        assert [row.entrypoint for row in remaining] == (["other"] if entrypoint else [])
+
+        await queries.enqueue("ep", None)
+        stats = await queries.log_statistics(limit=None)
+
+    assert [row.entrypoint for row in stats] == (["ep", "other"] if entrypoint else ["ep"])
+    assert all(row.count == 1 for row in stats)
+
+
 # ---------------------------------------------------------------------------
 # job_status
 # ---------------------------------------------------------------------------

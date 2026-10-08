@@ -9,7 +9,7 @@ import asyncio
 import dataclasses
 import heapq
 from datetime import datetime, timedelta
-from typing import Literal, TypedDict, overload
+from typing import Literal, NamedTuple, TypedDict, overload
 
 from pydantic_core import to_json
 from typing_extensions import assert_never
@@ -71,6 +71,13 @@ class StatisticsRow(TypedDict):
     entrypoint: QueueEntrypoint
     priority: int
     status: JOB_STATUS
+
+
+class StatisticsBucket(NamedTuple):
+    entrypoint: QueueEntrypoint
+    priority: int
+    status: JOB_STATUS
+    created: datetime
 
 
 class ScheduleRow(TypedDict):
@@ -711,12 +718,12 @@ class InMemoryQueries:
 
     def aggregate_log_to_statistics(self) -> None:
         """Roll un-aggregated log rows into per-second statistics buckets."""
-        to_agg: dict[tuple[QueueEntrypoint, int, JOB_STATUS, datetime], int] = {}
+        to_agg: dict[StatisticsBucket, int] = {}
         for entry in self._log:
             if entry["aggregated"]:
                 continue
             created_sec = entry["created"].replace(microsecond=0)
-            key = (
+            key = StatisticsBucket(
                 entry["entrypoint"],
                 entry["priority"],
                 entry["status"],
@@ -725,15 +732,23 @@ class InMemoryQueries:
             to_agg[key] = to_agg.get(key, 0) + 1
             entry["aggregated"] = True
 
-        for (ep, pri, st, created_sec), count in to_agg.items():
+        statistics_by_bucket = {
+            StatisticsBucket(row["entrypoint"], row["priority"], row["status"], row["created"]): row
+            for row in self._statistics
+        }
+        for bucket, count in to_agg.items():
+            existing = statistics_by_bucket.get(bucket)
+            if existing is not None:
+                existing["count"] += count
+                continue
             self._statistics.append(
                 {
                     "id": self._next_stats_id,
-                    "created": created_sec,
+                    "created": bucket.created,
                     "count": count,
-                    "entrypoint": ep,
-                    "priority": pri,
-                    "status": st,
+                    "entrypoint": bucket.entrypoint,
+                    "priority": bucket.priority,
+                    "status": bucket.status,
                 }
             )
             self._next_stats_id += 1
