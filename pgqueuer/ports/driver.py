@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Protocol, runtime_checkable
+from typing import Callable, Protocol, TypeAlias, runtime_checkable
 
 from typing_extensions import Self
+
+NotifyCallback: TypeAlias = Callable[[str | bytes | bytearray], None]
+"""Callback that receives the payload of a NOTIFY."""
 
 
 @runtime_checkable
@@ -46,7 +49,7 @@ class ListenerRemover(Protocol):
     async def remove_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         """Stop delivering NOTIFY payloads on *channel* to *callback*."""
         ...
@@ -86,7 +89,7 @@ class Driver(Protocol):
     async def add_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         """Register *callback* to receive payloads from NOTIFY on *channel*."""
         raise NotImplementedError

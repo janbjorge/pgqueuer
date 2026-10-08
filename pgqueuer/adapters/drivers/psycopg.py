@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from typing_extensions import Self
 
 from pgqueuer.core import logconfig
 from pgqueuer.core.tm import TaskManager, cancel_and_wait
-from pgqueuer.ports.driver import Driver, SyncDriver
+from pgqueuer.ports.driver import Driver, NotifyCallback, SyncDriver
 
 if TYPE_CHECKING:
     import psycopg
@@ -40,7 +40,7 @@ class PsycopgDriver(Driver):
         self._shutdown = asyncio.Event()
         self._connection = connection
         self._tm = TaskManager()
-        self._listeners: dict[str, list[Callable[[str | bytes | bytearray], None]]] = {}
+        self._listeners: dict[str, list[NotifyCallback]] = {}
         self._watcher: asyncio.Task[None] | None = None
         self._entered = 0
 
@@ -88,7 +88,7 @@ class PsycopgDriver(Driver):
     async def add_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         if not channel.isidentifier():
             raise ValueError(f"Invalid channel name: {channel!r}")
@@ -122,7 +122,7 @@ class PsycopgDriver(Driver):
     async def remove_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         callbacks = self._listeners.get(channel, [])
         if callback not in callbacks:

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from typing_extensions import Self
 
 from pgqueuer.core.tm import TaskManager
-from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.driver import Driver, NotifyCallback
 
 if TYPE_CHECKING:
     import asyncpg
@@ -22,7 +22,7 @@ class Relay:
     asyncpg removes listeners by equality, so remove_listener can pass a new Relay(callback).
     """
 
-    callback: Callable[[str | bytes | bytearray], None]
+    callback: NotifyCallback
 
     def __call__(self, connection: object, pid: object, channel: object, payload: object) -> None:
         if isinstance(payload, (str, bytes, bytearray)):
@@ -72,7 +72,7 @@ class AsyncpgDriver(Driver):
     async def add_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         async with self._lock:
             await self._connection.add_listener(channel, Relay(callback))
@@ -80,7 +80,7 @@ class AsyncpgDriver(Driver):
     async def remove_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         async with self._lock:
             await self._connection.remove_listener(channel, Relay(callback))
@@ -140,7 +140,7 @@ class AsyncpgPoolDriver(Driver):
     async def add_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         async with self._lock:
             if self._listener_connection is None:
@@ -156,7 +156,7 @@ class AsyncpgPoolDriver(Driver):
     async def remove_listener(
         self,
         channel: str,
-        callback: Callable[[str | bytes | bytearray], None],
+        callback: NotifyCallback,
     ) -> None:
         async with self._lock:
             if self._listener_connection is not None:
