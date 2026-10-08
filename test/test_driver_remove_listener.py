@@ -125,3 +125,36 @@ async def test_asyncpg_pool_keeps_listener_until_last_exit() -> None:
 
     assert received == ["a"]
     assert pool.released == 1
+
+
+async def test_psycopg_delivers_each_notify_to_its_channel() -> None:
+    """Every NOTIFY reaches the callbacks of its own channel, and only those (#894)."""
+    connection = FakePsycopgConnection()
+    driver = PsycopgDriver(connection)  # type: ignore[arg-type]
+    on_a: list[str | bytes | bytearray] = []
+    on_b: list[str | bytes | bytearray] = []
+    await driver.add_listener("a", on_a.append)
+    await driver.add_listener("b", on_b.append)
+
+    for note in (Notify("a", "1"), Notify("b", "2"), Notify("a", "3"), Notify("b", "4")):
+        await connection.notes.put(note)
+    await asyncio.sleep(0.1)
+
+    assert on_a == ["1", "3"]
+    assert on_b == ["2", "4"]
+
+
+async def test_psycopg_remove_listener_keeps_other_channels() -> None:
+    """Removing one channel's listener leaves other channels receiving."""
+    connection = FakePsycopgConnection()
+    driver = PsycopgDriver(connection)  # type: ignore[arg-type]
+    on_b: list[str | bytes | bytearray] = []
+    await driver.add_listener("a", print)
+    await driver.add_listener("b", on_b.append)
+
+    await driver.remove_listener("a", print)
+    await connection.notes.put(Notify("b", "1"))
+    await asyncio.sleep(0.05)
+
+    assert on_b == ["1"]
+    assert connection.executed == ["LISTEN a", "LISTEN b", "UNLISTEN a"]
