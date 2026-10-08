@@ -282,3 +282,53 @@ async def test_dequeue_plan_is_independent_of_concurrency_limit(
         f"(bound {bound}); slot bookkeeping is scaling with the limit rather than "
         f"the batch. nodes={_scan_summary(nodes)}"
     )
+
+
+PICKED_ROWS = 20_000
+
+
+async def _dequeue_picked_backlog(driver: db.Driver, stale: int) -> tuple[set[object], int]:
+    """Dequeue from a backlog of picked jobs, *stale* of them with a timed-out heartbeat.
+
+    Returns the ids dequeued and the rows the plan read to find them.
+    """
+    await driver.execute(
+        f"""
+        INSERT INTO {QUEUE_TABLE} (priority, entrypoint, status)
+        SELECT 0, 'ep_' || (g % {BULK_EPS}), 'picked'
+        FROM generate_series(1, {PICKED_ROWS}) g;
+        """
+    )
+    await driver.execute(
+        f"UPDATE {QUEUE_TABLE} SET heartbeat = NOW() - interval '1 hour' WHERE id <= {stale};"
+    )
+    await driver.execute(f"ANALYZE {QUEUE_TABLE};")
+    query = queries.Queries(driver).qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=[QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)],
+        concurrency_limits=[0] * BULK_EPS,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    nodes = await _analyze_nodes(driver, query.sql, *query.args)
+    read = sum(
+        (n.get("Actual Rows", 0) + n.get("Rows Removed by Filter", 0)) * n.get("Actual Loops", 1)
+        for n in nodes
+    )
+    rows = await driver.fetch(query.sql, *query.args)
+    return {row["id"] for row in rows}, read
+
+
+async def test_dequeue_stale_scan_skips_live_picked_jobs(apgdriver: db.Driver) -> None:
+    """With no stale job, dequeue reads next to nothing, not every picked row (#904)."""
+    dequeued, read = await _dequeue_picked_backlog(apgdriver, stale=0)
+    assert dequeued == set()
+    assert read < 100, f"dequeue read {read} rows to find no stale job"
+
+
+async def test_dequeue_stale_scan_finds_stale_jobs(apgdriver: db.Driver) -> None:
+    """Stale jobs among many live ones are still re-picked, cheaply (#904)."""
+    dequeued, read = await _dequeue_picked_backlog(apgdriver, stale=3)
+    assert dequeued == {1, 2, 3}
+    assert read < 100, f"dequeue read {read} rows to find 3 stale jobs"

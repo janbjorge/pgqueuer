@@ -14,6 +14,14 @@
 
 ## v1.6.0
 
+### Added
+
+- Index `pgqueuer_picked_heartbeat_idx` on `pgqueuer (heartbeat) WHERE status =
+  'picked'`. Dequeue's stale-job check used to read every picked row to find the
+  few with a timed-out heartbeat; now it reads only those. `pgq upgrade` builds
+  it with a plain `CREATE INDEX`, which blocks writes to `pgqueuer` for the
+  build. Heartbeat updates now also write this index.
+
 ### Removed
 
 - PostgreSQL 13 support. It reached end of life in November 2025, and CI now
