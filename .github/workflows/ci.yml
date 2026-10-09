@@ -133,7 +133,7 @@ jobs:
       matrix:
         # Sparse matrix: every Python against anchor PG 16,
         # plus every PG against anchor Python 3.12.
-        # Covers the full range of both axes in 9 jobs instead of 25.
+        # Covers the full range of both axes in 10 jobs instead of 30.
         include:
           # All Python versions × PG 16 (anchor)
           - python-version: "3.10"
@@ -145,6 +145,8 @@ jobs:
           - python-version: "3.13"
             postgres-version: "16"
           - python-version: "3.14"
+            postgres-version: "16"
+          - python-version: "3.15"
             postgres-version: "16"
           # All remaining PG versions × Python 3.12 (anchor)
           - python-version: "3.12"
