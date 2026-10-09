@@ -139,6 +139,8 @@ async def test_heartbeat_exit_propagates_caller_cancel() -> None:
     try:
         with pytest.raises(asyncio.CancelledError):
             await task
+        assert beat.heartbeat_task is not None
+        assert beat.heartbeat_task.cancelled()
     finally:
         release.set()
         assert beat.heartbeat_task is not None
