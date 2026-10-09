@@ -15,7 +15,7 @@ from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.core import logconfig
-from pgqueuer.domain.settings import ConnectionSettings
+from pgqueuer.domain.settings import ConnectionSettings, db_settings
 
 
 def create_web_app(
@@ -42,7 +42,7 @@ def create_web_app(
         from pgqueuer.adapters.connections import create_asyncpg_pool
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        settings = qb.DBSettings()
+        settings = db_settings()
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             driver = AsyncpgPoolDriver(pool)
             app.state.pgq_queries = queries.Queries(

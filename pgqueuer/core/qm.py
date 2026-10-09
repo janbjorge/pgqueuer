@@ -22,7 +22,7 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.settings import db_settings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -38,7 +38,7 @@ class QueueManager:
 
     queries: RepositoryPort
     channel: types.Channel = dataclasses.field(
-        default=types.Channel(DBSettings().channel),
+        default_factory=lambda: types.Channel(db_settings().channel),
     )
 
     shutdown: asyncio.Event = dataclasses.field(

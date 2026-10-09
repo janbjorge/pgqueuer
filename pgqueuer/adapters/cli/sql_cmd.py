@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from pgqueuer.adapters.persistence import qb, schema_ddl
+from pgqueuer.domain.settings import db_settings
 
 sql_app = typer.Typer(
     help=(
@@ -103,7 +104,7 @@ def install(
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
 def uninstall() -> None:
-    typer.echo(schema_ddl.render_uninstall(qb.DBSettings()))
+    typer.echo(schema_ddl.render_uninstall(db_settings()))
 
 
 @sql_app.command(

@@ -15,6 +15,7 @@ import pytest_asyncio
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.settings import db_settings
 from pgqueuer.queries import Queries
 
 try:  # pragma: no cover - uvloop not installed on Windows
@@ -51,6 +52,15 @@ def _restore_pgqueuer_env() -> Generator[None, None, None]:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+@pytest.fixture(autouse=True)
+def _fresh_db_settings() -> Generator[None, None, None]:
+    """Re-read DBSettings from the env per test, so a monkeypatched PGQUEUER_* var
+    is seen and does not stay cached into the next test."""
+    db_settings.cache_clear()
+    yield
+    db_settings.cache_clear()
 
 
 @pytest.fixture

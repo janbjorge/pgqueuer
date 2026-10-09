@@ -25,6 +25,13 @@
   the priority of the job that holds it, and never lowers it, instead of raising
   `DuplicateJobError`. It returns that job's id. See the reliability guide.
 
+### Changed
+
+- PgQueuer reads its `PGQUEUER_*` table and channel settings from the
+  environment once per process and shares them, instead of on every use.
+  The default channel of `QueueManager` and `PgQueuer` now follows a
+  `PGQUEUER_PREFIX` set after `import pgqueuer`; it used to be fixed at import.
+
 ### Removed
 
 - PostgreSQL 13 support. It reached end of life in November 2025, and CI now

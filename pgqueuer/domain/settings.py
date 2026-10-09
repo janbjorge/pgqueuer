@@ -287,3 +287,12 @@ class DBSettings(BaseSettings):
         DO-blocks which cannot take bind parameters.
         """
         return f"'{self.db_schema}'" if self.db_schema else "current_schema()"
+
+
+@functools.cache
+def db_settings() -> DBSettings:
+    """The process-wide ``DBSettings``, read from the environment once.
+
+    Clear with ``db_settings.cache_clear()`` after changing ``PGQUEUER_*`` env vars.
+    """
+    return DBSettings()

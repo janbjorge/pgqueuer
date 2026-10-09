@@ -9,7 +9,7 @@ from itertools import chain
 
 from pgqueuer.core import tm
 from pgqueuer.domain import models, types
-from pgqueuer.domain.settings import DBSettings
+from pgqueuer.domain.settings import db_settings
 from pgqueuer.ports.driver import Driver, ListenerRemover
 from pgqueuer.ports.repository import QueueRepositoryPort
 
@@ -76,7 +76,7 @@ class CompletionWatcher:
     async def __aenter__(self) -> "CompletionWatcher":
         if self.refresh_interval is not None:
             self.task_manager.add(asyncio.create_task(self._poll_for_change(self.refresh_interval)))
-        await self.driver.add_listener(DBSettings().channel, self._is_relevant_event)
+        await self.driver.add_listener(db_settings().channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 
@@ -95,7 +95,7 @@ class CompletionWatcher:
             self.shutdown.set()
             await self.task_manager.gather_tasks()
             if isinstance(self.driver, ListenerRemover):
-                await self.driver.remove_listener(DBSettings().channel, self._is_relevant_event)
+                await self.driver.remove_listener(db_settings().channel, self._is_relevant_event)
         return False
 
     def wait_for(self, jid: types.JobId) -> asyncio.Future[types.JOB_STATUS]:
