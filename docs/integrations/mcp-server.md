@@ -103,17 +103,19 @@ server.run(transport="stdio")
 
 ### Custom table prefix or schema
 
-If you use `PGQUEUER_PREFIX` or `PGQUEUER_SCHEMA` to namespace your tables, pass
-custom settings:
+The server reads `PGQUEUER_PREFIX` and `PGQUEUER_SCHEMA` from the environment. Set
+them to the values your tables were installed with, next to the connection
+variables in the client's `env` block:
 
-```python
-from pgqueuer.adapters.mcp.server import create_mcp_server
-from pgqueuer.adapters.persistence.qb import DBSettings
-
-# reads PGQUEUER_PREFIX / PGQUEUER_SCHEMA
-server = create_mcp_server(settings=DBSettings())
-server.run(transport="stdio")
+```json
+"env": {
+  "PGQUEUER_PREFIX": "billing",
+  "PGQUEUER_SCHEMA": "jobs"
+}
 ```
+
+See [Environment configuration](../guides/deployment.md#environment-configuration)
+for the full list.
 
 ## Available tools
 

@@ -164,7 +164,7 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to `Channel(DBSettings().channel)` |
+| `channel` | No | Custom `Channel` configuration. Defaults to `ch_pgqueuer` with `PGQUEUER_PREFIX` prepended |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
 
 ## Recommendations

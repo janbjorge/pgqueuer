@@ -121,7 +121,7 @@ as the first positional parameter. The underlying driver is accessed via
 class QueueManager:
     queries: RepositoryPort
     channel: models.Channel = dataclasses.field(
-        default=models.Channel(DBSettings().channel),
+        default_factory=lambda: models.Channel(db_settings().channel),
     )
 ```
 
