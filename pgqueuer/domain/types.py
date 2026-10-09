@@ -34,7 +34,7 @@ JOB_STATUS = Literal[
     "failed",
 ]
 
-OnConflict = Literal["raise", "skip"]
+OnConflict = Literal["raise", "skip", "update_priority"]
 OnFailure = Literal["delete", "hold"]
 SortOrder = Literal["ASC", "DESC"]
 

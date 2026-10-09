@@ -173,6 +173,73 @@ async def test_dedupe_key_on_conflict_skip_freed_after_log(queries: InMemoryQuer
     assert job_id is not None
 
 
+async def test_dedupe_key_on_conflict_update_priority_only_raises(
+    queries: InMemoryQueries,
+) -> None:
+    (job_id,) = await queries.enqueue("ep", None, priority=1, dedupe_key="k")
+
+    bumped = await queries.enqueue("ep", None, 5, dedupe_key="k", on_conflict="update_priority")
+    assert bumped == [job_id]
+    assert [(x.priority, x.count) for x in await queries.queue_size()] == [(5, 1)]
+
+    lowered = await queries.enqueue("ep", None, 2, dedupe_key="k", on_conflict="update_priority")
+    assert lowered == [job_id]
+    assert [(x.priority, x.count) for x in await queries.queue_size()] == [(5, 1)]
+
+
+async def test_dedupe_key_on_conflict_update_priority_batch(queries: InMemoryQueries) -> None:
+    (existing,) = await queries.enqueue("ep", None, dedupe_key="dup")
+
+    ids = await queries.enqueue(
+        ["ep", "ep", "ep", "ep"],
+        [None, None, None, None],
+        [3, 3, 3, 3],
+        dedupe_key=[None, "dup", None, "new"],
+        on_conflict="update_priority",
+    )
+
+    assert ids[1] == existing
+    assert len(set(ids)) == 4
+    assert sum(x.count for x in await queries.queue_size()) == 4
+    logged = [log.job_id for log in await queries.queue_log() if log.status == "queued"]
+    assert sorted(logged) == sorted([existing, ids[0], ids[2], ids[3]])
+
+
+async def test_dedupe_key_on_conflict_update_priority_rejects_repeated_key(
+    queries: InMemoryQueries,
+) -> None:
+    with pytest.raises(ValueError, match="at most once"):
+        await queries.enqueue(
+            ["ep", "ep"],
+            [None, None],
+            [0, 0],
+            dedupe_key=["k", "k"],
+            on_conflict="update_priority",
+        )
+    assert await queries.queue_size() == []
+
+
+async def test_dedupe_key_on_conflict_update_priority_moves_job_ahead(
+    queries: InMemoryQueries,
+) -> None:
+    (job_id,) = await queries.enqueue("ep", None, priority=0, dedupe_key="k")
+    await queries.enqueue("ep", None, priority=1)
+    await queries.enqueue("ep", None, 10, dedupe_key="k", on_conflict="update_priority")
+
+    jobs = await queries.dequeue(
+        1,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert [job.id for job in jobs] == [job_id]
+
+    again = await queries.enqueue("ep", None, 20, dedupe_key="k", on_conflict="update_priority")
+    assert again == [job_id]
+    assert sum(x.count for x in await queries.queue_size()) == 2
+
+
 # ---------------------------------------------------------------------------
 # Dequeue
 # ---------------------------------------------------------------------------

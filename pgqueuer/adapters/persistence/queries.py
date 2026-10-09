@@ -278,7 +278,7 @@ class Queries:
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload
@@ -304,7 +304,7 @@ class Queries:
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload
@@ -348,6 +348,9 @@ class Queries:
                 )
             )
 
+        if on_conflict == "update_priority":
+            query_helpers.reject_repeated_dedupe_keys(normed_params.dedupe_key)
+
         with raising_duplicate_job(normed_params.dedupe_key):
             rows = await self.driver.fetch(
                 self.qbq.build_enqueue_query(on_conflict),
@@ -361,7 +364,7 @@ class Queries:
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
-        if on_conflict == "raise":
+        if on_conflict == "raise" or on_conflict == "update_priority":
             return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 
@@ -774,7 +777,7 @@ class SyncQueries:
         dedupe_key: str | None = None,
         headers: dict[str, str] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload
@@ -800,7 +803,7 @@ class SyncQueries:
         dedupe_key: list[str | None] | None = None,
         headers: list[dict[str, str] | None] | None = None,
         *,
-        on_conflict: Literal["raise"] = "raise",
+        on_conflict: Literal["raise", "update_priority"] = "raise",
     ) -> list[types.JobId]: ...
 
     @overload
@@ -850,6 +853,9 @@ class SyncQueries:
                 )
             )
 
+        if on_conflict == "update_priority":
+            query_helpers.reject_repeated_dedupe_keys(normed_params.dedupe_key)
+
         with raising_duplicate_job(normed_params.dedupe_key):
             rows = self.driver.fetch(
                 self.qbq.build_enqueue_query(on_conflict),
@@ -863,7 +869,7 @@ class SyncQueries:
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
-        if on_conflict == "raise":
+        if on_conflict == "raise" or on_conflict == "update_priority":
             return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 

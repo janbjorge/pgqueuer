@@ -156,6 +156,28 @@ enqueued and every later occurrence is treated as a conflict. Under `on_conflict
 later positions come back as `None`; under the default they fail the call. Order your inputs
 so the payload you want kept comes first.
 
+### Raising the priority of a duplicate
+
+Pass `on_conflict="update_priority"` to raise the priority of the job that already holds the
+key, for when the same work has become more urgent:
+
+```python
+(job_id,) = await queries.enqueue(
+    "process_report",
+    payload,
+    priority=100,
+    dedupe_key="report:42",
+    on_conflict="update_priority",
+)
+```
+
+- With no `queued` or `picked` job for the key, the job is inserted as usual.
+- With one, nothing is inserted. That job's priority becomes the higher of the two, so a
+  duplicate never lowers it, and `job_id` is its id. A `picked` job is already running, so
+  its new priority changes nothing.
+- Only inserted jobs get a `queued` entry in the log table.
+- Each key may appear at most once per call; a repeat raises `ValueError`.
+
 ## Poison jobs
 
 A "poison job" is one that consistently causes worker crashes or hangs without updating its
