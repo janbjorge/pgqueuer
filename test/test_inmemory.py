@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -893,6 +894,8 @@ async def test_table_changed_notification(queries: InMemoryQueries, driver: InMe
 
     await queries.enqueue("ep", None)
     assert any("table_changed_event" in n for n in notifications)
+    # Same keys as the Postgres trigger, so received_at is stamped by the listener.
+    assert {*json.loads(notifications[-1])} == {"channel", "operation", "sent_at", "table", "type"}
 
 
 async def test_health_check_notification(queries: InMemoryQueries, driver: InMemoryDriver) -> None:
