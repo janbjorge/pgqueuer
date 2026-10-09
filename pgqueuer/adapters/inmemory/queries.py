@@ -1124,11 +1124,14 @@ class InMemoryQueries:
             self._dedupe_index.pop(dk, None)
 
     async def emit_table_changed(self, operation: types.OPERATIONS) -> None:
-        event = models.TableChangedEvent(
-            channel=self.qbq.settings.channel,
-            sent_at=utc_now(),
-            type="table_changed_event",
-            operation=operation,
-            table=self.qbe.settings.queue_table,
-        )
-        await self.driver.notify(self.qbq.settings.channel, event.model_dump_json())
+        # Same keys as the Postgres trigger; the listener stamps received_at on parse.
+        payload = to_json(
+            {
+                "channel": self.qbq.settings.channel,
+                "operation": operation,
+                "sent_at": utc_now(),
+                "table": self.qbe.settings.queue_table,
+                "type": "table_changed_event",
+            }
+        ).decode()
+        await self.driver.notify(self.qbq.settings.channel, payload)
