@@ -23,6 +23,7 @@ from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
+from pgqueuer.domain.settings import db_settings
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -102,6 +103,7 @@ class AppConfig:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
+        db_settings.cache_clear()
 
 
 @app.callback()
@@ -335,7 +337,7 @@ def verify(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             expect_present = expect == VerifyMode.PRESENT
             divergence = list[str]()
 
@@ -386,11 +388,11 @@ def uninstall(
     ),
 ) -> None:
     if dry_run:
-        emit_deprecated_dry_run(ctx, schema_ddl.render_uninstall(qb.DBSettings()))
+        emit_deprecated_dry_run(ctx, schema_ddl.render_uninstall(db_settings()))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -481,7 +483,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
@@ -521,12 +523,12 @@ def web(
 def listen(
     ctx: Context,
     channel: str = typer.Option(
-        qb.DBSettings().channel,
+        db_settings().channel,
         "--channel",
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             await display_pg_channel(q.driver, types.Channel(channel))
 
     asyncio_run(run())
@@ -626,7 +628,7 @@ def schedules(
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             if remove:
                 schedule_ids = {types.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
@@ -661,7 +663,7 @@ def queue(
     async def run_async() -> None:
         # For a single job, skip mode subsumes raise mode: a None result is
         # exactly the duplicate case, so on_conflict only decides the exit.
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -695,7 +697,7 @@ def failed(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if as_json:
                 print(
@@ -738,7 +740,7 @@ def requeue(
     ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
@@ -759,7 +761,7 @@ def stale(
     as_json: bool = typer.Option(False, "--json", help="Print the jobs as a JSON array on stdout."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             jobs = await InsightsService(q).stale_jobs(timedelta(seconds=threshold), limit)
             if as_json:
                 print(to_json(jobs).decode())
@@ -802,7 +804,7 @@ def workers(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             active = await InsightsService(q).active_workers()
             if as_json:
                 print(to_json(active).decode())
@@ -845,7 +847,7 @@ def backlog(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             ages = await InsightsService(q).queue_age()
             if as_json:
                 print(to_json(ages).decode())
@@ -922,7 +924,7 @@ def optimize_autovacuum(
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, qb.DBSettings()) as q:
+        async with yield_queries(ctx, db_settings()) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())
