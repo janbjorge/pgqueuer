@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mkdocs.commands.build import build
-from mkdocs.config import load_config
+import pytest
 
 
 def test_agent_guide_is_published_as_raw_markdown(tmp_path: Path) -> None:
+    build = pytest.importorskip("mkdocs.commands.build").build
+    load_config = pytest.importorskip("mkdocs.config").load_config
     config = load_config(config_file="mkdocs.yml")
     config.site_dir = str(tmp_path / "site")
     build(config)

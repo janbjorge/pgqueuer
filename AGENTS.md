@@ -24,11 +24,11 @@ tools/                 Benchmarking and monitoring scripts
 
 ## Build, Lint, and Test Commands
 
-All commands use `uv` as the package manager. Install deps first: `uv sync --all-extras --frozen`
+All commands use `uv` as the package manager. Install deps first: `uv sync --frozen`
 
 ```bash
 # Run ALL checks (recommended before any PR)
-uv sync --all-extras --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest
+uv sync --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest
 
 # Individual checks
 uv run ruff check .         # Lint (ruff)

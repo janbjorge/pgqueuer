@@ -14,8 +14,8 @@ Rancher Desktop, etc.).
 ## Quick start
 
 ```bash
-# 1. Install dependencies (including all extras)
-uv sync --all-extras --frozen
+# 1. Install dependencies (the default dev group pulls in every extra)
+uv sync --frozen
 
 # 2. Lint and formatting checks
 uv run ruff check .
@@ -93,7 +93,7 @@ This restarts the worker process whenever any Python file changes. For developme
 ## Development flow summary
 
 ```bash
-uv sync --all-extras --frozen
+uv sync --frozen
 uv run ruff check .
 uv run lint-imports
 uv run mypy .
