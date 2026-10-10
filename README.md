@@ -173,7 +173,7 @@ pgq dashboard --interval 10 --limit 25
 PgQueuer uses [Testcontainers](https://testcontainers.com/?language=python) to spin up an ephemeral PostgreSQL instance for the test suite. Just have Docker running.
 
 ```bash
-uv sync --all-extras --frozen  # install dependencies
+uv sync --frozen  # install dependencies
 uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest  # full check suite
 ```
 

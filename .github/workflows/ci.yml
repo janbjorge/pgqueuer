@@ -48,9 +48,9 @@ jobs:
         run: psql -h localhost -U $PGUSER -d $PGDATABASE -c "SHOW jit;"
       - name: Install PGQueuer
         run: |
-          uv sync --all-extras --frozen
-          uv run --frozen pgq install
-          uv run --frozen pgq autovac
+          uv sync --no-default-groups --group bench --frozen
+          uv run --no-sync pgq install
+          uv run --no-sync pgq autovac
       - name: Set ISO Timestamp
         id: timestamp
         run: echo "TIMESTAMP=$(date -u +%s)" >> $GITHUB_ENV
@@ -64,7 +64,7 @@ jobs:
           fi
       - name: Benchmark
         run: |
-          PYTHONUNBUFFERED=1 uv run python3 tools/benchmark.py \
+          PYTHONUNBUFFERED=1 uv run --no-sync python3 tools/benchmark.py \
             --driver ${{ matrix.pgdriver }} \
             --strategy ${{ matrix.strategy }} \
             --output-json benchmark.json
@@ -173,9 +173,9 @@ jobs:
       - name: Prefetch docker images
         run: docker pull postgres:${{ matrix.postgres-version }}
       - name: Set up Python
-        run: uv sync --python ${{ matrix.python-version }} --all-extras --frozen
+        run: uv sync --python ${{ matrix.python-version }} --no-default-groups --group test --frozen
       - name: Run Full Test Suite
-        run: uv run pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
+        run: uv run --no-sync pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
   run-windows-tests:
     if: github.event_name != 'schedule'
     runs-on: windows-latest
@@ -200,7 +200,7 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
       - name: Install PGQueuer
-        run: uv sync --all-extras --frozen
+        run: uv sync --no-default-groups --group test --frozen
       - name: Start preinstalled PostgreSQL
         shell: pwsh
         run: |
@@ -214,15 +214,15 @@ jobs:
         run: |
           & "$env:PGBIN\psql" -U $env:PGUSER -h $env:PGHOST -p $env:PGPORT -d postgres -c "CREATE DATABASE $env:PGDATABASE;"
       - name: Run Windows Tests
-        run: uv run pytest test/windows/ --durations=10
+        run: uv run --no-sync pytest test/windows/ --durations=10
       - name: Force psycopg backend (drop asyncpg)
         run: uv pip uninstall asyncpg
       - name: Smoke `pgq install` / `pgq uninstall` against psycopg
         run: |
-          uv run pgq install
-          uv run pgq verify --expect present
-          uv run pgq uninstall
-          uv run pgq verify --expect absent
+          uv run --no-sync pgq install
+          uv run --no-sync pgq verify --expect present
+          uv run --no-sync pgq uninstall
+          uv run --no-sync pgq verify --expect absent
   run-checks:
     if: github.event_name != 'schedule'
     name: Lint, Typecheck & Architecture
@@ -234,7 +234,7 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
       - name: Install Dev Environment
-        run: uv sync --all-extras --frozen
+        run: uv sync --all-groups --frozen
       - name: Run Ruff Linter
         if: ${{ always() }}
         run: uv run ruff check .
@@ -247,6 +247,9 @@ jobs:
       - name: Run Mypy Type Check
         if: ${{ always() }}
         run: uv run mypy .
+      - name: Test Docs Build
+        if: ${{ always() }}
+        run: uv run pytest test/test_docs_agent_guide.py
       - name: Validate PR Title (Conventional Commits)
         if: ${{ always() && github.event_name == 'pull_request' }}
         uses: amannn/action-semantic-pull-request@v5

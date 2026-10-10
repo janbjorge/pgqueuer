@@ -3,7 +3,7 @@
 - Reference related issues when applicable.
 
 ## Testing
-- [ ] `uv sync --all-extras --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest` passed
+- [ ] `uv sync --frozen && uv run ruff check . && uv run ruff format . --check && uv run lint-imports && uv run mypy . && uv run pytest` passed
 - [ ] Additional testing steps
 
 ## Checklist

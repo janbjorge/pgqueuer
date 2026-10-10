@@ -14,8 +14,8 @@ Rancher Desktop, etc.).
 ## Quick start
 
 ```bash
-# 1. Install dependencies (including all extras)
-uv sync --all-extras --frozen
+# 1. Install dependencies (the default dev group pulls in every extra)
+uv sync --frozen
 
 # 2. Lint and formatting checks
 uv run ruff check .
@@ -29,6 +29,26 @@ uv run pytest
 
 You do not have to bootstrap a database yourself. The test setup installs the schema
 inside the container.
+
+## Dependency groups
+
+Development dependencies live in `[dependency-groups]` in `pyproject.toml`, not in
+published extras. `uv sync` installs the `dev` group by default, which includes all the
+others. To install one group only, as CI does:
+
+| Group | Contents |
+|-------|----------|
+| `test` | pytest and plugins, Testcontainers, and every runtime extra |
+| `lint` | ruff, mypy, import-linter, type stubs |
+| `bench` | the asyncpg and psycopg drivers and tqdm, for `tools/benchmark.py` |
+| `docs` | MkDocs and its plugins |
+
+```bash
+uv sync --no-default-groups --group test --frozen
+uv run --no-sync pytest
+```
+
+Pass `--no-sync` to `uv run`; otherwise it installs the `dev` group again.
 
 ## Test structure and tips
 
@@ -93,7 +113,7 @@ This restarts the worker process whenever any Python file changes. For developme
 ## Development flow summary
 
 ```bash
-uv sync --all-extras --frozen
+uv sync --frozen
 uv run ruff check .
 uv run lint-imports
 uv run mypy .
