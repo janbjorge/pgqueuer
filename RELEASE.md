@@ -41,6 +41,9 @@
   pushed, `1.5.0` and `latest`, stay pullable but get no newer versions. Build
   from `tools/web/Dockerfile` and `tools/prometheus/Dockerfile` instead; see
   the Docker images guide.
+- The `dev` and `docs` extras. They held PgQueuer's own test, lint, and docs
+  tooling and are now uv dependency groups, which are not published. Install
+  the runtime extras you use, such as `pgqueuer[asyncpg]`, instead.
 
 ## v1.5.0
 
