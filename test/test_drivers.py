@@ -125,6 +125,27 @@ async def test_notify(
 
 
 @pytest.mark.parametrize("driver", drivers())
+@pytest.mark.parametrize("channel", ["MyChan", "my-app.events", "'; DROP TABLE x --"])
+async def test_notify_channel_needs_quoting(
+    dsn: str,
+    driver: Callable[..., AsyncContextManager[Driver]],
+    channel: str,
+) -> None:
+    """LISTEN must quote the channel so it matches pg_notify's string literal (#947).
+
+    Unquoted, MyChan folds to mychan and never receives, and the other two were
+    rejected by the psycopg driver outright.
+    """
+    event = asyncio.Future[str | bytearray | bytes]()
+
+    async with driver(dsn) as d:
+        await d.add_listener(channel, event.set_result)
+        async with driver(dsn) as ad:
+            await ad.notify(channel, "hello")
+        assert await asyncio.wait_for(event, timeout=1) == "hello"
+
+
+@pytest.mark.parametrize("driver", drivers())
 @pytest.mark.parametrize(
     "query, name",
     (
