@@ -5,20 +5,33 @@ from __future__ import annotations
 import dataclasses
 import functools
 import os
-import re
 import warnings
 from enum import Enum
-from typing import Callable, ClassVar, Literal
+from typing import Annotated, Callable, Literal, TypeAlias
 
-from pydantic import AliasChoices, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, StringConstraints, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from pgqueuer.domain.types import Channel
 
-IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+
+# Object names are interpolated into SQL unquoted (schema DDL, TRUNCATE,
+# INSERT/SELECT), so every one is constrained to identifier characters before
+# it can reach a query string (#945).
+# Prefix is prepended to the default names, so it may be empty.
+IdentifierPrefix: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^({_IDENT})?$")]
+# Rendered both as an unquoted identifier (folds to lowercase) and as a nspname
+# string literal (does not fold); normalize so both agree.
+SchemaName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}$", to_lower=True)]
+# A dotted chain stays allowed (the legacy "schema.table" form), but each part
+# must itself be a plain identifier.
+ObjectName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}(\.{_IDENT})*$")]
 # A NOTIFY channel goes into SQL as a string literal and asyncpg quotes it for
 # LISTEN, so dashes and dots work there; quotes, spaces and semicolons do not.
-CHANNEL_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+ChannelName: TypeAlias = Annotated[
+    Channel, StringConstraints(pattern=r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+]
 
 
 def add_prefix(string: str) -> str:
@@ -169,44 +182,44 @@ class DBSettings(BaseSettings):
     # Prepended to every object name not explicitly overridden; lets multiple
     # PgQueuer instances share one database. Declared first: the name-field
     # default factories read it from the validated data.
-    prefix: str = Field(default="")
+    prefix: IdentifierPrefix = Field(default="")
 
     # Postgres schema holding all PgQueuer objects; None defers to the
     # connection's search_path (env var: PGQUEUER_SCHEMA).
-    db_schema: str | None = Field(
+    db_schema: SchemaName | None = Field(
         default=None,
         validation_alias=AliasChoices("db_schema", "pgqueuer_schema"),
     )
 
-    channel: Channel = Field(
+    channel: ChannelName = Field(
         default_factory=lambda data: Channel(f"{data['prefix']}ch_pgqueuer"),
         validation_alias=name_env_alias("channel"),
     )
-    function: str = Field(
+    function: ObjectName = Field(
         default_factory=prefixed_default("fn_pgqueuer_changed"),
         validation_alias=name_env_alias("function"),
     )
-    statistics_table: str = Field(
+    statistics_table: ObjectName = Field(
         default_factory=prefixed_default("pgqueuer_statistics"),
         validation_alias=name_env_alias("statistics_table"),
     )
-    queue_status_type: str = Field(
+    queue_status_type: ObjectName = Field(
         default_factory=prefixed_default("pgqueuer_status"),
         validation_alias=name_env_alias("queue_status_type"),
     )
-    queue_table: str = Field(
+    queue_table: ObjectName = Field(
         default_factory=prefixed_default("pgqueuer"),
         validation_alias=name_env_alias("queue_table"),
     )
-    queue_table_log: str = Field(
+    queue_table_log: ObjectName = Field(
         default_factory=prefixed_default("pgqueuer_log"),
         validation_alias=name_env_alias("queue_table_log"),
     )
-    trigger: str = Field(
+    trigger: ObjectName = Field(
         default_factory=prefixed_default("tg_pgqueuer_changed"),
         validation_alias=name_env_alias("trigger"),
     )
-    schedules_table: str = Field(
+    schedules_table: ObjectName = Field(
         default_factory=prefixed_default("pgqueuer_schedules"),
         validation_alias=name_env_alias("schedules_table"),
     )
@@ -217,64 +230,6 @@ class DBSettings(BaseSettings):
     # When True, `pgq upgrade` widens legacy int4 id columns/sequences to BIGINT, which takes an
     # ACCESS EXCLUSIVE lock and rewrites each table; set False to skip it and apply it out-of-band.
     widen_id: bool = Field(default=True, validation_alias=name_env_alias("widen_id"))
-
-    @field_validator("prefix")
-    @classmethod
-    def validate_prefix(cls, value: str) -> str:
-        if value and not IDENTIFIER_PATTERN.match(value):
-            raise ValueError(
-                "prefix must start with a letter or underscore and contain only "
-                "letters, digits, and underscores"
-            )
-        return value
-
-    @field_validator("db_schema")
-    @classmethod
-    def validate_db_schema(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not IDENTIFIER_PATTERN.match(value):
-            raise ValueError(
-                "db_schema must be a single unquoted identifier (letters, digits, "
-                "underscores; no dots)"
-            )
-        # Rendered both as an unquoted identifier (folds to lowercase) and as a
-        # nspname string literal (does not fold); normalize so both agree.
-        return value.lower()
-
-    # Object names are interpolated into SQL unquoted (schema DDL, TRUNCATE,
-    # INSERT/SELECT). Validate every one so a name like
-    # "evil; CREATE TABLE x; --" cannot reach the SQL string (#945). A dotted
-    # chain stays allowed (the legacy "schema.table" form), but each part must
-    # itself be a plain identifier.
-    IDENTIFIER_FIELD_NAMES: ClassVar[tuple[str, ...]] = (
-        "function",
-        "statistics_table",
-        "queue_status_type",
-        "queue_table",
-        "queue_table_log",
-        "trigger",
-        "schedules_table",
-    )
-
-    @field_validator(*IDENTIFIER_FIELD_NAMES)
-    @classmethod
-    def validate_object_name(cls, value: str) -> str:
-        if not all(IDENTIFIER_PATTERN.match(part) for part in value.split(".")):
-            raise ValueError(
-                "object name must be an identifier or a dotted identifier chain; "
-                "letters, digits, and underscores only, no quotes or symbols"
-            )
-        return value
-
-    @field_validator("channel")
-    @classmethod
-    def validate_channel(cls, value: Channel) -> Channel:
-        if not CHANNEL_PATTERN.match(value):
-            raise ValueError(
-                "channel may contain letters, digits, underscores, dots and dashes only"
-            )
-        return value
 
     @model_validator(mode="after")
     def reject_dotted_names_with_db_schema(self) -> DBSettings:
