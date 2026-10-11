@@ -8,7 +8,7 @@ import os
 import re
 import warnings
 from enum import Enum
-from typing import Callable, Literal
+from typing import Callable, ClassVar, Literal
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +16,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pgqueuer.domain.types import Channel
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+# A NOTIFY channel goes into SQL as a string literal and asyncpg quotes it for
+# LISTEN, so dashes and dots work there; quotes, spaces and semicolons do not.
+CHANNEL_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
 
 def add_prefix(string: str) -> str:
@@ -238,6 +241,40 @@ class DBSettings(BaseSettings):
         # Rendered both as an unquoted identifier (folds to lowercase) and as a
         # nspname string literal (does not fold); normalize so both agree.
         return value.lower()
+
+    # Object names are interpolated into SQL unquoted (schema DDL, TRUNCATE,
+    # INSERT/SELECT). Validate every one so a name like
+    # "evil; CREATE TABLE x; --" cannot reach the SQL string (#945). A dotted
+    # chain stays allowed (the legacy "schema.table" form), but each part must
+    # itself be a plain identifier.
+    IDENTIFIER_FIELD_NAMES: ClassVar[tuple[str, ...]] = (
+        "function",
+        "statistics_table",
+        "queue_status_type",
+        "queue_table",
+        "queue_table_log",
+        "trigger",
+        "schedules_table",
+    )
+
+    @field_validator(*IDENTIFIER_FIELD_NAMES)
+    @classmethod
+    def validate_object_name(cls, value: str) -> str:
+        if not all(IDENTIFIER_PATTERN.match(part) for part in value.split(".")):
+            raise ValueError(
+                "object name must be an identifier or a dotted identifier chain; "
+                "letters, digits, and underscores only, no quotes or symbols"
+            )
+        return value
+
+    @field_validator("channel")
+    @classmethod
+    def validate_channel(cls, value: Channel) -> Channel:
+        if not CHANNEL_PATTERN.match(value):
+            raise ValueError(
+                "channel may contain letters, digits, underscores, dots and dashes only"
+            )
+        return value
 
     @model_validator(mode="after")
     def reject_dotted_names_with_db_schema(self) -> DBSettings:
