@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import AsyncGenerator, Callable
 
 import pytest
+from psycopg import sql
 
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
@@ -82,8 +83,8 @@ class FakePsycopgConnection:
     executed: list[str] = field(default_factory=list)
     notes: asyncio.Queue[Notify] = field(default_factory=asyncio.Queue)
 
-    async def execute(self, query: str) -> None:
-        self.executed.append(query)
+    async def execute(self, query: str | sql.Composable) -> None:
+        self.executed.append(query.as_string() if isinstance(query, sql.Composable) else query)
 
     async def notifies(self, *, timeout: float, stop_after: int) -> AsyncGenerator[Notify, None]:
         with suppress(TimeoutError, asyncio.TimeoutError):
@@ -106,7 +107,7 @@ async def test_psycopg_remove_listener_stops_watcher() -> None:
     assert isinstance(driver, ListenerRemover)
     assert received == ["a"]
     assert not driver.tm.tasks
-    assert connection.executed == ["LISTEN ch", "UNLISTEN ch"]
+    assert connection.executed == ['LISTEN "ch"', 'UNLISTEN "ch"']
 
 
 async def test_asyncpg_pool_keeps_listener_until_last_exit() -> None:
@@ -157,7 +158,7 @@ async def test_psycopg_remove_listener_keeps_other_channels() -> None:
     await asyncio.sleep(0.05)
 
     assert on_b == ["1"]
-    assert connection.executed == ["LISTEN a", "LISTEN b", "UNLISTEN a"]
+    assert connection.executed == ['LISTEN "a"', 'LISTEN "b"', 'UNLISTEN "a"']
 
 
 async def test_psycopg_keeps_listening_until_last_exit() -> None:

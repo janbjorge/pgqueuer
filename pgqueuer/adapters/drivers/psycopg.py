@@ -90,10 +90,13 @@ class PsycopgDriver(Driver):
         channel: str,
         callback: NotifyCallback,
     ) -> None:
-        if not channel.isidentifier():
-            raise ValueError(f"Invalid channel name: {channel!r}")
+        from psycopg import sql
+
         if channel not in self._listeners:
-            await self._connection.execute(f"LISTEN {channel}")
+            # Quote like asyncpg's add_listener does: an unquoted LISTEN folds
+            # the name to lowercase, so it would never match the trigger's
+            # pg_notify('{channel}') literal for mixed-case channels (#947).
+            await self._connection.execute(sql.SQL("LISTEN {}").format(sql.Identifier(channel)))
             self._listeners[channel] = []
         self._listeners[channel].append(callback)
 
@@ -124,6 +127,8 @@ class PsycopgDriver(Driver):
         channel: str,
         callback: NotifyCallback,
     ) -> None:
+        from psycopg import sql
+
         callbacks = self._listeners.get(channel, [])
         if callback not in callbacks:
             return
@@ -135,7 +140,7 @@ class PsycopgDriver(Driver):
         if not self._listeners and self._watcher is not None:
             await cancel_and_wait(self._watcher)
             self._watcher = None
-        await self._connection.execute(f"UNLISTEN {channel}")
+        await self._connection.execute(sql.SQL("UNLISTEN {}").format(sql.Identifier(channel)))
 
     async def __aenter__(self) -> Self:
         if self._entered == 0:
