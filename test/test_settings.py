@@ -18,6 +18,7 @@ from pgqueuer.domain.settings import (
     add_prefix,
     db_settings,
 )
+from pgqueuer.domain.types import Channel
 
 pytestmark = pytest.mark.usefixtures("clean_connection_env")
 
@@ -213,3 +214,50 @@ def test_cli_setup_env_refreshes_db_settings(monkeypatch: pytest.MonkeyPatch) ->
     assert db_settings().prefix == ""
     AppConfig(prefix="acme_", schema="billing").setup_env()
     assert (db_settings().prefix, db_settings().db_schema) == ("acme_", "billing")
+
+
+# Before #945 only prefix and db_schema were validated, so a name like
+# "evil; CREATE TABLE x; --" reached the SQL string verbatim. Object names must
+# be identifiers or dotted identifier chains; the channel, which goes into SQL
+# as a string literal, may also hold dots and dashes.
+
+OBJECT_NAME_FIELDS = [
+    "function",
+    "statistics_table",
+    "queue_status_type",
+    "queue_table",
+    "queue_table_log",
+    "trigger",
+    "schedules_table",
+]
+
+
+@pytest.mark.parametrize("field", [*OBJECT_NAME_FIELDS, "channel"])
+@pytest.mark.parametrize("bad", ["evil; CREATE TABLE x; --", "x'y", "x y", 'x"y'])
+def test_name_field_rejects_sql(field: str, bad: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(f"PGQUEUER_{field.upper()}", bad)
+    with pytest.raises(ValidationError):
+        DBSettings()
+
+
+@pytest.mark.parametrize("field", OBJECT_NAME_FIELDS)
+@pytest.mark.parametrize("bad", ["x-y", "x..y", ".x", "x."])
+def test_object_name_rejects_non_identifier(
+    field: str, bad: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(f"PGQUEUER_{field.upper()}", bad)
+    with pytest.raises(ValidationError):
+        DBSettings()
+
+
+def test_default_names_are_valid() -> None:
+    DBSettings()
+    DBSettings(prefix="acme_")
+
+
+def test_dotted_object_name_still_accepted() -> None:
+    assert DBSettings(queue_table="myschema.pgqueuer").queue_table == "myschema.pgqueuer"
+
+
+def test_channel_keeps_dots_and_dashes() -> None:
+    assert DBSettings(channel=Channel("my-app.events")).channel == "my-app.events"
