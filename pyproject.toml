@@ -104,6 +104,8 @@ lint = [
 ]
 bench = [
     "pgqueuer[asyncpg,psycopg]",
+    # Benchmark psycopg with its C libpq wrapper; users choose their own impl.
+    "psycopg[binary]",
     "tqdm",
 ]
 docs = [

@@ -78,6 +78,19 @@ conn.autocommit = True
 driver = PsycopgDriver(conn)
 ```
 
+#### psycopg performance
+
+- **Install the C implementation.** `pgqueuer[psycopg]` does not pull in psycopg's C
+  implementation, and without it psycopg wraps libpq in pure Python. Install
+  `psycopg[binary]` (prebuilt wheels) or `psycopg[c]` (builds against your local libpq).
+  Check which one is active with `python -c "import psycopg; print(psycopg.pq.__impl__)"`.
+  It should print `binary` or `c`, not `python`.
+- **Expect extra latency on quiet queues.** psycopg delivers notifications through
+  `notifies()`, which holds the connection lock while it waits. While the listener runs, a
+  query on the same connection can wait up to about a second when no `NOTIFY` arrives.
+  Under steady load notifications keep arriving, so this costs little. If job latency on
+  low-traffic queues matters, use `AsyncpgDriver`.
+
 !!! note "Windows event loop"
     psycopg's async driver is not compatible with Python's default
     `ProactorEventLoop` on Windows. Run your application under
