@@ -23,6 +23,16 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     connections. Use this if you need to enqueue jobs from sync code (e.g. Flask, Django)
     or already use psycopg elsewhere in your application.
 
+    The extra installs psycopg without its C implementation, so psycopg falls back to a
+    slower pure-Python wrapper around libpq. For production, also install the C
+    implementation:
+
+    ```bash
+    pip install pgqueuer[psycopg] "psycopg[binary]"
+    ```
+
+    See [Driver performance](../reference/drivers.md#psycopg-performance) for details.
+
 === "uv"
 
     ```bash

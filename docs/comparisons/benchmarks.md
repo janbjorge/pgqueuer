@@ -85,6 +85,10 @@ python3 tools/benchmark.py -d psy -t 10
 - Total jobs: 85.1k
 - Throughput: **8.35k jobs/s**
 
+psycopg throughput depends on whether its C implementation is installed. The pure-Python
+fallback is noticeably slower. CI benchmarks psycopg with `psycopg[binary]`. See
+[psycopg performance](../reference/drivers.md#psycopg-performance).
+
 ### Supported Drivers
 
 The benchmark tool supports all four drivers via the `-d` flag:
