@@ -255,6 +255,9 @@ for jobs: row-lock claim plus heartbeat-based staleness recovery (ADR-0022).
 - [SQL naming model](sql-naming.md): how statements get object names,
   the bare, qualified and namespace spellings, what is bound versus
   interpolated, and the definitions statements restate.
+- [Connection failure model](connection-failures.md): what each part of a
+  worker does when its connection drops, how fast the drop is noticed, and
+  how the supervisor restarts the worker.
 
 Planned split-outs once a section outgrows this document; each keeps a
 summary here:
