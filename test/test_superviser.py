@@ -15,7 +15,7 @@ import pytest
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
 from pgqueuer.adapters.cli import supervisor
 from pgqueuer.errors import FailingListenerError
-from pgqueuer.models import HealthCheckEvent
+from pgqueuer.models import HealthCheckEvent, Job
 from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
 
@@ -446,6 +446,60 @@ async def test_shutdown_on_listener_failure(queue_manager: QueueManager) -> None
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=True,
         )
+
+
+async def test_listener_failure_ends_run_before_dequeue_timeout(
+    queue_manager: QueueManager,
+) -> None:
+    """A failed health check must not wait out a long dequeue_timeout."""
+
+    async def failing_listener_healthy(timeout: timedelta) -> HealthCheckEvent:
+        await asyncio.sleep(0.1)
+        raise FailingListenerError
+
+    queue_manager.listener_healthy = failing_listener_healthy  # type: ignore[assignment]
+    with pytest.raises(FailingListenerError):
+        await asyncio.wait_for(
+            queue_manager.run(
+                dequeue_timeout=timedelta(seconds=60),
+                shutdown_on_listener_failure=True,
+            ),
+            timeout=5,
+        )
+
+
+async def test_listener_failure_without_shutdown_does_not_spin(
+    queue_manager: QueueManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With shutdown_on_listener_failure off, a dead health check must not wake the loop."""
+
+    async def failing_listener_healthy(timeout: timedelta) -> HealthCheckEvent:
+        raise FailingListenerError
+
+    queue_manager.listener_healthy = failing_listener_healthy  # type: ignore[assignment]
+
+    dequeue_calls = 0
+    real_dequeue = queue_manager.queries.dequeue
+
+    async def counting_dequeue(**kwargs: object) -> list[Job]:
+        nonlocal dequeue_calls
+        dequeue_calls += 1
+        return await real_dequeue(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(queue_manager.queries, "dequeue", counting_dequeue)
+
+    run = asyncio.create_task(
+        queue_manager.run(
+            dequeue_timeout=timedelta(seconds=60),
+            shutdown_on_listener_failure=False,
+        )
+    )
+    await asyncio.sleep(0.5)
+    queue_manager.shutdown.set()
+    await asyncio.wait_for(run, timeout=5)
+
+    assert dequeue_calls <= 2
 
 
 async def test_fallback_when_add_signal_handler_is_missing(

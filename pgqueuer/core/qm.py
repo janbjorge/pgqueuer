@@ -487,16 +487,22 @@ class QueueManager:
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
 
+                # A failed health check ends the wait at once, not at the next
+                # dequeue_timeout. Only when it shuts us down: a finished task
+                # would otherwise wake every wait and spin the loop.
+                wake_on_listener_failure = (
+                    shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
+                )
                 async with tm.cancel_on_exit(
                     listeners.wait_for_notice_event(
                         notice_event_listener,
                         await self._effective_dequeue_timeout(dequeue_timeout),
                     )
                 ) as event_task:
-                    await asyncio.wait(
-                        (shutdown_task, event_task),
-                        return_when=asyncio.FIRST_COMPLETED,
-                    )
+                    wake_on: set[asyncio.Task[object]] = {shutdown_task, event_task}
+                    if wake_on_listener_failure:
+                        wake_on.add(periodic_health_check_task)
+                    await asyncio.wait(wake_on, return_when=asyncio.FIRST_COMPLETED)
 
     async def log_failure(
         self,
