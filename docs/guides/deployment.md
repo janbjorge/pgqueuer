@@ -168,6 +168,26 @@ LISTEN connection causes a clean restart rather than silent degradation:
   worker = "pgq run myapp:main --shutdown-on-listener-failure"
 ```
 
+## Connection loss
+
+PgQueuer does not reconnect a dropped connection itself. A worker recovers by exiting and
+starting again with a new connection:
+
+- `--shutdown-on-listener-failure` makes the worker exit when its connection stops working.
+  Every 10 s the worker sends a NOTIFY on its own channel and waits for it to come back
+  through LISTEN. If the NOTIFY can't be sent, or doesn't arrive within 10 s, the worker exits.
+  A dead connection is noticed within about 20 s.
+- `--restart-on-failure`, or a process supervisor, starts the worker again. With `pgq run`
+  the factory runs again, so it opens a new connection.
+
+Without `--shutdown-on-listener-failure`, a dead connection is only noticed at the worker's
+next query, which can be up to `--dequeue-timeout` (30 s) away. With an asyncpg pool, a dead
+LISTEN connection is never noticed: the worker keeps running, but only picks up jobs by polling
+every `--dequeue-timeout`.
+
+Jobs running when the connection drops still finish, but their results can't be saved, so they
+run again after `--heartbeat-timeout`. Keep jobs idempotent.
+
 ## Graceful shutdown
 
 `pgq run` handles `SIGTERM` and `SIGINT`. On receiving a signal:
