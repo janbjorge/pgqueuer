@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import Self
 
-from pgqueuer.core.tm import TaskManager
 from pgqueuer.ports.driver import Driver, NotifyCallback
 
 if TYPE_CHECKING:
@@ -89,10 +88,6 @@ class AsyncpgDriver(Driver):
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
 
-    @property
-    def tm(self) -> TaskManager:
-        return TaskManager()
-
     async def __aenter__(self) -> Self:
         return self
 
@@ -165,10 +160,6 @@ class AsyncpgPoolDriver(Driver):
     @property
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
-
-    @property
-    def tm(self) -> TaskManager:
-        return TaskManager()
 
     async def __aenter__(self) -> Self:
         self._entered += 1

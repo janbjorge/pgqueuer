@@ -12,6 +12,14 @@
 
 ---
 
+## v1.7.0
+
+### Removed
+
+- `Driver.tm` property and `TaskManagerPort` protocol. Drivers manage background
+  tasks privately without exposing a task manager port; `PsycopgDriver` uses an
+  internal task set for its NOTIFY watcher (#892).
+
 ## v1.6.0
 
 ### Added

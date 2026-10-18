@@ -106,7 +106,7 @@ async def test_psycopg_remove_listener_stops_watcher() -> None:
 
     assert isinstance(driver, ListenerRemover)
     assert received == ["a"]
-    assert not driver.tm.tasks
+    assert not driver._tasks
     assert connection.executed == ['LISTEN "ch"', 'UNLISTEN "ch"']
 
 
