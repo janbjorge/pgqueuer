@@ -55,20 +55,6 @@ class ListenerRemover(Protocol):
         ...
 
 
-class TaskManagerPort(Protocol):
-    """Protocol for managing background asyncio tasks."""
-
-    tasks: set[asyncio.Task[object]]
-
-    def add(self, task: asyncio.Task[object]) -> None: ...
-
-    async def gather_tasks(self, return_exceptions: bool = True) -> list[object]: ...
-
-    async def __aenter__(self) -> "TaskManagerPort": ...
-
-    async def __aexit__(self, *_: object) -> None: ...
-
-
 class Driver(Protocol):
     """Async database driver contract: fetch/execute/notify/listen + lifecycle."""
 
@@ -101,11 +87,6 @@ class Driver(Protocol):
     @property
     def shutdown(self) -> asyncio.Event:
         """Set when the driver should stop accepting new work."""
-        raise NotImplementedError
-
-    @property
-    def tm(self) -> TaskManagerPort:
-        """TaskManager tracking the driver's background tasks (e.g. notify watchers)."""
         raise NotImplementedError
 
     async def __aenter__(self) -> Self:

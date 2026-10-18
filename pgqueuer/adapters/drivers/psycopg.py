@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from typing_extensions import Self
 
 from pgqueuer.core import logconfig
-from pgqueuer.core.tm import TaskManager, cancel_and_wait
+from pgqueuer.core.tm import cancel_and_wait
 from pgqueuer.ports.driver import Driver, NotifyCallback, SyncDriver
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class PsycopgDriver(Driver):
     ) -> None:
         self._shutdown = asyncio.Event()
         self._connection = connection
-        self._tm = TaskManager()
+        self._tasks: set[asyncio.Task[None]] = set()
         self._listeners: dict[str, list[NotifyCallback]] = {}
         self._watcher: asyncio.Task[None] | None = None
         self._entered = 0
@@ -54,10 +54,6 @@ class PsycopgDriver(Driver):
     @property
     def shutdown(self) -> asyncio.Event:
         return self._shutdown
-
-    @property
-    def tm(self) -> TaskManager:
-        return self._tm
 
     async def fetch(
         self,
@@ -104,7 +100,8 @@ class PsycopgDriver(Driver):
             self._watcher = asyncio.create_task(
                 self.watch_notifies(), name="notify_psycopg_watcher"
             )
-            self._tm.add(self._watcher)
+            self._tasks.add(self._watcher)
+            self._watcher.add_done_callback(self._tasks.discard)
 
     async def watch_notifies(self) -> None:
         """Hand each NOTIFY to the callbacks of its channel.
@@ -154,7 +151,8 @@ class PsycopgDriver(Driver):
         if self._entered > 0:
             return
         self.shutdown.set()
-        await self.tm.gather_tasks()
+        if self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
         # Start afresh on the next enter: add_listener then LISTENs and starts a new watcher.
         self._watcher = None
         self._listeners.clear()
