@@ -11,6 +11,7 @@ except ImportError as e:
     ) from e
 
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
+from pgqueuer.adapters.web.deps import PooledQueries
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.core import logconfig
@@ -50,8 +51,7 @@ def create_web_app(
             connect_asyncpg(dsn=dsn, settings=connection_settings) as listener,
             AsyncpgDriver(listener) as driver,
         ):
-            app.state.pgq_pool = pool
-            app.state.pgq_settings = db
+            app.state.pgq_queries = PooledQueries(pool, db)
             broadcaster = Broadcaster(driver=driver, channel=db.channel)
             await broadcaster.start()
             app.state.pgq_broadcaster = broadcaster
