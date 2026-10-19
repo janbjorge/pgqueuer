@@ -143,7 +143,6 @@ for executing queries and listening for notifications. PgQueuer includes these d
 | Driver | Connection Type | Use Case |
 |--------|----------------|----------|
 | `AsyncpgDriver` | Single `asyncpg.Connection` | Workers (recommended) |
-| `AsyncpgPoolDriver` | `asyncpg.Pool` | Producers or high-throughput scenarios |
 | `PsycopgDriver` | `psycopg.AsyncConnection` | Async psycopg applications |
 | `SyncPsycopgDriver` | `psycopg.Connection` | Sync scripts and Django views |
 | `InMemoryDriver` | None | Tests and CI without PostgreSQL |
@@ -154,8 +153,8 @@ Factory classmethods on `PgQueuer` simplify setup:
 # asyncpg single connection
 pgq = PgQueuer.from_asyncpg_connection(conn)
 
-# asyncpg pool
-pgq = PgQueuer.from_asyncpg_pool(pool)
+# connection acquired from an asyncpg pool
+pgq = PgQueuer.from_asyncpg_connection(await pool.acquire())
 
 # psycopg async connection
 pgq = PgQueuer.from_psycopg_connection(conn)

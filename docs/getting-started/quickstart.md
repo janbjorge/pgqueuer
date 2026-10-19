@@ -50,7 +50,9 @@ Create a file called `myapp.py`. PgQueuer uses a factory pattern: you write an
     @asynccontextmanager
     async def main():
         pool = await asyncpg.create_pool()
-        pgq = PgQueuer.from_asyncpg_pool(pool)
+        connection = await pool.acquire()
+        # PgQueuer holds one connection; jobs borrow from the pool via resources.
+        pgq = PgQueuer.from_asyncpg_connection(connection, resources={"pool": pool})
 
         @pgq.entrypoint("fetch")
         async def process_message(job: Job) -> None:

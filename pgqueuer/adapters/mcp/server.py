@@ -12,20 +12,28 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
 from pgqueuer.adapters.connections import create_asyncpg_pool
-from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
+from pgqueuer.adapters.persistence.qb import QueryQueueBuilder
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain.settings import ConnectionSettings, DBSettings, db_settings
 
 
 class PgQueuerDatabase:
-    """Thin wrapper holding a connection pool and query builders."""
+    """Thin wrapper holding a connection pool and query builders.
+
+    Every tool call borrows its own connection from *pool*, so calls run in parallel.
+    """
 
     def __init__(self, pool: asyncpg.Pool, settings: DBSettings) -> None:
         self.pool = pool
-        queries = Queries(AsyncpgPoolDriver(pool), settings)
-        self.qbq = queries.qbq
-        self.insights = InsightsService(queries)
+        self.settings = settings
+        self.qbq = QueryQueueBuilder(settings)
+
+    @asynccontextmanager
+    async def insights(self) -> AsyncIterator[InsightsService]:
+        async with self.pool.acquire() as conn:
+            yield InsightsService(Queries(AsyncpgDriver(conn), self.settings))
 
     async def fetch(self, sql: str, *args: object) -> list[dict[str, object]]:
         async with self.pool.acquire() as conn:
@@ -82,7 +90,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - Many 'picked' jobs with stale heartbeats: workers may be stuck
             (use stale_jobs to investigate).
         """
-        return [s.model_dump() for s in await _db(ctx).insights.queue_size()]
+        async with _db(ctx).insights() as insights:
+            return [s.model_dump() for s in await insights.queue_size()]
 
     @mcp.tool()
     async def queue_table_info(
@@ -286,7 +295,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
             the worker executing this schedule may be stuck.
           - last_run is null: the schedule has never executed since registration.
         """
-        return [s.model_dump() for s in await _db(ctx).insights.schedules()]
+        async with _db(ctx).insights() as insights:
+            return [s.model_dump() for s in await insights.schedules()]
 
     @mcp.tool()
     async def stale_jobs(
@@ -325,7 +335,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
         If you see stale jobs, cross-reference the queue_manager_id with
         active_workers to check if that worker is still alive.
         """
-        jobs = await _db(ctx).insights.stale_jobs(_parse_interval(threshold), limit)
+        async with _db(ctx).insights() as insights:
+            jobs = await insights.stale_jobs(_parse_interval(threshold), limit)
         return [j.model_dump() for j in jobs]
 
     @mcp.tool()
@@ -356,7 +367,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - No workers at all but queue_size shows 'queued' jobs: workers
             are not running or cannot connect.
         """
-        return [w.model_dump() for w in await _db(ctx).insights.active_workers()]
+        async with _db(ctx).insights() as insights:
+            return [w.model_dump() for w in await insights.active_workers()]
 
     @mcp.tool()
     async def queue_age(ctx: Ctx) -> list[dict[str, object]]:
@@ -385,7 +397,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
           - Both count and age are high: sustained backlog, need more workers
             or faster processing.
         """
-        return [a.model_dump() for a in await _db(ctx).insights.queue_age()]
+        async with _db(ctx).insights() as insights:
+            return [a.model_dump() for a in await insights.queue_age()]
 
     @mcp.tool()
     async def schema_info(ctx: Ctx) -> list[dict[str, object]]:
@@ -418,7 +431,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:  # noqa: C901
         will be truncated after an unclean PostgreSQL shutdown (crash, OOM kill).
         Production systems typically use 'balanced' or 'durable' durability.
         """
-        return [t.model_dump() for t in await _db(ctx).insights.schema_info()]
+        async with _db(ctx).insights() as insights:
+            return [t.model_dump() for t in await insights.schema_info()]
 
 
 def create_mcp_server(

@@ -5,15 +5,16 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import Depends, FastAPI, Request, Response
 
-from pgqueuer.db import AsyncpgPoolDriver
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 
 
-def get_pgq_queries(request: Request) -> Queries:
-    """Retrieve Queries instance from FastAPI app context."""
-    pgq_queries = request.app.extra["pgq_queries"]
-    assert isinstance(pgq_queries, Queries)
-    return pgq_queries
+async def get_pgq_queries(request: Request) -> AsyncGenerator[Queries, None]:
+    """Yield Queries over a connection held from the app's pool for one request."""
+    pool = request.app.extra["pgq_pool"]
+    assert isinstance(pool, asyncpg.Pool)
+    async with pool.acquire() as connection:
+        yield Queries(AsyncpgDriver(connection))
 
 
 def create_app() -> FastAPI:
@@ -26,7 +27,7 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         """Manage async database connection throughout the app's lifespan."""
         async with asyncpg.create_pool() as pool:
-            app.extra["pgq_queries"] = Queries(AsyncpgPoolDriver(pool))
+            app.extra["pgq_pool"] = pool
             yield
 
     app = FastAPI(lifespan=lifespan)

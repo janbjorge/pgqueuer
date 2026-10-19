@@ -16,6 +16,21 @@
 
 ### Removed
 
+- `AsyncpgPoolDriver`, `PgQueuer.from_asyncpg_pool` and `Queries.from_asyncpg_pool`
+  (#951). The pool driver sent every query through the pool, so asyncpg's reset
+  added a round trip per query and dropped session state: the advisory lock of
+  `Queries.upgrade()` was released as soon as it was taken. Hold a connection
+  instead, and share a pool with jobs through `resources`:
+
+  ```python
+  async with asyncpg.create_pool() as pool, pool.acquire() as connection:
+      pgq = PgQueuer.from_asyncpg_connection(connection, resources={"pool": pool})
+  ```
+
+  `AsyncpgDriver` and the `from_asyncpg_connection` constructors accept the
+  connection `pool.acquire()` returns. The web dashboard and MCP server keep
+  their pools and borrow one connection per request; the dashboard listens on a
+  connection of its own.
 - `Driver.tm` property and `TaskManagerPort` protocol. Drivers manage background
   tasks privately without exposing a task manager port; `PsycopgDriver` uses an
   internal task set for its NOTIFY watcher (#892).

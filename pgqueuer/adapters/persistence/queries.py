@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal, overload
 
 if TYPE_CHECKING:
     import asyncpg
+    import asyncpg.pool
     import psycopg
 
 from typing import assert_never
@@ -87,24 +88,13 @@ class Queries:
     @classmethod
     def from_asyncpg_connection(
         cls,
-        connection: asyncpg.Connection,
+        connection: asyncpg.Connection | asyncpg.pool.PoolConnectionProxy,
         settings: DBSettings | None = None,
     ) -> Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
         return cls(AsyncpgDriver(connection), settings or db_settings())
-
-    @classmethod
-    def from_asyncpg_pool(
-        cls,
-        pool: asyncpg.Pool,
-        settings: DBSettings | None = None,
-    ) -> Queries:
-        """Build Queries over an asyncpg pool."""
-        from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
-
-        return cls(AsyncpgPoolDriver(pool), settings or db_settings())
 
     @classmethod
     def from_psycopg_connection(

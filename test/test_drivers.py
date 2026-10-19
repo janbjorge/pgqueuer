@@ -20,7 +20,6 @@ from pgqueuer.core.listeners import (
 )
 from pgqueuer.db import (
     AsyncpgDriver,
-    AsyncpgPoolDriver,
     Driver,
     PsycopgDriver,
     SyncDriver,
@@ -57,10 +56,12 @@ async def apgdriver(dsn: str) -> AsyncGenerator[AsyncpgDriver, None]:
 
 
 @asynccontextmanager
-async def apgpooldriver(dsn: str) -> AsyncGenerator[AsyncpgPoolDriver, None]:
+async def apgpoolconndriver(dsn: str) -> AsyncGenerator[AsyncpgDriver, None]:
+    """AsyncpgDriver over a connection acquired from a pool."""
     async with (
         asyncpg.create_pool(dsn=dsn) as pool,
-        AsyncpgPoolDriver(pool) as x,
+        pool.acquire() as conn,
+        AsyncpgDriver(conn) as x,
     ):
         yield x
 
@@ -81,7 +82,7 @@ def drivers() -> tuple[Callable[..., AbstractAsyncContextManager[Driver]], ...]:
     return (
         apgdriver,
         psydriver,
-        apgpooldriver,
+        apgpoolconndriver,
     )
 
 
@@ -184,7 +185,7 @@ async def test_valid_query_syntax(
         return f"BEGIN; {sql}; ROLLBACK;"
 
     async with driver(dsn) as d:
-        if isinstance(d, AsyncpgDriver | AsyncpgPoolDriver):
+        if isinstance(d, AsyncpgDriver):
             with suppress(asyncpg.exceptions.UndefinedParameterError):
                 await d.execute(rolledback(sql))
 
@@ -265,13 +266,3 @@ async def test_no_autocommit_raises(dsn: str) -> None:
     with pytest.raises(RuntimeError):
         async with await psycopg.AsyncConnection.connect(conninfo=dsn) as conn:
             PsycopgDriver(conn)
-
-
-async def test_a_one_connection_pool_queries_but_cannot_listen(dsn: str) -> None:
-    """A listener holds a connection for good, so only listening needs a second one."""
-    async with asyncpg.create_pool(dsn=dsn, min_size=1, max_size=1) as pool:
-        driver = AsyncpgPoolDriver(pool)
-        assert await driver.fetch("SELECT 1 AS one") == [{"one": 1}]
-
-        with pytest.raises(RuntimeError, match="Pool max size"):
-            await driver.add_listener(Channel("ch_one_connection"), lambda _: None)

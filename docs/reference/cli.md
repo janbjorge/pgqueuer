@@ -114,10 +114,7 @@ naming the column and both types; alter it by hand and re-run.
     The statements cannot share a transaction, because PostgreSQL forbids using
     a new enum value in the transaction that added it. That makes the lock
     session-scoped, so it only binds the connection that took it -- `pgq
-    upgrade` uses one. Over `AsyncpgPoolDriver` the lock is not held at all:
-    asyncpg runs `pg_advisory_unlock_all()` when the connection that took it
-    goes back to the pool, so `Queries.upgrade()` through a pool serializes
-    nothing.
+    upgrade` uses one.
 
 ---
 

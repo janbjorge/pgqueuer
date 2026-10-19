@@ -5,10 +5,9 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 
-import pytest
 from psycopg import sql
 
-from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.ports.driver import ListenerRemover
 
@@ -29,34 +28,11 @@ class FakeAsyncpgConnection:
         for listener in list(self.listeners):
             listener(self, 1, "ch", payload)
 
-    async def reset(self) -> None:
-        self.listeners.clear()
 
-
-@dataclass
-class FakePool:
-    connection: FakeAsyncpgConnection
-    released: int = 0
-
-    def get_max_size(self) -> int:
-        return 10
-
-    async def acquire(self) -> FakeAsyncpgConnection:
-        return self.connection
-
-    async def release(self, connection: FakeAsyncpgConnection) -> None:
-        self.released += 1
-
-
-@pytest.mark.parametrize("pool", (False, True))
-async def test_asyncpg_remove_listener_keeps_other_callbacks(pool: bool) -> None:
+async def test_asyncpg_remove_listener_keeps_other_callbacks() -> None:
     """remove_listener unhooks only the given callback (#886)."""
     connection = FakeAsyncpgConnection()
-    driver = (
-        AsyncpgPoolDriver(FakePool(connection))  # type: ignore[arg-type]
-        if pool
-        else AsyncpgDriver(connection)  # type: ignore[arg-type]
-    )
+    driver = AsyncpgDriver(connection)  # type: ignore[arg-type]
     removed: list[str | bytes | bytearray] = []
     kept: list[str | bytes | bytearray] = []
     await driver.add_listener("ch", removed.append)
@@ -127,24 +103,6 @@ async def test_psycopg_remove_listener_stops_watcher() -> None:
     assert received == ["a"]
     assert not driver._tasks
     assert connection.executed == ['LISTEN "ch"', 'UNLISTEN "ch"']
-
-
-async def test_asyncpg_pool_keeps_listener_until_last_exit() -> None:
-    """A nested exit leaves the shared listener connection in place (#895)."""
-    connection = FakeAsyncpgConnection()
-    pool = FakePool(connection)
-    driver = AsyncpgPoolDriver(pool)  # type: ignore[arg-type]
-    received: list[str | bytes | bytearray] = []
-
-    async with driver:
-        await driver.add_listener("ch", received.append)
-        async with driver:
-            pass
-        connection.notify("a")
-        assert pool.released == 0
-
-    assert received == ["a"]
-    assert pool.released == 1
 
 
 async def test_psycopg_delivers_each_notify_to_its_channel() -> None:
