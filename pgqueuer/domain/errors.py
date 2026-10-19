@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from datetime import timedelta
 
 from pgqueuer.domain.types import ColumnName, SqlType, TableName
@@ -43,12 +42,11 @@ def retry_request(exc: BaseException) -> RetryRequested | None:
     """
     if isinstance(exc, RetryRequested):
         return exc
-    if sys.version_info >= (3, 11):
-        if isinstance(exc, BaseExceptionGroup):  # noqa: F821 -- builtin from 3.11, gated above
-            found = [retry_request(inner) for inner in exc.exceptions]
-            retries = [retry for retry in found if retry is not None]
-            if retries and len(retries) == len(found):
-                return max(retries, key=lambda retry: retry.delay)
+    if isinstance(exc, BaseExceptionGroup):
+        found = [retry_request(inner) for inner in exc.exceptions]
+        retries = [retry for retry in found if retry is not None]
+        if retries and len(retries) == len(found):
+            return max(retries, key=lambda retry: retry.delay)
     return None
 
 

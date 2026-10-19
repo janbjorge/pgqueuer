@@ -101,8 +101,7 @@ driver = PsycopgDriver(conn)
     asyncio.run(main(), loop_factory=asyncio.SelectorEventLoop)
     ```
 
-    On 3.11 use `asyncio.Runner(loop_factory=asyncio.SelectorEventLoop)`;
-    on 3.10 set `WindowsSelectorEventLoopPolicy` before `asyncio.run`.
+    On 3.11 use `asyncio.Runner(loop_factory=asyncio.SelectorEventLoop)`.
     The `pgq` CLI handles this automatically. See the
     [psycopg async docs](https://www.psycopg.org/psycopg3/docs/advanced/async.html).
 

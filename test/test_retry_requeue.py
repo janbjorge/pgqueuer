@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 import uuid
 from datetime import timedelta
 from typing import Any
@@ -249,21 +248,15 @@ async def test_failing_retry_job_records_the_job_as_failed(
     )
 
 
-needs_exception_groups = pytest.mark.skipif(
-    sys.version_info < (3, 11), reason="asyncio.TaskGroup and ExceptionGroup need Python 3.11"
-)
-
-
 async def raise_from_task_group(*errors: Exception) -> None:
     async def fail(error: Exception) -> None:
         raise error
 
-    async with asyncio.TaskGroup() as group:  # type: ignore[attr-defined,unused-ignore]
+    async with asyncio.TaskGroup() as group:
         for error in errors:
-            group.create_task(fail(error))
+            _ = group.create_task(fail(error))
 
 
-@needs_exception_groups
 @pytest.mark.parametrize(
     ("with_other_error", "status"), ((False, "successful"), (True, "exception"))
 )
@@ -294,7 +287,6 @@ async def test_retry_requested_from_task_group(with_other_error: bool, status: s
     assert [log.status for log in await pq.qm.queries.queue_log()][-1] == status
 
 
-@needs_exception_groups
 async def test_database_retry_executor_honours_retry_from_task_group() -> None:
     """A grouped RetryRequested stays an explicit retry, outside max_attempts (#899)."""
     pq = PgQueuer.in_memory()
