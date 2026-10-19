@@ -158,7 +158,6 @@ jobs:
     env:
       CI: 1
       PYTHONASYNCIODEBUG: 1
-      PYTHONDEBUG: 1
       PYTHONFAULTHANDLER: 1
       POSTGRES_VERSION: ${{ matrix.postgres-version }}
       TESTCONTAINERS_RYUK_DISABLED: "true"
@@ -186,7 +185,6 @@ jobs:
     env:
       CI: 1
       PYTHONASYNCIODEBUG: 1
-      PYTHONDEBUG: 1
       PYTHONFAULTHANDLER: 1
       PGHOST: localhost
       PGPORT: "5432"
