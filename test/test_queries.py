@@ -682,19 +682,18 @@ async def test_queue_log_queued_dedupe_key_raises_concurrent(
     loop_size: int,
     apgdriver: db.Driver,
 ) -> None:
+    async def enqueue(pool: asyncpg.Pool) -> None:
+        async with pool.acquire() as connection:
+            await queries.Queries(db.AsyncpgDriver(connection)).enqueue(
+                "test_queue_log_queued_dedupe_key_raises_concurrent",
+                None,
+                dedupe_key="test_queue_log_queued_dedupe_key_raises_concurrent",
+            )
+
     async with asyncpg.create_pool(dsn=dsn) as pool:
         for _ in range(loop_size):
             with pytest.raises(errors.DuplicateJobError):
-                await asyncio.gather(
-                    *[
-                        queries.Queries(db.AsyncpgPoolDriver(pool)).enqueue(
-                            "test_queue_log_queued_dedupe_key_raises_concurrent",
-                            None,
-                            dedupe_key="test_queue_log_queued_dedupe_key_raises_concurrent",
-                        )
-                        for _ in range(batch_size)
-                    ],
-                )
+                await asyncio.gather(*[enqueue(pool) for _ in range(batch_size)])
             assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
 
     assert sum(x.count for x in await queries.Queries(apgdriver).queue_size()) == 1
@@ -837,18 +836,17 @@ async def test_enqueue_on_conflict_skip_concurrent(
     batch_size: int,
     apgdriver: db.Driver,
 ) -> None:
+    async def enqueue(pool: asyncpg.Pool) -> list[models.JobId | None]:
+        async with pool.acquire() as connection:
+            return await queries.Queries(db.AsyncpgDriver(connection)).enqueue(
+                "ep",
+                None,
+                dedupe_key="test_enqueue_on_conflict_skip_concurrent",
+                on_conflict="skip",
+            )
+
     async with asyncpg.create_pool(dsn=dsn) as pool:
-        results = await asyncio.gather(
-            *[
-                queries.Queries(db.AsyncpgPoolDriver(pool)).enqueue(
-                    "ep",
-                    None,
-                    dedupe_key="test_enqueue_on_conflict_skip_concurrent",
-                    on_conflict="skip",
-                )
-                for _ in range(batch_size)
-            ],
-        )
+        results = await asyncio.gather(*[enqueue(pool) for _ in range(batch_size)])
 
     inserted = [x for (x,) in results if x is not None]
     assert len(inserted) == 1
@@ -1108,24 +1106,6 @@ async def test_queries_from_asyncpg_connection(dsn: str) -> None:
         assert sum(x.count for x in queue_sizes) > 0
     finally:
         await connection.close()
-
-
-async def test_queries_from_asyncpg_pool(dsn: str) -> None:
-    """Test creating Queries from an asyncpg connection pool."""
-    pool = await asyncpg.create_pool(dsn=dsn, min_size=2, max_size=5)
-    try:
-        q = queries.Queries.from_asyncpg_pool(pool)
-
-        # Verify the instance is properly configured
-        assert isinstance(q, queries.Queries)
-        assert isinstance(q.driver, db.AsyncpgPoolDriver)
-
-        # Test that it can be used to enqueue jobs
-        await q.enqueue("test_job", b"payload")
-        queue_sizes = await q.queue_size()
-        assert sum(x.count for x in queue_sizes) > 0
-    finally:
-        await pool.close()
 
 
 async def test_queries_from_psycopg_connection(dsn: str) -> None:

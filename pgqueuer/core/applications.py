@@ -6,7 +6,7 @@ from collections.abc import Callable, MutableMapping
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.queries import Queries
@@ -28,6 +28,7 @@ from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
     import asyncpg
+    import asyncpg.pool
     import psycopg
 
 
@@ -89,7 +90,7 @@ class PgQueuer:
     @classmethod
     def from_asyncpg_connection(
         cls,
-        connection: asyncpg.Connection,
+        connection: asyncpg.Connection | asyncpg.pool.PoolConnectionProxy,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
@@ -97,22 +98,6 @@ class PgQueuer:
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
-            channel=channel,
-            resources=resources,
-            settings=settings,
-        )
-
-    @classmethod
-    def from_asyncpg_pool(
-        cls,
-        pool: asyncpg.Pool,
-        channel: Channel | None = None,
-        resources: MutableMapping[str, object] | None = None,
-        settings: DBSettings | None = None,
-    ) -> PgQueuer:
-        """Build PgQueuer over an asyncpg pool."""
-        return cls._from_driver(
-            driver=AsyncpgPoolDriver(pool),
             channel=channel,
             resources=resources,
             settings=settings,

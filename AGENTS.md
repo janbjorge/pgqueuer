@@ -119,7 +119,7 @@ PgQueuer follows **hexagonal (ports & adapters) architecture** enforced by `impo
   - `tm.py` — `TaskManager` for background task lifecycle
   - `heartbeat.py`, `helpers.py`, `logconfig.py`
 - **`adapters/`** — Concrete implementations:
-  - `drivers/` — `asyncpg.py` (AsyncpgDriver, AsyncpgPoolDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
+  - `drivers/` — `asyncpg.py` (AsyncpgDriver), `psycopg.py` (PsycopgDriver, SyncPsycopgDriver)
   - `persistence/` — `queries.py` (SQL queries), `qb.py` (query builder + DBSettings), `query_helpers.py`, `schema_ddl.py` (render the model as DDL), `schema_inspect.py` (read the installed schema), `schema_plan.py` (diff the two)
   - `inmemory/` — In-memory driver and queries for testing without Postgres
   - `tracing/` — Logfire, Sentry, OpenTelemetry integrations

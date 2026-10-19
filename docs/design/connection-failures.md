@@ -83,13 +83,6 @@ drop reruns every job in flight. With psycopg it also happened once to jobs that
 had finished before the kill, probably because their flush was still waiting
 for the connection lock that `notifies()` holds.
 
-The asyncpg pool hides the failure. `AsyncpgPoolDriver` keeps its LISTEN
-connection out of the pool, and that connection dies without an error. Queries
-move to fresh pool connections, so nothing raises and nothing restarts. The
-[performance guide](../guides/performance-tuning.md#notify-channel-and-polling-fallback)
-already advises a direct connection for the queue manager, and #951 deprecates
-the pool drivers.
-
 ## What other queues do
 
 River, Oban, GoodJob, graphile-worker, pg-boss and Procrastinate give the

@@ -40,7 +40,7 @@ The following imports must continue to work throughout all phases:
 ```python
 from pgqueuer import (
     PgQueuer, QueueManager, SchedulerManager, Queries,
-    Job, JobId, AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver,
+    Job, JobId, AsyncpgDriver, PsycopgDriver,
 )
 ```
 
@@ -105,8 +105,8 @@ inheritance or registration required.
 
 - **`Driver`** (`pgqueuer.ports.driver`): database execution abstraction.
   Methods: `fetch`, `execute`, `add_listener`, `notify`. Adapters:
-  `AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`,
-  and the in-memory driver.
+  `AsyncpgDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and the in-memory
+  driver.
 - **`TracingProtocol`** (`pgqueuer.ports.tracing`): distributed tracing.
   Adapters: `LogfireTracing`, `SentryTracing`, `OpenTelemetryTracing`.
 
@@ -166,7 +166,7 @@ pgqueuer/
 
   adapters/
     drivers/
-      asyncpg.py              # AsyncpgDriver, AsyncpgPoolDriver
+      asyncpg.py              # AsyncpgDriver
       psycopg.py              # PsycopgDriver, SyncPsycopgDriver
     persistence/
       queries.py              # Queries class (implements all repository ports)

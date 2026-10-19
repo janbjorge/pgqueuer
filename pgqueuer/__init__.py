@@ -3,7 +3,7 @@ from __future__ import annotations
 from pgqueuer.adapters.cli.supervisor import run
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.applications import PgQueuer
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
+from pgqueuer.db import AsyncpgDriver, PsycopgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.errors import RetryRequested
 from pgqueuer.executors import DatabaseRetryEntrypointExecutor
@@ -19,7 +19,6 @@ except ImportError:
 
 __all__ = [
     "AsyncpgDriver",
-    "AsyncpgPoolDriver",
     "DBSettings",
     "DatabaseRetryEntrypointExecutor",
     "InMemoryDriver",

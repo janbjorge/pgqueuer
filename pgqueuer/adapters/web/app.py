@@ -10,7 +10,6 @@ except ImportError as e:
         "fastapi is required for this module. Install with: pip install pgqueuer[web]"
     ) from e
 
-from pgqueuer.adapters.persistence import queries
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
@@ -41,18 +40,22 @@ def create_web_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        from pgqueuer.adapters.connections import create_asyncpg_pool
-        from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
+        from pgqueuer.adapters.connections import connect_asyncpg, create_asyncpg_pool
+        from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
-            driver = AsyncpgPoolDriver(pool)
-            q = queries.Queries(driver, settings or db_settings())
-            app.state.pgq_queries = q
-            broadcaster = Broadcaster(driver=driver, channel=q.settings.channel)
+        db = settings or db_settings()
+        async with (
+            create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool,
+            # LISTEN gets its own connection; it never goes back to the pool.
+            connect_asyncpg(dsn=dsn, settings=connection_settings) as listener,
+            AsyncpgDriver(listener) as driver,
+        ):
+            app.state.pgq_pool = pool
+            app.state.pgq_settings = db
+            broadcaster = Broadcaster(driver=driver, channel=db.channel)
             await broadcaster.start()
             app.state.pgq_broadcaster = broadcaster
-            async with driver:
-                yield
+            yield
 
     auth = create_basic_auth_dependency()
     if auth is None:

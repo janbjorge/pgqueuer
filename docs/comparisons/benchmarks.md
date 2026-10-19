@@ -96,7 +96,6 @@ The benchmark tool supports all four drivers via the `-d` flag:
 | Flag | Driver |
 |------|--------|
 | `apg` | `AsyncpgDriver` (single connection) |
-| `apgpool` | `AsyncpgPoolDriver` (connection pool) |
 | `psy` | `PsycopgDriver` (async psycopg) |
 | `mem` | `InMemoryDriver` (no database) |
 

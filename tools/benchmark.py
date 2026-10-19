@@ -21,7 +21,7 @@ from tqdm.asyncio import tqdm
 
 from pgqueuer import PgQueuer, types
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
+from pgqueuer.db import AsyncpgDriver, PsycopgDriver
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.queries import Queries
@@ -42,7 +42,6 @@ app = typer.Typer(add_completion=False)
 
 class DriverEnum(str, Enum):
     apg = "apg"
-    apgpool = "apgpool"
     psy = "psy"
     mem = "mem"
 
@@ -196,12 +195,6 @@ async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort
             import asyncpg
 
             return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
-        case "apgpool":
-            import asyncpg
-
-            pool = await asyncpg.create_pool(dsn=conninfo)
-            assert pool is not None
-            return Queries(AsyncpgPoolDriver(pool))
         case "psy":
             import psycopg
 

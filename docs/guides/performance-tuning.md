@@ -43,22 +43,20 @@ contrast, is a per-process safety ceiling on total asyncio tasks.
 
 ## Connection pooling
 
-For high-throughput deployments, use a connection pool driver instead of a single connection:
+PgQueuer runs on one connection. Routing each query through a pool adds asyncpg's
+reset round trip per query and drops session state such as advisory locks, so
+hold a connection instead. If your jobs need a pool, share it through `resources`:
 
 ```python
 import asyncpg
-from pgqueuer.db import AsyncpgPoolDriver
 
-pool = await asyncpg.create_pool(min_size=5, max_size=20)
-driver = AsyncpgPoolDriver(pool)
-pgq = PgQueuer(driver)
+async with asyncpg.create_pool() as pool, pool.acquire() as connection:
+    pgq = PgQueuer.from_asyncpg_connection(connection, resources={"pool": pool})
+    await pgq.run()
 ```
 
-**Pool sizing guidance:**
-- A single `QueueManager` uses one connection for the LISTEN channel and borrows connections
-  briefly for each dequeue/status-update round-trip.
-- Start with `max_size = 2 × expected_concurrent_jobs` and adjust based on `pg_stat_activity`.
-- Avoid pools larger than your PostgreSQL `max_connections` allows.
+Producers in a web app should acquire a connection per request; see
+`examples/fastapi_usage.py`.
 
 ## Durability vs. throughput
 
@@ -153,7 +151,7 @@ will put back.
 
 - [ ] Run `pgq autovac` after installation
 - [ ] Choose a `durability` level appropriate for your crash recovery requirements
-- [ ] Use `AsyncpgPoolDriver` for producers; a single connection for `QueueManager`
+- [ ] Hold one connection for `QueueManager`; producers acquire one per request
 - [ ] Set `heartbeat_timeout` on `pgq.run()` to recover from worker crashes automatically
 - [ ] Add `--shutdown-on-listener-failure` when running behind a PgBouncer pool
 - [ ] Monitor `pgqueuer_log` table size and prune if needed

@@ -21,8 +21,7 @@ For any driver:
 ## Driver protocol
 
 Every driver implements `pgqueuer.ports.driver.Driver`. Built-ins:
-`AsyncpgDriver`, `AsyncpgPoolDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and
-the in-memory driver. Custom drivers work anywhere a `Driver` is expected.
+`AsyncpgDriver`, `PsycopgDriver`, `SyncPsycopgDriver`, and the in-memory driver. Custom drivers work anywhere a `Driver` is expected.
 
 Key methods:
 
@@ -59,11 +58,8 @@ async def notify(self, channel: str, payload: str) -> None:
 
 ### `AsyncpgDriver`
 
-Thin wrapper around a single `asyncpg` connection.
-
-### `AsyncpgPoolDriver`
-
-Uses an `asyncpg` connection pool for improved throughput under high concurrency.
+Thin wrapper around a single `asyncpg` connection. A connection acquired from
+an `asyncpg` pool works too; the driver holds it until you release it.
 
 ### `PsycopgDriver`
 
@@ -150,10 +146,10 @@ await pgq.run()
 import asyncpg
 from pgqueuer import PgQueuer
 
-pool = await asyncpg.create_pool(dsn, min_size=2, max_size=10)
-pgq = PgQueuer.from_asyncpg_pool(pool)
-
-await pgq.run()
+async with asyncpg.create_pool(dsn) as pool, pool.acquire() as connection:
+    # PgQueuer holds one connection; jobs borrow from the pool via resources.
+    pgq = PgQueuer.from_asyncpg_connection(connection, resources={"pool": pool})
+    await pgq.run()
 ```
 
 ### From psycopg async connection

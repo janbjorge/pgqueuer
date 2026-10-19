@@ -59,15 +59,15 @@ from contextlib import asynccontextmanager
 import asyncpg
 from fastapi import Depends, FastAPI
 
-from pgqueuer.db import AsyncpgPoolDriver
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.queries import Queries
 from pgqueuer.web import create_web_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with asyncpg.create_pool(min_size=2) as pool:
-        app.state.pgq_queries = Queries(AsyncpgPoolDriver(pool))
+    async with asyncpg.create_pool() as pool, pool.acquire() as connection:
+        app.state.pgq_queries = Queries(AsyncpgDriver(connection))
         yield
 
 
