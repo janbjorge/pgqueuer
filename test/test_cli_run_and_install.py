@@ -71,12 +71,10 @@ def test_cli_run_handles_sigint_gracefully(dsn: str) -> None:
         # Provide rich debugging info on failure
         if exit_code not in (0, 130):
             pytest.fail(
-                (
-                    "Unexpected exit code "
-                    f"{exit_code} (expected 0 or 130).\n"
-                    f"STDOUT:\n{stdout}\n"
-                    f"STDERR:\n{stderr}"
-                )
+                "Unexpected exit code "
+                f"{exit_code} (expected 0 or 130).\n"
+                f"STDOUT:\n{stdout}\n"
+                f"STDERR:\n{stderr}"
             )
     finally:
         # Double safeguard in case of early exceptions

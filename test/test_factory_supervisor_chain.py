@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import functools
+from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
-from typing import Any, AsyncGenerator, Generator
+from typing import Any
 
 import pytest
 

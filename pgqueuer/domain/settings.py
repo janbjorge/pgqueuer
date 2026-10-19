@@ -6,8 +6,9 @@ import dataclasses
 import functools
 import os
 import warnings
+from collections.abc import Callable
 from enum import Enum
-from typing import Annotated, Callable, Literal, TypeAlias
+from typing import Annotated, Literal, TypeAlias
 
 from pydantic import AliasChoices, Field, StringConstraints, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict

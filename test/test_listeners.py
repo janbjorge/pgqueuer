@@ -1,7 +1,7 @@
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import MutableMapping
+from collections.abc import MutableMapping
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from anyio import CancelScope
@@ -34,7 +34,7 @@ async def test_handle_table_changed_event() -> None:
     event = AnyEvent(
         root=TableChangedEvent(
             channel=Channel("channel_1"),
-            sent_at=datetime.now(tz=timezone.utc),
+            sent_at=datetime.now(tz=UTC),
             type="table_changed_event",
             operation="insert",
             table="jobs_table",
@@ -64,7 +64,7 @@ async def test_handle_cancellation_event() -> None:
     event = AnyEvent(
         root=CancellationEvent(
             channel=Channel("channel_1"),
-            sent_at=datetime.now(tz=timezone.utc),
+            sent_at=datetime.now(tz=UTC),
             type="cancellation_event",
             ids=[job_id],
         )
@@ -87,7 +87,7 @@ async def test_handle_health_check_event_event() -> None:
     event = AnyEvent(
         root=HealthCheckEvent(
             channel=Channel("channel_1"),
-            sent_at=datetime.now(timezone.utc),
+            sent_at=datetime.now(UTC),
             type="health_check_event",
             id=HealthCheckId(uuid.uuid4()),
         )
@@ -227,7 +227,7 @@ def _table_changed_event() -> AnyEvent:
     return AnyEvent(
         root=TableChangedEvent(
             channel=Channel("chan"),
-            sent_at=datetime.now(tz=timezone.utc),
+            sent_at=datetime.now(tz=UTC),
             type="table_changed_event",
             operation="insert",
             table="jobs_table",
@@ -255,7 +255,7 @@ def test_event_router_dispatches_each_type_once() -> None:
         on_cancellation=lambda evt: hits.append(evt.type),
         on_health_check=lambda evt: hits.append(evt.type),
     )
-    sent_at = datetime.now(tz=timezone.utc)
+    sent_at = datetime.now(tz=UTC)
 
     router(_table_changed_event())
     router(

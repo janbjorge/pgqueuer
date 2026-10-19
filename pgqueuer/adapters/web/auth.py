@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from typing import Callable
+from collections.abc import Callable
 
 try:
     from fastapi import Depends, HTTPException

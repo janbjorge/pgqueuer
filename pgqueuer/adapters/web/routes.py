@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta, timezone
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Sequence
 
 try:
     from fastapi import APIRouter, Depends, HTTPException, Request, Response, params
@@ -77,7 +77,7 @@ def fmt_duration(seconds: float | None) -> str:
 def fmt_dt(dt: datetime | None) -> str:
     if dt is None:
         return "–"
-    return dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return dt.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def fmt_rate(rate: float | None) -> str:
@@ -293,7 +293,7 @@ def create_web_router(  # noqa: C901
         slots = chart_slots(
             await insights.throughput_timeseries(window),
             window,
-            end=datetime.now(timezone.utc),
+            end=datetime.now(UTC),
         )
         return {
             "snapshot": await insights.overview(),
@@ -502,7 +502,7 @@ def create_web_router(  # noqa: C901
         return render(
             request,
             "schedules.html",
-            {"schedules": await insights.schedules(), "now": datetime.now(timezone.utc)},
+            {"schedules": await insights.schedules(), "now": datetime.now(UTC)},
         )
 
     @router.get("/system", name="system", response_class=HTMLResponse)

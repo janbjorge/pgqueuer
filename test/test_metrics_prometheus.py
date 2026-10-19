@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from fastapi import FastAPI
@@ -62,7 +62,7 @@ def test_custom_metric_names_are_used() -> None:
             status="successful",
             count=5,
             priority=0,
-            created=datetime.now(tz=timezone.utc),
+            created=datetime.now(tz=UTC),
         )
     ]
 
@@ -97,7 +97,7 @@ async def test_collect_metrics_with_statistics() -> None:
             status="successful",
             count=25,
             priority=0,
-            created=datetime.now(tz=timezone.utc),
+            created=datetime.now(tz=UTC),
         ),
     ]
 

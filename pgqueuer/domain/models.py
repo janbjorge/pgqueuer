@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import traceback
 from collections.abc import MutableMapping
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple
 
 import anyio
@@ -28,7 +28,7 @@ from pgqueuer.domain.types import (
 
 def utc_now() -> datetime:
     """Return the current time in UTC."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Event(BaseModel):
@@ -40,7 +40,7 @@ class Event(BaseModel):
     received_at: AwareDatetime = Field(
         init=False,
         default_factory=lambda: datetime.now(
-            tz=timezone.utc,
+            tz=UTC,
         ),
     )
 

@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import psycopg
@@ -513,7 +513,7 @@ async def test_queue_log_fetches_inserted_rows(apgdriver: db.Driver) -> None:
     q = queries.Queries(apgdriver)
     await q.clear_queue_log()
 
-    created = datetime.now(timezone.utc)
+    created = datetime.now(UTC)
     entries = [
         {
             "created": created,

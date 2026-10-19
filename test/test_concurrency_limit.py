@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Any, AsyncGenerator, Awaitable, Callable
+from typing import Any
 
 import asyncpg
 import pytest

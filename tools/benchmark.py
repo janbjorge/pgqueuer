@@ -7,7 +7,7 @@ import signal
 import sys
 from contextlib import suppress
 from dataclasses import dataclass, field as dataclass_field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from itertools import count
 from pathlib import Path
@@ -351,7 +351,7 @@ class ThroughputStrategy:
             await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
         ).queue_size()
         return BenchmarkResult(
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             driver=self.settings.driver,
             strategy=StrategyEnum.throughput,
             elapsed=timedelta(seconds=float(self.tqdm_format_dict.get("elapsed", 0))),
@@ -402,7 +402,7 @@ class DrainStrategy:
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver, queries=q))
 
-        start = datetime.now(timezone.utc)
+        start = datetime.now(UTC)
         with job_progress_bar(total=self.settings.jobs) as bar:
             tasks = [
                 Consumer(
@@ -415,9 +415,9 @@ class DrainStrategy:
             ]
             await asyncio.gather(*tasks)
             self.tqdm_format_dict.update(bar.format_dict)
-        elapsed = datetime.now(timezone.utc) - start
+        elapsed = datetime.now(UTC) - start
         return BenchmarkResult(
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             driver=self.settings.driver,
             strategy=StrategyEnum.drain,
             elapsed=elapsed,

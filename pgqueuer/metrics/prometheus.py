@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import timedelta
 from itertools import groupby
-from typing import Generator
 
 from pgqueuer.models import LogStatistics, QueueStatistics
 from pgqueuer.ports.repository import QueueRepositoryPort

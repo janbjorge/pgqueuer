@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import signal
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import partial
-from typing import AsyncIterator
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest

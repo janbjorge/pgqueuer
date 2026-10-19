@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pgqueuer.models import JobId, TracebackRecord
@@ -31,7 +31,7 @@ def test_timestamp() -> None:
         raise RuntimeError("Another test error")
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id)
-    now: datetime = datetime.now(timezone.utc)
+    now: datetime = datetime.now(UTC)
 
     assert record.timestamp <= now
     diff: float = (now - record.timestamp).total_seconds()

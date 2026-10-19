@@ -6,10 +6,11 @@ import functools
 import json
 import os
 import sys
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Coroutine, TypeVar, assert_never
+from typing import TYPE_CHECKING, TypeVar, assert_never
 
 import typer
 from pydantic_core import to_json

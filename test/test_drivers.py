@@ -1,8 +1,8 @@
 import asyncio
 import inspect
-from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timezone
-from typing import AsyncContextManager, AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Callable, Iterable
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
+from datetime import UTC, datetime
 
 import asyncpg
 import psycopg
@@ -77,7 +77,7 @@ async def psydriver(dsn: str) -> AsyncGenerator[PsycopgDriver, None]:
         yield x
 
 
-def drivers() -> tuple[Callable[..., AsyncContextManager[Driver]], ...]:
+def drivers() -> tuple[Callable[..., AbstractAsyncContextManager[Driver]], ...]:
     return (
         apgdriver,
         psydriver,
@@ -88,7 +88,7 @@ def drivers() -> tuple[Callable[..., AsyncContextManager[Driver]], ...]:
 @pytest.mark.parametrize("driver", drivers())
 async def test_fetch(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     async with driver(dsn) as d:
         assert list(await d.fetch("SELECT 1 as one, 2 as two")) == [{"one": 1, "two": 2}]
@@ -97,7 +97,7 @@ async def test_fetch(
 @pytest.mark.parametrize("driver", drivers())
 async def test_execute(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     async with driver(dsn) as d:
         assert isinstance(await d.execute("SELECT 1 as one, 2 as two;"), str)
@@ -106,7 +106,7 @@ async def test_execute(
 @pytest.mark.parametrize("driver", drivers())
 async def test_notify(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     event = asyncio.Future[str | bytearray | bytes]()
 
@@ -128,7 +128,7 @@ async def test_notify(
 @pytest.mark.parametrize("channel", ["MyChan", "my-app.events", "'; DROP TABLE x --"])
 async def test_notify_channel_needs_quoting(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
     channel: str,
 ) -> None:
     """LISTEN must quote the channel so it matches pg_notify's string literal (#947).
@@ -167,7 +167,7 @@ async def test_valid_query_syntax(
     dsn: str,
     query: Callable[..., str | Iterable[str]],
     name: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     if name == "build_install_query":
         pytest.skip()
@@ -198,7 +198,7 @@ async def test_valid_query_syntax(
 @pytest.mark.parametrize("driver", drivers())
 async def test_event_listener(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     async with driver(dsn) as d:
         name = d.__class__.__name__.lower()
@@ -206,7 +206,7 @@ async def test_event_listener(
         payload = TableChangedEvent(
             channel=channel,
             operation="update",
-            sent_at=datetime.now(timezone.utc),
+            sent_at=datetime.now(UTC),
             table="foo",
             type="table_changed_event",
         )
@@ -232,7 +232,7 @@ async def test_event_listener(
 @pytest.mark.parametrize("driver", drivers())
 async def test_recovery_after_failed_sql(
     dsn: str,
-    driver: Callable[..., AsyncContextManager[Driver]],
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     async with driver(dsn) as d:
         with pytest.raises(Exception):

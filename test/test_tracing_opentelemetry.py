@@ -13,7 +13,7 @@ collector is needed.  The tests verify that:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -39,7 +39,7 @@ def _make_job(headers: dict[str, Any] | None = None, entrypoint: str = "say_hell
     bytes/str, so we serialise the dict before passing it in — matching
     what ``InMemoryQueries.enqueue`` does via ``pydantic_core.to_json``.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Job(
         id=JobId(1),
         priority=0,

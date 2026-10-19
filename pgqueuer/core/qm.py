@@ -6,10 +6,10 @@ import dataclasses
 import functools
 import random
 import uuid
-from collections.abc import MutableMapping
+from collections.abc import AsyncGenerator, Callable, MutableMapping
 from contextlib import nullcontext, suppress
 from datetime import timedelta
-from typing import AsyncGenerator, Callable, get_args
+from typing import get_args
 
 import anyio
 

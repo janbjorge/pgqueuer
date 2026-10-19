@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Generator, Sequence, TypeVar
+from typing import TypeVar
 
 from pgqueuer.domain.types import JobId
 

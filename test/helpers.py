@@ -4,7 +4,7 @@ import asyncio
 import dataclasses
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from itertools import count
 from pathlib import Path
 from typing import Protocol
@@ -96,7 +96,7 @@ def mocked_job(
     queue_manager_id: None | uuid.UUID = None,
     headers: dict[str, object] | None = None,
 ) -> Job:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Job(
         id=JobId(id if isinstance(id, int) else next(id)),
         priority=priority,

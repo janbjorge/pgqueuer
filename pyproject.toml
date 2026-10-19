@@ -133,6 +133,7 @@ select = [
     "RET",
     "RSE",
     "SIM",
+    "UP",
     "W",
     "C90"
 ]

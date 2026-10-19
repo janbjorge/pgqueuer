@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -18,7 +18,7 @@ from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
 def _make_job(headers: dict[str, Any]) -> Job:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return Job(
         id=JobId(1),
         priority=0,

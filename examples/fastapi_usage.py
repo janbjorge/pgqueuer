@@ -1,6 +1,6 @@
 import json
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 import asyncpg
 from fastapi import Depends, FastAPI, Request, Response

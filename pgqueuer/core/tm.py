@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
-from typing import AsyncGenerator, TypeVar
+from collections.abc import AsyncGenerator
+from typing import TypeVar
 
 from pgqueuer.core import logconfig
 

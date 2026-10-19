@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import timedelta
-from typing import Callable, TypeAlias
+from typing import TypeAlias
 
 from pgqueuer.adapters.cli import factories
 from pgqueuer.core import applications, logconfig, qm, sm, tm
