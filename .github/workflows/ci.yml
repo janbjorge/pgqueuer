@@ -183,10 +183,12 @@ jobs:
         uses: astral-sh/setup-uv@v10.3.0
         with:
           version: ${{ env.UV_VERSION }}
-      - name: Prefetch docker images
-        run: docker pull postgres:${{ matrix.postgres-version }}
-      - name: Set up Python
-        run: uv sync --python ${{ matrix.python-version }} --no-default-groups --group test --frozen
+      - name: Prefetch docker image and set up Python
+        run: |
+          docker pull --quiet postgres:${{ matrix.postgres-version }} &
+          pull=$!
+          uv sync --python ${{ matrix.python-version }} --no-default-groups --group test --frozen
+          wait $pull
       - name: Run Full Test Suite
         run: uv run --no-sync pytest --cov=pgqueuer --cov-report=xml --cov-report=term-missing --durations=15
   run-windows-tests:
