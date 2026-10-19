@@ -193,6 +193,14 @@ PGQUEUER_PREFIX=billing pgq run billing_app:main
 ```
 
 This prefixes all table names, the enum type, the trigger, and the NOTIFY channel.
+To choose the prefix in code instead, pass settings to `PgQueuer`:
+
+```python
+from pgqueuer import DBSettings, PgQueuer
+
+pgq = PgQueuer(AsyncpgDriver(connection), settings=DBSettings(prefix="billing"))
+```
+
 The two settings are independent: a prefix separates instances that share a
 schema, and `PGQUEUER_SCHEMA` moves the whole installation into another schema.
 

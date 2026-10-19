@@ -176,7 +176,8 @@ All classmethods accept:
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `connection` / `pool` | Yes | The database connection or pool |
-| `channel` | No | Custom `Channel` configuration. Defaults to `ch_pgqueuer` with `PGQUEUER_PREFIX` prepended |
+| `channel` | No | Custom `Channel` configuration. Defaults to the channel in `settings` |
+| `settings` | No | `DBSettings` with table, channel and schema names. Defaults to the `PGQUEUER_*` environment variables |
 | `resources` | No | Mutable mapping for shared resources. Defaults to `{}` |
 
 ## Recommendations

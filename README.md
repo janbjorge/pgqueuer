@@ -51,7 +51,7 @@ pip install pgqueuer
 pgq install        # create tables and functions in your database
 ```
 
-The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and related environment variables. Use `pgq sql install` to preview the SQL (or pipe it to another client: `pgq sql install | psql`), `--prefix myapp_` to namespace tables, or `pgq uninstall` to remove the schema.
+The CLI reads `PGHOST`, `PGUSER`, `PGDATABASE` and related environment variables. Use `pgq sql install` to preview the SQL (or pipe it to another client: `pgq sql install | psql`), `--prefix myapp_` to namespace tables, or `pgq uninstall` to remove the schema. Code reads the same names from `PGQUEUER_PREFIX` and related environment variables, or from `settings=DBSettings(prefix="myapp_")` passed to `PgQueuer` and `Queries`.
 
 ## Quick Start
 
