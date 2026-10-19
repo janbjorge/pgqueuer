@@ -11,8 +11,9 @@ if TYPE_CHECKING:
     import asyncpg
     import psycopg
 
+from typing import assert_never
+
 from pydantic_core import to_json
-from typing_extensions import assert_never
 
 from pgqueuer.adapters.persistence import (
     qb,

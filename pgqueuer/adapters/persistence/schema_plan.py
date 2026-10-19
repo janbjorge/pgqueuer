@@ -5,8 +5,7 @@ from __future__ import annotations
 import dataclasses
 import zlib
 from enum import Enum
-
-from typing_extensions import assert_never
+from typing import assert_never
 
 from pgqueuer.adapters.persistence.schema_ddl import (
     collapse_statistics,

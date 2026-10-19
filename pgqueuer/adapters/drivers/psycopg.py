@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING
-
-from typing_extensions import Self
+from typing import TYPE_CHECKING, Self
 
 from pgqueuer.core import logconfig
 from pgqueuer.core.tm import cancel_and_wait
