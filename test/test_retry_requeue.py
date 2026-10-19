@@ -8,7 +8,6 @@ from datetime import timedelta
 from typing import Any
 
 import anyio
-import async_timeout
 import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
@@ -149,7 +148,7 @@ async def test_retry_requested_requeues_and_succeeds(n_jobs: int, batch_size: in
 
     await pq.qm.queries.enqueue(["retry_ep"] * n_jobs, [b"data"] * n_jobs, [0] * n_jobs)
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await pq.qm.run(
             batch_size=batch_size,
             mode=QueueExecutionMode.drain,
@@ -232,7 +231,7 @@ async def test_failing_retry_job_records_the_job_as_failed(
     monkeypatch.setattr(pq.qm.queries, "retry_job", failing_retry_job)
     await pq.qm.queries.enqueue("retry_ep", b"data", priority=0)
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await pq.qm.run(
             batch_size=10,
             mode=QueueExecutionMode.drain,
@@ -275,7 +274,7 @@ async def test_retry_requested_from_task_group(with_other_error: bool, status: s
 
     await pq.qm.queries.enqueue("group_ep", b"data", priority=0)
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await pq.qm.run(
             batch_size=10,
             mode=QueueExecutionMode.drain,
@@ -305,7 +304,7 @@ async def test_database_retry_executor_honours_retry_from_task_group() -> None:
 
     await pq.qm.queries.enqueue("group_retry_ep", b"data", priority=0)
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await pq.qm.run(
             batch_size=10,
             mode=QueueExecutionMode.drain,
@@ -569,7 +568,7 @@ async def test_retry_requested_postgres(apgdriver: AsyncpgDriver) -> None:
 
     ids = await q.enqueue("pg_retry_ep", b"test-payload", priority=0)
 
-    async with async_timeout.timeout(10):
+    async with asyncio.timeout(10):
         await qm.run(
             mode=QueueExecutionMode.drain,
             dequeue_timeout=timedelta(seconds=1),
@@ -613,7 +612,7 @@ async def test_retry_preserves_payload_postgres(apgdriver: AsyncpgDriver) -> Non
 
     await q.enqueue("pg_payload_ep", b"critical-data", priority=0)
 
-    async with async_timeout.timeout(10):
+    async with asyncio.timeout(10):
         await qm.run(
             mode=QueueExecutionMode.drain,
             dequeue_timeout=timedelta(seconds=1),

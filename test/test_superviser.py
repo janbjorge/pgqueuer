@@ -9,7 +9,6 @@ from functools import partial
 from typing import AsyncIterator
 from unittest.mock import ANY, MagicMock, patch
 
-import async_timeout
 import pytest
 
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
@@ -126,7 +125,7 @@ async def test_runit_normal_operation(
     await asyncio.sleep(0.2)
 
     # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
+    async with asyncio.timeout(1):
         await runit_task
     assert runit_task.done()
 
@@ -164,7 +163,7 @@ async def test_runit_with_partial_function(
     await asyncio.sleep(0.2)
 
     # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
+    async with asyncio.timeout(1):
         await runit_task
     assert runit_task.done()
 
@@ -208,7 +207,7 @@ async def test_runit_restart_on_failure(
     shutdown_event.set()
 
     # Ensure runit_task is completed
-    async with async_timeout.timeout(1):
+    async with asyncio.timeout(1):
         await runit_task
     assert runit_task.done()
     assert calls > 1
@@ -255,7 +254,7 @@ async def test_runit_restarts_when_pgqueuer_inner_run_fails() -> None:
     assert calls > 1, f"expected multiple restart attempts, got {calls}"
 
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await runit_task
 
 

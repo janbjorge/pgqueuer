@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
 
-import async_timeout
-
 from pgqueuer import db
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.queries import Queries
@@ -124,7 +122,7 @@ async def wait_until_empty_queue(
     """
     Block until the queue is empty or the timeout elapses, then signal shutdown.
     """
-    async with async_timeout.timeout(timeout_seconds):
+    async with asyncio.timeout(timeout_seconds):
         while sum(result.count for result in await queries.queue_size()) > 0:
             await asyncio.sleep(poll_interval)
 
