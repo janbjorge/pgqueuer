@@ -6,6 +6,12 @@ on:
     branches: [main]
   schedule:
     - cron: "0 */6 * * *"
+# A new push to a PR cancels that PR's in-flight run. Pushes to main and
+# scheduled runs fall back to the unique run_id, so they are never cancelled
+# (they publish benchmark results).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
 env:
   UV_VERSION: "0.13.1"
 jobs:
