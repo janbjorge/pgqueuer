@@ -46,6 +46,7 @@ fail, the job is held instead of lost:
 ```python
 from datetime import timedelta
 from pgqueuer.executors import DatabaseRetryEntrypointExecutor
+from pgqueuer.models import Job
 
 @pgq.entrypoint(
     "sync_inventory",

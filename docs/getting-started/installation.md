@@ -196,8 +196,10 @@ This prefixes all table names, the enum type, the trigger, and the NOTIFY channe
 To choose the prefix in code instead, pass settings to `PgQueuer`:
 
 ```python
-from pgqueuer import DBSettings, PgQueuer
+import asyncpg
+from pgqueuer import AsyncpgDriver, DBSettings, PgQueuer
 
+connection = await asyncpg.connect()
 pgq = PgQueuer(AsyncpgDriver(connection), settings=DBSettings(prefix="billing"))
 ```
 
