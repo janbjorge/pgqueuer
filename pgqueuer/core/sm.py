@@ -140,11 +140,9 @@ class SchedulerManager:
                     else timedelta(seconds=0)
                 )
 
-                with suppress(TimeoutError, asyncio.TimeoutError):
-                    await asyncio.wait_for(
-                        self.shutdown.wait(),
-                        timeout=(wait + leeway).total_seconds(),
-                    )
+                with suppress(TimeoutError):
+                    async with asyncio.timeout((wait + leeway).total_seconds()):
+                        await self.shutdown.wait()
 
     async def dispatch(
         self,
@@ -197,8 +195,6 @@ class SchedulerManager:
             if self.shutdown.is_set():
                 await asyncio.sleep(1.0)
                 continue
-            with suppress(TimeoutError, asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=1.0,
-                )
+            with suppress(TimeoutError):
+                async with asyncio.timeout(1.0):
+                    await self.shutdown.wait()

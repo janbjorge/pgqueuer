@@ -199,8 +199,9 @@ async def await_shutdown_or_timeout(
     """Wait for *shutdown* or up to *restart_delay*, whichever comes first."""
     logconfig.logger.info("Waiting %r before restarting.", restart_delay)
 
-    with suppress(TimeoutError, asyncio.TimeoutError):
-        await asyncio.wait_for(shutdown.wait(), timeout=restart_delay.total_seconds())
+    with suppress(TimeoutError):
+        async with asyncio.timeout(restart_delay.total_seconds()):
+            await shutdown.wait()
 
     if not shutdown.is_set():
         logconfig.logger.info("Attempting to restart...")

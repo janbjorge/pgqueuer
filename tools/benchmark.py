@@ -306,11 +306,9 @@ class ThroughputStrategy:
             self.tqdm_format_dict.update(bar.format_dict)
 
     async def shutdown_timer(self) -> None:
-        with suppress(TimeoutError, asyncio.TimeoutError):
-            await asyncio.wait_for(
-                self.shutdown.wait(),
-                self.settings.timer.total_seconds(),
-            )
+        with suppress(TimeoutError):
+            async with asyncio.timeout(self.settings.timer.total_seconds()):
+                await self.shutdown.wait()
 
         self.graceful_shutdown()
 
