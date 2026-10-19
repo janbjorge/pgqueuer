@@ -44,8 +44,6 @@ def asyncio_run(coro: Coroutine[object, object, T]) -> T:
     if sys.platform == "win32":
         # psycopg async rejects ProactorEventLoop (Windows default); force the
         # selector loop on every supported Windows + Python combination.
-        if sys.version_info >= (3, 12):
-            return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
         with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
             return runner.run(coro)
     if HAS_UVLOOP:
