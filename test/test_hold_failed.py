@@ -131,16 +131,16 @@ async def test_inmemory_requeue_resets_attempts(queries: InMemoryQueries) -> Non
     )
     job = jobs[0]
 
-    # Simulate a few retries then hold
-    await queries.retry_job(job, timedelta(0), None)
-    await queries.retry_job(job, timedelta(0), None)
-    jobs2 = await queries.dequeue(
-        10, {QueueEntrypoint("ep"): EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
-    )
-    assert jobs2[0].attempts == 2
+    # Simulate a few retries then hold; only the worker holding the job can retry it.
+    for _ in range(2):
+        await queries.retry_job(job, timedelta(0), None)
+        (job,) = await queries.dequeue(
+            10, {QueueEntrypoint("ep"): EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
+        )
+    assert job.attempts == 2
 
-    await queries.log_jobs([(jobs2[0], "failed", None)])
-    await queries.requeue_jobs([jobs2[0].id])
+    await queries.log_jobs([(job, "failed", None)])
+    await queries.requeue_jobs([job.id])
 
     jobs3 = await queries.dequeue(
         10, {QueueEntrypoint("ep"): EP}, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
