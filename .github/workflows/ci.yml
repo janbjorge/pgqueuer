@@ -152,6 +152,7 @@ jobs:
             postgres-version: "16"
           - python-version: "3.12"
             postgres-version: "16"
+            asyncio-debug: true
           - python-version: "3.13"
             postgres-version: "16"
           - python-version: "3.14"
@@ -169,7 +170,9 @@ jobs:
             postgres-version: "18"
     env:
       CI: 1
-      PYTHONASYNCIODEBUG: 1
+      # asyncio debug mode adds runtime checks to every callback; run it on
+      # the anchor job only. An empty value leaves it off.
+      PYTHONASYNCIODEBUG: ${{ matrix.asyncio-debug && '1' || '' }}
       PYTHONFAULTHANDLER: 1
       POSTGRES_VERSION: ${{ matrix.postgres-version }}
       TESTCONTAINERS_RYUK_DISABLED: "true"
