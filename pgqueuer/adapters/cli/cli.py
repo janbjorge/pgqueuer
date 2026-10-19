@@ -47,12 +47,8 @@ def asyncio_run(coro: Coroutine[object, object, T]) -> T:
         # selector loop on every supported Windows + Python combination.
         if sys.version_info >= (3, 12):
             return asyncio.run(coro, loop_factory=asyncio.SelectorEventLoop)
-        if sys.version_info >= (3, 11):
-            with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
-                return runner.run(coro)
-        # Python 3.10: no Runner, no loop_factory; mutate policy.
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-        return asyncio.run(coro)
+        with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
+            return runner.run(coro)
     if HAS_UVLOOP:
         return uvloop.run(coro)
     return asyncio.run(coro)

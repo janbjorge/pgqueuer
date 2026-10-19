@@ -20,7 +20,7 @@ description = "PostgreSQL-backed background job and task queue for Python."
 authors = [{name = "JeyBee"}]
 license = {text = "MIT License"}
 dynamic = ["version"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
 keywords = ["postgresql", "task-queue", "job-queue", "background-jobs", "asyncio"]
 
@@ -32,7 +32,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Natural Language :: English",
     "Operating System :: OS Independent",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -150,7 +149,7 @@ force-single-line = false
 [tool.mypy]
 strict = true
 plugins = ["pydantic.mypy"]
-python_version = "3.10"
+python_version = "3.11"
 exclude = "^(build)"
 ignore_missing_imports = true
 explicit_package_bases = true

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PgQueuer is a Python library that turns PostgreSQL into a job queue using `LISTEN/NOTIFY` for instant notifications and `FOR UPDATE SKIP LOCKED` for worker coordination. Supports async (asyncpg, psycopg) and sync (psycopg) drivers, with an in-memory adapter for testing. Python >=3.10, async-first, MIT-licensed.
+PgQueuer is a Python library that turns PostgreSQL into a job queue using `LISTEN/NOTIFY` for instant notifications and `FOR UPDATE SKIP LOCKED` for worker coordination. Supports async (asyncpg, psycopg) and sync (psycopg) drivers, with an in-memory adapter for testing. Python >=3.11, async-first, MIT-licensed.
 
 ## Project Structure
 
@@ -38,7 +38,7 @@ uv sync --frozen && uv run ruff check . && uv run ruff format . --check && uv ru
 uv run ruff check .         # Lint (ruff)
 uv run ruff format . --check  # Format check
 uv run lint-imports         # Hexagonal architecture boundary validation
-uv run mypy .               # Type checking (strict, targets Python 3.10)
+uv run mypy .               # Type checking (strict, targets Python 3.11)
 
 # Run all tests (parallel by default: 2 xdist workers, one Postgres container each)
 uv run pytest
@@ -161,7 +161,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 - **Formatter/linter**: ruff (line-length=100)
 - **Lint rules**: C, E, F, I, PIE, Q, RET, RSE, SIM, W, C90 (max-complexity=15)
 - **isort**: combined-as-imports, furthest-to-closest relative imports
-- **Mypy** `strict = true` plus `warn_unreachable` and the error codes `truthy-bool`, `truthy-iterable`, `redundant-expr`, `unused-awaitable`, `possibly-undefined`, `ignore-without-code`; Pydantic plugin with `init_typed`; targets Python 3.10. Inside `pgqueuer/`, `tools/` and `examples/` the overrides add `disallow_any_explicit` and `disallow_any_unimported`. Run it as `uv run mypy . --no-incremental`; the incremental cache has reported green on stale signatures.
+- **Mypy** `strict = true` plus `warn_unreachable` and the error codes `truthy-bool`, `truthy-iterable`, `redundant-expr`, `unused-awaitable`, `possibly-undefined`, `ignore-without-code`; Pydantic plugin with `init_typed`; targets Python 3.11. Inside `pgqueuer/`, `tools/` and `examples/` the overrides add `disallow_any_explicit` and `disallow_any_unimported`. Run it as `uv run mypy . --no-incremental`; the incremental cache has reported green on stale signatures.
 
 ### Import Rules
 
@@ -416,4 +416,4 @@ chore: bump ruff to 0.8 (#101)
 
 ## CI Matrix
 
-Python 3.10--3.14 x Postgres 14--18 on Ubuntu. Windows tests run only `test/windows/test_shutdown.py`.
+Python 3.11--3.15 x Postgres 14--18 on Ubuntu. Windows tests run only `test/windows/test_shutdown.py`.

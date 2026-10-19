@@ -7,7 +7,7 @@ Rancher Desktop, etc.).
 
 ## Prerequisites
 
-- Python 3.10+ (managed via `uv` recommended)
+- Python 3.11+ (managed via `uv` recommended)
 - A working Docker (or compatible) daemon on your system path
 - Internet access the first time tests pull the PostgreSQL image
 
