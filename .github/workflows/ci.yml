@@ -6,6 +6,8 @@ on:
     branches: [main]
   schedule:
     - cron: "0 */6 * * *"
+env:
+  UV_VERSION: "0.13.1"
 jobs:
   run-benchmark:
     strategy:
@@ -41,7 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
       - name: Check that JIT is off
@@ -111,7 +115,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Set Branch or Tag Name
         id: get_ref
         run: |
@@ -168,7 +174,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Prefetch docker images
         run: docker pull postgres:${{ matrix.postgres-version }}
       - name: Set up Python
@@ -194,7 +202,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Set up Python
         run: uv python install ${{ matrix.python-version }}
       - name: Install PGQueuer
@@ -228,7 +238,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: ${{ env.UV_VERSION }}
       - name: Set up Python
         run: uv python install 3.12
       - name: Install Dev Environment
