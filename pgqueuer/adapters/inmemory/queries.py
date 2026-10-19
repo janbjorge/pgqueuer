@@ -18,6 +18,7 @@ from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.models import utc_now
+from pgqueuer.domain.settings import DBSettings, db_settings
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
@@ -108,15 +109,13 @@ class InMemoryQueries:
 
     driver: InMemoryDriver
 
-    qbe: qb.QueryBuilderEnvironment = dataclasses.field(
-        default_factory=qb.QueryBuilderEnvironment,
-    )
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-    qbs: qb.QuerySchedulerBuilder = dataclasses.field(
-        default_factory=qb.QuerySchedulerBuilder,
-    )
+    # Table, channel and schema names. The builders, and every caller holding
+    # these queries, read this one object; defaults to the PGQUEUER_* env vars.
+    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+
+    qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+    qbs: qb.QuerySchedulerBuilder = dataclasses.field(init=False)
 
     tracer: TracingProtocol | None = None
 
@@ -142,6 +141,11 @@ class InMemoryQueries:
     _next_log_id: int = dataclasses.field(default=1, init=False)
     _next_schedule_id: int = dataclasses.field(default=1, init=False)
     _next_stats_id: int = dataclasses.field(default=1, init=False)
+
+    def __post_init__(self) -> None:
+        self.qbe = qb.QueryBuilderEnvironment(self.settings)
+        self.qbq = qb.QueryQueueBuilder(self.settings)
+        self.qbs = qb.QuerySchedulerBuilder(self.settings)
 
     async def install(self) -> None:
         pass

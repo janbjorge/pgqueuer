@@ -13,15 +13,9 @@ from mcp.server.session import ServerSession
 
 from pgqueuer.adapters.connections import create_asyncpg_pool
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
-from pgqueuer.adapters.persistence.qb import (
-    DBSettings,
-    QueryBuilderEnvironment,
-    QueryQueueBuilder,
-    QuerySchedulerBuilder,
-)
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.insights import InsightsService
-from pgqueuer.domain.settings import ConnectionSettings, db_settings
+from pgqueuer.domain.settings import ConnectionSettings, DBSettings, db_settings
 
 
 class PgQueuerDatabase:
@@ -29,15 +23,9 @@ class PgQueuerDatabase:
 
     def __init__(self, pool: asyncpg.Pool, settings: DBSettings) -> None:
         self.pool = pool
-        self.qbq = QueryQueueBuilder(settings)
-        self.insights = InsightsService(
-            Queries(
-                AsyncpgPoolDriver(pool),
-                qbe=QueryBuilderEnvironment(settings),
-                qbq=self.qbq,
-                qbs=QuerySchedulerBuilder(settings),
-            )
-        )
+        queries = Queries(AsyncpgPoolDriver(pool), settings)
+        self.qbq = queries.qbq
+        self.insights = InsightsService(queries)
 
     async def fetch(self, sql: str, *args: object) -> list[dict[str, object]]:
         async with self.pool.acquire() as conn:
