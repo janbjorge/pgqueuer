@@ -26,15 +26,6 @@ wheels = [
 ]
 
 [[package]]
-name = "async-timeout"
-version = "5.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a5/ae/136395dfbfe00dfc94da3f3e136d0b13f394cba8f4841120e34226265780/async_timeout-5.0.1.tar.gz", hash = "sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3", size = 9274, upload-time = "2024-11-06T16:41:39.6Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl", hash = "sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c", size = 6233, upload-time = "2024-11-06T16:41:37.9Z" },
-]
-
-[[package]]
 name = "asyncpg"
 version = "0.32.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1383,7 +1374,6 @@ bench = [
     { name = "tqdm" },
 ]
 dev = [
-    { name = "async-timeout" },
     { name = "asyncpg-stubs" },
     { name = "flask" },
     { name = "httpx" },
@@ -1425,7 +1415,6 @@ lint = [
     { name = "types-tqdm" },
 ]
 test = [
-    { name = "async-timeout" },
     { name = "flask" },
     { name = "httpx" },
     { name = "pgqueuer", extra = ["asyncpg", "fastapi", "logfire", "mcp", "opentelemetry", "psycopg", "sentry", "web"] },
@@ -1472,7 +1461,6 @@ bench = [
     { name = "tqdm" },
 ]
 dev = [
-    { name = "async-timeout", specifier = ">=5.0.1" },
     { name = "asyncpg-stubs" },
     { name = "flask" },
     { name = "httpx" },
@@ -1515,7 +1503,6 @@ lint = [
     { name = "types-tqdm" },
 ]
 test = [
-    { name = "async-timeout", specifier = ">=5.0.1" },
     { name = "flask" },
     { name = "httpx" },
     { name = "pgqueuer", extras = ["asyncpg", "psycopg", "logfire", "sentry", "opentelemetry", "fastapi", "mcp", "web"] },

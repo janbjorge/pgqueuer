@@ -13,7 +13,6 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
 from typing import Any, AsyncGenerator, Generator
 
-import async_timeout
 import pytest
 
 from pgqueuer.adapters.cli import supervisor
@@ -76,7 +75,7 @@ async def test_asynccm_factory_pgqueuer() -> None:
     )
     await asyncio.sleep(0.1)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
     assert teardown_called, "Async CM teardown must execute on shutdown"
 
@@ -107,7 +106,7 @@ async def test_asynccm_factory_queue_manager() -> None:
     )
     await asyncio.sleep(0.1)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
     assert teardown_called
 
@@ -138,7 +137,7 @@ async def test_asynccm_factory_scheduler_manager() -> None:
     )
     await asyncio.sleep(0.1)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
     assert teardown_called
 
@@ -241,7 +240,7 @@ async def test_shutdown_injected_into_pgqueuer() -> None:
     # so PgQueuer.run's finally cannot latch the supervisor loop.
     assert not pgq.shutdown.is_set()
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await pgq.shutdown.wait()
         await task
     assert pgq.qm.shutdown.is_set()
@@ -272,7 +271,7 @@ async def test_shutdown_injected_into_queue_manager() -> None:
     await asyncio.sleep(0.1)
     assert not qm.shutdown.is_set()
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await qm.shutdown.wait()
         await task
 
@@ -301,7 +300,7 @@ async def test_shutdown_injected_into_scheduler_manager() -> None:
     await asyncio.sleep(0.1)
     assert not sm.shutdown.is_set()
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await sm.shutdown.wait()
         await task
 
@@ -379,7 +378,7 @@ async def test_factory_raises_restart_on_failure_retries() -> None:
     )
     await asyncio.sleep(0.3)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
     assert call_count >= 2, f"Expected >=2 factory calls, got {call_count}"
 
@@ -503,7 +502,7 @@ async def test_pgqueuer_processes_job_via_supervisor() -> None:
         )
     )
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await task
 
     assert len(processed_jobs) == 1
@@ -537,7 +536,7 @@ async def test_queue_manager_processes_job_via_supervisor() -> None:
         )
     )
 
-    async with async_timeout.timeout(5):
+    async with asyncio.timeout(5):
         await task
 
     assert len(processed_jobs) == 1
@@ -578,7 +577,7 @@ async def test_factory_called_each_restart_cycle() -> None:
     )
     await asyncio.sleep(0.5)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
 
     assert call_count >= 3, f"Expected >=3 cycles, got {call_count}"
@@ -616,7 +615,7 @@ async def test_extra_args_forwarded_to_factory() -> None:
     )
     await asyncio.sleep(0.1)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
 
     assert len(received_args) == 1
@@ -648,7 +647,7 @@ async def test_no_extra_args_factory_stays_zero_arg() -> None:
     )
     await asyncio.sleep(0.1)
     shutdown.set()
-    async with async_timeout.timeout(2):
+    async with asyncio.timeout(2):
         await task
 
     assert called

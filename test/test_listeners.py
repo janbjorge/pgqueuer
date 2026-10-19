@@ -5,7 +5,6 @@ from typing import MutableMapping
 
 import pytest
 from anyio import CancelScope
-from async_timeout import timeout
 
 from pgqueuer import db
 from pgqueuer.core.listeners import (
@@ -118,7 +117,7 @@ async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
         None,
     )
 
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
 
@@ -142,7 +141,7 @@ async def test_emit_stable_changed_update(apgdriver: db.Driver) -> None:
         None,
     )
 
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
 
@@ -176,14 +175,14 @@ async def test_emits_truncate_table_truncate(apgdriver: db.Driver) -> None:
         "test_emits_truncate_table_truncate",
         None,
     )
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
 
     evnets.clear()
 
     await Queries(apgdriver).clear_queue()
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
 
@@ -208,7 +207,7 @@ async def test_pgqueuer_heartbeat_event_trigger(apgdriver: db.Driver) -> None:
         None,
     )
 
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(evnets) < 1:
             await asyncio.sleep(0)
 

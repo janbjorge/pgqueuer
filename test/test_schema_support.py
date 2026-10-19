@@ -12,7 +12,6 @@ from datetime import timedelta
 
 import asyncpg
 import pytest
-from async_timeout import timeout
 
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence.query_helpers import cell
@@ -137,7 +136,7 @@ async def test_notify_channel_is_not_schema_qualified(apgdriver: db.Driver) -> N
     await initialize_notice_event_listener(apgdriver, Channel(settings.channel), events.append)
     await q.enqueue("ep", None)
 
-    async with timeout(1):
+    async with asyncio.timeout(1):
         while len(events) < 1:
             await asyncio.sleep(0)
 

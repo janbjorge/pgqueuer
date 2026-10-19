@@ -80,7 +80,6 @@ web = ["fastapi>=0.115.0", "jinja2>=3.1", "uvicorn>=0.30"]
 [dependency-groups]
 test = [
     "pgqueuer[asyncpg,psycopg,logfire,sentry,opentelemetry,fastapi,mcp,web]",
-    "async-timeout>=5.0.1",
     "flask",
     "httpx",
     "pytest",
