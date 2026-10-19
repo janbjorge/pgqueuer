@@ -39,11 +39,9 @@ class Heartbeat:
 
     async def send_heartbeat(self) -> None:
         while not self.shutdown.is_set():
-            with suppress(TimeoutError, asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=self.interval.total_seconds(),
-                )
+            with suppress(TimeoutError):
+                async with asyncio.timeout(self.interval.total_seconds()):
+                    await self.shutdown.wait()
             if self.shutdown.is_set():
                 break
             try:

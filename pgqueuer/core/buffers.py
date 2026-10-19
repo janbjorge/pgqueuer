@@ -112,11 +112,9 @@ class TimedOverflowBuffer(Generic[T]):
             if not self.lock.locked() and self.events.qsize() > 0:
                 await self.flush()
 
-            with suppress(asyncio.TimeoutError, TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=self.timeout.total_seconds() * random.uniform(0.8, 1.2),
-                )
+            with suppress(TimeoutError):
+                async with asyncio.timeout(self.timeout.total_seconds() * random.uniform(0.8, 1.2)):
+                    await self.shutdown.wait()
 
 
 class JobLogSink(Protocol):

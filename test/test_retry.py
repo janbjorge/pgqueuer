@@ -324,7 +324,7 @@ async def test_job_reruns_after_its_dispatch_dies_before_it_starts(apgdriver: db
     await qm.queries.enqueue(["fetch"], [None], [0])
 
     async def stopper() -> None:
-        with contextlib.suppress(asyncio.TimeoutError):
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(ran.wait(), timeout=3)
         qm.shutdown.set()
 

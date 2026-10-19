@@ -53,9 +53,11 @@ class Broadcaster:
             yield "retry: 3000\n\n"
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=KEEPALIVE_SECONDS)
-                    yield f"event: {event}\ndata: {{}}\n\n"
-                except asyncio.TimeoutError:
+                    async with asyncio.timeout(KEEPALIVE_SECONDS):
+                        event = await queue.get()
+                except TimeoutError:
                     yield ": keepalive\n\n"
+                else:
+                    yield f"event: {event}\ndata: {{}}\n\n"
         finally:
             self.subscribers.discard(queue)

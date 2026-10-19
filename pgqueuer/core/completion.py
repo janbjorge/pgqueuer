@@ -120,11 +120,9 @@ class CompletionWatcher:
         """
         try:
             while self.refresh_requested:
-                with suppress(TimeoutError, asyncio.TimeoutError):
-                    await asyncio.wait_for(
-                        self.shutdown.wait(),
-                        timeout=self.debounce.total_seconds(),
-                    )
+                with suppress(TimeoutError):
+                    async with asyncio.timeout(self.debounce.total_seconds()):
+                        await self.shutdown.wait()
                 self.refresh_requested = False
                 await self._refresh_waiters()
         finally:
@@ -143,11 +141,9 @@ class CompletionWatcher:
         """Safety-net poller for missed NOTIFY events."""
         while not self.shutdown.is_set():
             try:
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=refresh_interval.total_seconds(),
-                )
-            except (TimeoutError, asyncio.TimeoutError):
+                async with asyncio.timeout(refresh_interval.total_seconds()):
+                    await self.shutdown.wait()
+            except TimeoutError:
                 self._schedule_refresh_waiters()
             except asyncio.CancelledError:
                 break

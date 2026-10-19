@@ -100,11 +100,9 @@ def wait_for_notice_event(
     """Wait for a table change event with a timeout, returning None on expiry."""
 
     async def suppressed_timeout() -> models.TableChangedEvent | None:
-        with contextlib.suppress(asyncio.TimeoutError):
-            return await asyncio.wait_for(
-                queue.get(),
-                timeout=timeout.total_seconds(),
-            )
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(timeout.total_seconds()):
+                return await queue.get()
         return None
 
     return asyncio.create_task(suppressed_timeout())

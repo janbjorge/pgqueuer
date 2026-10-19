@@ -117,11 +117,9 @@ class QueueManager:
         """Probe listener health every *interval*; raise on timeout via ``listener_healthy``."""
         while not self.shutdown.is_set():
             await self.listener_healthy(timeout=interval)
-            with suppress(TimeoutError, asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=interval.total_seconds(),
-                )
+            with suppress(TimeoutError):
+                async with asyncio.timeout(interval.total_seconds()):
+                    await self.shutdown.wait()
 
     async def _run_periodic_log_aggregation(self, interval: timedelta) -> None:
         """Aggregate log->statistics every *interval* (jittered) until shutdown.
@@ -140,11 +138,9 @@ class QueueManager:
                     pass
                 else:
                     self.jobs_logged = 0
-            with suppress(TimeoutError, asyncio.TimeoutError):
-                await asyncio.wait_for(
-                    self.shutdown.wait(),
-                    timeout=interval.total_seconds() * random.uniform(0.8, 1.2),
-                )
+            with suppress(TimeoutError):
+                async with asyncio.timeout(interval.total_seconds() * random.uniform(0.8, 1.2)):
+                    await self.shutdown.wait()
 
     def get_context(self, job_id: types.JobId) -> models.Context:
         return self.job_context[job_id]

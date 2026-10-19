@@ -87,7 +87,7 @@ class FakePsycopgConnection:
         self.executed.append(query.as_string() if isinstance(query, sql.Composable) else query)
 
     async def notifies(self, *, timeout: float, stop_after: int) -> AsyncGenerator[Notify, None]:
-        with suppress(TimeoutError, asyncio.TimeoutError):
+        with suppress(TimeoutError):
             yield await asyncio.wait_for(self.notes.get(), timeout)
 
 
