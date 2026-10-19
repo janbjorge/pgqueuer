@@ -40,6 +40,7 @@ any other handler error, following the entrypoint's `on_failure`.
 ```python
 from datetime import timedelta
 from pgqueuer.errors import RetryRequested
+from pgqueuer.models import Job
 
 @pgq.entrypoint("call_api")
 async def call_api(job: Job) -> None:
@@ -52,7 +53,10 @@ Use `DatabaseRetryEntrypointExecutor` to automatically convert any exception int
 database-level retry with exponential backoff:
 
 ```python
+from datetime import timedelta
+
 from pgqueuer.executors import DatabaseRetryEntrypointExecutor
+from pgqueuer.models import Job
 
 @pgq.entrypoint(
     "flaky_api",

@@ -131,6 +131,8 @@ async def simple_task(schedule: Schedule) -> None:
 ## Testing with resources
 
 ```python
+from pgqueuer import QueueManager
+from pgqueuer.models import Context, Job
 from pgqueuer.queries import Queries
 
 qm = QueueManager(Queries(driver), resources={"flag": "test"})

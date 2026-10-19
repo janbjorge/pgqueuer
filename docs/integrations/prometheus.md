@@ -37,8 +37,9 @@ Use `collect_metrics` directly and return the result as plain text with content 
 `text/plain; version=0.0.4`:
 
 ```python
-content = await collect_metrics(queries)
-return Response(content=content, media_type="text/plain; version=0.0.4")
+async def metrics() -> Response:
+    content = await collect_metrics(queries)
+    return Response(content=content, media_type="text/plain; version=0.0.4")
 ```
 
 ## Standalone metrics service

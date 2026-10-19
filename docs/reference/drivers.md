@@ -73,8 +73,7 @@ Built on psycopg's async connection API.
 import psycopg
 from pgqueuer.db import PsycopgDriver
 
-conn = await psycopg.AsyncConnection.connect(dsn)
-conn.autocommit = True
+conn = await psycopg.AsyncConnection.connect(dsn, autocommit=True)
 driver = PsycopgDriver(conn)
 ```
 

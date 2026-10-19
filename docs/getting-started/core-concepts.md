@@ -43,6 +43,7 @@ When a job with `entrypoint="send_email"` is dequeued, PgQueuer calls this funct
 
     ```python
     import asyncio
+    from pgqueuer.models import Job
 
     @pgq.entrypoint("resize_image")
     async def resize_image(job: Job) -> None:

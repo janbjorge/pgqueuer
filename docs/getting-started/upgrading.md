@@ -148,6 +148,9 @@ def factory():
 # After
 from contextlib import asynccontextmanager
 
+import asyncpg
+from pgqueuer import AsyncpgDriver, Job, PgQueuer
+
 @asynccontextmanager
 async def factory():
     connection = await asyncpg.connect()
@@ -253,8 +256,12 @@ from pgqueuer.executors import (
         parameters=p, max_attempts=5, max_delay=timedelta(seconds=10),
     ),
 )
+async def my_task(job: Job) -> None: ...
 
 # After
+from datetime import timedelta
+
+from pgqueuer import Job
 from pgqueuer.executors import DatabaseRetryEntrypointExecutor
 
 @pgq.entrypoint(
@@ -263,6 +270,7 @@ from pgqueuer.executors import DatabaseRetryEntrypointExecutor
         parameters=p, max_attempts=5, max_delay=timedelta(minutes=5),
     ),
 )
+async def my_task(job: Job) -> None: ...
 ```
 
 The `async-timeout` runtime dependency is dropped along with the old executor.
@@ -283,6 +291,8 @@ sm = SchedulerManager(driver)
 watcher = CompletionWatcher(driver)
 
 # After
+from pgqueuer import QueueManager, SchedulerManager
+from pgqueuer.core.completion import CompletionWatcher
 from pgqueuer.queries import Queries
 
 queries = Queries(driver)
