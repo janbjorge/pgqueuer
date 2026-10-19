@@ -101,9 +101,18 @@ class Queries:
 
         return cls(PsycopgDriver(connection))
 
-    async def install(self, create_schema: bool = True) -> None:
-        """Create the schema (when configured), tables, types, indexes, triggers, and functions."""
-        await self.driver.execute(self.qbe.build_install_query(create_schema=create_schema))
+    async def install(
+        self,
+        create_schema: bool = True,
+        durability: qb.Durability | None = None,
+    ) -> None:
+        """Create the schema (when configured), tables, types, indexes, triggers, and functions.
+
+        *durability* overrides the configured level for this install only.
+        """
+        await self.driver.execute(
+            self.qbe.build_install_query(create_schema=create_schema, durability=durability)
+        )
 
     async def uninstall(self) -> None:
         """Drop every PgQueuer schema object. Destructive."""
@@ -118,9 +127,16 @@ class Queries:
         live = await schema_inspect.inspect(self.driver, self.qbe.settings)
         return bool(live.tables or live.enums)
 
-    async def plan_upgrade(self) -> models_schema.Plan:
-        """What :meth:`upgrade` would do to this database, without doing it."""
-        settings = self.qbe.settings
+    async def plan_upgrade(self, widen_id: bool | None = None) -> models_schema.Plan:
+        """What :meth:`upgrade` would do to this database, without doing it.
+
+        *widen_id* overrides the configured ``widen_id`` for this plan only.
+        """
+        settings = (
+            self.qbe.settings
+            if widen_id is None
+            else self.qbe.settings.model_copy(update={"widen_id": widen_id})
+        )
         live = await schema_inspect.inspect(self.driver, settings)
         return schema_plan.plan(live, target(settings), settings)
 
@@ -139,7 +155,7 @@ class Queries:
         finally:
             await self.driver.execute("SELECT pg_advisory_unlock($1)", key)
 
-    async def apply_upgrade(self) -> models_schema.Plan:
+    async def apply_upgrade(self, widen_id: bool | None = None) -> models_schema.Plan:
         """Converge the installed schema onto the declaration; return what ran.
 
         One statement per round trip, never batched: ``ALTER TYPE ... ADD
@@ -147,7 +163,7 @@ class Queries:
         transaction. Planned inside the lock, so the result is what was applied.
         """
         async with self.schema_lock():
-            computed = await self.plan_upgrade()
+            computed = await self.plan_upgrade(widen_id)
             for statement in computed.statements:
                 await self.driver.execute(statement)
         for note in computed.notes:
@@ -161,9 +177,9 @@ class Queries:
         """
         await self.apply_upgrade()
 
-    async def alter_durability(self) -> None:
-        """Switch table durability mode without data loss."""
-        await self.driver.execute("\n\n".join(self.qbe.build_alter_durability_query()))
+    async def alter_durability(self, durability: qb.Durability | None = None) -> None:
+        """Switch table durability to *durability* (default: configured) without data loss."""
+        await self.driver.execute("\n\n".join(self.qbe.build_alter_durability_query(durability)))
 
     async def optimize_autovacuum(self) -> None:
         """Apply autovacuum settings."""

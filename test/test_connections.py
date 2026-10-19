@@ -10,7 +10,6 @@ import pytest
 
 from pgqueuer.adapters import connections
 from pgqueuer.adapters.cli.cli import AppConfig, create_default_queries_factory
-from pgqueuer.adapters.persistence.qb import DBSettings
 from pgqueuer.domain.settings import ConnectionSettings
 
 pytestmark = pytest.mark.usefixtures("clean_connection_env")
@@ -118,7 +117,7 @@ async def run_cli_factory_capturing(
         return FakeConnection()  # AsyncpgDriver only stores the connection at init.
 
     monkeypatch.setattr(asyncpg, "connect", fake_connect)
-    factory = create_default_queries_factory(config, DBSettings())
+    factory = create_default_queries_factory(config)
     async with factory():
         pass
     return captured

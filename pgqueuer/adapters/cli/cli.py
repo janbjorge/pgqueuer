@@ -141,7 +141,6 @@ def main(
 
 def create_default_queries_factory(
     config: AppConfig,
-    settings: qb.DBSettings,
 ) -> Callable[[], contextlib.AbstractAsyncContextManager[queries.Queries]]:
     """Default Queries factory: try asyncpg, fall back to psycopg."""
 
@@ -152,24 +151,14 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    AsyncpgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(AsyncpgDriver(connection))
             return
         with contextlib.suppress(ImportError):
             from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(
-                    PsycopgDriver(connection),
-                    qbe=qb.QueryBuilderEnvironment(settings),
-                    qbq=qb.QueryQueueBuilder(settings),
-                    qbs=qb.QuerySchedulerBuilder(settings),
-                )
+                yield queries.Queries(PsycopgDriver(connection))
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
@@ -177,17 +166,14 @@ def create_default_queries_factory(
 
 
 @contextlib.asynccontextmanager
-async def yield_queries(
-    ctx: Context,
-    settings: qb.DBSettings,
-) -> AsyncGenerator[queries.Queries, None]:
+async def yield_queries(ctx: Context) -> AsyncGenerator[queries.Queries, None]:
     """Yield Queries from the user-supplied factory or the built-in default."""
     config: AppConfig = ctx.obj
     factory_fn: Callable[[], object]
     if config.factory_fn_ref:
         factory_fn = factories.load_factory(config.factory_fn_ref)
     else:
-        factory_fn = create_default_queries_factory(config, settings)
+        factory_fn = create_default_queries_factory(config)
     async with factories.validate_factory_result(factory_fn()) as entered:
         if not isinstance(entered, queries.Queries):
             raise TypeError(f"Factory must yield Queries, got {type(entered).__name__}")
@@ -306,10 +292,10 @@ def install(
         return
 
     async def run() -> bool:
-        async with yield_queries(ctx, settings) as q:
+        async with yield_queries(ctx) as q:
             if await q.schema_is_installed():
                 return False
-            await q.install(create_schema=create_schema)
+            await q.install(create_schema=create_schema, durability=durability)
             return True
 
     if not asyncio_run(run()):
@@ -331,7 +317,7 @@ def verify(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             expect_present = expect == VerifyMode.PRESENT
             divergence = list[str]()
 
@@ -386,7 +372,7 @@ def uninstall(
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             await q.uninstall()
 
     asyncio_run(run())
@@ -446,8 +432,8 @@ def upgrade(
         return
 
     async def run() -> schema_model.Plan:
-        async with yield_queries(ctx, settings) as q:
-            return await q.plan_upgrade() if plan else await q.apply_upgrade()
+        async with yield_queries(ctx) as q:
+            return await (q.plan_upgrade if plan else q.apply_upgrade)(widen_id)
 
     try:
         applied = asyncio_run(run())
@@ -477,7 +463,7 @@ def dashboard(
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
@@ -522,7 +508,7 @@ def listen(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             await display_pg_channel(q.driver, types.Channel(channel))
 
     asyncio_run(run())
@@ -622,7 +608,7 @@ def schedules(
     ),
 ) -> None:
     async def run_async() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             if remove:
                 schedule_ids = {types.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
@@ -657,7 +643,7 @@ def queue(
     async def run_async() -> None:
         # For a single job, skip mode subsumes raise mode: a None result is
         # exactly the duplicate case, so on_conflict only decides the exit.
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             (job_id,) = await q.enqueue(
                 entrypoint,
                 None if payload is None else payload.encode(),
@@ -691,7 +677,7 @@ def failed(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if as_json:
                 print(
@@ -734,7 +720,7 @@ def requeue(
     ids: list[int] = typer.Argument(..., help="Job IDs to re-queue."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
             print(f"Re-queued {len(typed_ids)} job(s).")
@@ -755,7 +741,7 @@ def stale(
     as_json: bool = typer.Option(False, "--json", help="Print the jobs as a JSON array on stdout."),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             jobs = await InsightsService(q).stale_jobs(timedelta(seconds=threshold), limit)
             if as_json:
                 print(to_json(jobs).decode())
@@ -798,7 +784,7 @@ def workers(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             active = await InsightsService(q).active_workers()
             if as_json:
                 print(to_json(active).decode())
@@ -841,7 +827,7 @@ def backlog(
     ),
 ) -> None:
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             ages = await InsightsService(q).queue_age()
             if as_json:
                 print(to_json(ages).decode())
@@ -888,14 +874,13 @@ def durability(
     ),
 ) -> None:
     """Switch durability level of PgQueuer tables without data loss."""
-    settings = qb.DBSettings(durability=durability)
     if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_durability(settings))
+        emit_deprecated_dry_run(ctx, sql_cmd.render_durability(durability))
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, settings) as q:
-            await q.alter_durability()
+        async with yield_queries(ctx) as q:
+            await q.alter_durability(durability)
 
     asyncio_run(run())
     typer.secho(f"Set PgQueuer durability to {durability.value}.", err=True)
@@ -918,7 +903,7 @@ def optimize_autovacuum(
         return
 
     async def run() -> None:
-        async with yield_queries(ctx, db_settings()) as q:
+        async with yield_queries(ctx) as q:
             await (q.optimize_autovacuum_rollback() if rollback else q.optimize_autovacuum())
 
     asyncio_run(run())
