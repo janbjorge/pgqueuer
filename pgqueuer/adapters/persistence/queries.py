@@ -395,6 +395,7 @@ class Queries:
                 ids,
                 ["canceled"] * len(ids),
                 [None] * len(ids),
+                [None] * len(ids),
             ),
             self.notify_job_cancellation(ids),
         )
@@ -421,13 +422,15 @@ class Queries:
 
         Jobs with status ``'failed'`` are held in the queue table (UPDATE)
         rather than deleted.  All other statuses are removed (DELETE) as before.
-        Both paths write an entry to the log table.
+        Both paths write an entry to the log table.  A job whose row another
+        worker has re-picked is skipped, so a stale worker cannot resolve it.
         """
         await self.driver.execute(
             self.qbq.build_log_job_query(),
             [job.id for job, _, _ in job_status],
             [status for _, status, _ in job_status],
             [tb.model_dump_json() if tb else None for _, _, tb in job_status],
+            [job.queue_manager_id for job, _, _ in job_status],
         )
 
     async def retry_job(
@@ -440,13 +443,14 @@ class Queries:
 
         Atomically updates the job in-place (status → queued, execute_after
         bumped, attempts incremented) and writes a log entry recording the
-        retry event.
+        retry event.  A no-op when another worker has re-picked the job.
         """
         await self.driver.execute(
             self.qbq.build_retry_job_query(),
             job.id,
             delay,
             traceback_record.model_dump_json() if traceback_record else None,
+            job.queue_manager_id,
         )
 
     async def requeue_jobs(self, ids: list[types.JobId]) -> None:

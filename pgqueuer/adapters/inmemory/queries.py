@@ -525,6 +525,8 @@ class InMemoryQueries:
         now = utc_now()
         for job, status, tb in job_status:
             jid = int(job.id)
+            if not self._owns(job):
+                continue
             if status == "failed":
                 j = self._jobs.get(jid)
                 if j is not None:
@@ -562,7 +564,7 @@ class InMemoryQueries:
         now = utc_now()
         jid = int(job.id)
         j = self._jobs.get(jid)
-        if j is not None:
+        if j is not None and self._owns(job):
             j["status"] = "queued"
             j["execute_after"] = now + delay
             j["attempts"] = j["attempts"] + 1
@@ -1122,6 +1124,15 @@ class InMemoryQueries:
         dk = self._dedupe_key_by_job.pop(job_id, None)
         if dk is not None:
             self._dedupe_index.pop(dk, None)
+
+    def _owns(self, job: models.Job) -> bool:
+        """Mirror the SQL owner check: False only when the row has another owner."""
+        row = self._jobs.get(int(job.id))
+        return (
+            job.queue_manager_id is None
+            or row is None
+            or row["queue_manager_id"] == job.queue_manager_id
+        )
 
     async def emit_table_changed(self, operation: types.OPERATIONS) -> None:
         # Same keys as the Postgres trigger; the listener stamps received_at on parse.

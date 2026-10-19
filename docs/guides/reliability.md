@@ -96,6 +96,11 @@ await pgq.run(
 Any worker can then claim and re-run the stalled job. See
 [Heartbeat Monitoring](heartbeat.md) for stall detection queries.
 
+A worker that was only slow, not dead, can finish after another worker has re-picked its
+job. Its result is then dropped: completion, `on_failure="hold"` and `RetryRequested` only
+apply while the reporting worker still holds the job, so a late result cannot delete, hold
+or re-queue a job the new worker is running.
+
 !!! warning "Design for re-execution"
     A recovered job **will run again from the start**. Ensure your job functions are
     idempotent, or checkpoint progress externally so a restart is safe.

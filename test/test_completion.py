@@ -93,6 +93,7 @@ async def test_completion_deleted(apgdriver: db.Driver) -> None:
     @dataclass
     class FakeJob:
         id: int
+        queue_manager_id: None = None
 
     entries = [(FakeJob(jid), "deleted", None) for jid in jids]
     await qm.queries.log_jobs(entries)  # type: ignore[arg-type]

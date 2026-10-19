@@ -675,20 +675,29 @@ class QueryQueueBuilder:
     """
 
     def build_log_job_query(self) -> str:
+        # The owner check sits on the target row so a concurrent re-pick is re-checked
+        # under READ COMMITTED; a NULL owner (admin cancellation) is unfenced.
         return f"""WITH job_status AS (
             SELECT
                 UNNEST($1::bigint[])                            AS id,
                 UNNEST($2::{self.qualified.queue_status_type}[]) AS status,
-                UNNEST($3::JSONB[])                             AS traceback
+                UNNEST($3::JSONB[])                             AS traceback,
+                UNNEST($4::uuid[])                              AS queue_manager_id
         ), deleted AS (
-            DELETE FROM {self.qualified.queue_table}
-            WHERE id = ANY(SELECT js.id FROM job_status js WHERE js.status != 'failed')
-            RETURNING id, entrypoint, priority
+            DELETE FROM {self.qualified.queue_table} q
+            USING job_status js
+            WHERE q.id = js.id
+                AND js.status != 'failed'
+                AND (js.queue_manager_id IS NULL OR q.queue_manager_id = js.queue_manager_id)
+            RETURNING q.id, q.entrypoint, q.priority
         ), held AS (
-            UPDATE {self.qualified.queue_table}
+            UPDATE {self.qualified.queue_table} q
             SET status = 'failed', updated = NOW(), queue_manager_id = NULL
-            WHERE id = ANY(SELECT js.id FROM job_status js WHERE js.status = 'failed')
-            RETURNING id, entrypoint, priority
+            FROM job_status js
+            WHERE q.id = js.id
+                AND js.status = 'failed'
+                AND (js.queue_manager_id IS NULL OR q.queue_manager_id = js.queue_manager_id)
+            RETURNING q.id, q.entrypoint, q.priority
         ), all_resolved AS (
             SELECT id, entrypoint, priority FROM deleted
             UNION ALL
@@ -812,6 +821,7 @@ class QueryQueueBuilder:
                 updated = NOW(),
                 queue_manager_id = NULL
             WHERE id = $1::bigint
+                AND ($4::uuid IS NULL OR queue_manager_id = $4::uuid)
             RETURNING id, entrypoint, priority
         )
         INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority, traceback)
