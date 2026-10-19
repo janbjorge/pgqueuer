@@ -10,17 +10,18 @@ except ImportError as e:
         "fastapi is required for this module. Install with: pip install pgqueuer[web]"
     ) from e
 
-from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.adapters.persistence import queries
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.core import logconfig
-from pgqueuer.domain.settings import ConnectionSettings, db_settings
+from pgqueuer.domain.settings import ConnectionSettings, DBSettings, db_settings
 
 
 def create_web_app(
     dsn: str | None = None,
     connection_settings: ConnectionSettings | None = None,
+    settings: DBSettings | None = None,
 ) -> FastAPI:
     """Standalone dashboard app: asyncpg pool, NOTIFY-driven SSE, optional Basic auth.
 
@@ -33,7 +34,8 @@ def create_web_app(
 
     When *dsn* is None, the DSN comes from PGQUEUER_DSN/PGDSN, else asyncpg
     reads standard libpq env vars (PGHOST, PGUSER, ...). Pool sizing and
-    timeouts come from *connection_settings*, or PGQUEUER_* env vars when None.
+    timeouts come from *connection_settings*, and table and channel names from
+    *settings*; PGQUEUER_* env vars fill in either when None.
     Auth is enabled only when PGQUEUER_WEB_USER and PGQUEUER_WEB_PASSWORD are set.
     """
 
@@ -42,16 +44,11 @@ def create_web_app(
         from pgqueuer.adapters.connections import create_asyncpg_pool
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        settings = db_settings()
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             driver = AsyncpgPoolDriver(pool)
-            app.state.pgq_queries = queries.Queries(
-                driver,
-                qbe=qb.QueryBuilderEnvironment(settings),
-                qbq=qb.QueryQueueBuilder(settings),
-                qbs=qb.QuerySchedulerBuilder(settings),
-            )
-            broadcaster = Broadcaster(driver=driver, channel=settings.channel)
+            q = queries.Queries(driver, settings or db_settings())
+            app.state.pgq_queries = q
+            broadcaster = Broadcaster(driver=driver, channel=q.settings.channel)
             await broadcaster.start()
             app.state.pgq_broadcaster = broadcaster
             async with driver:

@@ -27,6 +27,7 @@ from pgqueuer.core.logconfig import logger
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as models_schema
 from pgqueuer.domain.schema.declaration import target
+from pgqueuer.domain.settings import DBSettings, db_settings
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -67,39 +68,54 @@ class Queries:
 
     driver: Driver
 
-    qbe: qb.QueryBuilderEnvironment = dataclasses.field(
-        default_factory=qb.QueryBuilderEnvironment,
-    )
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
-    qbs: qb.QuerySchedulerBuilder = dataclasses.field(
-        default_factory=qb.QuerySchedulerBuilder,
-    )
+    # Table, channel and schema names. The builders, and every caller holding
+    # these queries, read this one object; defaults to the PGQUEUER_* env vars.
+    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+
+    qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
+    qbs: qb.QuerySchedulerBuilder = dataclasses.field(init=False)
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
 
+    def __post_init__(self) -> None:
+        self.qbe = qb.QueryBuilderEnvironment(self.settings)
+        self.qbq = qb.QueryQueueBuilder(self.settings)
+        self.qbs = qb.QuerySchedulerBuilder(self.settings)
+
     @classmethod
-    def from_asyncpg_connection(cls, connection: asyncpg.Connection) -> Queries:
+    def from_asyncpg_connection(
+        cls,
+        connection: asyncpg.Connection,
+        settings: DBSettings | None = None,
+    ) -> Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        return cls(AsyncpgDriver(connection))
+        return cls(AsyncpgDriver(connection), settings or db_settings())
 
     @classmethod
-    def from_asyncpg_pool(cls, pool: asyncpg.Pool) -> Queries:
+    def from_asyncpg_pool(
+        cls,
+        pool: asyncpg.Pool,
+        settings: DBSettings | None = None,
+    ) -> Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        return cls(AsyncpgPoolDriver(pool))
+        return cls(AsyncpgPoolDriver(pool), settings or db_settings())
 
     @classmethod
-    def from_psycopg_connection(cls, connection: psycopg.AsyncConnection) -> Queries:
+    def from_psycopg_connection(
+        cls,
+        connection: psycopg.AsyncConnection,
+        settings: DBSettings | None = None,
+    ) -> Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        return cls(PsycopgDriver(connection))
+        return cls(PsycopgDriver(connection), settings or db_settings())
 
     async def install(
         self,
@@ -781,12 +797,16 @@ class SyncQueries:
 
     driver: SyncDriver
 
-    qbq: qb.QueryQueueBuilder = dataclasses.field(
-        default_factory=qb.QueryQueueBuilder,
-    )
+    # Table, channel and schema names; defaults to the PGQUEUER_* env vars.
+    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+
+    qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
 
     # Optional injected tracer; falls back to the global ``tracing.TRACER.tracer``.
     tracer: TracingProtocol | None = None
+
+    def __post_init__(self) -> None:
+        self.qbq = qb.QueryQueueBuilder(self.settings)
 
     @overload
     def enqueue(

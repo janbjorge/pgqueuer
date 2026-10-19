@@ -22,7 +22,6 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
-from pgqueuer.domain.settings import db_settings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -37,9 +36,8 @@ class QueueManager:
     """
 
     queries: RepositoryPort
-    channel: types.Channel = dataclasses.field(
-        default_factory=lambda: types.Channel(db_settings().channel),
-    )
+    # Empty: listen on ``queries.qbe.settings.channel``, where the queries notify.
+    channel: types.Channel = types.Channel("")
 
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -90,6 +88,9 @@ class QueueManager:
         init=False,
         default=timedelta(seconds=0.1),
     )
+
+    def __post_init__(self) -> None:
+        self.channel = self.channel or types.Channel(self.queries.qbe.settings.channel)
 
     async def listener_healthy(
         self,

@@ -8,8 +8,10 @@ from pydantic import ValidationError
 
 from pgqueuer.adapters.cli.cli import AppConfig
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.adapters.persistence.queries import Queries
+from pgqueuer.adapters.persistence import qb
+from pgqueuer.adapters.persistence.queries import Queries, SyncQueries
 from pgqueuer.core.applications import PgQueuer
+from pgqueuer.core.completion import CompletionWatcher
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.domain.settings import (
     ConnectionSettings,
@@ -197,6 +199,53 @@ def test_queries_builders_share_one_settings(
 ) -> None:
     q = make(InMemoryDriver())
     assert q.qbe.settings is q.qbq.settings is q.qbs.settings is db_settings()
+
+
+@pytest.mark.parametrize("make", [Queries, InMemoryQueries])
+def test_queries_builders_share_passed_settings(
+    make: Callable[..., Queries | InMemoryQueries],
+) -> None:
+    settings = DBSettings(prefix="billing_")
+    q = make(InMemoryDriver(), settings=settings)
+    assert q.settings is q.qbe.settings is q.qbq.settings is q.qbs.settings is settings
+
+
+def test_sync_queries_uses_passed_settings() -> None:
+    settings = DBSettings(prefix="billing_")
+    q = SyncQueries(InMemoryDriver(), settings)  # type: ignore[arg-type]
+    assert q.qbq.settings is settings
+
+
+@pytest.mark.parametrize("make", [Queries, InMemoryQueries])
+def test_builders_are_not_constructor_arguments(make: Callable[..., object]) -> None:
+    """Separate builders could disagree on names; settings= is the one input."""
+    with pytest.raises(TypeError, match="unexpected keyword argument"):
+        make(InMemoryDriver(), qbe=qb.QueryBuilderEnvironment())
+
+
+def test_passed_settings_set_the_channel() -> None:
+    """QueueManager and PgQueuer listen where their queries notify."""
+    settings = DBSettings(prefix="billing_")
+    driver = InMemoryDriver()
+    assert QueueManager(InMemoryQueries(driver, settings)).channel == "billing_ch_pgqueuer"
+    assert PgQueuer(driver, settings=settings).channel == "billing_ch_pgqueuer"
+    assert PgQueuer.in_memory(settings=settings).channel == "billing_ch_pgqueuer"
+    assert PgQueuer(driver, Channel("explicit"), settings=settings).channel == "explicit"
+
+
+def test_pgqueuer_rejects_settings_beside_other_queries() -> None:
+    driver = InMemoryDriver()
+    with pytest.raises(ValueError, match="Pass settings to the queries"):
+        PgQueuer(driver, queries=InMemoryQueries(driver), settings=DBSettings(prefix="x_"))
+
+
+async def test_completion_watcher_listens_on_the_queries_channel() -> None:
+    """#938 repro: a prefixed Queries notifies on its channel, so the watcher must listen there."""
+    driver = InMemoryDriver()
+    queries = InMemoryQueries(driver, DBSettings(prefix="billing_"))
+    async with CompletionWatcher(driver, queries=queries, refresh_interval=None):
+        assert driver._listeners["billing_ch_pgqueuer"]
+        assert not driver._listeners["ch_pgqueuer"]
 
 
 def test_channel_default_resolves_at_construction(monkeypatch: pytest.MonkeyPatch) -> None:

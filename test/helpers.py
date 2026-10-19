@@ -29,13 +29,8 @@ WIDENED_ID_TABLES = [
 
 
 def queries_for(driver: db.Driver, settings: qb.DBSettings) -> Queries:
-    """Queries wired to non-default DBSettings across all three builders."""
-    return Queries(
-        driver,
-        qbe=qb.QueryBuilderEnvironment(settings=settings),
-        qbq=qb.QueryQueueBuilder(settings=settings),
-        qbs=qb.QuerySchedulerBuilder(settings=settings),
-    )
+    """Queries wired to non-default DBSettings."""
+    return Queries(driver, settings)
 
 
 async def id_data_type(driver: db.Driver, table: str, schema: str | None = None) -> str:
