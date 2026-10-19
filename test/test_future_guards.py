@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timezone
-from typing import MutableMapping
+from collections.abc import MutableMapping
+from datetime import UTC, datetime
 
 from pgqueuer import db
 from pgqueuer.core.completion import CompletionWatcher
@@ -33,7 +33,7 @@ async def test_health_check_callback_ignores_done_future() -> None:
     event = AnyEvent(
         root=HealthCheckEvent(
             channel=Channel("ch"),
-            sent_at=datetime.now(timezone.utc),
+            sent_at=datetime.now(UTC),
             type="health_check_event",
             id=HealthCheckId(uuid.uuid4()),
         )
@@ -62,7 +62,7 @@ async def test_health_check_callback_ignores_cancelled_future() -> None:
     event = AnyEvent(
         root=HealthCheckEvent(
             channel=Channel("ch"),
-            sent_at=datetime.now(timezone.utc),
+            sent_at=datetime.now(UTC),
             type="health_check_event",
             id=HealthCheckId(uuid.uuid4()),
         )

@@ -1,6 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
-from typing import MutableMapping
+from collections.abc import MutableMapping
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -112,7 +112,7 @@ async def test_scheduler_register_accepts_three_second_expression(
     async def sample_task(schedule: Schedule) -> None:
         pass
 
-    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=UTC)
     mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
 
     scheduler.schedule("sample_task", "* * * * * */3")(sample_task)
@@ -123,7 +123,7 @@ async def test_scheduler_register_accepts_three_second_expression(
     assert key.entrypoint == "sample_task"
     assert key.expression == "* * * * * */3"
     assert executor.parameters.expression == "* * * * * */3"
-    assert executor.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc)
+    assert executor.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=UTC)
     assert executor.next_in() == timedelta(seconds=2)
 
 
@@ -135,7 +135,7 @@ async def test_scheduler_trailing_seconds_field_is_documented_behavior(
     async def sample_task(schedule: Schedule) -> None:
         pass
 
-    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=timezone.utc)
+    mocked_now = datetime(2025, 1, 1, 0, 0, 1, tzinfo=UTC)
     mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
 
     scheduler.schedule("sample_task_seconds_last", "* * * * * */3")(sample_task)
@@ -154,14 +154,14 @@ async def test_scheduler_trailing_seconds_field_is_documented_behavior(
         )
     ]
 
-    assert seconds_last.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=timezone.utc)
+    assert seconds_last.get_next() == datetime(2025, 1, 1, 0, 0, 3, tzinfo=UTC)
     assert seconds_last.next_in() == timedelta(seconds=2)
-    assert seconds_first.get_next() == datetime(2025, 1, 1, 0, 0, 2, tzinfo=timezone.utc)
+    assert seconds_first.get_next() == datetime(2025, 1, 1, 0, 0, 2, tzinfo=UTC)
     assert seconds_first.next_in() == timedelta(seconds=1)
 
 
 async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -> None:
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
@@ -201,7 +201,7 @@ async def test_scheduler_releases_schedule_before_driver_exit(mocker: Mock, fail
 
     queries = InMemoryQueries(driver=RecordingDriver())
     scheduler = SchedulerManager(queries)
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
     mocker.patch(
         "pgqueuer.core.executors.croniter",
@@ -270,7 +270,7 @@ async def test_scheduler_run_beats_while_draining_after_error(
     mocker: Mock,
 ) -> None:
     """A failing loop drains running schedules with their heartbeat still going."""
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
     mocker.patch(
         "pgqueuer.core.executors.croniter",
@@ -306,7 +306,7 @@ async def test_scheduler_run_beats_while_draining_after_error(
 
 
 async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> None:
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
@@ -338,7 +338,7 @@ async def test_schedule_storage_and_retrieval(
     scheduler: SchedulerManager,
     mocker: Mock,
 ) -> None:
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch(
         "pgqueuer.core.executors.utc_now",
         return_value=mocked_now,
@@ -456,7 +456,7 @@ async def test_multi_instance_single_task_execution(
     """
     mocker.patch(
         "pgqueuer.core.executors.utc_now",
-        return_value=datetime.now(timezone.utc) + timedelta(hours=1),
+        return_value=datetime.now(UTC) + timedelta(hours=1),
     )
 
     # Track execution across all scheduler instances
@@ -466,7 +466,7 @@ async def test_multi_instance_single_task_execution(
     async def test_task(schedule: Schedule) -> None:
         nonlocal execution_count, execution_instances
         execution_count += 1
-        execution_instances.append((datetime.now(timezone.utc), schedule.id))
+        execution_instances.append((datetime.now(UTC), schedule.id))
         # Add small delay to allow potential race conditions to manifest
         await asyncio.sleep(0.1)
 
@@ -538,10 +538,10 @@ async def test_schedule_executor_without_context() -> None:
     fake_schedule = Schedule(
         id=ScheduleId(1),
         expression=CronExpression("* * * * *"),
-        heartbeat=datetime.now(timezone.utc),
-        created=datetime.now(timezone.utc),
-        updated=datetime.now(timezone.utc),
-        next_run=datetime.now(timezone.utc),
+        heartbeat=datetime.now(UTC),
+        created=datetime.now(UTC),
+        updated=datetime.now(UTC),
+        next_run=datetime.now(UTC),
         status="queued",
         entrypoint=CronEntrypoint("no_ctx"),
     )
@@ -571,10 +571,10 @@ async def test_schedule_executor_with_context() -> None:
     fake_schedule = Schedule(
         id=ScheduleId(1),
         expression=CronExpression("* * * * *"),
-        heartbeat=datetime.now(timezone.utc),
-        created=datetime.now(timezone.utc),
-        updated=datetime.now(timezone.utc),
-        next_run=datetime.now(timezone.utc),
+        heartbeat=datetime.now(UTC),
+        created=datetime.now(UTC),
+        updated=datetime.now(UTC),
+        next_run=datetime.now(UTC),
         status="queued",
         entrypoint=CronEntrypoint("with_ctx"),
     )
@@ -592,7 +592,7 @@ async def test_schedule_context_resources_via_scheduler(
     mocker: Mock,
 ) -> None:
     """Scheduled handler registered with accepts_context=True receives resources via dispatch."""
-    mocked_now = datetime.now(timezone.utc) + timedelta(hours=1)
+    mocked_now = datetime.now(UTC) + timedelta(hours=1)
     mocker.patch("pgqueuer.core.executors.utc_now", return_value=mocked_now)
     past_timestamp = int(mocked_now.timestamp()) - 60
     mocker.patch(

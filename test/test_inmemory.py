@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import time_machine
@@ -371,9 +371,9 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
 
     # Manually make heartbeat old
     job_id = int(jobs[0].id)
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    queries._jobs[job_id]["heartbeat"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    queries._jobs[job_id]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
 
     # Now dequeue again - should retry the stale job
     jobs2 = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -391,9 +391,9 @@ async def test_dequeue_stale_priority_beats_fresh_work(queries: InMemoryQueries)
     assert len(picked) == 1
     stale_id = picked[0].id
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    queries._jobs[int(stale_id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    queries._jobs[int(stale_id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
 
     await queries.enqueue(["ep"] * 3, [b"fresh-lo"] * 3, [0] * 3)
 
@@ -420,7 +420,7 @@ async def test_dequeue_deferred_jobs_delivered_in_priority_order_when_due(
         == []
     )
 
-    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+    with time_machine.travel(datetime.now(UTC) + timedelta(hours=2)):
         jobs = await queries.dequeue(
             10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30)
         )
@@ -459,7 +459,7 @@ async def test_retry_job_with_delay_defers_redelivery(queries: InMemoryQueries) 
         await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=1)) == []
     )
 
-    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+    with time_machine.travel(datetime.now(UTC) + timedelta(hours=2)):
         jobs = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(hours=4))
     assert [j.id for j in jobs] == [job.id]
     assert jobs[0].attempts == 1
@@ -483,7 +483,7 @@ async def test_cancelled_deferred_job_not_delivered_when_due(queries: InMemoryQu
     (job_id,) = await queries.enqueue("ep", None, execute_after=timedelta(hours=1))
     await queries.mark_job_as_cancelled([job_id])
 
-    with time_machine.travel(datetime.now(timezone.utc) + timedelta(hours=2)):
+    with time_machine.travel(datetime.now(UTC) + timedelta(hours=2)):
         jobs = await queries.dequeue(
             10,
             {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
@@ -704,7 +704,7 @@ async def test_log_statistics(queries: InMemoryQueries) -> None:
 async def test_log_statistics_accumulates_existing_bucket(
     queries: InMemoryQueries, aggregate_between: bool
 ) -> None:
-    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=UTC), tick=False):
         await queries.aggregate_logs()
         assert await queries.log_statistics(limit=None) == []
         await queries.enqueue("ep", None)
@@ -723,7 +723,7 @@ async def test_log_statistics_accumulates_existing_bucket(
 
 
 async def test_log_statistics_preserves_existing_bucket_order(queries: InMemoryQueries) -> None:
-    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=UTC), tick=False):
         await queries.enqueue("first", None)
         await queries.log_statistics(limit=None)
         await queries.enqueue("second", None)
@@ -739,7 +739,7 @@ async def test_log_statistics_preserves_existing_bucket_order(queries: InMemoryQ
 
 
 async def test_log_statistics_keeps_distinct_bucket_dimensions(queries: InMemoryQueries) -> None:
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
     with time_machine.travel(start, tick=False):
         ids = await queries.enqueue("ep", None)
         await queries.log_statistics(limit=None)
@@ -762,7 +762,7 @@ async def test_log_statistics_keeps_distinct_bucket_dimensions(queries: InMemory
 async def test_log_statistics_rebuilds_cleared_bucket(
     queries: InMemoryQueries, entrypoint: str | None
 ) -> None:
-    with time_machine.travel(datetime(2026, 1, 1, tzinfo=timezone.utc), tick=False):
+    with time_machine.travel(datetime(2026, 1, 1, tzinfo=UTC), tick=False):
         await queries.enqueue(["ep", "other"], [None, None], [0, 0])
         await queries.log_statistics(limit=None)
         await queries.clear_statistics_log(entrypoint)
@@ -777,7 +777,7 @@ async def test_log_statistics_rebuilds_cleared_bucket(
 
 
 async def test_log_statistics_last_excludes_bucket_at_cutoff(queries: InMemoryQueries) -> None:
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
     with time_machine.travel(start, tick=False):
         await queries.enqueue("ep", None)
         await queries.aggregate_logs()

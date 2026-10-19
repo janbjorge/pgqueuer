@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncIterator, Generator
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import opentelemetry

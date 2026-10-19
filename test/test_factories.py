@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import AsyncGenerator, Callable, Generator
 from contextlib import (
     AbstractAsyncContextManager,
     asynccontextmanager,
     contextmanager,
 )
 from functools import partial
-from typing import Any, AsyncGenerator, Callable, Generator
+from typing import Any
 from unittest.mock import Mock
 
 import pytest

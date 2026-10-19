@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 import signal
 import sys
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import AsyncGenerator, Callable
 
 import pytest
 

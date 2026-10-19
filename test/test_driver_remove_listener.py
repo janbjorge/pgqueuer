@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import AsyncGenerator, Callable
 
 import pytest
 from psycopg import sql

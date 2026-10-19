@@ -1,9 +1,10 @@
 import asyncio
 import functools
 import inspect
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from multiprocessing import Process, Queue as MPQueue
-from typing import Any, Awaitable, Callable, cast
+from typing import Any, cast
 from unittest.mock import Mock
 
 import anyio

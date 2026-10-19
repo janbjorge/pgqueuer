@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import timedelta
+from datetime import UTC, timedelta
 from typing import Any
 
 import asyncpg
@@ -262,7 +262,7 @@ async def test_traceback_jsonb_roundtrip(
     apgdriver: AsyncpgDriver,
 ) -> None:
     """Traceback JSONB round-trips correctly through log storage."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     q = Queries(apgdriver)
 
@@ -281,7 +281,7 @@ async def test_traceback_jsonb_roundtrip(
 
     tb_record = TracebackRecord(
         job_id=JobId(int(jids[0])),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         exception_type="ValueError",
         exception_message="test error",
         traceback="line 1\nline 2",

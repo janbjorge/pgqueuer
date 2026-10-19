@@ -81,21 +81,21 @@ class Queries:
     tracer: TracingProtocol | None = None
 
     @classmethod
-    def from_asyncpg_connection(cls, connection: "asyncpg.Connection") -> "Queries":
+    def from_asyncpg_connection(cls, connection: asyncpg.Connection) -> Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
         return cls(AsyncpgDriver(connection))
 
     @classmethod
-    def from_asyncpg_pool(cls, pool: "asyncpg.Pool") -> "Queries":
+    def from_asyncpg_pool(cls, pool: asyncpg.Pool) -> Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
         return cls(AsyncpgPoolDriver(pool))
 
     @classmethod
-    def from_psycopg_connection(cls, connection: "psycopg.AsyncConnection") -> "Queries":
+    def from_psycopg_connection(cls, connection: psycopg.AsyncConnection) -> Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 

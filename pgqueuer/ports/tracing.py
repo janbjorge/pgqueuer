@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import AsyncContextManager, Final, Generator, Protocol
+from typing import Final, Protocol
 
 from pgqueuer.domain.models import Job
 
@@ -15,7 +17,7 @@ class TracingProtocol(Protocol):
         """Yield one tracing-header dict per entrypoint, in input order."""
         ...
 
-    def trace_process(self, job: Job) -> AsyncContextManager[None]:
+    def trace_process(self, job: Job) -> AbstractAsyncContextManager[None]:
         """Wrap consumer processing of *job* in a tracing span."""
         ...
 

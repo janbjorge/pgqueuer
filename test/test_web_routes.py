@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -382,7 +382,7 @@ class TestTemplateFormatters:
 
     def test_fmt_dt(self) -> None:
         assert fmt_dt(None) == "–"
-        aware = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
+        aware = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
         assert fmt_dt(aware) == "2026-01-02 03:04:05"
 
     def test_fmt_rate(self) -> None:
@@ -392,7 +392,7 @@ class TestTemplateFormatters:
 
 class TestChartSlots:
     def now(self) -> datetime:
-        return datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+        return datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
 
     def bucket(
         self, minutes_ago: int, status: types.JOB_STATUS, count: int
@@ -435,11 +435,11 @@ class TestChartSlots:
 class TestThroughputChartSvg:
     def test_empty_is_blank(self) -> None:
         assert throughput_chart_svg([]) == ""
-        empty = chart_slots([], timedelta(hours=1), end=datetime.now(timezone.utc))
+        empty = chart_slots([], timedelta(hours=1), end=datetime.now(UTC))
         assert throughput_chart_svg(empty) == ""
 
     def test_stacked_rects_and_tooltip(self) -> None:
-        now = datetime(2026, 7, 19, 12, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
         slot = ChartSlot(
             start=now - timedelta(minutes=1),
             end=now,

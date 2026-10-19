@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Generator
 from http import HTTPStatus
 from pathlib import Path
-from typing import Generator
 from urllib.parse import urlparse
 
 import pytest

@@ -4,8 +4,9 @@ import dataclasses
 import functools
 import inspect
 from abc import ABC, abstractmethod
-from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, TypeAlias, TypeVar, cast
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
+from typing import TypeAlias, TypeVar, cast
 
 from croniter import croniter
 
@@ -148,7 +149,7 @@ class AbstractScheduleExecutor(ABC):
         """Next scheduled fire time in UTC."""
         return datetime.fromtimestamp(
             croniter(self.parameters.expression, start_time=utc_now()).get_next(),
-            timezone.utc,
+            UTC,
         )
 
     def next_in(self) -> timedelta:

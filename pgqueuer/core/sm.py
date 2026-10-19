@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from contextlib import suppress
 from datetime import timedelta
-from typing import Callable
 
 import croniter
 

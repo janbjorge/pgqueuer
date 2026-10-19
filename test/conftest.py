@@ -4,7 +4,8 @@ import asyncio
 import dataclasses
 import os
 import uuid
-from typing import Any, AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
 from urllib.parse import quote, urlparse, urlunparse
 
 import asyncpg

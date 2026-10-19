@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from itertools import count
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 import pytest
 

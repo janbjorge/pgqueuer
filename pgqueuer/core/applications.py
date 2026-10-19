@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+from collections.abc import Callable, MutableMapping
 from datetime import timedelta
-from typing import TYPE_CHECKING, Callable, MutableMapping
+from typing import TYPE_CHECKING
 
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
@@ -82,10 +83,10 @@ class PgQueuer:
     @classmethod
     def from_asyncpg_connection(
         cls,
-        connection: "asyncpg.Connection",
+        connection: asyncpg.Connection,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
-    ) -> "PgQueuer":
+    ) -> PgQueuer:
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
             driver=AsyncpgDriver(connection),
@@ -96,10 +97,10 @@ class PgQueuer:
     @classmethod
     def from_asyncpg_pool(
         cls,
-        pool: "asyncpg.Pool",
+        pool: asyncpg.Pool,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
-    ) -> "PgQueuer":
+    ) -> PgQueuer:
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
             driver=AsyncpgPoolDriver(pool),
@@ -110,10 +111,10 @@ class PgQueuer:
     @classmethod
     def from_psycopg_connection(
         cls,
-        connection: "psycopg.AsyncConnection",
+        connection: psycopg.AsyncConnection,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
-    ) -> "PgQueuer":
+    ) -> PgQueuer:
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
             driver=PsycopgDriver(connection),
@@ -127,7 +128,7 @@ class PgQueuer:
         driver: Driver,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
-    ) -> "PgQueuer":
+    ) -> PgQueuer:
         channel = channel or Channel(db_settings().channel)
         resources = resources or {}
         return cls(connection=driver, channel=channel, resources=resources)
@@ -137,7 +138,7 @@ class PgQueuer:
         cls,
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
-    ) -> "PgQueuer":
+    ) -> PgQueuer:
         """Create a PgQueuer backed entirely by in-memory data structures.
 
         No PostgreSQL connection is needed.  Useful for testing, dev,

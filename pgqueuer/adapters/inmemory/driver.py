@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from typing import Callable, Self
+from collections.abc import Callable
+from typing import Self
 
 
 class InMemoryDriver:

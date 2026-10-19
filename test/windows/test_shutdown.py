@@ -1,7 +1,8 @@
 import asyncio
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import timedelta
-from typing import AsyncGenerator, cast
+from typing import cast
 
 import pytest
 

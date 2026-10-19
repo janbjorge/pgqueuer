@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+from collections.abc import AsyncGenerator, Callable, Generator, Iterable
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from itertools import groupby
-from typing import AsyncGenerator, Callable, Generator, Iterable, TypeAlias
+from typing import TypeAlias
 
 import asyncpg
 from fastapi import APIRouter, Depends, FastAPI, Request

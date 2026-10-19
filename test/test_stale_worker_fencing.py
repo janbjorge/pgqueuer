@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Awaitable, Callable, NamedTuple
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 import pytest
 
@@ -61,7 +62,7 @@ async def take_over_in_postgres(queries: Queries, apgdriver: AsyncpgDriver) -> T
 
 async def take_over_in_memory(queries: InMemoryQueries) -> Takeover:
     async def stall(job: Job) -> None:
-        queries._jobs[int(job.id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=timezone.utc)
+        queries._jobs[int(job.id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
 
     return await take_over(queries, stall)
 
