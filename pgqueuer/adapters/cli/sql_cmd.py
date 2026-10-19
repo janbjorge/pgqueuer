@@ -79,9 +79,9 @@ def render_plan(statements: Sequence[str], settings: qb.DBSettings) -> str:
     return "\n\n".join([header, *statements])
 
 
-def render_durability(settings: qb.DBSettings) -> str:
-    qbe = qb.QueryBuilderEnvironment(settings)
-    return "\n\n".join(qbe.build_alter_durability_query())
+def render_durability(durability: qb.Durability) -> str:
+    qbe = qb.QueryBuilderEnvironment()
+    return "\n\n".join(qbe.build_alter_durability_query(durability))
 
 
 def render_autovac(rollback: bool) -> str:
@@ -125,7 +125,7 @@ def upgrade(
 def durability(
     durability: DurabilityArgument,
 ) -> None:
-    typer.echo(render_durability(qb.DBSettings(durability=durability)))
+    typer.echo(render_durability(durability))
 
 
 @sql_app.command(help="SQL for recommended autovacuum settings (--rollback to reset).")

@@ -45,9 +45,21 @@ class QueryBuilderEnvironment:
     def qualified(self) -> QualifiedNames:
         return self.settings.qualified
 
-    def build_install_query(self, create_schema: bool = True) -> str:
-        """DDL: schema (optional), types, tables, indexes, trigger, and notify function."""
-        return schema_ddl.render_install(self.settings, create_schema=create_schema)
+    def build_install_query(
+        self,
+        create_schema: bool = True,
+        durability: Durability | None = None,
+    ) -> str:
+        """DDL: schema (optional), types, tables, indexes, trigger, and notify function.
+
+        *durability* overrides the configured level for this install only.
+        """
+        settings = (
+            self.settings
+            if durability is None
+            else self.settings.model_copy(update={"durability": durability})
+        )
+        return schema_ddl.render_install(settings, create_schema=create_schema)
 
     def build_uninstall_query(self) -> str:
         return schema_ddl.render_uninstall(self.settings)
@@ -113,12 +125,16 @@ class QueryBuilderEnvironment:
     FROM pg_enum
     JOIN pg_type ON pg_enum.enumtypid = pg_type.oid"""
 
-    def build_alter_durability_query(self) -> Generator[str, None, None]:
-        durability = self.settings.durability.config
-        yield f"""ALTER TABLE {self.qualified.queue_table} SET {"LOGGED" if durability.queue_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.queue_table_log} SET {"LOGGED" if durability.queue_log_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.statistics_table} SET {"LOGGED" if durability.statistics_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.schedules_table} SET {"LOGGED" if durability.schedules_table == "" else "UNLOGGED"};"""  # noqa
+    def build_alter_durability_query(
+        self,
+        durability: Durability | None = None,
+    ) -> Generator[str, None, None]:
+        """ALTER statements for *durability*, or the configured level when None."""
+        config = (self.settings.durability if durability is None else durability).config
+        yield f"""ALTER TABLE {self.qualified.queue_table} SET {"LOGGED" if config.queue_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.qualified.queue_table_log} SET {"LOGGED" if config.queue_log_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.qualified.statistics_table} SET {"LOGGED" if config.statistics_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.qualified.schedules_table} SET {"LOGGED" if config.schedules_table == "" else "UNLOGGED"};"""  # noqa
 
     def build_optimize_autovacuum_query(self) -> str:
         return f"""ALTER TABLE {self.qualified.queue_table} SET (
