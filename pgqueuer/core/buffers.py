@@ -7,9 +7,7 @@ import dataclasses
 import random
 from contextlib import suppress
 from datetime import timedelta
-from typing import Generic, Protocol, TypeVar
-
-from typing_extensions import Self
+from typing import Generic, Protocol, Self, TypeVar
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types

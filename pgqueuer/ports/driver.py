@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Callable, Protocol, TypeAlias, runtime_checkable
-
-from typing_extensions import Self
+from typing import Callable, Protocol, Self, TypeAlias, runtime_checkable
 
 NotifyCallback: TypeAlias = Callable[[str | bytes | bytearray], None]
 """Callback that receives the payload of a NOTIFY."""

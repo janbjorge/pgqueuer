@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import timedelta
-from typing import Generator
-
-from typing_extensions import assert_never
+from typing import Generator, assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer

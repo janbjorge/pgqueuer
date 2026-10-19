@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Generator
-
-from typing_extensions import assert_never
+from typing import Generator, assert_never
 
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.schema.model import (

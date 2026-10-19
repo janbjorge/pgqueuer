@@ -9,10 +9,9 @@ import asyncio
 import dataclasses
 import heapq
 from datetime import datetime, timedelta
-from typing import Literal, NamedTuple, TypedDict, overload
+from typing import Literal, NamedTuple, TypedDict, assert_never, overload
 
 from pydantic_core import to_json
-from typing_extensions import assert_never
 
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
 from pgqueuer.adapters.persistence import qb, query_helpers

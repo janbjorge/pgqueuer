@@ -4,8 +4,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
-
-from typing_extensions import Self
+from typing import Self
 
 from pgqueuer.core import buffers, logconfig
 from pgqueuer.domain import types

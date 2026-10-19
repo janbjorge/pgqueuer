@@ -7,9 +7,7 @@ import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import MutableMapping
-
-from typing_extensions import assert_never
+from typing import MutableMapping, assert_never
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types

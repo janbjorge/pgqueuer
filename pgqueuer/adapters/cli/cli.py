@@ -9,13 +9,12 @@ import sys
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, AsyncGenerator, Callable, Coroutine, TypeVar
+from typing import TYPE_CHECKING, AsyncGenerator, Callable, Coroutine, TypeVar, assert_never
 
 import typer
 from pydantic_core import to_json
 from tabulate import tabulate
 from typer import Context
-from typing_extensions import assert_never
 
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.persistence import qb, queries, schema_ddl
