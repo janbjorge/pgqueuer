@@ -259,7 +259,9 @@ def test_cli_setup_env_refreshes_db_settings(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_cli_settings_follow_prefix_and_schema() -> None:
-    settings = AppConfig(prefix="acme_", schema="billing").settings
+    config = AppConfig(prefix="acme_", schema="billing")
+    settings = config.settings
+    assert config.settings is settings
     assert (settings.prefix, settings.db_schema) == ("acme_", "billing")
     assert settings.queue_table == "acme_pgqueuer"
 

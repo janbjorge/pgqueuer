@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from collections.abc import AsyncGenerator, Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, TypeVar, assert_never
@@ -81,6 +81,12 @@ class AppConfig:
     schema: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
+    # Names for --prefix/--schema; the remaining names come from PGQUEUER_* env
+    # vars. Every command reads this one object.
+    settings: DBSettings = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.settings = DBSettings(prefix=self.prefix, db_schema=self.schema or None)
 
     def setup_env(self) -> None:
         if self.prefix:
@@ -88,11 +94,6 @@ class AppConfig:
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
         db_settings.cache_clear()
-
-    @property
-    def settings(self) -> DBSettings:
-        """Names for --prefix/--schema; the remaining names come from PGQUEUER_* env vars."""
-        return DBSettings(prefix=self.prefix, db_schema=self.schema or None)
 
 
 @app.callback()
