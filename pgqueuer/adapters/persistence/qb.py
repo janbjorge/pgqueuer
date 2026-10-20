@@ -14,7 +14,6 @@ from pgqueuer.domain.settings import (
     Durability,
     DurabilityPolicy,
     QualifiedNames,
-    db_settings,
 )
 from pgqueuer.domain.types import (
     OnConflict,
@@ -39,7 +38,7 @@ __all__ = [
 class QueryBuilderEnvironment:
     """DDL/utility query builder bound to a :class:`DBSettings`."""
 
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -209,7 +208,7 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 
 @dataclasses.dataclass
 class QueryQueueBuilder:
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings
     # Rendered dequeue SQL per (capacity-gated, budget-gated) shape. The bind
     # order is fixed per shape, so cached text pairs with freshly bound args.
     dequeue_sql_cache: dict[tuple[bool, bool], str] = dataclasses.field(default_factory=dict)
@@ -1046,7 +1045,7 @@ class QueryQueueBuilder:
 
 @dataclasses.dataclass
 class QuerySchedulerBuilder:
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings
 
     @property
     def qualified(self) -> QualifiedNames:
