@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import importlib
 import inspect
 import os
@@ -7,11 +8,14 @@ import sys
 from contextlib import AbstractAsyncContextManager
 from typing import Protocol
 
+from pgqueuer.domain.settings import DBSettings
+
 
 class Factory(Protocol):
-    """User factory callable; CLI extra arguments are forwarded positionally."""
+    """User factory callable; CLI extra arguments are forwarded positionally,
+    and ``settings`` by keyword when the factory declares it."""
 
-    def __call__(self, *args: object) -> object: ...
+    def __call__(self, *args: object, **kwargs: object) -> object: ...
 
 
 def load_factory(factory: str | Factory) -> Factory:
@@ -27,6 +31,29 @@ def load_factory(factory: str | Factory) -> Factory:
     if not callable(loaded):
         raise TypeError(f"{factory!r} does not resolve to a callable, got {type(loaded).__name__}")
     return loaded
+
+
+def bind_settings(factory: Factory, settings: DBSettings, required: bool) -> Factory:
+    """Pass *settings* to a factory that declares a ``settings`` parameter.
+
+    *required* is set when --prefix/--schema was given on the command line; a
+    factory that cannot take settings would silently use other tables, so fail.
+    """
+    if "settings" in inspect.signature(factory).parameters:
+        return functools.partial(factory, settings=settings)
+    if required:
+        raise TypeError(
+            "--prefix/--schema need a factory that accepts them. Add a settings\n"
+            "parameter and pass it on, for example:\n"
+            "\n"
+            "    @asynccontextmanager\n"
+            "    async def main(settings: DBSettings | None = None):\n"
+            "        ...\n"
+            "        yield PgQueuer(driver, settings=settings)\n"
+            "\n"
+            "or set PGQUEUER_PREFIX/PGQUEUER_SCHEMA in the environment instead."
+        )
+    return factory
 
 
 def validate_factory_result(result: object) -> AbstractAsyncContextManager[object]:

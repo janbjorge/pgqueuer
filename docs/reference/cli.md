@@ -525,6 +525,20 @@ async def create_pgqueuer(args: list[str]):
     yield pgq
 ```
 
+A factory that declares a `settings` parameter receives the `DBSettings` built from
+`--prefix` and `--schema`; pass it on so the worker uses those names:
+
+```python
+@asynccontextmanager
+async def create_pgqueuer(settings: DBSettings | None = None):
+    ...
+    yield PgQueuer(driver, settings=settings)
+```
+
+`--prefix`/`--schema` given on the command line fail for a factory without that
+parameter, since it would build its own settings and use other tables. Setting
+`PGQUEUER_PREFIX`/`PGQUEUER_SCHEMA` in the environment works with either kind.
+
 ### Things worth knowing
 
 - With `--restart-on-failure`, the factory runs again after each failure, so every restart

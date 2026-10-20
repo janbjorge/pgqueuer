@@ -13,6 +13,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, TypeVar, assert_never
 
 import typer
+from click.core import ParameterSource
 from pydantic_core import to_json
 from tabulate import tabulate
 from typer import Context
@@ -81,18 +82,15 @@ class AppConfig:
     schema: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
+    # --prefix/--schema typed on the command line, not read from the env. A user
+    # factory must then accept settings, or it would use other tables.
+    names_from_cli: bool = False
     # Names for --prefix/--schema; the remaining names come from PGQUEUER_* env
     # vars. Every command reads this one object.
     settings: DBSettings = field(init=False)
 
     def __post_init__(self) -> None:
         self.settings = DBSettings(prefix=self.prefix, db_schema=self.schema or None)
-
-    def setup_env(self) -> None:
-        if self.prefix:
-            os.environ["PGQUEUER_PREFIX"] = self.prefix
-        if self.schema:
-            os.environ["PGQUEUER_SCHEMA"] = self.schema
 
 
 @app.callback()
@@ -129,8 +127,11 @@ def main(
         schema=schema,
         pg_dsn=pg_dsn,
         factory_fn_ref=factory_fn_ref,
+        names_from_cli=any(
+            ctx.get_parameter_source(name) is ParameterSource.COMMANDLINE
+            for name in ("prefix", "schema")
+        ),
     )
-    config.setup_env()
     ctx.obj = config
 
 
@@ -166,7 +167,11 @@ async def yield_queries(ctx: Context) -> AsyncGenerator[queries.Queries, None]:
     config: AppConfig = ctx.obj
     factory_fn: Callable[[], object]
     if config.factory_fn_ref:
-        factory_fn = factories.load_factory(config.factory_fn_ref)
+        factory_fn = factories.bind_settings(
+            factories.load_factory(config.factory_fn_ref),
+            config.settings,
+            required=config.names_from_cli,
+        )
     else:
         factory_fn = create_default_queries_factory(config)
     async with factories.validate_factory_result(factory_fn()) as entered:
@@ -472,6 +477,7 @@ def listen(
 
 @app.command(help="Start a PgQueuer.")
 def run(
+    ctx: Context,
     factory_fn: str = typer.Argument(
         ...,
         help="Path to a factory function (module:function).",
@@ -534,7 +540,12 @@ def run(
     """
     logconfig.setup_fancy_logger(log_level)
 
-    factory = factories.load_factory(factory_fn)
+    config: AppConfig = ctx.obj
+    factory = factories.bind_settings(
+        factories.load_factory(factory_fn),
+        config.settings,
+        required=config.names_from_cli,
+    )
     if factory_args:
         factory = functools.partial(factory, factory_args)
 

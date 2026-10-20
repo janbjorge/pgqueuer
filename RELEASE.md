@@ -21,6 +21,11 @@
   vars when they are built. v1.6 read them once per process and kept that
   value. Building `DBSettings()` takes a few hundred microseconds, so if you
   create queries per request, build the settings once and pass them in.
+- `pgq` no longer writes `--prefix`/`--schema` into `os.environ`. A `pgq run`
+  or `--factory` factory with a `settings` parameter receives them instead.
+  `pgq --prefix ... run app:factory` now fails when the factory has no
+  `settings` parameter, where v1.6 passed the prefix through the environment;
+  add the parameter or set `PGQUEUER_PREFIX` instead.
 
 ### Removed
 

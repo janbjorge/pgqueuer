@@ -5,6 +5,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from datetime import timedelta
 
 import psycopg
@@ -242,3 +243,51 @@ def test_cli_upgrade_reports_converged_and_plans_the_delta(dsn: str) -> None:
     assert applied.stdout.strip() == ""
 
     assert "already up to date" in runner.invoke(app, ["upgrade"], env=env).stderr
+
+
+def factory_with_settings(settings: DBSettings | None = None) -> DBSettings | None:
+    return settings
+
+
+def factory_without_settings() -> None:
+    return None
+
+
+@pytest.mark.parametrize(
+    ("args", "env", "expected"),
+    [
+        (["--prefix", "foo_", "run", f"{__name__}:factory_with_settings"], {}, "foo_"),
+        (["run", f"{__name__}:factory_with_settings"], {"PGQUEUER_PREFIX": "bar_"}, "bar_"),
+        (["run", f"{__name__}:factory_without_settings"], {"PGQUEUER_PREFIX": "bar_"}, None),
+    ],
+)
+def test_cli_run_passes_settings_to_the_factory(
+    monkeypatch: pytest.MonkeyPatch,
+    args: list[str],
+    env: dict[str, str],
+    expected: str | None,
+) -> None:
+    """Settings reach the factory as an argument; the CLI never writes os.environ."""
+    monkeypatch.delenv("PGQUEUER_PREFIX", raising=False)
+    built: list[object] = []
+
+    async def fake_runit(factory: Callable[[], object], **kwargs: object) -> None:
+        built.append(factory())
+
+    monkeypatch.setattr(supervisor, "runit", fake_runit)
+    result = CliRunner().invoke(app, args, env=env)
+    assert result.exit_code == 0, result.output
+    assert [getattr(b, "prefix", b) for b in built] == [expected]
+    assert "PGQUEUER_PREFIX" not in os.environ
+
+
+def test_cli_run_rejects_prefix_for_a_factory_without_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A factory that cannot take settings would use other tables than --prefix names."""
+    monkeypatch.setattr(supervisor, "runit", lambda *a, **k: None)
+    result = CliRunner().invoke(
+        app, ["--prefix", "foo_", "run", f"{__name__}:factory_without_settings"]
+    )
+    assert result.exit_code != 0
+    assert "need a factory that accepts them" in str(result.exception)
