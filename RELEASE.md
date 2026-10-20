@@ -16,6 +16,9 @@
 
 ### Removed
 
+- `pgqueuer.domain.settings.add_prefix()`. `DBSettings` applies
+  `PGQUEUER_PREFIX` itself; use `DBSettings(prefix=...)` or the environment
+  variable.
 - `Driver.tm` property and `TaskManagerPort` protocol. Drivers manage background
   tasks privately without exposing a task manager port; `PsycopgDriver` uses an
   internal task set for its NOTIFY watcher (#892).

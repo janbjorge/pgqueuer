@@ -17,7 +17,6 @@ from pgqueuer.domain.settings import (
     ConnectionSettings,
     DBSettings,
     QualifiedNames,
-    add_prefix,
     db_settings,
 )
 from pgqueuer.domain.types import Channel
@@ -76,12 +75,6 @@ def test_legacy_statistics_status_type_carries_prefix() -> None:
         DBSettings(prefix="acme_").legacy_statistics_status_type
         == "acme_pgqueuer_statistics_status"
     )
-
-
-def test_add_prefix_shim_warns_and_concats(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PGQUEUER_PREFIX", "acme_")
-    with pytest.deprecated_call():
-        assert add_prefix("pgqueuer") == "acme_pgqueuer"
 
 
 @pytest.mark.parametrize("bad", ["foo.bar", "foo;drop", "foo bar", "1foo", "foo'"])

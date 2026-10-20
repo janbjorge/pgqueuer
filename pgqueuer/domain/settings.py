@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import functools
-import os
-import warnings
 from collections.abc import Callable
 from enum import Enum
 from typing import Annotated, Literal, TypeAlias
@@ -33,17 +31,6 @@ ObjectName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}(\.
 ChannelName: TypeAlias = Annotated[
     Channel, StringConstraints(pattern=r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 ]
-
-
-def add_prefix(string: str) -> str:
-    """Deprecated: ``DBSettings`` applies ``PGQUEUER_PREFIX`` itself via its ``prefix`` field."""
-    warnings.warn(
-        "add_prefix is deprecated; DBSettings reads PGQUEUER_PREFIX itself "
-        "(DBSettings(prefix=...) or the PGQUEUER_PREFIX environment variable).",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return f"{os.environ.get('PGQUEUER_PREFIX', '')}{string}"
 
 
 def name_env_alias(field_name: str) -> AliasChoices:
