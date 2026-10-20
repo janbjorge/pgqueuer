@@ -27,7 +27,7 @@ from pgqueuer.core.logconfig import logger
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as models_schema
 from pgqueuer.domain.schema.declaration import target
-from pgqueuer.domain.settings import DBSettings, db_settings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
 from pgqueuer.ports.driver import Driver, SyncDriver
@@ -70,7 +70,7 @@ class Queries:
 
     # Table, channel and schema names. The builders, and every caller holding
     # these queries, read this one object; defaults to the PGQUEUER_* env vars.
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
     qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
@@ -93,7 +93,7 @@ class Queries:
         """Build Queries over an asyncpg connection."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
-        return cls(AsyncpgDriver(connection), settings or db_settings())
+        return cls(AsyncpgDriver(connection), settings or DBSettings())
 
     @classmethod
     def from_asyncpg_pool(
@@ -104,7 +104,7 @@ class Queries:
         """Build Queries over an asyncpg pool."""
         from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 
-        return cls(AsyncpgPoolDriver(pool), settings or db_settings())
+        return cls(AsyncpgPoolDriver(pool), settings or DBSettings())
 
     @classmethod
     def from_psycopg_connection(
@@ -115,7 +115,7 @@ class Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
         from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
-        return cls(PsycopgDriver(connection), settings or db_settings())
+        return cls(PsycopgDriver(connection), settings or DBSettings())
 
     async def install(
         self,
@@ -798,7 +798,7 @@ class SyncQueries:
     driver: SyncDriver
 
     # Table, channel and schema names; defaults to the PGQUEUER_* env vars.
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
 

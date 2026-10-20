@@ -14,6 +14,13 @@
 
 ## v1.7.0
 
+### Changed
+
+- `Queries`, `SyncQueries`, `InMemoryQueries`, `PgQueuer`, `create_web_app` and
+  `create_mcp_server` read their default `DBSettings` from the `PGQUEUER_*` env
+  vars when they are built. v1.6 read them once per process and kept that
+  value.
+
 ### Removed
 
 - `--dry-run` on `pgq install`, `uninstall`, `upgrade`, `durability` and

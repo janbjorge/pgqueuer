@@ -17,7 +17,6 @@ from pgqueuer.domain.settings import (
     ConnectionSettings,
     DBSettings,
     QualifiedNames,
-    db_settings,
 )
 from pgqueuer.domain.types import Channel
 
@@ -175,23 +174,12 @@ def test_connection_settings_pgqueuer_dsn_wins_over_pgdsn(
     assert ConnectionSettings().dsn == "postgresql://example/pgqueuer"
 
 
-def test_db_settings_reads_the_env_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PGQUEUER_PREFIX", "first_")
-    settings = db_settings()
-    monkeypatch.setenv("PGQUEUER_PREFIX", "second_")
-    assert db_settings() is settings
-    assert settings.prefix == "first_"
-
-    db_settings.cache_clear()
-    assert db_settings().prefix == "second_"
-
-
 @pytest.mark.parametrize("make", [Queries, InMemoryQueries])
 def test_queries_builders_share_one_settings(
     make: Callable[[InMemoryDriver], Queries | InMemoryQueries],
 ) -> None:
     q = make(InMemoryDriver())
-    assert q.qbe.settings is q.qbq.settings is q.qbs.settings is db_settings()
+    assert q.qbe.settings is q.qbq.settings is q.qbs.settings is q.settings
 
 
 @pytest.mark.parametrize("make", [Queries, InMemoryQueries])
@@ -249,21 +237,28 @@ def test_channel_default_resolves_at_construction(monkeypatch: pytest.MonkeyPatc
     assert PgQueuer(driver).channel == "acme_ch_pgqueuer"
 
 
-def test_cli_setup_env_refreshes_db_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """--prefix/--schema reach settings even when they were read before the callback ran."""
-    monkeypatch.delenv("PGQUEUER_PREFIX", raising=False)
-    monkeypatch.delenv("PGQUEUER_SCHEMA", raising=False)
-    assert db_settings().prefix == ""
-    AppConfig(prefix="acme_", schema="billing").setup_env()
-    assert (db_settings().prefix, db_settings().db_schema) == ("acme_", "billing")
-
-
 def test_cli_settings_follow_prefix_and_schema() -> None:
     config = AppConfig(prefix="acme_", schema="billing")
     settings = config.settings
     assert config.settings is settings
     assert (settings.prefix, settings.db_schema) == ("acme_", "billing")
     assert settings.queue_table == "acme_pgqueuer"
+
+
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: PgQueuer(InMemoryDriver()),
+        lambda: PgQueuer(InMemoryDriver(), settings=DBSettings(prefix="billing_")),
+        lambda: PgQueuer(InMemoryDriver(), queries=InMemoryQueries(InMemoryDriver())),
+        PgQueuer.in_memory,
+        lambda: PgQueuer.in_memory(settings=DBSettings(prefix="billing_")),
+    ],
+)
+def test_managers_share_one_queries(make: Callable[[], PgQueuer]) -> None:
+    """Both managers hold the same queries, so they read the same settings."""
+    pgq = make()
+    assert pgq.qm.queries is pgq.sm.queries is pgq.queries
 
 
 # Before #945 only prefix and db_schema were validated, so a name like

@@ -23,7 +23,7 @@ from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
-from pgqueuer.domain.settings import DBSettings, db_settings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -93,7 +93,6 @@ class AppConfig:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
-        db_settings.cache_clear()
 
 
 @app.callback()
