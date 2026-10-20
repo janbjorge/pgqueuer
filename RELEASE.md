@@ -12,10 +12,12 @@
 
 ---
 
-## v1.7.0
+## v2.0.0
 
 ### Removed
 
+- `--dry-run` on `pgq install`, `uninstall`, `upgrade`, `durability` and
+  `autovac`. Use `pgq sql install` and its siblings, which print the same SQL.
 - `Driver.tm` property and `TaskManagerPort` protocol. Drivers manage background
   tasks privately without exposing a task manager port; `PsycopgDriver` uses an
   internal task set for its NOTIFY watcher (#892).
