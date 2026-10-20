@@ -23,7 +23,7 @@ from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
-from pgqueuer.domain.settings import db_settings
+from pgqueuer.domain.settings import DBSettings, db_settings
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -89,6 +89,11 @@ class AppConfig:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
         db_settings.cache_clear()
 
+    @property
+    def settings(self) -> DBSettings:
+        """Names for --prefix/--schema; the remaining names come from PGQUEUER_* env vars."""
+        return DBSettings(prefix=self.prefix, db_schema=self.schema or None)
+
 
 @app.callback()
 def main(
@@ -141,14 +146,14 @@ def create_default_queries_factory(
             from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(AsyncpgDriver(connection))
+                yield queries.Queries(AsyncpgDriver(connection), config.settings)
             return
         with contextlib.suppress(ImportError):
             from pgqueuer.adapters.connections import connect_psycopg
             from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
-                yield queries.Queries(PsycopgDriver(connection))
+                yield queries.Queries(PsycopgDriver(connection), config.settings)
             return
         raise RuntimeError("Neither asyncpg nor psycopg could be imported.")
 
@@ -268,7 +273,8 @@ def install(
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     create_schema: sql_cmd.CreateSchemaOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability)
+    config: AppConfig = ctx.obj
+    settings = config.settings.model_copy(update={"durability": durability})
 
     async def run() -> bool:
         async with yield_queries(ctx) as q:
@@ -375,7 +381,8 @@ def upgrade(
     ),
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
-    settings = qb.DBSettings(widen_id=widen_id)
+    config: AppConfig = ctx.obj
+    settings = config.settings.model_copy(update={"widen_id": widen_id})
 
     async def run() -> schema_model.Plan:
         async with yield_queries(ctx) as q:
@@ -442,7 +449,9 @@ def web(
 
     logconfig.setup_fancy_logger(logconfig.LogLevel.INFO)
     config: AppConfig = ctx.obj
-    uvicorn.run(create_web_app(config.pg_dsn or None), host=host, port=port)
+    uvicorn.run(
+        create_web_app(config.pg_dsn or None, settings=config.settings), host=host, port=port
+    )
 
 
 @app.command(help="Listen to a PostgreSQL NOTIFY channel for debug purposes.")

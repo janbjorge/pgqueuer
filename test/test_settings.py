@@ -258,6 +258,12 @@ def test_cli_setup_env_refreshes_db_settings(monkeypatch: pytest.MonkeyPatch) ->
     assert (db_settings().prefix, db_settings().db_schema) == ("acme_", "billing")
 
 
+def test_cli_settings_follow_prefix_and_schema() -> None:
+    settings = AppConfig(prefix="acme_", schema="billing").settings
+    assert (settings.prefix, settings.db_schema) == ("acme_", "billing")
+    assert settings.queue_table == "acme_pgqueuer"
+
+
 # Before #945 only prefix and db_schema were validated, so a name like
 # "evil; CREATE TABLE x; --" reached the SQL string verbatim. Object names must
 # be identifiers or dotted identifier chains; the channel, which goes into SQL
