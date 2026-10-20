@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from collections.abc import AsyncGenerator, Callable, Coroutine
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, TypeVar, assert_never
@@ -23,7 +23,7 @@ from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as schema_model
-from pgqueuer.domain.settings import DBSettings, db_settings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports.driver import Driver
 
 if TYPE_CHECKING:
@@ -81,18 +81,18 @@ class AppConfig:
     schema: str = ""
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
+    # Names for --prefix/--schema; the remaining names come from PGQUEUER_* env
+    # vars. Every command reads this one object.
+    settings: DBSettings = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.settings = DBSettings(prefix=self.prefix, db_schema=self.schema or None)
 
     def setup_env(self) -> None:
         if self.prefix:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
-        db_settings.cache_clear()
-
-    @property
-    def settings(self) -> DBSettings:
-        """Names for --prefix/--schema; the remaining names come from PGQUEUER_* env vars."""
-        return DBSettings(prefix=self.prefix, db_schema=self.schema or None)
 
 
 @app.callback()

@@ -21,7 +21,7 @@ from pgqueuer.core.executors import (
 )
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.core.sm import SchedulerManager
-from pgqueuer.domain.settings import DBSettings, db_settings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel, OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
@@ -70,7 +70,7 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         if self.queries is None:
-            self.queries = Queries(self.connection, self.settings or db_settings())
+            self.queries = Queries(self.connection, self.settings or DBSettings())
         elif self.settings is not None and self.settings is not self.queries.qbe.settings:
             raise ValueError("Pass settings to the queries, not to PgQueuer alongside them.")
         self.channel = self.channel or Channel(self.queries.qbe.settings.channel)
@@ -162,7 +162,7 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        inmem = InMemoryQueries(driver=driver, settings=settings or db_settings())
+        inmem = InMemoryQueries(driver=driver, settings=settings or DBSettings())
         return cls(
             connection=driver,
             channel=channel or Channel(""),

@@ -15,7 +15,7 @@ from pgqueuer.adapters.connections import create_asyncpg_pool
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.insights import InsightsService
-from pgqueuer.domain.settings import ConnectionSettings, DBSettings, db_settings
+from pgqueuer.domain.settings import ConnectionSettings, DBSettings
 
 
 class PgQueuerDatabase:
@@ -434,7 +434,7 @@ def create_mcp_server(
              environment variables (PGHOST, PGPORT, PGUSER, PGPASSWORD,
              PGDATABASE) automatically.
         settings: PgQueuer DBSettings (table names, channel, etc.). If None,
-             the process-wide settings read from PGQUEUER_* env vars.
+             read from PGQUEUER_* env vars when the server starts.
         connection_settings: Pool sizing/timeouts. If None, read from
              PGQUEUER_* env vars at startup (PGQUEUER_POOL_MIN_SIZE,
              PGQUEUER_POOL_MAX_SIZE, PGQUEUER_CONNECT_TIMEOUT,
@@ -444,7 +444,7 @@ def create_mcp_server(
     @asynccontextmanager
     async def app_lifespan(server: FastMCP[PgQueuerDatabase]) -> AsyncIterator[PgQueuerDatabase]:
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
-            yield PgQueuerDatabase(pool, settings or db_settings())
+            yield PgQueuerDatabase(pool, settings or DBSettings())
 
     mcp = FastMCP("pgqueuer", lifespan=app_lifespan)
 

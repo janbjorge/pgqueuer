@@ -3,12 +3,15 @@ from typing import cast
 import psycopg
 from flask import Flask, Response, g, jsonify, request
 
+from pgqueuer import DBSettings
 from pgqueuer.db import SyncPsycopgDriver
 from pgqueuer.queries import SyncQueries
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    # Read the PGQUEUER_* env vars once, not on every request.
+    settings = DBSettings()
 
     def get_driver() -> SyncPsycopgDriver:
         if "driver" not in g:
@@ -26,7 +29,7 @@ def create_app() -> Flask:
 
     @app.route("/enqueue", methods=["POST"])
     def enqueue() -> Response:
-        queries = SyncQueries(get_driver())
+        queries = SyncQueries(get_driver(), settings)
         data = request.get_json(force=True)
         entrypoint = data.get("entrypoint", "default")
         payload = data.get("payload")
@@ -37,7 +40,7 @@ def create_app() -> Flask:
 
     @app.route("/queue_size")
     def queue_size() -> Response:
-        queries = SyncQueries(get_driver())
+        queries = SyncQueries(get_driver(), settings)
         stats = queries.queue_size()
         return jsonify(
             [

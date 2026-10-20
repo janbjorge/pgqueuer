@@ -18,7 +18,7 @@ from pgqueuer.adapters.persistence import qb, query_helpers
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.models import utc_now
-from pgqueuer.domain.settings import DBSettings, db_settings
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
@@ -111,7 +111,7 @@ class InMemoryQueries:
 
     # Table, channel and schema names. The builders, and every caller holding
     # these queries, read this one object; defaults to the PGQUEUER_* env vars.
-    settings: DBSettings = dataclasses.field(default_factory=db_settings)
+    settings: DBSettings = dataclasses.field(default_factory=DBSettings)
 
     qbe: qb.QueryBuilderEnvironment = dataclasses.field(init=False)
     qbq: qb.QueryQueueBuilder = dataclasses.field(init=False)
