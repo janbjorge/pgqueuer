@@ -183,27 +183,12 @@ def test_cli_upgrade_reports_drift_without_a_traceback(dsn: str) -> None:
     assert result.stdout.strip() == ""
 
 
-@pytest.mark.parametrize(
-    ("extra_args", "warned"),
-    [([], False), (["--durability", "volatile"], True), (["-d", "volatile"], True)],
-)
-def test_cli_upgrade_ignores_a_durability_flag(
-    dsn: str,
-    extra_args: list[str],
-    warned: bool,
-) -> None:
-    """v1.4.0 scripts pass it; it never applied, so it warns and the upgrade runs.
+@pytest.mark.parametrize("flag", ["--durability", "-d"])
+def test_cli_upgrade_rejects_a_durability_flag(flag: str) -> None:
+    result = CliRunner().invoke(app, ["upgrade", flag, "volatile"])
 
-    No ``note:`` means the declared level stayed durable rather than volatile.
-    """
-    env = env_from_dsn(dsn)
-
-    result = CliRunner().invoke(app, ["upgrade", *extra_args], env=env)
-
-    assert result.exit_code == 0
-    assert ("--durability is ignored" in result.stderr) is warned
-    assert "note:" not in result.stderr
-    assert "already up to date" in result.stderr
+    assert result.exit_code == 2
+    assert "No such option" in result.output
 
 
 @pytest.mark.parametrize(

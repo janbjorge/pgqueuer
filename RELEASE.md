@@ -16,6 +16,8 @@
 
 ### Removed
 
+- `pgq upgrade --durability` / `-d`. It was already ignored; use
+  `pgq durability` to change durability.
 - `Driver.tm` property and `TaskManagerPort` protocol. Drivers manage background
   tasks privately without exposing a task manager port; `PsycopgDriver` uses an
   internal task set for its NOTIFY watcher (#892).
