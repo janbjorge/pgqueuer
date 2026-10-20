@@ -18,7 +18,7 @@ from tabulate import tabulate
 from typer import Context
 
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
-from pgqueuer.adapters.persistence import qb, queries, schema_ddl
+from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
@@ -63,16 +63,6 @@ app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(sql_cmd.sql_app, name="sql")
-
-
-def emit_deprecated_dry_run(ctx: Context, sql: str) -> None:
-    typer.secho(
-        "Warning: --dry-run is deprecated and will be removed in v2.0; "
-        f"use 'pgq sql {ctx.command.name}'.",
-        err=True,
-        fg=typer.colors.YELLOW,
-    )
-    typer.echo(sql)
 
 
 class VerifyMode(Enum):
@@ -275,21 +265,10 @@ def located(settings: qb.DBSettings) -> str:
 @app.command(help="Install the necessary database schema for PgQueuer.")
 def install(
     ctx: Context,
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        hidden=True,
-        help="Deprecated: use 'pgq sql install'.",
-    ),
     durability: sql_cmd.DurabilityOption = qb.Durability.durable,
     create_schema: sql_cmd.CreateSchemaOption = True,
 ) -> None:
     settings = qb.DBSettings(durability=durability)
-    if dry_run:
-        emit_deprecated_dry_run(
-            ctx, schema_ddl.render_install(settings, create_schema=create_schema)
-        )
-        return
 
     async def run() -> bool:
         async with yield_queries(ctx) as q:
@@ -360,17 +339,7 @@ def verify(
 @app.command(help="Remove the PgQueuer schema from the database.")
 def uninstall(
     ctx: Context,
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        hidden=True,
-        help="Deprecated: use 'pgq sql uninstall'.",
-    ),
 ) -> None:
-    if dry_run:
-        emit_deprecated_dry_run(ctx, schema_ddl.render_uninstall(db_settings()))
-        return
-
     async def run() -> None:
         async with yield_queries(ctx) as q:
             await q.uninstall()
@@ -399,12 +368,6 @@ def report_upgrade(applied: schema_model.Plan, planned_only: bool) -> None:
 )
 def upgrade(
     ctx: Context,
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        hidden=True,
-        help="Deprecated: use 'pgq sql upgrade'.",
-    ),
     plan: bool = typer.Option(
         False,
         "--plan",
@@ -413,9 +376,6 @@ def upgrade(
     widen_id: sql_cmd.WidenIdOption = True,
 ) -> None:
     settings = qb.DBSettings(widen_id=widen_id)
-    if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_upgrade(settings))
-        return
 
     async def run() -> schema_model.Plan:
         async with yield_queries(ctx) as q:
@@ -852,17 +812,8 @@ def backlog(
 def durability(
     ctx: Context,
     durability: sql_cmd.DurabilityArgument,
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        hidden=True,
-        help="Deprecated: use 'pgq sql durability'.",
-    ),
 ) -> None:
     """Switch durability level of PgQueuer tables without data loss."""
-    if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_durability(durability))
-        return
 
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -875,18 +826,9 @@ def durability(
 @app.command(name="autovac", help="Optimize autovacuum settings for PgQueuer tables.")
 def optimize_autovacuum(
     ctx: Context,
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        hidden=True,
-        help="Deprecated: use 'pgq sql autovac'.",
-    ),
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
     """Apply or revert recommended autovacuum settings."""
-    if dry_run:
-        emit_deprecated_dry_run(ctx, sql_cmd.render_autovac(rollback))
-        return
 
     async def run() -> None:
         async with yield_queries(ctx) as q:

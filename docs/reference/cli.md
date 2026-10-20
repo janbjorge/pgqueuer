@@ -16,7 +16,6 @@ Set up the necessary database schema for PgQueuer.
   - `balanced`: Critical tables (`pgqueuer`, `pgqueuer_schedules`) are logged; auxiliary
     tables are unlogged.
   - `durable` *(default)*: All tables are logged: full crash recovery.
-- `--dry-run` *(deprecated)*: Alias for [`pgq sql install`](#sql).
 
 ```bash
 pgq install --durability balanced
@@ -35,10 +34,6 @@ empty database, where it installs everything -- use [`pgq upgrade`](#upgrade).
 ### `uninstall`
 
 Remove the PgQueuer schema from the database.
-
-**Options:**
-
-- `--dry-run` *(deprecated)*: Alias for [`pgq sql uninstall`](#sql).
 
 ```bash
 pgq uninstall
@@ -63,7 +58,6 @@ already current runs nothing and says so.
   [`pgq sql upgrade`](#sql) for the artifact to check in.
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
-- `--dry-run` *(deprecated)*: Alias for [`pgq sql upgrade`](#sql).
 
 ```bash
 pgq upgrade --plan          # what would change, nothing applied
@@ -143,7 +137,6 @@ Change the durability level of existing PgQueuer tables **without data loss**.
 **Arguments:**
 
 - `durability` *(required)*: `volatile`, `balanced`, or `durable`.
-- `--dry-run` *(deprecated)*: Alias for [`pgq sql durability`](#sql).
 
 ```bash
 pgq durability durable
@@ -157,7 +150,6 @@ Apply recommended autovacuum settings for PgQueuer tables.
 
 **Options:**
 
-- `--dry-run` *(deprecated)*: Alias for [`pgq sql autovac`](#sql).
 - `--rollback`: Reset autovacuum settings to system defaults.
 
 ```bash
