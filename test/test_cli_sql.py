@@ -66,6 +66,24 @@ def test_sql_install_respects_prefix_and_schema(monkeypatch: pytest.MonkeyPatch)
     assert "CREATE SCHEMA" not in no_create.output
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["install"],
+        ["uninstall"],
+        ["upgrade"],
+        ["durability", "volatile"],
+        ["autovac"],
+        ["autovac", "--rollback"],
+    ],
+)
+def test_sql_commands_respect_prefix(monkeypatch: pytest.MonkeyPatch, args: list[str]) -> None:
+    monkeypatch.delenv("PGQUEUER_PREFIX", raising=False)
+    result = CliRunner().invoke(app, ["--prefix", "foo_", "sql", *args])
+    assert result.exit_code == 0, result.output
+    assert "foo_pgqueuer" in result.output
+
+
 @pytest.mark.parametrize("command", ["install", "upgrade"])
 def test_sql_install_durability_option(command: str) -> None:
     result = CliRunner().invoke(app, ["sql", command, "-d", "volatile"])

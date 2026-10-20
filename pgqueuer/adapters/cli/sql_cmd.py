@@ -8,7 +8,6 @@ from typing import Annotated
 import typer
 
 from pgqueuer.adapters.persistence import qb, schema_ddl
-from pgqueuer.domain.settings import db_settings
 
 sql_app = typer.Typer(
     help=(
@@ -79,13 +78,13 @@ def render_plan(statements: Sequence[str], settings: qb.DBSettings) -> str:
     return "\n\n".join([header, *statements])
 
 
-def render_durability(durability: qb.Durability) -> str:
-    qbe = qb.QueryBuilderEnvironment()
+def render_durability(durability: qb.Durability, settings: qb.DBSettings) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings)
     return "\n\n".join(qbe.build_alter_durability_query(durability))
 
 
-def render_autovac(rollback: bool) -> str:
-    qbe = qb.QueryBuilderEnvironment()
+def render_autovac(rollback: bool, settings: qb.DBSettings) -> str:
+    qbe = qb.QueryBuilderEnvironment(settings)
     return (
         qbe.build_optimize_autovacuum_rollback_query()
         if rollback
@@ -95,16 +94,17 @@ def render_autovac(rollback: bool) -> str:
 
 @sql_app.command(help="SQL to create the PgQueuer schema.")
 def install(
+    ctx: typer.Context,
     durability: DurabilityOption = qb.Durability.durable,
     create_schema: CreateSchemaOption = True,
 ) -> None:
-    settings = qb.DBSettings(durability=durability)
+    settings = ctx.obj.settings.model_copy(update={"durability": durability})
     typer.echo(schema_ddl.render_install(settings, create_schema=create_schema))
 
 
 @sql_app.command(help="SQL to drop all PgQueuer objects.")
-def uninstall() -> None:
-    typer.echo(schema_ddl.render_uninstall(db_settings()))
+def uninstall(ctx: typer.Context) -> None:
+    typer.echo(schema_ddl.render_uninstall(ctx.obj.settings))
 
 
 @sql_app.command(
@@ -115,21 +115,25 @@ def uninstall() -> None:
     )
 )
 def upgrade(
+    ctx: typer.Context,
     durability: DurabilityOption = qb.Durability.durable,
     widen_id: WidenIdOption = True,
 ) -> None:
-    typer.echo(render_upgrade(qb.DBSettings(durability=durability, widen_id=widen_id)))
+    settings = ctx.obj.settings.model_copy(update={"durability": durability, "widen_id": widen_id})
+    typer.echo(render_upgrade(settings))
 
 
 @sql_app.command(help="SQL to switch table durability without data loss.")
 def durability(
+    ctx: typer.Context,
     durability: DurabilityArgument,
 ) -> None:
-    typer.echo(render_durability(durability))
+    typer.echo(render_durability(durability, ctx.obj.settings))
 
 
 @sql_app.command(help="SQL for recommended autovacuum settings (--rollback to reset).")
 def autovac(
+    ctx: typer.Context,
     rollback: bool = typer.Option(False, help="Reset to defaults instead."),
 ) -> None:
-    typer.echo(render_autovac(rollback))
+    typer.echo(render_autovac(rollback, ctx.obj.settings))
