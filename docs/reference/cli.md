@@ -58,8 +58,6 @@ already current runs nothing and says so.
   [`pgq sql upgrade`](#sql) for the artifact to check in.
 - `--widen-id/--no-widen-id`: Widen legacy `int4` id columns to `BIGINT`. See
   [Upgrading](../getting-started/upgrading.md).
-- `--durability` *(deprecated)*: Accepted for older scripts, warns, and is
-  ignored. See below.
 
 ```bash
 pgq upgrade --plan          # what would change, nothing applied

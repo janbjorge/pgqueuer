@@ -18,6 +18,8 @@
 
 - `--dry-run` on `pgq install`, `uninstall`, `upgrade`, `durability` and
   `autovac`. Use `pgq sql install` and its siblings, which print the same SQL.
+- `pgq upgrade --durability` / `-d`. It was already ignored; use
+  `pgq durability` to change durability.
 - `pgqueuer.domain.settings.add_prefix()`. `DBSettings` applies
   `PGQUEUER_PREFIX` itself; use `DBSettings(prefix=...)` or the environment
   variable.
