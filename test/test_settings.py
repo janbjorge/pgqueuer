@@ -213,7 +213,7 @@ def test_sync_queries_uses_passed_settings() -> None:
 def test_builders_are_not_constructor_arguments(make: Callable[..., object]) -> None:
     """Separate builders could disagree on names; settings= is the one input."""
     with pytest.raises(TypeError, match="unexpected keyword argument"):
-        make(InMemoryDriver(), qbe=qb.QueryBuilderEnvironment())
+        make(InMemoryDriver(), qbe=qb.QueryBuilderEnvironment(DBSettings()))
 
 
 def test_passed_settings_set_the_channel() -> None:

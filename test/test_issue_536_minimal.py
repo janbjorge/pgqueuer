@@ -17,7 +17,7 @@ def test_issue_536_heartbeat_in_query() -> None:
     This prevents the race condition where multiple scheduler instances
     execute the same scheduled task multiple times instead of once.
     """
-    builder = qb.QuerySchedulerBuilder()
+    builder = qb.QuerySchedulerBuilder(qb.DBSettings())
     query = builder.build_fetch_schedule_query()
 
     assert "heartbeat = NOW()" in query, (
