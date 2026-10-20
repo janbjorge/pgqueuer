@@ -14,6 +14,11 @@
 
 ## v1.7.0
 
+### Added
+
+- `QueueManager.settings` and `SchedulerManager.settings` expose the settings of
+  their `queries`; inside one `PgQueuer` they are the same object.
+
 ### Removed
 
 - `--dry-run` on `pgq install`, `uninstall`, `upgrade`, `durability` and

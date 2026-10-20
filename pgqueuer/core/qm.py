@@ -22,6 +22,7 @@ from pgqueuer.core import (
     tm,
 )
 from pgqueuer.domain import errors, models, types
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
@@ -89,8 +90,13 @@ class QueueManager:
         default=timedelta(seconds=0.1),
     )
 
+    @property
+    def settings(self) -> DBSettings:
+        """Table, channel and schema names, owned by ``queries``."""
+        return self.queries.qbe.settings
+
     def __post_init__(self) -> None:
-        self.channel = self.channel or types.Channel(self.queries.qbe.settings.channel)
+        self.channel = self.channel or types.Channel(self.settings.channel)
 
     async def listener_healthy(
         self,

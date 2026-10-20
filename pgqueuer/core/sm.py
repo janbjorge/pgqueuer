@@ -10,6 +10,7 @@ import croniter
 
 from pgqueuer.core import executors, logconfig, tm
 from pgqueuer.domain import models, types
+from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
 
@@ -34,6 +35,11 @@ class SchedulerManager:
         init=False,
         default_factory=set,
     )
+
+    @property
+    def settings(self) -> DBSettings:
+        """Table, channel and schema names, owned by ``queries``."""
+        return self.queries.qbe.settings
 
     def schedule(
         self,

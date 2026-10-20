@@ -264,6 +264,23 @@ def test_cli_settings_follow_prefix_and_schema() -> None:
     assert settings.queue_table == "acme_pgqueuer"
 
 
+@pytest.mark.parametrize(
+    "make",
+    [
+        lambda: PgQueuer(InMemoryDriver()),
+        lambda: PgQueuer(InMemoryDriver(), settings=DBSettings(prefix="billing_")),
+        lambda: PgQueuer(InMemoryDriver(), queries=InMemoryQueries(InMemoryDriver())),
+        PgQueuer.in_memory,
+        lambda: PgQueuer.in_memory(settings=DBSettings(prefix="billing_")),
+    ],
+)
+def test_managers_share_one_settings(make: Callable[[], PgQueuer]) -> None:
+    """PgQueuer resolves settings once; every manager reads that same object."""
+    pgq = make()
+    assert pgq.queries is not None
+    assert pgq.settings is pgq.qm.settings is pgq.sm.settings is pgq.queries.qbe.settings
+
+
 # Before #945 only prefix and db_schema were validated, so a name like
 # "evil; CREATE TABLE x; --" reached the SQL string verbatim. Object names must
 # be identifiers or dotted identifier chains; the channel, which goes into SQL

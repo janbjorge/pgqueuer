@@ -55,7 +55,7 @@ class PgQueuer:
     queries: RepositoryPort | None = dataclasses.field(default=None)
     # Table, channel and schema names for the default ``Queries``; None reads the
     # PGQUEUER_* env vars. Pass settings to your own ``queries`` instead when you
-    # bring one.
+    # bring one. After construction this is the queries' settings.
     settings: DBSettings | None = None
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -73,6 +73,7 @@ class PgQueuer:
             self.queries = Queries(self.connection, self.settings or db_settings())
         elif self.settings is not None and self.settings is not self.queries.qbe.settings:
             raise ValueError("Pass settings to the queries, not to PgQueuer alongside them.")
+        self.settings = self.queries.qbe.settings
         self.channel = self.channel or Channel(self.queries.qbe.settings.channel)
         self.qm = QueueManager(
             self.queries,

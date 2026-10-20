@@ -120,9 +120,12 @@ as the first positional parameter. The underlying driver is accessed via
 @dataclasses.dataclass
 class QueueManager:
     queries: RepositoryPort
-    channel: models.Channel = dataclasses.field(
-        default_factory=lambda: models.Channel(db_settings().channel),
-    )
+    # Empty: listen on the channel the queries notify on.
+    channel: types.Channel = types.Channel("")
+
+    @property
+    def settings(self) -> DBSettings:
+        return self.queries.qbe.settings
 ```
 
 Callers construct concrete adapters at the composition root:
@@ -134,6 +137,9 @@ qm = QueueManager(Queries(driver))
 
 `PgQueuer.__post_init__` is the single wiring point that builds `Queries(driver)`
 when a caller passes a `Driver` directly, so `PgQueuer(driver)` still works.
+The query builders inside `Queries` take settings as a required argument, and
+`QueueManager` and `SchedulerManager` read theirs from `queries`, so
+`pgq.qm.settings is pgq.sm.settings`.
 `QueueManager` and `SchedulerManager` no longer build adapters themselves.
 
 ### Target directory layout
