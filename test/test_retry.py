@@ -195,6 +195,7 @@ async def test_cancellation_marks_canceled_no_retry(apgdriver: db.Driver) -> Non
 async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
     retry_timer = timedelta(seconds=0.150)
     event = asyncio.Event()
+    started = asyncio.Event()
     qm = QueueManager(queries.Queries(apgdriver))
 
     async def fetch_db_heartbeat(jobid: JobId) -> timedelta:
@@ -205,16 +206,21 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
 
     @qm.entrypoint("fetch")
     async def fetch(context: Job) -> None:
+        started.set()
         await event.wait()
 
     jid, *_ = await qm.queries.enqueue(["fetch"], [None], [0])
 
     async def entrypoint_waiter() -> None:
+        await started.wait()
         await asyncio.sleep(retry_timer.total_seconds() * 2)
         event.set()
         qm.shutdown.set()
 
     async def poller() -> list[timedelta]:
+        # Until the job is picked, heartbeat holds the enqueue time and ages
+        # with however long qm.run takes to start.
+        await started.wait()
         samples = list[timedelta]()
         while not event.is_set():
             samples.append(await fetch_db_heartbeat(jid))
@@ -226,6 +232,7 @@ async def test_heartbeat_db_datetime(apgdriver: db.Driver) -> None:
         entrypoint_waiter(),
     )
 
+    assert samples
     leeway = retry_timer / 10
     for sample in samples:
         assert sample - leeway < retry_timer, (sample, retry_timer, sample - retry_timer)
