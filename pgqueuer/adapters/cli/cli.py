@@ -13,7 +13,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, TypeVar, assert_never
 
 import typer
-from click.core import ParameterSource
 from pydantic_core import to_json
 from tabulate import tabulate
 from typer import Context
@@ -78,33 +77,38 @@ class OnConflictChoice(Enum):
 
 @dataclass
 class AppConfig:
-    prefix: str = ""
-    schema: str = ""
+    # --prefix/--schema; None when not given, so DBSettings reads PGQUEUER_*.
+    prefix: str | None = None
+    schema: str | None = None
     pg_dsn: str = ""
     factory_fn_ref: str | None = None
-    # --prefix/--schema typed on the command line, not read from the env. A user
-    # factory must then accept settings, or it would use other tables.
-    names_from_cli: bool = False
     # Names for --prefix/--schema; the remaining names come from PGQUEUER_* env
     # vars. Every command reads this one object.
     settings: DBSettings = field(init=False)
 
     def __post_init__(self) -> None:
-        self.settings = DBSettings(prefix=self.prefix, db_schema=self.schema or None)
+        env = DBSettings()
+        self.settings = DBSettings(
+            prefix=env.prefix if self.prefix is None else self.prefix,
+            db_schema=env.db_schema if self.schema is None else self.schema,
+        )
+
+    @property
+    def names_given(self) -> bool:
+        """--prefix or --schema was passed; a user factory must then take settings."""
+        return self.prefix is not None or self.schema is not None
 
 
 @app.callback()
 def main(
     ctx: Context,
-    prefix: str = typer.Option(
-        "",
-        help="Prefix for pgqueuer objects.",
-        envvar="PGQUEUER_PREFIX",
+    prefix: str | None = typer.Option(
+        None,
+        help="Prefix for pgqueuer objects. Defaults to PGQUEUER_PREFIX.",
     ),
-    schema: str = typer.Option(
-        "",
-        help="Postgres schema holding all pgqueuer objects.",
-        envvar="PGQUEUER_SCHEMA",
+    schema: str | None = typer.Option(
+        None,
+        help="Postgres schema holding all pgqueuer objects. Defaults to PGQUEUER_SCHEMA.",
     ),
     pg_dsn: str = typer.Option(
         "",
@@ -127,10 +131,6 @@ def main(
         schema=schema,
         pg_dsn=pg_dsn,
         factory_fn_ref=factory_fn_ref,
-        names_from_cli=any(
-            ctx.get_parameter_source(name) is ParameterSource.COMMANDLINE
-            for name in ("prefix", "schema")
-        ),
     )
     ctx.obj = config
 
@@ -170,7 +170,7 @@ async def yield_queries(ctx: Context) -> AsyncGenerator[queries.Queries, None]:
         factory_fn = factories.bind_settings(
             factories.load_factory(config.factory_fn_ref),
             config.settings,
-            required=config.names_from_cli,
+            required=config.names_given,
         )
     else:
         factory_fn = create_default_queries_factory(config)
@@ -544,7 +544,7 @@ def run(
     factory = factories.bind_settings(
         factories.load_factory(factory_fn),
         config.settings,
-        required=config.names_from_cli,
+        required=config.names_given,
     )
     if factory_args:
         factory = functools.partial(factory, factory_args)
