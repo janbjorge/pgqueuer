@@ -12,7 +12,15 @@ import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.types import HealthCheckId, OnConflict, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.models import CronExpressionEntrypoint
+from pgqueuer.domain.types import (
+    CronEntrypoint,
+    CronExpression,
+    HealthCheckId,
+    OnConflict,
+    QueueEntrypoint,
+    QueueManagerId,
+)
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 # ---------------------------------------------------------------------------
@@ -938,6 +946,51 @@ async def test_clear_schedule(queries: InMemoryQueries) -> None:
     await queries.clear_schedule()
     schedules = await queries.peek_schedule()
     assert len(schedules) == 0
+
+
+async def test_fetch_schedule_moves_next_run_on(queries: InMemoryQueries) -> None:
+    """A picked schedule's next run moves to now + delay, as in PostgreSQL."""
+    key = CronExpressionEntrypoint(CronEntrypoint("hourly"), CronExpression("0 * * * *"))
+    with time_machine.travel(datetime(2026, 10, 22, 12, 0, 0, 250_000, tzinfo=UTC), tick=False):
+        await queries.insert_schedule({key: timedelta(seconds=0)})
+        (picked,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+        await queries.set_schedule_queued({picked.id})
+
+        assert await queries.fetch_schedule({key: timedelta(hours=1)}) == []
+
+    (schedule,) = await queries.peek_schedule()
+    assert schedule.next_run == datetime(2026, 10, 22, 13, 0, 0, tzinfo=UTC)
+
+
+async def test_fetch_schedule_reclaim_moves_next_run_on(queries: InMemoryQueries) -> None:
+    """Reclaiming a schedule with a stale heartbeat also moves its next run on."""
+    key = CronExpressionEntrypoint(CronEntrypoint("hourly"), CronExpression("0 * * * *"))
+    start = datetime(2026, 10, 22, 12, 0, 0, 250_000, tzinfo=UTC)
+    with time_machine.travel(start, tick=False):
+        await queries.insert_schedule({key: timedelta(seconds=0)})
+        (first,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+
+    with time_machine.travel(start + timedelta(seconds=31), tick=False):
+        (reclaimed,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+
+    assert reclaimed.id == first.id
+    assert reclaimed.next_run == datetime(2026, 10, 22, 13, 0, 31, tzinfo=UTC)
+
+
+async def test_fetch_schedule_picks_again_once_next_run_is_due(
+    queries: InMemoryQueries,
+) -> None:
+    key = CronExpressionEntrypoint(CronEntrypoint("hourly"), CronExpression("0 * * * *"))
+    start = datetime(2026, 10, 22, 12, 0, 0, 250_000, tzinfo=UTC)
+    with time_machine.travel(start, tick=False):
+        await queries.insert_schedule({key: timedelta(seconds=0)})
+        (picked,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+        await queries.set_schedule_queued({picked.id})
+
+    with time_machine.travel(start + timedelta(hours=1), tick=False):
+        (again,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+
+    assert again.id == picked.id
 
 
 # ---------------------------------------------------------------------------

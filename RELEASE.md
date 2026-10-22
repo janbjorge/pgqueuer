@@ -44,6 +44,10 @@
   delete nothing. An empty list used to truncate the table, because `[]` is
   falsy. Only `None`, the default, truncates. `""` is the empty-string
   entrypoint: `clear_queue("")` deletes those rows and no longer truncates.
+- `InMemoryQueries.fetch_schedule()` now moves a picked schedule's `next_run`
+  to now plus the delay, as PostgreSQL does. It stayed in the past, so the
+  schedule was due again on every poll: under `PgQueuer.in_memory()`, a
+  schedule ran each time `SchedulerManager` woke for any other schedule.
 
 ## v1.6.0
 

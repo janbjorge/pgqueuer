@@ -353,6 +353,24 @@ async def test_schedule_fetch_reclaims_stale_picked_schedule(
     assert reclaimed[0].heartbeat > first[0].heartbeat
 
 
+async def test_schedule_fetch_moves_next_run_on(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """A picked schedule's next run moves to now + delay, so it is not due again at once."""
+    queries = Queries(apgdriver)
+    key = CronExpressionEntrypoint(
+        CronEntrypoint("next_run_schedule"),
+        CronExpression("0 * * * *"),
+    )
+    await queries.insert_schedule({key: timedelta(seconds=0)})
+    (picked,) = await queries.fetch_schedule({key: timedelta(hours=1)})
+    await queries.set_schedule_queued({picked.id})
+
+    assert await queries.fetch_schedule({key: timedelta(hours=1)}) == []
+    (schedule,) = await queries.peek_schedule()
+    assert schedule.next_run == (picked.updated + timedelta(hours=1)).replace(microsecond=0)
+
+
 async def test_schedule_heartbeat_update_persists_timestamps(
     apgdriver: AsyncpgDriver,
 ) -> None:
