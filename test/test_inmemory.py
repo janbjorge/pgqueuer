@@ -632,39 +632,32 @@ async def test_clear_queue_filtered(queries: InMemoryQueries) -> None:
     assert deleted_entries[0].entrypoint == "a"
 
 
-@pytest.mark.parametrize("entrypoint", ([], ""))
-async def test_clear_queue_empty_entrypoint_deletes_nothing(
-    queries: InMemoryQueries, entrypoint: str | list[str]
-) -> None:
-    """An empty entrypoint filter matches no jobs; only None truncates."""
+async def test_clear_queue_empty_entrypoint_deletes_nothing(queries: InMemoryQueries) -> None:
+    """An empty entrypoint list matches no jobs; only None truncates."""
     await queries.enqueue(["a", "b"], [None, None], [0, 0])
 
-    await queries.clear_queue(entrypoint)
+    await queries.clear_queue([])
 
     assert sum(s.count for s in await queries.queue_size()) == 2
     assert not any(e.status == "deleted" for e in await queries.queue_log())
 
 
-@pytest.mark.parametrize("entrypoint", ([], ""))
-async def test_clear_queue_log_empty_entrypoint_deletes_nothing(
-    queries: InMemoryQueries, entrypoint: str | list[str]
-) -> None:
+async def test_clear_queue_log_empty_entrypoint_deletes_nothing(queries: InMemoryQueries) -> None:
     await queries.enqueue(["a", "b"], [None, None], [0, 0])
 
-    await queries.clear_queue_log(entrypoint)
+    await queries.clear_queue_log([])
 
     assert len(await queries.queue_log()) == 2
 
 
-@pytest.mark.parametrize("entrypoint", ([], ""))
 async def test_clear_statistics_log_empty_entrypoint_deletes_nothing(
-    queries: InMemoryQueries, entrypoint: str | list[str]
+    queries: InMemoryQueries,
 ) -> None:
     await queries.enqueue(["a", "b"], [None, None], [0, 0])
     before = await queries.log_statistics(limit=None)
     assert sum(s.count for s in before) == 2
 
-    await queries.clear_statistics_log(entrypoint)
+    await queries.clear_statistics_log([])
 
     assert await queries.log_statistics(limit=None) == before
 
@@ -676,6 +669,20 @@ async def test_clear_entrypoint_list_deletes_only_listed(queries: InMemoryQuerie
     await queries.clear_statistics_log(["a"])
     await queries.clear_queue(["a"])
     await queries.clear_queue_log(["a"])
+
+    assert {s.entrypoint for s in await queries.log_statistics(limit=None)} == {"b"}
+    assert {s.entrypoint for s in await queries.queue_size()} == {"b"}
+    assert {e.entrypoint for e in await queries.queue_log()} == {"b"}
+
+
+async def test_clear_empty_string_entrypoint_deletes_only_that(queries: InMemoryQueries) -> None:
+    """A string filter names one entrypoint, including the empty string."""
+    await queries.enqueue(["", "b"], [None, None], [0, 0])
+    await queries.log_statistics(limit=None)
+
+    await queries.clear_statistics_log("")
+    await queries.clear_queue("")
+    await queries.clear_queue_log("")
 
     assert {s.entrypoint for s in await queries.log_statistics(limit=None)} == {"b"}
     assert {s.entrypoint for s in await queries.queue_size()} == {"b"}
