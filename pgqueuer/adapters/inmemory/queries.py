@@ -860,10 +860,12 @@ class InMemoryQueries:
                 s["status"] = "picked"
                 s["heartbeat"] = now
                 s["updated"] = now
+                s["next_run"] = (now + ep_set[key]).replace(microsecond=0)
                 selected.append(s)
             elif s["status"] == "picked" and (now - s["heartbeat"]).total_seconds() > 30:
                 s["heartbeat"] = now
                 s["updated"] = now
+                s["next_run"] = (now + ep_set[key]).replace(microsecond=0)
                 selected.append(s)
 
         return [models.Schedule.model_validate(s) for s in selected]
