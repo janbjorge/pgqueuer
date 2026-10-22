@@ -411,8 +411,8 @@ class Queries:
         return cell(rows[0], "queued_work", int) if rows else 0
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
-        """Delete jobs; restrict to *entrypoint* when given, else truncate."""
-        if entrypoint:
+        """Delete jobs; restrict to *entrypoint* unless it is None, which truncates."""
+        if entrypoint is not None:
             await self.driver.execute(
                 self.qbq.build_delete_from_queue_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
@@ -510,8 +510,8 @@ class Queries:
         return [models.Job.model_validate(r) for r in rows]
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
-        """Delete statistics rows; restrict to *entrypoint* when given, else truncate."""
-        if entrypoint:
+        """Delete statistics rows; restrict to *entrypoint* unless it is None, which truncates."""
+        if entrypoint is not None:
             await self.driver.execute(
                 self.qbq.build_delete_from_log_statistics_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,
@@ -520,8 +520,8 @@ class Queries:
             await self.driver.execute(self.qbq.build_truncate_log_statistics_query())
 
     async def clear_queue_log(self, entrypoint: str | list[str] | None = None) -> None:
-        """Delete queue-log rows; restrict to *entrypoint* when given, else truncate."""
-        if entrypoint:
+        """Delete queue-log rows; restrict to *entrypoint* unless it is None, which truncates."""
+        if entrypoint is not None:
             await self.driver.execute(
                 self.qbq.build_delete_log_query(),
                 [entrypoint] if isinstance(entrypoint, str) else entrypoint,

@@ -632,6 +632,56 @@ async def test_clear_queue_filtered(queries: InMemoryQueries) -> None:
     assert deleted_entries[0].entrypoint == "a"
 
 
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_queue_empty_entrypoint_deletes_nothing(
+    queries: InMemoryQueries, entrypoint: str | list[str]
+) -> None:
+    """An empty entrypoint filter matches no jobs; only None truncates."""
+    await queries.enqueue(["a", "b"], [None, None], [0, 0])
+
+    await queries.clear_queue(entrypoint)
+
+    assert sum(s.count for s in await queries.queue_size()) == 2
+    assert not any(e.status == "deleted" for e in await queries.queue_log())
+
+
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_queue_log_empty_entrypoint_deletes_nothing(
+    queries: InMemoryQueries, entrypoint: str | list[str]
+) -> None:
+    await queries.enqueue(["a", "b"], [None, None], [0, 0])
+
+    await queries.clear_queue_log(entrypoint)
+
+    assert len(await queries.queue_log()) == 2
+
+
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_statistics_log_empty_entrypoint_deletes_nothing(
+    queries: InMemoryQueries, entrypoint: str | list[str]
+) -> None:
+    await queries.enqueue(["a", "b"], [None, None], [0, 0])
+    before = await queries.log_statistics(limit=None)
+    assert sum(s.count for s in before) == 2
+
+    await queries.clear_statistics_log(entrypoint)
+
+    assert await queries.log_statistics(limit=None) == before
+
+
+async def test_clear_entrypoint_list_deletes_only_listed(queries: InMemoryQueries) -> None:
+    await queries.enqueue(["a", "b"], [None, None], [0, 0])
+    await queries.log_statistics(limit=None)
+
+    await queries.clear_statistics_log(["a"])
+    await queries.clear_queue(["a"])
+    await queries.clear_queue_log(["a"])
+
+    assert {s.entrypoint for s in await queries.log_statistics(limit=None)} == {"b"}
+    assert {s.entrypoint for s in await queries.queue_size()} == {"b"}
+    assert {e.entrypoint for e in await queries.queue_log()} == {"b"}
+
+
 # ---------------------------------------------------------------------------
 # update_heartbeat
 # ---------------------------------------------------------------------------
