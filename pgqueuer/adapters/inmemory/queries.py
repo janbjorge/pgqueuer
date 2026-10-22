@@ -528,7 +528,9 @@ class InMemoryQueries:
         now = utc_now()
         for job, status, tb in job_status:
             jid = int(job.id)
-            if not self._owns(job):
+            # As in SQL, only a row still in the queue is resolved and logged; a job
+            # cancelled or cleared while it ran already has its terminal log row.
+            if jid not in self._jobs or not self._owns(job):
                 continue
             if status == "failed":
                 j = self._jobs.get(jid)

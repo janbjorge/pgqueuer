@@ -48,6 +48,11 @@
   to now plus the delay, as PostgreSQL does. It stayed in the past, so the
   schedule was due again on every poll: under `PgQueuer.in_memory()`, a
   schedule ran each time `SchedulerManager` woke for any other schedule.
+- `InMemoryQueries.log_jobs()` now writes nothing for a job that is no longer
+  in the queue, as PostgreSQL does. A job cancelled or cleared while it ran got
+  a second log row when its worker finished, so `job_status()` turned a
+  cleared job's `deleted` into `successful`, and a cancelled job was counted
+  as canceled twice.
 
 ## v1.6.0
 
