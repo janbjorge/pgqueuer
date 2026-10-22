@@ -53,6 +53,13 @@
   a second log row when its worker finished, so `job_status()` turned a
   cleared job's `deleted` into `successful`, and a cancelled job was counted
   as canceled twice.
+- Statistics no longer count a log row twice when two aggregations overlap. A
+  stats read (`log_statistics()`, `throughput_summary()`,
+  `throughput_timeseries()`, so `pgq dashboard`, the web dashboard and
+  Prometheus metrics) aggregates without the advisory lock, so it could run
+  while a worker's periodic aggregation or another read was in flight, and
+  both counted the same rows. Each aggregation now counts only the rows its
+  own update flagged.
 
 ## v1.6.0
 

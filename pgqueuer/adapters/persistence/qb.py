@@ -793,12 +793,22 @@ class QueryQueueBuilder:
         aggregation (losers see ``proceed = FALSE`` and no-op) -- used by the
         periodic background task. Without it ``proceed`` is an unconditional
         ``TRUE`` (the on-demand ``log_statistics`` read path).
+
+        Counts come from the rows this statement's UPDATE flagged, so a row
+        another aggregation flagged first is not counted twice.
         """
         log = self.qualified.queue_table_log
         stats = self.qualified.statistics_table
         proceed = f"pg_try_advisory_xact_lock(hashtext('{stats}'))" if advisory_lock else "TRUE"
         return f"""WITH guard AS (
             SELECT {proceed} AS proceed
+        ),
+        updated_logs AS (
+            UPDATE {log}
+            SET aggregated = TRUE
+            FROM guard
+            WHERE NOT aggregated AND guard.proceed
+            RETURNING entrypoint, priority, status, created
         ),
         log_aggregation AS (
             SELECT
@@ -807,16 +817,8 @@ class QueryQueueBuilder:
                 status,
                 COUNT(*) AS count,
                 date_trunc('sec', created) AS created
-            FROM {log}, guard
-            WHERE NOT aggregated AND guard.proceed
+            FROM updated_logs
             GROUP BY entrypoint, priority, status, date_trunc('sec', created)
-        ),
-        updated_logs AS (
-            UPDATE {log}
-            SET aggregated = TRUE
-            FROM guard
-            WHERE NOT aggregated AND guard.proceed
-            RETURNING id
         )
         INSERT INTO {stats} (count, created, entrypoint, priority, status)
         SELECT count, created, entrypoint, priority, status
