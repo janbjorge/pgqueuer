@@ -649,7 +649,7 @@ class InMemoryQueries:
         await self.notify_job_cancellation(ids)
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
-        if entrypoint:
+        if entrypoint is not None:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
             now = utc_now()
             to_remove = [jid for jid, j in self._jobs.items() if j["entrypoint"] in eps]
@@ -906,7 +906,7 @@ class InMemoryQueries:
         self._schedules.clear()
 
     async def clear_statistics_log(self, entrypoint: str | list[str] | None = None) -> None:
-        if entrypoint:
+        if entrypoint is not None:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
             ep_set = set(eps)
             self._statistics = [s for s in self._statistics if s["entrypoint"] not in ep_set]
@@ -914,7 +914,7 @@ class InMemoryQueries:
             self._statistics.clear()
 
     async def clear_queue_log(self, entrypoint: str | list[str] | None = None) -> None:
-        if entrypoint:
+        if entrypoint is not None:
             eps = [entrypoint] if isinstance(entrypoint, str) else entrypoint
             ep_set = set(eps)
             self._log = [e for e in self._log if e["entrypoint"] not in ep_set]

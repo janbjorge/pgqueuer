@@ -199,6 +199,74 @@ async def test_clear_queue(
     assert sum(x.status == "deleted" for x in await q.queue_log()) == N + 1
 
 
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_queue_empty_entrypoint_deletes_nothing(
+    apgdriver: db.Driver, entrypoint: str | list[str]
+) -> None:
+    """An empty entrypoint filter matches no jobs; only None truncates."""
+    q = queries.Queries(apgdriver)
+    await q.enqueue(["a", "b"], [None, None], [0, 0])
+
+    await q.clear_queue(entrypoint)
+
+    assert sum(x.count for x in await q.queue_size()) == 2
+    assert not any(x.status == "deleted" for x in await q.queue_log())
+
+
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_queue_log_empty_entrypoint_deletes_nothing(
+    apgdriver: db.Driver, entrypoint: str | list[str]
+) -> None:
+    q = queries.Queries(apgdriver)
+    await q.enqueue(["a", "b"], [None, None], [0, 0])
+
+    await q.clear_queue_log(entrypoint)
+
+    assert len(await q.queue_log()) == 2
+
+
+@pytest.mark.parametrize("entrypoint", ([], ""))
+async def test_clear_statistics_log_empty_entrypoint_deletes_nothing(
+    apgdriver: db.Driver, entrypoint: str | list[str]
+) -> None:
+    q = queries.Queries(apgdriver)
+    await q.enqueue(["a", "b"], [None, None], [0, 0])
+    before = await q.log_statistics(limit=None)
+    assert sum(x.count for x in before) == 2
+
+    await q.clear_statistics_log(entrypoint)
+
+    assert await q.log_statistics(limit=None) == before
+
+
+async def test_clear_entrypoint_list_deletes_only_listed(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+    await q.enqueue(["a", "b"], [None, None], [0, 0])
+    await q.log_statistics(limit=None)
+
+    await q.clear_statistics_log(["a"])
+    await q.clear_queue(["a"])
+    await q.clear_queue_log(["a"])
+
+    assert {x.entrypoint for x in await q.log_statistics(limit=None)} == {"b"}
+    assert {x.entrypoint for x in await q.queue_size()} == {"b"}
+    assert {x.entrypoint for x in await q.queue_log()} == {"b"}
+
+
+async def test_clear_none_truncates(apgdriver: db.Driver) -> None:
+    q = queries.Queries(apgdriver)
+    await q.enqueue(["a", "b"], [None, None], [0, 0])
+    await q.log_statistics(limit=None)
+
+    await q.clear_queue(None)
+    await q.clear_queue_log(None)
+    await q.clear_statistics_log(None)
+
+    assert await q.queue_size() == []
+    assert await q.queue_log() == []
+    assert await q.log_statistics(limit=None) == []
+
+
 @pytest.mark.parametrize("N", (1, 2, 64))
 async def test_queue_priority(
     apgdriver: db.Driver,

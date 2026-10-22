@@ -40,6 +40,9 @@
 - `pgq --prefix foo_ listen` now listens on `foo_ch_pgqueuer`. The default
   channel was read once at import, before `--prefix` was applied, so it
   stayed on the unprefixed channel.
+- `clear_queue([])`, `clear_queue_log([])` and `clear_statistics_log([])` now
+  delete nothing. An empty entrypoint list (or `""`) used to be treated like
+  `None` and truncated the whole table. Only `None`, the default, truncates.
 
 ## v1.6.0
 
