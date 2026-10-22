@@ -20,6 +20,7 @@ from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
 from pgqueuer.domain.types import (
+    JOB_STATUS,
     CronEntrypoint,
     CronExpression,
     JobId,
@@ -256,6 +257,36 @@ async def test_mark_job_cancellation(
     logs = await q.queue_log()
     cancel_logs = [log for log in logs if log.job_id == int(jids[0]) and log.status == "canceled"]
     assert len(cancel_logs) == 1
+
+
+@pytest.mark.parametrize("outcome", ["successful", "canceled", "exception", "failed"])
+@pytest.mark.parametrize(("remove", "terminal"), [("cancel", "canceled"), ("clear", "deleted")])
+async def test_log_jobs_skips_job_no_longer_in_queue(
+    apgdriver: AsyncpgDriver,
+    remove: str,
+    terminal: str,
+    outcome: JOB_STATUS,
+) -> None:
+    """log_jobs writes nothing for a job cancelled or cleared while it ran."""
+    q = Queries(apgdriver)
+    (jid,) = await q.enqueue("ep", None)
+    (job,) = await q.dequeue(
+        batch_size=1,
+        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    if remove == "cancel":
+        await q.mark_job_as_cancelled([jid])
+    else:
+        await q.clear_queue("ep")
+
+    await q.log_jobs([(job, outcome, None)])
+
+    history = await q.job_log_history(jid)
+    assert [e.status for e in history] == ["queued", "picked", terminal]
+    assert await q.job_status([jid]) == [(jid, terminal)]
 
 
 async def test_traceback_jsonb_roundtrip(

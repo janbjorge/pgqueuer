@@ -14,6 +14,7 @@ from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.domain.models import CronExpressionEntrypoint
 from pgqueuer.domain.types import (
+    JOB_STATUS,
     CronEntrypoint,
     CronExpression,
     HealthCheckId,
@@ -587,6 +588,52 @@ async def test_log_jobs_adds_to_log(queries: InMemoryQueries) -> None:
     log = await queries.queue_log()
     statuses = [e.status for e in log]
     assert "successful" in statuses
+
+
+@pytest.mark.parametrize("outcome", ["successful", "canceled", "exception", "failed"])
+@pytest.mark.parametrize(("remove", "terminal"), [("cancel", "canceled"), ("clear", "deleted")])
+async def test_log_jobs_skips_job_no_longer_in_queue(
+    queries: InMemoryQueries,
+    remove: str,
+    terminal: str,
+    outcome: JOB_STATUS,
+) -> None:
+    """A job cancelled or cleared while it ran keeps its terminal status, as in PostgreSQL."""
+    (jid,) = await queries.enqueue("ep", None)
+    (job,) = await queries.dequeue(
+        10,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    if remove == "cancel":
+        await queries.mark_job_as_cancelled([jid])
+    else:
+        await queries.clear_queue("ep")
+
+    await queries.log_jobs([(job, outcome, None)])
+
+    history = await queries.job_log_history(jid)
+    assert [e.status for e in history] == ["queued", "picked", terminal]
+    assert await queries.job_status([jid]) == [(jid, terminal)]
+
+
+async def test_log_jobs_logs_job_still_in_queue(queries: InMemoryQueries) -> None:
+    (jid,) = await queries.enqueue("ep", None)
+    (job,) = await queries.dequeue(
+        10,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+
+    await queries.log_jobs([(job, "successful", None)])
+
+    history = await queries.job_log_history(jid)
+    assert [e.status for e in history] == ["queued", "picked", "successful"]
+    assert await queries.job_status([jid]) == [(jid, "successful")]
 
 
 # ---------------------------------------------------------------------------
