@@ -41,8 +41,9 @@
   channel was read once at import, before `--prefix` was applied, so it
   stayed on the unprefixed channel.
 - `clear_queue([])`, `clear_queue_log([])` and `clear_statistics_log([])` now
-  delete nothing. An empty entrypoint list (or `""`) used to be treated like
-  `None` and truncated the whole table. Only `None`, the default, truncates.
+  delete nothing. An empty list used to truncate the table, because `[]` is
+  falsy. Only `None`, the default, truncates. `""` is the empty-string
+  entrypoint: `clear_queue("")` deletes those rows and no longer truncates.
 
 ## v1.6.0
 
