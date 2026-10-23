@@ -37,6 +37,8 @@
 
 ### Fixed
 
+- In-memory `queued_work` and `eligible_queued_work` return 1 when any matching
+  job exists and 0 otherwise, matching the PostgreSQL existence probe.
 - In-memory `requeue_jobs` keeps a held job's dedupe key, matching PostgreSQL.
   A later enqueue with that key raises `DuplicateJobError`.
 - In-memory `throughput_summary` orders status in enum order, matching

@@ -930,14 +930,15 @@ async def test_job_status(queries: InMemoryQueries) -> None:
 
 async def test_queued_work(queries: InMemoryQueries) -> None:
     await queries.enqueue(["ep", "ep", "other"], [None, None, None], [0, 0, 0])
-    count = await queries.queued_work([QueueEntrypoint("ep")])
-    assert count == 2
+    assert await queries.queued_work([QueueEntrypoint("ep")]) == 1
+    assert await queries.queued_work([QueueEntrypoint("missing")]) == 0
 
 
 async def test_eligible_queued_work_excludes_deferred(queries: InMemoryQueries) -> None:
-    await queries.enqueue("ep", None, 0)
     await queries.enqueue("ep", None, 0, execute_after=timedelta(seconds=30))
-    assert await queries.queued_work([QueueEntrypoint("ep")]) == 2
+    assert await queries.queued_work([QueueEntrypoint("ep")]) == 1
+    assert await queries.eligible_queued_work([QueueEntrypoint("ep")]) == 0
+    await queries.enqueue("ep", None, 0)
     assert await queries.eligible_queued_work([QueueEntrypoint("ep")]) == 1
 
 
