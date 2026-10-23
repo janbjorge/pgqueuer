@@ -15,6 +15,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Awaitable
 from datetime import timedelta
+from typing import Literal, assert_never
 
 import pytest
 
@@ -25,10 +26,8 @@ from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.domain.models import (
     CronExpressionEntrypoint,
     Job,
-    JobDurationStats,
     Log,
     LogStatistics,
-    QueueAgeStats,
     QueueStatistics,
     Schedule,
     ThroughputStats,
@@ -71,7 +70,7 @@ def job_tuple(job: Job) -> tuple[object, ...]:
         job.attempts,
         job.payload,
         None if job.queue_manager_id is None else str(job.queue_manager_id),
-        job.headers or None,
+        job.headers,
     )
 
 
@@ -83,54 +82,37 @@ def log_sequences(logs: list[Log]) -> list[tuple[int, tuple[str, ...]]]:
     return sorted((job_id, tuple(statuses)) for job_id, statuses in groups.items())
 
 
-def summed_statistics(value: list[object]) -> list[tuple[str, int, str, int]] | None:
-    totals: dict[tuple[str, int, str], int] = {}
-    for item in value:
-        if not isinstance(item, LogStatistics):
-            return None
-        key = (str(item.entrypoint), item.priority, item.status)
-        totals[key] = totals.get(key, 0) + item.count
-    return sorted((*key, count) for key, count in totals.items())
-
-
-def summed_throughput(value: list[object]) -> list[tuple[str, str, int]] | None:
-    rows: list[tuple[str, str, int]] = []
-    for item in value:
-        if not isinstance(item, ThroughputStats):
-            return None
-        rows.append((str(item.entrypoint), item.status, item.total_count))
-    return sorted(rows)
-
-
 def norm_list(value: list[object]) -> object:
     if not value:
         return []
-    stats = summed_statistics(value)
-    if stats is not None:
-        return stats
-    throughput = summed_throughput(value)
-    if throughput is not None:
-        return throughput
+    head = value[0]
+    if isinstance(head, LogStatistics):
+        totals: dict[tuple[str, int, str], int] = {}
+        for item in value:
+            if not isinstance(item, LogStatistics):
+                return [norm_value(entry) for entry in value]
+            key = (str(item.entrypoint), item.priority, item.status)
+            totals[key] = totals.get(key, 0) + item.count
+        return sorted((*key, count) for key, count in totals.items())
+    if isinstance(head, ThroughputStats):
+        rows: list[tuple[str, str, int]] = []
+        for item in value:
+            if not isinstance(item, ThroughputStats):
+                return [norm_value(entry) for entry in value]
+            rows.append((str(item.entrypoint), item.status, item.total_count))
+        return sorted(rows)
     return [norm_value(item) for item in value]
 
 
 def norm_value(value: object) -> object:
     if isinstance(value, Job):
         return job_tuple(value)
-    if isinstance(value, Log):
-        return (int(value.job_id), value.status, str(value.entrypoint), value.priority)
     if isinstance(value, QueueStatistics):
         return (value.count, str(value.entrypoint), value.priority, value.status)
     if isinstance(value, Schedule):
         return (int(value.id), str(value.expression), str(value.entrypoint), value.status)
-    if isinstance(value, QueueAgeStats):
-        return (str(value.entrypoint), value.queued_count)
-    if isinstance(value, JobDurationStats):
-        return (str(value.entrypoint), value.completed)
     if isinstance(value, list):
         return norm_list(value)
-    if isinstance(value, tuple):
-        return tuple(norm_value(item) for item in value)
     return value
 
 
@@ -139,6 +121,7 @@ async def snapshot(q: Repository) -> dict[str, object]:
     logs = await q.queue_log()
     failed = await q.list_failed_jobs(limit=500)
     size = norm_value(await q.queue_size())
+    assert isinstance(size, list)
     exceptions = await q.exception_logs(limit=500)
     schedules = await q.peek_schedule()
     ages = await q.queue_age()
@@ -147,7 +130,7 @@ async def snapshot(q: Repository) -> dict[str, object]:
         "jobs": [job_tuple(job) for job in jobs],
         "logs": log_sequences(logs),
         "failed": [job_tuple(job) for job in failed],
-        "size": sorted(size, key=str) if isinstance(size, list) else size,
+        "size": sorted(size, key=str),
         "unaggregated": await q.unaggregated_log_count(),
         "exceptions": log_sequences(exceptions),
         "schedules": norm_value(schedules),
@@ -174,7 +157,7 @@ async def trace(q: Repository) -> list[object]:
     async def step(name: str, call: Awaitable[object]) -> object:
         try:
             value = await call
-        except Exception as exc:
+        except DuplicateJobError as exc:
             found.append((name, "err", classify(exc)))
             value = None
         else:
@@ -280,7 +263,10 @@ async def test_queue_size_order_matches(apgdriver: AsyncpgDriver) -> None:
     assert norm_value(await memory.queue_size()) == norm_value(await postgres.queue_size())
 
 
-async def id_gap(q: Repository, conflict: str) -> int:
+Conflict = Literal["raise", "skip", "update_priority"]
+
+
+async def id_gap(q: Repository, conflict: Conflict) -> int:
     first = as_id(await q.enqueue("ep", b"a", priority=1, dedupe_key="k"))
     if conflict == "raise":
         with pytest.raises(DuplicateJobError):
@@ -297,7 +283,7 @@ async def id_gap(q: Repository, conflict: str) -> int:
         )
         assert bumped == [first]
     else:
-        raise AssertionError(conflict)
+        assert_never(conflict)
     return int(as_id(await q.enqueue("ep", b"c", dedupe_key="next"))) - int(first)
 
 
@@ -307,7 +293,9 @@ async def id_gap(q: Repository, conflict: str) -> int:
     reason="in-memory does not consume a job id on a dedupe skip, update, or raise",
 )
 @pytest.mark.parametrize("conflict", ["raise", "skip", "update_priority"])
-async def test_dedupe_conflict_consumes_job_id(apgdriver: AsyncpgDriver, conflict: str) -> None:
+async def test_dedupe_conflict_consumes_job_id(
+    apgdriver: AsyncpgDriver, conflict: Conflict
+) -> None:
     memory, postgres = pair(apgdriver)
     assert await id_gap(memory, conflict) == await id_gap(postgres, conflict)
 
@@ -345,17 +333,19 @@ async def test_requeue_keeps_dedupe_key(apgdriver: AsyncpgDriver) -> None:
 async def test_requeue_conflict_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 
+    async def requeue_error(q: Repository, ids: list[JobId]) -> tuple[str, str | None] | None:
+        try:
+            await q.requeue_jobs(ids)
+        except Exception as exc:
+            return classify(exc)
+        return None
+
     async def run(q: Repository) -> tuple[object, list[tuple[str, str]]]:
         original = as_id(await q.enqueue("ep", b"a", dedupe_key="k"))
         (job,) = await q.dequeue(1, EP, OWNER, None, TIMEOUT)
         await q.log_jobs([(job, "failed", None)])
         await q.enqueue("ep", b"b", dedupe_key="k")
-        try:
-            await q.requeue_jobs([original])
-        except Exception as exc:
-            error: object = classify(exc)
-        else:
-            error = None
+        single = await requeue_error(q, [original])
 
         batch = {
             QueueEntrypoint("ba"): EntrypointExecutionParameter(0),
@@ -366,14 +356,8 @@ async def test_requeue_conflict_matches(apgdriver: AsyncpgDriver) -> None:
         picked = await q.dequeue(2, batch, OWNER, None, TIMEOUT)
         await q.log_jobs([(row, "failed", None) for row in picked])
         await q.enqueue("bb", b"live", dedupe_key="bb")
-        try:
-            await q.requeue_jobs([ba, bb])
-        except Exception as exc:
-            error = (error, classify(exc))
-        else:
-            error = (error, None)
         jobs = [(str(row.entrypoint), row.status) for row in await q.browse_queue(limit=20)]
-        return error, sorted(jobs)
+        return (single, await requeue_error(q, [ba, bb])), sorted(jobs)
 
     assert await run(memory) == await run(postgres)
 
