@@ -290,6 +290,27 @@ async def test_dequeue_priority_ordering(queries: InMemoryQueries) -> None:
     assert priorities == sorted(priorities, reverse=True)
 
 
+async def test_dequeue_immediate_jobs_pass_a_deferred_head(queries: InMemoryQueries) -> None:
+    """A future job with a lower id stays queued while later jobs run."""
+    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
+    qm_id = QueueManagerId(uuid.uuid4())
+    heartbeat = timedelta(seconds=30)
+    (later,) = await queries.enqueue("ep", b"later", execute_after=timedelta(hours=1))
+
+    for _ in range(40):
+        await queries.enqueue("ep", b"now")
+        (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=heartbeat)
+        assert job.payload == b"now"
+        await queries.log_jobs([(job, "successful", None)])
+
+    lane = queries.job_table.ready[QueueEntrypoint("ep")]
+    assert len(lane.jobs) < 64
+
+    with time_machine.travel(datetime.now(UTC) + timedelta(hours=2)):
+        (job,) = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=heartbeat)
+    assert job.id == later
+
+
 async def test_dequeue_execute_after(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, execute_after=timedelta(hours=1))
     qm_id = QueueManagerId(uuid.uuid4())
