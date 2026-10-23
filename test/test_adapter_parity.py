@@ -300,11 +300,6 @@ async def test_dedupe_conflict_consumes_job_id(
     assert await id_gap(memory, conflict) == await id_gap(postgres, conflict)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory requeue drops a held job's dedupe key",
-)
 async def test_requeue_keeps_dedupe_key(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 
