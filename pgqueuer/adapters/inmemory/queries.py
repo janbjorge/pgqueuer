@@ -37,6 +37,25 @@ from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
 
+def job_status_rank(status: JOB_STATUS) -> int:
+    """Declaration order of ``pgqueuer_status``, which is how PostgreSQL sorts it."""
+    if status == "queued":
+        return 0
+    if status == "picked":
+        return 1
+    if status == "successful":
+        return 2
+    if status == "canceled":
+        return 3
+    if status == "deleted":
+        return 4
+    if status == "exception":
+        return 5
+    if status == "failed":
+        return 6
+    assert_never(status)
+
+
 class JobRow(TypedDict):
     id: int
     priority: int
@@ -1008,7 +1027,10 @@ class InMemoryQueries:
             totals[key] = totals.get(key, 0) + r["count"]
         return [
             models.ThroughputStats(entrypoint=ep, status=st, total_count=count)
-            for (ep, st), count in sorted(totals.items())
+            for (ep, st), count in sorted(
+                totals.items(),
+                key=lambda item: (item[0][0], job_status_rank(item[0][1])),
+            )
         ]
 
     async def throughput_timeseries(
