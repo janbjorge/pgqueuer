@@ -1154,7 +1154,7 @@ class InMemoryQueries:
     def unindex_dedupe(self, job_id: int) -> None:
         key = self._dedupe_key_by_job.get(job_id)
         if key is not None and self._dedupe_index.get(key) == job_id:
-            del self._dedupe_index[key]
+            self._dedupe_index.pop(key, None)
 
     def restore_dedupe(self, job_id: int) -> None:
         key = self._dedupe_key_by_job.get(job_id)
