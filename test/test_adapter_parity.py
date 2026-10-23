@@ -305,11 +305,6 @@ async def test_requeue_keeps_dedupe_key(apgdriver: AsyncpgDriver) -> None:
     assert await run(memory) == await run(postgres)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory requeue ignores a dedupe key a queued job already holds",
-)
 async def test_requeue_conflict_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 

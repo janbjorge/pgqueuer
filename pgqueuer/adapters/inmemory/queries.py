@@ -14,7 +14,7 @@ from typing import Literal, NamedTuple, TypedDict, assert_never, overload
 from pydantic_core import to_json
 
 from pgqueuer.adapters.inmemory.driver import InMemoryDriver
-from pgqueuer.adapters.persistence import qb, query_helpers
+from pgqueuer.adapters.persistence import qb, query_helpers, sqlstate
 from pgqueuer.adapters.persistence.query_helpers import merge_tracing_headers
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.models import utc_now
@@ -148,6 +148,15 @@ def percentile_cont(values: list[float], fraction: float) -> float:
     lower = int(rank)
     upper = min(lower + 1, len(ordered) - 1)
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
+
+
+class UniqueViolation(Exception):
+    """Unique violation of the dedupe index, SQLSTATE 23505."""
+
+    def __init__(self, constraint_name: str) -> None:
+        super().__init__(f'duplicate key value violates unique constraint "{constraint_name}"')
+        self.sqlstate = sqlstate.UNIQUE_VIOLATION
+        self.constraint_name = constraint_name
 
 
 @dataclasses.dataclass
@@ -650,30 +659,48 @@ class InMemoryQueries:
 
     async def requeue_jobs(self, ids: list[JobId]) -> None:
         now = utc_now()
-        for jid in ids:
-            j = self._jobs.get(int(jid))
-            if j is not None and j["status"] == "failed":
-                j["status"] = "queued"
-                j["execute_after"] = now
-                j["updated"] = now
-                j["attempts"] = 0
-                j["queue_manager_id"] = None
-                self.restore_dedupe(int(jid))
-                self._push_queued_job(j, now)
-                self._log.append(
-                    {
-                        "id": self._next_log_id,
-                        "created": now,
-                        "job_id": int(jid),
-                        "status": "queued",
-                        "priority": j["priority"],
-                        "entrypoint": j["entrypoint"],
-                        "traceback": None,
-                        "aggregated": False,
-                    }
-                )
-                self._next_log_id += 1
-                await self.emit_table_changed("update")
+        claimed: set[str] = set()
+        pending: list[tuple[int, JobRow]] = []
+        seen: set[int] = set()
+        for raw_id in ids:
+            job_id = int(raw_id)
+            if job_id in seen:
+                continue
+            seen.add(job_id)
+            job = self._jobs.get(job_id)
+            if job is None or job["status"] != "failed":
+                continue
+            key = self._dedupe_key_by_job.get(job_id)
+            if key is not None:
+                holder = self._dedupe_index.get(key)
+                if (holder is not None and holder != job_id) or key in claimed:
+                    # One conflict aborts the statement; earlier rows stay failed.
+                    raise UniqueViolation(f"{self.settings.queue_table}_unique_dedupe_key")
+                claimed.add(key)
+            pending.append((job_id, job))
+
+        for job_id, job in pending:
+            job["status"] = "queued"
+            job["execute_after"] = now
+            job["updated"] = now
+            job["attempts"] = 0
+            job["queue_manager_id"] = None
+            self.restore_dedupe(job_id)
+            self._push_queued_job(job, now)
+            self._log.append(
+                {
+                    "id": self._next_log_id,
+                    "created": now,
+                    "job_id": job_id,
+                    "status": "queued",
+                    "priority": job["priority"],
+                    "entrypoint": job["entrypoint"],
+                    "traceback": None,
+                    "aggregated": False,
+                }
+            )
+            self._next_log_id += 1
+            await self.emit_table_changed("update")
 
     async def list_failed_jobs(
         self,
