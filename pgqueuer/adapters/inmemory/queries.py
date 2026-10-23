@@ -985,7 +985,12 @@ class InMemoryQueries:
                 s["updated"] = now
 
     async def peek_schedule(self) -> list[models.Schedule]:
-        return [models.Schedule.model_validate(s) for s in self._schedules.values()]
+        # PostgreSQL `ORDER BY last_run ASC` puts nulls last.
+        ordered = sorted(
+            self._schedules.values(),
+            key=lambda row: (row["last_run"] is None, row["last_run"]),
+        )
+        return [models.Schedule.model_validate(row) for row in ordered]
 
     async def delete_schedule(
         self,
