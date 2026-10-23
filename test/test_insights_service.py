@@ -6,7 +6,7 @@ from datetime import timedelta
 import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryQueries
-from pgqueuer.adapters.inmemory.queries import percentile_cont
+from pgqueuer.adapters.inmemory.logs import percentile_cont
 from pgqueuer.core.insights import (
     DEFAULT_WINDOW,
     MAX_WINDOW,

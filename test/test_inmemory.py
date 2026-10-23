@@ -382,7 +382,7 @@ async def test_dequeue_retry_stale_picked(queries: InMemoryQueries) -> None:
     job_id = int(jobs[0].id)
     from datetime import datetime
 
-    queries._jobs[job_id]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
+    queries.jobs[job_id].heartbeat = datetime(2000, 1, 1, tzinfo=UTC)
 
     # Now dequeue again - should retry the stale job
     jobs2 = await queries.dequeue(10, params, qm_id, None, heartbeat_timeout=timedelta(seconds=30))
@@ -402,7 +402,7 @@ async def test_dequeue_stale_priority_beats_fresh_work(queries: InMemoryQueries)
 
     from datetime import datetime
 
-    queries._jobs[int(stale_id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
+    queries.jobs[int(stale_id)].heartbeat = datetime(2000, 1, 1, tzinfo=UTC)
 
     await queries.enqueue(["ep"] * 3, [b"fresh-lo"] * 3, [0] * 3)
 
@@ -762,7 +762,7 @@ async def test_update_heartbeat(queries: InMemoryQueries) -> None:
     old_hb = jobs[0].heartbeat
     await asyncio.sleep(0.01)
     await queries.update_heartbeat([jobs[0].id])
-    new_hb = queries._jobs[int(jobs[0].id)]["heartbeat"]
+    new_hb = queries.jobs[int(jobs[0].id)].heartbeat
     assert new_hb > old_hb
 
 

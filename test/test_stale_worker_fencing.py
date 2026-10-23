@@ -62,7 +62,7 @@ async def take_over_in_postgres(queries: Queries, apgdriver: AsyncpgDriver) -> T
 
 async def take_over_in_memory(queries: InMemoryQueries) -> Takeover:
     async def stall(job: Job) -> None:
-        queries._jobs[int(job.id)]["heartbeat"] = datetime(2000, 1, 1, tzinfo=UTC)
+        queries.jobs[int(job.id)].heartbeat = datetime(2000, 1, 1, tzinfo=UTC)
 
     return await take_over(queries, stall)
 
@@ -81,10 +81,10 @@ async def queue_rows(
 
 
 def in_memory_rows(queries: InMemoryQueries, job: Job) -> list[dict[str, object]]:
-    row = queries._jobs.get(int(job.id))
+    row = queries.jobs.get(int(job.id))
     if row is None:
         return []
-    return [{"status": row["status"], "queue_manager_id": row["queue_manager_id"]}]
+    return [{"status": row.status, "queue_manager_id": row.queue_manager_id}]
 
 
 async def log_statuses(queries: QueueRepositoryPort, job: Job) -> list[str]:
