@@ -342,11 +342,6 @@ async def test_requeue_conflict_matches(apgdriver: AsyncpgDriver) -> None:
     assert await run(memory) == await run(postgres)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory peek_schedule keeps insert order; PostgreSQL orders by last_run",
-)
 async def test_peek_schedule_order_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 
