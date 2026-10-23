@@ -243,11 +243,6 @@ async def test_queued_work_matches(apgdriver: AsyncpgDriver) -> None:
     assert await memory.eligible_queued_work(eps) == await postgres.eligible_queued_work(eps)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory queue_size sorts by entrypoint; PostgreSQL sorts by count, then enum order",
-)
 async def test_queue_size_order_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
     entrypoints = {QueueEntrypoint("a"): EntrypointExecutionParameter(0)}
