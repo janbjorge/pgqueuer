@@ -37,6 +37,8 @@
 
 ### Fixed
 
+- In-memory `job_status` orders rows by `job_id`, matching PostgreSQL.
+  Reverse log order put the later job first.
 - In-memory `requeue_jobs` raises unique violation `23505` when a held job's
   dedupe key is already on a queued or picked job, matching PostgreSQL. The
   batch stays `failed`.

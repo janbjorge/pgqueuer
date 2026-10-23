@@ -827,7 +827,7 @@ class InMemoryQueries:
             jid = entry["job_id"]
             if jid in id_set and jid not in latest:
                 latest[jid] = entry["status"]
-        return [(JobId(jid), st) for jid, st in latest.items()]
+        return [(JobId(jid), latest[jid]) for jid in sorted(latest)]
 
     def aggregate_log_to_statistics(self) -> None:
         """Roll un-aggregated log rows into per-second statistics buckets."""
