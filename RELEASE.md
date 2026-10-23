@@ -37,6 +37,8 @@
 
 ### Fixed
 
+- In-memory `throughput_summary` orders status in enum order, matching
+  PostgreSQL. Text order put `picked` before `queued`.
 - `pgq --prefix foo_ listen` now listens on `foo_ch_pgqueuer`. The default
   channel was read once at import, before `--prefix` was applied, so it
   stayed on the unprefixed channel.

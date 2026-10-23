@@ -403,11 +403,6 @@ async def test_job_status_order_matches(apgdriver: AsyncpgDriver) -> None:
     assert await run(memory) == await run(postgres)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory throughput_summary sorts status as text; PostgreSQL uses enum order",
-)
 async def test_throughput_summary_order_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 
