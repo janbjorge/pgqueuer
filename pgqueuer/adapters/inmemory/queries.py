@@ -557,7 +557,8 @@ class InMemoryQueries:
                     j["status"] = "failed"
                     j["updated"] = now
                     j["queue_manager_id"] = None
-                self._remove_dedupe_for_job(jid)
+                # Failed rows leave the partial unique index and keep the key.
+                self.unindex_dedupe(jid)
             else:
                 self._jobs.pop(jid, None)
                 self._remove_dedupe_for_job(jid)
@@ -621,6 +622,7 @@ class InMemoryQueries:
                 j["updated"] = now
                 j["attempts"] = 0
                 j["queue_manager_id"] = None
+                self.restore_dedupe(int(jid))
                 self._push_queued_job(j, now)
                 self._log.append(
                     {
@@ -1148,6 +1150,19 @@ class InMemoryQueries:
             )
             for name, rows in sorted(tables)
         ]
+
+    def unindex_dedupe(self, job_id: int) -> None:
+        key = self._dedupe_key_by_job.get(job_id)
+        if key is not None and self._dedupe_index.get(key) == job_id:
+            del self._dedupe_index[key]
+
+    def restore_dedupe(self, job_id: int) -> None:
+        key = self._dedupe_key_by_job.get(job_id)
+        if key is None:
+            return
+        holder = self._dedupe_index.get(key)
+        if holder is None or holder == job_id:
+            self._dedupe_index[key] = job_id
 
     def _remove_dedupe_for_job(self, job_id: int) -> None:
         dk = self._dedupe_key_by_job.pop(job_id, None)

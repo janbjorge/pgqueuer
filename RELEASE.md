@@ -37,6 +37,8 @@
 
 ### Fixed
 
+- In-memory `requeue_jobs` keeps a held job's dedupe key, matching PostgreSQL.
+  A later enqueue with that key raises `DuplicateJobError`.
 - In-memory `throughput_summary` orders status in enum order, matching
   PostgreSQL. Text order put `picked` before `queued`.
 - `pgq --prefix foo_ listen` now listens on `foo_ch_pgqueuer`. The default
