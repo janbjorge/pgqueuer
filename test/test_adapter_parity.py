@@ -277,11 +277,6 @@ async def id_gap(q: Repository, conflict: Conflict) -> int:
     return int(as_id(await q.enqueue("ep", b"c", dedupe_key="next"))) - int(first)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory does not consume a job id on a dedupe skip, update, or raise",
-)
 @pytest.mark.parametrize("conflict", ["raise", "skip", "update_priority"])
 async def test_dedupe_conflict_consumes_job_id(
     apgdriver: AsyncpgDriver, conflict: Conflict
