@@ -233,11 +233,6 @@ async def test_repository_trace_matches(apgdriver: AsyncpgDriver) -> None:
             raise AssertionError(f"{index}\nMEM {mem!r}\nPG  {pg!r}")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="in-memory queued_work counts rows; PostgreSQL returns 0 or 1",
-)
 async def test_queued_work_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
     eps = [QueueEntrypoint("ep")]
