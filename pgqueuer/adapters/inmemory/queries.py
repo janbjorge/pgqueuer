@@ -99,6 +99,34 @@ class StatisticsBucket(NamedTuple):
     created: datetime
 
 
+class QueueSizeGroup(NamedTuple):
+    entrypoint: QueueEntrypoint
+    priority: int
+    status: JOB_STATUS
+
+
+class ThroughputGroup(NamedTuple):
+    entrypoint: QueueEntrypoint
+    status: JOB_STATUS
+
+
+class TimeseriesGroup(NamedTuple):
+    bucket: datetime
+    entrypoint: QueueEntrypoint
+    status: JOB_STATUS
+
+
+class ReadyHeapEntry(NamedTuple):
+    negated_priority: int
+    job_id: int
+
+
+class DeferredHeapEntry(NamedTuple):
+    execute_after: datetime
+    job_id: int
+    entrypoint: str
+
+
 class ScheduleRow(TypedDict):
     id: int
     expression: CronExpression
@@ -148,12 +176,10 @@ class InMemoryQueries:
     # Dequeue indexes. Heap entries are never removed eagerly; validity is
     # re-checked against ``_jobs`` on pop, so entries for jobs that were
     # cancelled, cleared, or re-queued are skipped as tombstones.
-    _ready_heaps: dict[str, list[tuple[int, int]]] = dataclasses.field(
+    _ready_heaps: dict[str, list[ReadyHeapEntry]] = dataclasses.field(
         default_factory=dict, init=False
     )
-    _deferred_heap: list[tuple[datetime, int, str]] = dataclasses.field(
-        default_factory=list, init=False
-    )
+    _deferred_heap: list[DeferredHeapEntry] = dataclasses.field(default_factory=list, init=False)
     _picked_ids: set[int] = dataclasses.field(default_factory=set, init=False)
 
     _next_job_id: int = dataclasses.field(default=1, init=False)
@@ -361,28 +387,31 @@ class InMemoryQueries:
         if job["execute_after"] <= now:
             heapq.heappush(
                 self._ready_heaps.setdefault(job["entrypoint"], []),
-                (-job["priority"], job["id"]),
+                ReadyHeapEntry(-job["priority"], job["id"]),
             )
         else:
             heapq.heappush(
                 self._deferred_heap,
-                (job["execute_after"], job["id"], job["entrypoint"]),
+                DeferredHeapEntry(job["execute_after"], job["id"], job["entrypoint"]),
             )
 
     def _promote_due_deferred(self, now: datetime) -> None:
-        while self._deferred_heap and self._deferred_heap[0][0] <= now:
-            _, job_id, ep = heapq.heappop(self._deferred_heap)
-            j = self._jobs.get(job_id)
+        while self._deferred_heap and self._deferred_heap[0].execute_after <= now:
+            entry = heapq.heappop(self._deferred_heap)
+            j = self._jobs.get(entry.job_id)
             if j is None or j["status"] != "queued":
                 continue
             if j["execute_after"] > now:
                 # retry_job pushed the job further into the future after this
                 # entry was created; track the current deadline instead.
-                heapq.heappush(self._deferred_heap, (j["execute_after"], job_id, ep))
+                heapq.heappush(
+                    self._deferred_heap,
+                    DeferredHeapEntry(j["execute_after"], entry.job_id, entry.entrypoint),
+                )
             else:
                 heapq.heappush(
-                    self._ready_heaps.setdefault(ep, []),
-                    (-j["priority"], job_id),
+                    self._ready_heaps.setdefault(entry.entrypoint, []),
+                    ReadyHeapEntry(-j["priority"], entry.job_id),
                 )
 
     def _pop_ready_jobs(
@@ -397,14 +426,17 @@ class InMemoryQueries:
         if heap is None:
             return popped
         while heap and len(popped) < limit:
-            _, job_id = heapq.heappop(heap)
-            j = self._jobs.get(job_id)
-            if j is None or j["status"] != "queued" or job_id in seen:
+            entry = heapq.heappop(heap)
+            j = self._jobs.get(entry.job_id)
+            if j is None or j["status"] != "queued" or entry.job_id in seen:
                 continue
             if j["execute_after"] > now:
-                heapq.heappush(self._deferred_heap, (j["execute_after"], job_id, entrypoint))
+                heapq.heappush(
+                    self._deferred_heap,
+                    DeferredHeapEntry(j["execute_after"], entry.job_id, entrypoint),
+                )
                 continue
-            seen.add(job_id)
+            seen.add(entry.job_id)
             popped.append(j)
         return popped
 
@@ -514,7 +546,7 @@ class InMemoryQueries:
             if j["id"] not in selected_ids:
                 heapq.heappush(
                     self._ready_heaps.setdefault(j["entrypoint"], []),
-                    (-j["priority"], j["id"]),
+                    ReadyHeapEntry(-j["priority"], j["id"]),
                 )
 
         for j in selected:
@@ -703,21 +735,27 @@ class InMemoryQueries:
             self._picked_ids.clear()
 
     async def queue_size(self) -> list[models.QueueStatistics]:
-        counts: dict[tuple[QueueEntrypoint, int, JOB_STATUS], int] = {}
+        counts: dict[QueueSizeGroup, int] = {}
         for j in self._jobs.values():
-            key = (j["entrypoint"], j["priority"], j["status"])
-            counts[key] = counts.get(key, 0) + 1
+            group = QueueSizeGroup(j["entrypoint"], j["priority"], j["status"])
+            counts[group] = counts.get(group, 0) + 1
+        ordered = sorted(
+            counts,
+            key=lambda group: (
+                counts[group],
+                group.entrypoint,
+                group.priority,
+                job_status_rank(group.status),
+            ),
+        )
         return [
             models.QueueStatistics(
-                count=count,
-                entrypoint=ep,
-                priority=pri,
-                status=st,
+                count=counts[group],
+                entrypoint=group.entrypoint,
+                priority=group.priority,
+                status=group.status,
             )
-            for (ep, pri, st), count in sorted(
-                counts.items(),
-                key=lambda item: (item[1], item[0][0], item[0][1], job_status_rank(item[0][2])),
-            )
+            for group in ordered
         ]
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
@@ -1026,18 +1064,23 @@ class InMemoryQueries:
     ) -> list[models.ThroughputStats]:
         self.aggregate_log_to_statistics()
         cutoff = utc_now() - last if last is not None else None
-        totals: dict[tuple[QueueEntrypoint, JOB_STATUS], int] = {}
+        totals: dict[ThroughputGroup, int] = {}
         for r in self._statistics:
             if cutoff is not None and r["created"] <= cutoff:
                 continue
-            key = (r["entrypoint"], r["status"])
-            totals[key] = totals.get(key, 0) + r["count"]
+            group = ThroughputGroup(r["entrypoint"], r["status"])
+            totals[group] = totals.get(group, 0) + r["count"]
+        ordered = sorted(
+            totals,
+            key=lambda group: (group.entrypoint, job_status_rank(group.status)),
+        )
         return [
-            models.ThroughputStats(entrypoint=ep, status=st, total_count=count)
-            for (ep, st), count in sorted(
-                totals.items(),
-                key=lambda item: (item[0][0], job_status_rank(item[0][1])),
+            models.ThroughputStats(
+                entrypoint=group.entrypoint,
+                status=group.status,
+                total_count=totals[group],
             )
+            for group in ordered
         ]
 
     async def throughput_timeseries(
@@ -1046,16 +1089,24 @@ class InMemoryQueries:
     ) -> list[models.ThroughputBucket]:
         self.aggregate_log_to_statistics()
         cutoff = utc_now() - last
-        buckets: dict[tuple[datetime, QueueEntrypoint, JOB_STATUS], int] = {}
+        buckets: dict[TimeseriesGroup, int] = {}
         for r in self._statistics:
             if r["created"] <= cutoff:
                 continue
-            bucket = r["created"].replace(second=0, microsecond=0)
-            key = (bucket, r["entrypoint"], r["status"])
-            buckets[key] = buckets.get(key, 0) + r["count"]
+            group = TimeseriesGroup(
+                r["created"].replace(second=0, microsecond=0),
+                r["entrypoint"],
+                r["status"],
+            )
+            buckets[group] = buckets.get(group, 0) + r["count"]
         return [
-            models.ThroughputBucket(bucket=bucket, entrypoint=ep, status=st, count=count)
-            for (bucket, ep, st), count in sorted(buckets.items())
+            models.ThroughputBucket(
+                bucket=group.bucket,
+                entrypoint=group.entrypoint,
+                status=group.status,
+                count=buckets[group],
+            )
+            for group in sorted(buckets)
         ]
 
     async def active_workers(self) -> list[models.ActiveWorker]:
