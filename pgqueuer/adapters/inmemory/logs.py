@@ -12,7 +12,7 @@ from pgqueuer.domain.models import utc_now
 from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(slots=True)
 class LogRow:
     id: int
     created: datetime
