@@ -37,6 +37,9 @@
 
 ### Fixed
 
+- In-memory `enqueue` advances the job id when a dedupe conflict is skipped,
+  updated, or raised, matching PostgreSQL `nextval`. The next insert gets the
+  same id on both adapters.
 - In-memory `queue_size` orders rows by count, entrypoint, priority, then
   status enum order, matching PostgreSQL.
 - In-memory `queued_work` and `eligible_queued_work` return 1 when any matching

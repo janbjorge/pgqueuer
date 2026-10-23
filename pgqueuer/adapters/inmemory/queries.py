@@ -309,6 +309,8 @@ class InMemoryQueries:
                 if dk is None:
                     continue
                 if dk in self._dedupe_index or dk in seen:
+                    # nextval is not undone when the insert rolls back.
+                    self._next_job_id += len(normed.entrypoint)
                     raise errors.DuplicateJobError(normed.dedupe_key)
                 seen.add(dk)
         elif on_conflict == "skip":
@@ -323,17 +325,19 @@ class InMemoryQueries:
 
         for i in range(len(normed.entrypoint)):
             dk = normed.dedupe_key[i]
-            if dk is not None and dk in self._dedupe_index and on_conflict == "update_priority":
-                job = self._jobs[self._dedupe_index[dk]]
-                if normed.priority[i] > job["priority"]:
-                    job["priority"] = normed.priority[i]
-                    if job["status"] == "queued":
-                        # The old heap entry goes stale; dequeue skips it.
-                        self._push_queued_job(job, now)
-                ids.append(JobId(job["id"]))
-                continue
             if dk is not None and dk in self._dedupe_index:
-                ids.append(None)
+                # A skipped or updated row still takes a serial id.
+                self._next_job_id += 1
+                if on_conflict == "update_priority":
+                    job = self._jobs[self._dedupe_index[dk]]
+                    if normed.priority[i] > job["priority"]:
+                        job["priority"] = normed.priority[i]
+                        if job["status"] == "queued":
+                            # The old heap entry goes stale; dequeue skips it.
+                            self._push_queued_job(job, now)
+                    ids.append(JobId(job["id"]))
+                else:
+                    ids.append(None)
                 continue
 
             job_id = self._next_job_id
