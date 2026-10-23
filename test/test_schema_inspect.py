@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.queries import Queries
@@ -43,6 +44,30 @@ async def test_prefixed_and_schema_scoped_install(
 ) -> None:
     await queries_for(apgdriver, settings).install()
     assert collapse(await inspect(apgdriver, settings)) == declared_schema(settings)
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        pytest.param(DBSettings(prefix="Acme_"), id="mixed-case-prefix"),
+        pytest.param(DBSettings(prefix="acme_", queue_table="AcmeJobs"), id="mixed-case-name"),
+        pytest.param(DBSettings(prefix="acme_"), id="lowercase-prefix"),
+    ],
+)
+async def test_mixed_case_names_are_found_after_install(
+    apgdriver: AsyncpgDriver,
+    settings: DBSettings,
+) -> None:
+    """The DDL folds unquoted names to lowercase; the catalog lookups must still find them."""
+    queries = queries_for(apgdriver, settings)
+    assert not await queries.schema_is_installed()
+    await queries.install()
+
+    assert await queries.has_table(settings.queue_table)
+    assert await queries.schema_is_installed()
+    assert collapse(await inspect(apgdriver, settings)) == declared_schema(settings)
+    assert (await queries.plan_upgrade()).statements == ()
+    await QueueManager(queries).verify_structure()
 
 
 async def test_missing_namespace_is_reported(apgdriver: AsyncpgDriver) -> None:

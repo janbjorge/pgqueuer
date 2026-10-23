@@ -94,6 +94,27 @@ def test_db_schema_lowercase_normalized() -> None:
     assert settings.schema_expr == "'billing'"
 
 
+def test_object_names_lowercase_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unquoted identifiers fold to lowercase; the catalog literals must match."""
+    settings = DBSettings(prefix="Acme_", statistics_table="AcmeStats")
+    assert settings.prefix == "acme_"
+    assert settings.queue_table == "acme_pgqueuer"
+    assert settings.statistics_table == "acmestats"
+    assert settings.qualified.function == "acme_fn_pgqueuer_changed"
+    assert settings.trigger == "acme_tg_pgqueuer_changed"
+    assert settings.channel == "acme_ch_pgqueuer"
+
+    monkeypatch.setenv("PGQUEUER_PREFIX", "Acme_")
+    monkeypatch.setenv("PGQUEUER_QUEUE_TABLE", "AcmeJobs")
+    from_env = DBSettings()
+    assert (from_env.queue_table, from_env.queue_table_log) == ("acmejobs", "acme_pgqueuer_log")
+
+
+def test_explicit_channel_keeps_its_case() -> None:
+    """A channel is a string literal in pg_notify and quoted in LISTEN, so case is kept."""
+    assert DBSettings(channel=Channel("Acme-Events")).channel == "Acme-Events"
+
+
 def test_qualified_names_with_schema() -> None:
     settings = DBSettings(db_schema="billing", prefix="acme_")
     assert settings.qualified.queue_table == "billing.acme_pgqueuer"

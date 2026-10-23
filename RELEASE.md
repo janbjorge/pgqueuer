@@ -79,6 +79,16 @@
   while a worker's periodic aggregation or another read was in flight, and
   both counted the same rows. Each aggregation now counts only the rows its
   own update flagged.
+- A mixed-case prefix or object name (`--prefix Billing_`,
+  `PGQUEUER_QUEUE_TABLE=AcmeJobs`) is now lowercased, as `db_schema` already
+  was. PostgreSQL folds the unquoted names in the DDL to lowercase, but the
+  catalog checks looked for the mixed-case spelling, so after `pgq install` a
+  worker refused to start ("The required table 'Billing_pgqueuer' is missing"),
+  `pgq verify --expect present` reported every object missing, and `pgq
+  upgrade` or a second `pgq install` failed on the existing enum. The default
+  channel follows the prefix and is lowercase too; an installation made with a
+  mixed-case prefix needs one `pgq upgrade`, which rewrites the trigger
+  function to notify on it. An explicitly set channel keeps its case.
 
 ## v1.6.0
 

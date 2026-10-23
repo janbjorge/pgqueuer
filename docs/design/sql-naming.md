@@ -32,10 +32,11 @@ Every object name defaults to `prefix` plus a base name (`pgqueuer`,
 `pgqueuer_log`, `pgqueuer_statistics`, `pgqueuer_schedules`,
 `pgqueuer_status`, `fn_pgqueuer_changed`, `tg_pgqueuer_changed`,
 `ch_pgqueuer`) and can be overridden on its own. Index names derive from
-their table. `prefix` and `db_schema` must be plain identifiers, and
-`db_schema` is lowercased so its identifier and string-literal uses
-agree. `qualified` is cached on first use, so a `DBSettings` must not
-change after it is used.
+their table. `prefix` and `db_schema` must be plain identifiers. They
+and the object names are lowercased so their identifier and
+string-literal uses agree; the channel keeps its case, since it is a
+string literal in `pg_notify` and quoted in `LISTEN`. `qualified` is
+cached on first use, so a `DBSettings` must not change after it is used.
 
 ## Spellings
 
@@ -114,7 +115,7 @@ numbering, and `test_cli_sql.py` the offline SQL.
 
 Per-object overrides are interpolated as given, apart from a dot check
 under `db_schema` that skips the channel and trigger. Names render
-unquoted, so PostgreSQL lowercases and truncates them at 63 bytes while
-catalog lookups bind them as configured; an uppercase or very long
-prefix makes inspection miss objects that exist. With `db_schema` unset,
+unquoted, so PostgreSQL truncates them at 63 bytes while catalog
+lookups bind them as configured; a very long prefix makes inspection
+miss objects that exist. With `db_schema` unset,
 the enum label check scans every schema.
