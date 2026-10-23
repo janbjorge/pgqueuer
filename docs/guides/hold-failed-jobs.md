@@ -137,6 +137,8 @@ await queries.requeue_jobs([JobId(42), JobId(43)])
 - `attempts` is reset to `0`: a fresh start.
 - A log entry with `status='queued'` is written for auditability.
 - Any worker can pick up the re-queued job.
+- If its `dedupe_key` is already on a queued or picked job, requeue raises
+  unique violation `23505` and every id in the call stays `failed`.
 - If `DatabaseRetryEntrypointExecutor` is configured, the job gets a full new set of retry
   attempts.
 
