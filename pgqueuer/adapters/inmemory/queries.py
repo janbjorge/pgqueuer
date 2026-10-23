@@ -714,7 +714,10 @@ class InMemoryQueries:
                 priority=pri,
                 status=st,
             )
-            for (ep, pri, st), count in sorted(counts.items())
+            for (ep, pri, st), count in sorted(
+                counts.items(),
+                key=lambda item: (item[1], item[0][0], item[0][1], job_status_rank(item[0][2])),
+            )
         ]
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
