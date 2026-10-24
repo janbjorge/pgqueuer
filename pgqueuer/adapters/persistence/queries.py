@@ -636,11 +636,21 @@ class Queries:
         self,
         ids: set[types.ScheduleId],
         entrypoints: set[CronEntrypoint],
+        *,
+        keep: set[models.CronExpressionEntrypoint] | None = None,
     ) -> None:
+        """Delete schedules by id or entrypoint.
+
+        A pair in *keep* survives the entrypoint match. An id in *ids* is
+        deleted even when its pair is listed.
+        """
+        spared = keep or set()
         await self.driver.execute(
             self.qbs.build_delete_schedule_query(),
             list(ids),
             list(entrypoints),
+            [key.entrypoint for key in spared],
+            [key.expression for key in spared],
         )
 
     async def clear_schedule(self) -> None:

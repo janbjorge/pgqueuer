@@ -408,8 +408,10 @@ class InMemoryQueries:
         self,
         ids: set[ScheduleId],
         entrypoints: set[CronEntrypoint],
+        *,
+        keep: set[models.CronExpressionEntrypoint] | None = None,
     ) -> None:
-        self.schedules.delete(ids, entrypoints)
+        self.schedules.delete(ids, entrypoints, keep)
 
     async def clear_schedule(self) -> None:
         self.schedules.clear()

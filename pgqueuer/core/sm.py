@@ -103,7 +103,12 @@ class SchedulerManager:
             )
 
         if to_clean := {k.entrypoint for k, v in self.registry.items() if v.parameters.clean_old}:
-            await self.queries.delete_schedule(ids=set(), entrypoints=to_clean)
+            # Spare expressions still registered, so a due next_run survives restart.
+            await self.queries.delete_schedule(
+                ids=set(),
+                entrypoints=to_clean,
+                keep={key for key in self.registry if key.entrypoint in to_clean},
+            )
 
         await self.queries.insert_schedule({k: v.next_in() for k, v in self.registry.items()})
 

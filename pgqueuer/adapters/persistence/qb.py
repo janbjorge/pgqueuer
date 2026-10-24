@@ -1108,7 +1108,20 @@ class QuerySchedulerBuilder:
         return f"""SELECT * FROM {self.qualified.schedules_table} ORDER BY last_run ASC"""
 
     def build_delete_schedule_query(self) -> str:
-        return f"""DELETE FROM {self.qualified.schedules_table} WHERE id = ANY($1) OR entrypoint = ANY($2)"""  # noqa: E501
+        # An empty keep deletes every row of the entrypoint. A listed pair is spared.
+        table = self.qualified.schedules_table
+        return f"""DELETE FROM {table}
+        WHERE id = ANY($1)
+            OR (
+                entrypoint = ANY($2)
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM UNNEST($3::text[], $4::text[]) AS registered(entrypoint, expression)
+                    WHERE registered.entrypoint = {table}.entrypoint
+                        AND registered.expression = {table}.expression
+                )
+            )
+        """
 
     def build_truncate_schedule_query(self) -> str:
         return f"""TRUNCATE {self.qualified.schedules_table}"""
