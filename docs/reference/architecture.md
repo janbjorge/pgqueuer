@@ -83,7 +83,8 @@ The lifecycle of a job flows through these statuses:
   stored for later inspection.
 - **`failed`**: Job held in the queue for manual review when `on_failure="hold"` is set.
   Can be re-queued or deleted manually.
-- **`canceled`**: Jobs canceled before completion receive this status and are logged.
+- **`canceled`**: A queued job canceled with `mark_job_as_cancelled` is logged at once.
+  A picked job stays `picked` until its worker logs `canceled`.
 - **`deleted`**: Used when jobs are removed from the queue without running, such as during
   manual cleanup operations.
 

@@ -104,7 +104,7 @@ can be manually re-queued via `pgq requeue <id>` or
 | `successful` | Handler completed without raising an exception |
 | `exception` | Handler raised an unhandled exception (traceback is logged) |
 | `failed` | Job held for manual review after terminal failure. Inspect with `pgq failed` and re-queue with `pgq requeue <id>` (see [Holding Failed Jobs](../guides/hold-failed-jobs.md)) |
-| `canceled` | Job was canceled via `mark_job_as_cancelled()` |
+| `canceled` | Queued job removed by `mark_job_as_cancelled()`, or a picked job stopped by its worker after a cancel request |
 | `deleted` | Job was removed before being processed |
 
 Once a job reaches a terminal state (`successful`, `exception`, `canceled`, `deleted`),

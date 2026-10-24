@@ -612,14 +612,11 @@ async def test_log_jobs_adds_to_log(queries: InMemoryQueries) -> None:
 
 
 @pytest.mark.parametrize("outcome", ["successful", "canceled", "exception", "failed"])
-@pytest.mark.parametrize(("remove", "terminal"), [("cancel", "canceled"), ("clear", "deleted")])
-async def test_log_jobs_skips_job_no_longer_in_queue(
+async def test_log_jobs_skips_job_cleared_while_it_ran(
     queries: InMemoryQueries,
-    remove: str,
-    terminal: str,
     outcome: JOB_STATUS,
 ) -> None:
-    """A job cancelled or cleared while it ran keeps its terminal status, as in PostgreSQL."""
+    """A job cleared while it ran keeps status deleted, as in PostgreSQL."""
     (jid,) = await queries.enqueue("ep", None)
     (job,) = await queries.dequeue(
         10,
@@ -628,16 +625,13 @@ async def test_log_jobs_skips_job_no_longer_in_queue(
         None,
         heartbeat_timeout=timedelta(seconds=30),
     )
-    if remove == "cancel":
-        await queries.mark_job_as_cancelled([jid])
-    else:
-        await queries.clear_queue("ep")
+    await queries.clear_queue("ep")
 
     await queries.log_jobs([(job, outcome, None)])
 
     history = await queries.job_log_history(jid)
-    assert [e.status for e in history] == ["queued", "picked", terminal]
-    assert await queries.job_status([jid]) == [(jid, terminal)]
+    assert [e.status for e in history] == ["queued", "picked", "deleted"]
+    assert await queries.job_status([jid]) == [(jid, "deleted")]
 
 
 async def test_log_jobs_logs_job_still_in_queue(queries: InMemoryQueries) -> None:
@@ -660,6 +654,72 @@ async def test_log_jobs_logs_job_still_in_queue(queries: InMemoryQueries) -> Non
 # ---------------------------------------------------------------------------
 # mark_job_as_cancelled
 # ---------------------------------------------------------------------------
+
+
+async def test_cancel_keeps_picked_row_until_worker_logs(queries: InMemoryQueries) -> None:
+    """Cancel of a running job keeps its slot and dedupe key until the worker logs (#1031)."""
+    params = {QueueEntrypoint("serial"): EntrypointExecutionParameter(concurrency_limit=1)}
+    owner = QueueManagerId(uuid.uuid4())
+    timeout = timedelta(seconds=30)
+    (running_id,) = await queries.enqueue("serial", None, dedupe_key="a")
+    (waiting_id,) = await queries.enqueue("serial", None, dedupe_key="b")
+    (queued_id,) = await queries.enqueue("serial", None, dedupe_key="c")
+
+    (running,) = await queries.dequeue(1, params, owner, None, timeout)
+    assert running.id == running_id
+
+    await queries.mark_job_as_cancelled([running_id, queued_id])
+
+    assert await queries.queue_job_by_id(queued_id) is None
+    assert [entry.status for entry in await queries.job_log_history(queued_id)] == [
+        "queued",
+        "canceled",
+    ]
+    held = await queries.queue_job_by_id(running_id)
+    assert held is not None and held.status == "picked"
+    assert [entry.status for entry in await queries.job_log_history(running_id)] == [
+        "queued",
+        "picked",
+    ]
+    assert await queries.dequeue(1, params, owner, None, timeout) == []
+    with pytest.raises(DuplicateJobError):
+        await queries.enqueue("serial", None, dedupe_key="a")
+
+    await queries.log_jobs([(running, "canceled", None)])
+
+    assert await queries.queue_job_by_id(running_id) is None
+    assert [entry.status for entry in await queries.job_log_history(running_id)] == [
+        "queued",
+        "picked",
+        "canceled",
+    ]
+    (next_job,) = await queries.dequeue(1, params, owner, None, timeout)
+    assert next_job.id == waiting_id
+    (replacement,) = await queries.enqueue("serial", None, dedupe_key="a")
+    assert replacement is not None
+
+
+async def test_cancel_removes_failed_job(queries: InMemoryQueries) -> None:
+    """A held failed job is still removed and logged canceled."""
+    (jid,) = await queries.enqueue("ep", None)
+    (job,) = await queries.dequeue(
+        1,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        timedelta(seconds=30),
+    )
+    await queries.log_jobs([(job, "failed", None)])
+
+    await queries.mark_job_as_cancelled([jid])
+
+    assert await queries.queue_job_by_id(jid) is None
+    assert [entry.status for entry in await queries.job_log_history(jid)] == [
+        "queued",
+        "picked",
+        "failed",
+        "canceled",
+    ]
 
 
 async def test_mark_job_as_cancelled(queries: InMemoryQueries, driver: InMemoryDriver) -> None:

@@ -689,8 +689,8 @@ class QueryQueueBuilder:
     """
 
     def build_log_job_query(self) -> str:
-        # The owner check sits on the target row so a concurrent re-pick is re-checked
-        # under READ COMMITTED; a NULL owner (admin cancellation) is unfenced.
+        # Owner check is re-read under READ COMMITTED. A NULL owner (admin cancel)
+        # removes queued and failed rows only; a picked row stays for its worker.
         return f"""WITH job_status AS (
             SELECT
                 UNNEST($1::bigint[])                            AS id,
@@ -702,7 +702,10 @@ class QueryQueueBuilder:
             USING job_status js
             WHERE q.id = js.id
                 AND js.status != 'failed'
-                AND (js.queue_manager_id IS NULL OR q.queue_manager_id = js.queue_manager_id)
+                AND (
+                    q.queue_manager_id = js.queue_manager_id
+                    OR (js.queue_manager_id IS NULL AND q.status <> 'picked')
+                )
             RETURNING q.id, q.entrypoint, q.priority
         ), held AS (
             UPDATE {self.qualified.queue_table} q
