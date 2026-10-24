@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, Callable, MutableMapping
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
@@ -417,6 +417,7 @@ async def test_schedule_clean_old(
     schedules = await inspect_schedule(apgdriver)
     assert len(schedules) == 1
     assert schedules[0].expression == "3 * * * *"
+    kept_id = schedules[0].id
 
     sm4 = SchedulerManager(Queries(apgdriver))
 
@@ -428,9 +429,64 @@ async def test_schedule_clean_old(
     await asyncio.gather(sm4.run(), shutdown_after(sm4))
 
     schedules = await inspect_schedule(apgdriver)
-    assert len(schedules) == 2
-    assert schedules[0].expression == "4 * * * *"
-    assert schedules[1].expression == "3 * * * *"
+    kept = CronExpression("3 * * * *")
+    by_expression = {row.expression: row.id for row in schedules}
+    assert set(by_expression) == {kept, CronExpression("4 * * * *")}
+    assert by_expression[kept] == kept_id
+
+
+async def assert_clean_old_keeps_due_schedule(
+    queries: InMemoryQueries | Queries,
+    backdate: Callable[[], Awaitable[None]],
+) -> None:
+    first = SchedulerManager(queries)
+
+    @first.schedule("nightly", "0 3 * * *", clean_old=True)
+    async def nightly(schedule: Schedule) -> None:
+        pass
+
+    await asyncio.gather(first.run(), shutdown_Scheduler_after(first, timedelta(seconds=0.1)))
+
+    stored = await queries.peek_schedule()
+    assert len(stored) == 1
+    original_id = stored[0].id
+    await backdate()
+
+    fired: list[ScheduleId] = []
+    second = SchedulerManager(queries)
+
+    @second.schedule("nightly", "0 3 * * *", clean_old=True)
+    async def nightly_again(schedule: Schedule) -> None:
+        fired.append(schedule.id)
+        second.shutdown.set()
+
+    await asyncio.wait_for(second.run(), timeout=5)
+
+    assert fired == [original_id]
+    assert [row.id for row in await queries.peek_schedule()] == [original_id]
+
+
+async def test_clean_old_keeps_due_firing(queries: InMemoryQueries) -> None:
+    """clean_old=True keeps an unchanged schedule and runs a firing missed while down (#1029)."""
+
+    async def backdate() -> None:
+        due = datetime.now(UTC) - timedelta(minutes=1)
+        for row in queries.schedules.rows.values():
+            row.next_run = due
+
+    await assert_clean_old_keeps_due_schedule(queries, backdate)
+
+
+async def test_clean_old_keeps_due_firing_postgres(apgdriver: AsyncpgDriver) -> None:
+    """clean_old=True keeps an unchanged schedule and runs a firing missed while down (#1029)."""
+    queries = Queries(apgdriver)
+
+    async def backdate() -> None:
+        await apgdriver.execute(
+            f"UPDATE {DBSettings().schedules_table} SET next_run = NOW() - interval '1 minute'"
+        )
+
+    await assert_clean_old_keeps_due_schedule(queries, backdate)
 
 
 # ============================================================================

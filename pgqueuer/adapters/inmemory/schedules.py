@@ -119,12 +119,19 @@ class ScheduleTable:
         ordered = sorted(self.rows.values(), key=lambda row: (row.last_run is None, row.last_run))
         return [row.to_model() for row in ordered]
 
-    def delete(self, ids: set[ScheduleId], entrypoints: set[CronEntrypoint]) -> None:
+    def delete(
+        self,
+        ids: set[ScheduleId],
+        entrypoints: set[CronEntrypoint],
+        keep: set[models.CronExpressionEntrypoint] | None = None,
+    ) -> None:
+        spared = {(key.entrypoint, key.expression) for key in (keep or ())}
         id_ints = {int(schedule_id) for schedule_id in ids}
         removed = [
             schedule_id
             for schedule_id, row in self.rows.items()
-            if schedule_id in id_ints or row.entrypoint in entrypoints
+            if schedule_id in id_ints
+            or (row.entrypoint in entrypoints and (row.entrypoint, row.expression) not in spared)
         ]
         for schedule_id in removed:
             del self.rows[schedule_id]

@@ -113,9 +113,10 @@ See [Shared Resources](shared-resources.md) for full details.
 
 ## Cleaning up old schedules
 
-When `clean_old=True`, PgQueuer deletes any **existing** database schedules whose entrypoint
-matches this decorator's entrypoint before re-registering it. This is useful when you change
-the cron expression for a task and want the old schedule row replaced on startup.
+When `clean_old=True`, PgQueuer deletes schedule rows for this entrypoint whose cron
+expression is no longer registered. A row whose expression did not change is kept, including
+a firing that came due while the scheduler was down. Use it when you change a cron expression
+and want the old row replaced on startup.
 
 ```python
 @pgq.schedule("fetch_db", "* * * * *", clean_old=True)

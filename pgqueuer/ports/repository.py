@@ -261,6 +261,8 @@ class ScheduleRepositoryPort(Protocol):
         self,
         ids: set[types.ScheduleId],
         entrypoints: set[CronEntrypoint],
+        *,
+        keep: set[models.CronExpressionEntrypoint] | None = None,
     ) -> None: ...
 
     async def clear_schedule(self) -> None: ...
