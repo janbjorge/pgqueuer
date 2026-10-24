@@ -33,6 +33,10 @@ class QueueManager:
     ``resources`` is a user-provided mapping (DB pools, HTTP clients, ML models,
     etc.) propagated into every job Context. Pass at construction time to share
     initialised objects across jobs.
+
+    ``unwritten_job_logs`` holds job ends whose shutdown flush failed. Copy
+    them off before the next ``run``. Write them with ``log_jobs`` on a live
+    connection. A write after another worker owns the job is ignored.
     """
 
     queries: RepositoryPort
@@ -412,6 +416,8 @@ class QueueManager:
         ``pgqueuer_log`` into ``pgqueuer_statistics`` on a timer instead of only
         on stats reads; pass ``timedelta(0)`` to disable (pure on-demand).
         """
+        # Drop the previous run's ends before anything here can raise.
+        self.unwritten_job_logs = []
         await self.verify_structure()
 
         # 0 has always meant unlimited; keep unlimited as None all the way to
@@ -425,6 +431,7 @@ class QueueManager:
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 repository=self.queries,
+                leftovers=self.unwritten_job_logs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 # Flush will be mainly driven by timeouts, but allow flush if

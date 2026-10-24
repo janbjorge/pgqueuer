@@ -136,9 +136,19 @@ class JobStatusLogBuffer(TimedOverflowBuffer[JobLogEntry]):
     """Batched buffer for job completion / failure log entries."""
 
     repository: JobLogSink
+    leftovers: list[JobLogEntry] = dataclasses.field(default_factory=list)
 
     async def flush_items(self, items: list[JobLogEntry]) -> None:
         await self.repository.log_jobs(items)
+
+    async def __aexit__(self, *exc: object) -> None:
+        await TimedOverflowBuffer.__aexit__(self, *exc)
+        self.leftovers.extend(self.drain_queue())
+        if self.leftovers:
+            logconfig.logger.warning(
+                "Kept %d unwritten job ends. Pass them to log_jobs on a live connection.",
+                len(self.leftovers),
+            )
 
 
 @dataclasses.dataclass

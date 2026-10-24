@@ -283,8 +283,8 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
         for item in items:
             await buffer.add(item)
 
-    # Was uanble to flush at exit, buffer should have all elements.
-    assert buffer.events.qsize() == N
+    assert buffer.leftovers == items
+    assert buffer.events.qsize() == 0
 
 
 async def test_job_buffer_flush_returns_when_lock_held() -> None:
