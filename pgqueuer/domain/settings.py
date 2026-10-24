@@ -17,15 +17,20 @@ _IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 
 # Object names are interpolated into SQL unquoted (schema DDL, TRUNCATE,
 # INSERT/SELECT), so every one is constrained to identifier characters before
-# it can reach a query string (#945).
+# it can reach a query string (#945). Like db_schema they are lowercased: the
+# DDL folds them, and the catalog lookups compare them as string literals.
 # Prefix is prepended to the default names, so it may be empty.
-IdentifierPrefix: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^({_IDENT})?$")]
+IdentifierPrefix: TypeAlias = Annotated[
+    str, StringConstraints(pattern=rf"^({_IDENT})?$", to_lower=True)
+]
 # Rendered both as an unquoted identifier (folds to lowercase) and as a nspname
 # string literal (does not fold); normalize so both agree.
 SchemaName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}$", to_lower=True)]
 # A dotted chain stays allowed (the legacy "schema.table" form), but each part
 # must itself be a plain identifier.
-ObjectName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}(\.{_IDENT})*$")]
+ObjectName: TypeAlias = Annotated[
+    str, StringConstraints(pattern=rf"^{_IDENT}(\.{_IDENT})*$", to_lower=True)
+]
 # A NOTIFY channel goes into SQL as a string literal and asyncpg quotes it for
 # LISTEN, so dashes and dots work there; quotes, spaces and semicolons do not.
 ChannelName: TypeAlias = Annotated[
