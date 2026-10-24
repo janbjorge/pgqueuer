@@ -148,5 +148,6 @@ await queries.requeue_jobs([JobId(42), JobId(43)])
 |----------|--------------------------------|---------------------|
 | Handler raises exception | Job deleted, logged as `exception` | Job kept with `status='failed'` |
 | Handler raises `RetryRequested` | Re-queued with delay (both modes) | Re-queued with delay (both modes) |
+| Retry write fails until shutdown | Job stays `picked` for stale recovery | Job stays `picked` for stale recovery |
 | Handler completes | Job deleted, logged as `successful` | Job deleted, logged as `successful` |
 | `DatabaseRetryEntrypointExecutor` exhausted | Job deleted | Job held with `status='failed'` |

@@ -22,7 +22,6 @@ from pgqueuer.domain.errors import RetryException, RetryRequested
 from pgqueuer.domain.models import Context, Job, TracebackRecord
 from pgqueuer.domain.types import (
     JobId,
-    OnFailure,
     QueueEntrypoint,
     QueueExecutionMode,
     QueueManagerId,
@@ -208,27 +207,31 @@ async def test_unhandled_exception_remains_terminal() -> None:
     assert await pq.qm.queries.queue_size() == []
 
 
-@pytest.mark.parametrize(
-    ("on_failure", "status", "queue_status"),
-    (("delete", "exception", None), ("hold", "failed", "failed")),
-)
-async def test_failing_retry_job_records_the_job_as_failed(
-    monkeypatch: pytest.MonkeyPatch,
-    on_failure: OnFailure,
-    status: str,
-    queue_status: str | None,
-) -> None:
-    """A retry_job error goes down the failure path instead of leaving the row picked (#883)."""
+async def test_retry_write_is_retried_until_it_lands(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One failed retry write is tried again, and the handler runs with attempts 1 (#1030)."""
     pq = PgQueuer.in_memory()
+    seen: list[int] = []
+    writes = 0
+    original = pq.qm.queries.retry_job
 
-    @pq.entrypoint("retry_ep", on_failure=on_failure)
+    @pq.entrypoint("retry_ep")
     async def handler(job: Job) -> None:
-        raise RetryRequested
+        seen.append(job.attempts)
+        if job.attempts == 0:
+            raise RetryRequested(delay=timedelta(0))
 
-    async def failing_retry_job(*_: object) -> None:
-        raise ConnectionError("retry write failed")
+    async def flaky_retry_job(
+        job: Job,
+        delay: timedelta,
+        traceback_record: TracebackRecord | None,
+    ) -> None:
+        nonlocal writes
+        writes += 1
+        if writes == 1:
+            raise ConnectionError("retry write failed")
+        await original(job, delay, traceback_record)
 
-    monkeypatch.setattr(pq.qm.queries, "retry_job", failing_retry_job)
+    monkeypatch.setattr(pq.qm.queries, "retry_job", flaky_retry_job)
     await pq.qm.queries.enqueue("retry_ep", b"data", priority=0)
 
     async with asyncio.timeout(5):
@@ -239,12 +242,44 @@ async def test_failing_retry_job_records_the_job_as_failed(
             dequeue_timeout=timedelta(seconds=1),
         )
 
-    (log,) = [log for log in await pq.qm.queries.queue_log() if log.status == status]
-    assert log.traceback is not None
-    assert log.traceback.exception_type == "ConnectionError"
-    assert [row.status for row in await pq.qm.queries.queue_size()] == (
-        [queue_status] if queue_status else []
-    )
+    assert seen == [0, 1]
+    assert writes == 2
+    assert await pq.qm.queries.queue_size() == []
+    assert [log.status for log in await pq.qm.queries.queue_log()][-1] == "successful"
+
+
+async def test_retry_write_stops_on_shutdown_and_leaves_the_job_picked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Shutdown during a failing retry write leaves the job picked (#1030)."""
+    pq = PgQueuer.in_memory()
+
+    @pq.entrypoint("retry_ep")
+    async def handler(job: Job) -> None:
+        raise RetryRequested
+
+    async def failing_retry_job(*_args: object) -> None:
+        pq.qm.shutdown.set()
+        raise ConnectionError("retry write failed")
+
+    monkeypatch.setattr(pq.qm.queries, "retry_job", failing_retry_job)
+    [job_id] = await pq.qm.queries.enqueue("retry_ep", b"data", priority=0)
+
+    async with asyncio.timeout(5):
+        await pq.qm.run(
+            batch_size=10,
+            mode=QueueExecutionMode.continuous,
+            max_concurrent_tasks=100,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    job = await pq.qm.queries.queue_job_by_id(job_id)
+    assert job is not None
+    assert job.status == "picked"
+    assert job.attempts == 0
+    logs = await pq.qm.queries.queue_log()
+    assert [log.status for log in logs] == ["queued", "picked"]
+    assert all(log.traceback is None for log in logs)
 
 
 async def raise_from_task_group(*errors: Exception) -> None:

@@ -16,6 +16,10 @@ are preserved across retries.
 3. The job becomes eligible for dequeue again after the delay expires.
 4. On the next execution, `job.attempts` reflects how many previous attempts occurred.
 
+If that write fails, the worker keeps the job `picked` and heartbeating and retries
+the write until it succeeds. Shutting the manager down first leaves the row
+`picked`. Stale recovery runs the handler again, and `attempts` is unchanged.
+
 Because the job row is **updated** (not deleted), the same `job.id` is stable across all
 retry attempts. This makes it straightforward to trace the full retry graph by querying the
 log table.
@@ -184,6 +188,7 @@ ORDER BY created;
 | Scenario | What happens |
 |----------|-------------|
 | Handler raises `RetryRequested` | Job updated to `queued`, attempts incremented, log entry written |
+| Retry write fails | Retried while the job stays `picked` and heartbeating. Shutdown leaves it `picked` for stale recovery |
 | Handler raises any other exception | Job deleted, logged as `exception` (or held if `on_failure="hold"`: see [Holding Failed Jobs](hold-failed-jobs.md)) |
 | Handler completes normally | Job deleted, logged as `successful` (existing behavior) |
 | `DatabaseRetryEntrypointExecutor` + exception + attempts < max | Converted to `RetryRequested` with backoff |

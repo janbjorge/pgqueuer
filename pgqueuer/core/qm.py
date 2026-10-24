@@ -537,6 +537,37 @@ class QueueManager:
         )
         await jbuff.add((job, status, tbr))
 
+    async def write_retry(
+        self,
+        job: models.Job,
+        delay: timedelta,
+        traceback_record: models.TracebackRecord,
+    ) -> None:
+        """Persist a requested retry until the write succeeds.
+
+        Failures keep the job picked and heartbeating. Shutdown leaves the row
+        picked so stale recovery runs the handler again, with ``attempts`` unchanged.
+        """
+        pause = timedelta(milliseconds=50)
+        cap = timedelta(seconds=1)
+        while True:
+            try:
+                await self.queries.retry_job(job, delay, traceback_record)
+                return
+            except Exception:
+                logconfig.logger.exception(
+                    "Retry write failed for entrypoint/job-id: %s/%s",
+                    job.entrypoint,
+                    job.id,
+                )
+            if self.shutdown.is_set():
+                return
+            with suppress(TimeoutError):
+                async with asyncio.timeout(pause.total_seconds()):
+                    await self.shutdown.wait()
+                return
+            pause = min(pause * 2, cap)
+
     async def _dispatch(
         self,
         job: models.Job,
@@ -594,10 +625,7 @@ class QueueManager:
                 )
                 # Release before re-queueing, or our own dequeue skips the re-picked row.
                 self.job_context.pop(job.id, None)
-                try:
-                    await self.queries.retry_job(job, retry_exc.delay, tbr)
-                except Exception as e:  # noqa: BLE001 - recorded as a job failure
-                    await self.log_failure(job, executor, e, jbuff)
+                await self.write_retry(job, retry_exc.delay, tbr)
             except asyncio.CancelledError:
                 logconfig.logger.debug(
                     "Job canceled mid-flight for entrypoint/id: %s/%s",
