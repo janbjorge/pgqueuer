@@ -13,10 +13,14 @@ import pytest
 
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
 from pgqueuer.adapters.cli import supervisor
+from pgqueuer.adapters.cli.supervisor import CarriesUnwrittenJobLogs, UnwrittenJobLogs
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core.buffers import JobLogEntry
 from pgqueuer.errors import FailingListenerError
 from pgqueuer.models import HealthCheckEvent, Job
 from pgqueuer.queries import Queries
 from pgqueuer.types import QueueExecutionMode
+from test.helpers import mocked_job
 
 
 @pytest.fixture(scope="function")
@@ -283,6 +287,62 @@ async def test_runit_pgqueuer_failure_without_restart_still_raises() -> None:
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
         )
+
+
+def test_pgqueuer_carries_the_queue_managers_unwritten_job_logs() -> None:
+    """PgQueuer exposes the same list the queue manager keeps."""
+    pgq = PgQueuer.in_memory()
+    scheduler = SchedulerManager(InMemoryQueries(driver=InMemoryDriver()))
+
+    assert isinstance(pgq, CarriesUnwrittenJobLogs)
+    assert isinstance(pgq.qm, CarriesUnwrittenJobLogs)
+    assert pgq.unwritten_job_logs is pgq.qm.unwritten_job_logs
+    assert not isinstance(scheduler, CarriesUnwrittenJobLogs)
+
+
+async def test_unwritten_job_logs_stay_held_when_the_write_fails() -> None:
+    """A failed replay does not drop the ends, and does not run the body."""
+    entry: JobLogEntry = (mocked_job(id=1, status="picked"), "successful", None)
+
+    class Carrier:
+        def __init__(self) -> None:
+            self.unwritten_job_logs: list[JobLogEntry] = []
+
+        async def write_job_ends(self, logs: list[JobLogEntry]) -> None:
+            raise RuntimeError("down")
+
+    held = UnwrittenJobLogs()
+    held.entries = [entry]
+    carrier = Carrier()
+    with pytest.raises(RuntimeError, match="down"):
+        async with held.around(carrier):
+            raise AssertionError("body must not run")
+
+    assert held.entries == [entry]
+    assert carrier.unwritten_job_logs == []
+
+
+async def test_unwritten_job_logs_capture_what_the_run_could_not_write() -> None:
+    """Ends left on the manager replace the ones just written."""
+    entry: JobLogEntry = (mocked_job(id=1, status="picked"), "successful", None)
+    fresh: JobLogEntry = (mocked_job(id=2, status="picked"), "exception", None)
+    written: list[JobLogEntry] = []
+
+    class Carrier:
+        def __init__(self) -> None:
+            self.unwritten_job_logs: list[JobLogEntry] = []
+
+        async def write_job_ends(self, logs: list[JobLogEntry]) -> None:
+            written.extend(logs)
+
+    held = UnwrittenJobLogs()
+    held.entries = [entry]
+    carrier = Carrier()
+    async with held.around(carrier):
+        carrier.unwritten_job_logs = [fresh]
+
+    assert written == [entry]
+    assert held.entries == [fresh]
 
 
 async def test_runit_drain_exits_once_with_restart_on_failure() -> None:

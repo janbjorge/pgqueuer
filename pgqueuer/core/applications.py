@@ -11,6 +11,7 @@ from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core import logconfig
+from pgqueuer.core.buffers import JobLogEntry
 from pgqueuer.core.executors import (
     AbstractEntrypointExecutor,
     AbstractScheduleExecutor,
@@ -85,6 +86,15 @@ class PgQueuer:
         )
         self.qm.shutdown = self.shutdown
         self.sm.shutdown = self.shutdown
+
+    @property
+    def unwritten_job_logs(self) -> list[JobLogEntry]:
+        """The queue manager's unwritten job logs."""
+        return self.qm.unwritten_job_logs
+
+    async def write_job_ends(self, logs: list[JobLogEntry]) -> None:
+        """Write *logs* through the queue manager's queries."""
+        await self.qm.write_job_ends(logs)
 
     @classmethod
     def from_asyncpg_connection(

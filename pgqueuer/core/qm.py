@@ -81,6 +81,11 @@ class QueueManager:
     # round-trips an aggregation query for nothing.
     jobs_logged: int = dataclasses.field(init=False, default=0)
 
+    unwritten_job_logs: list[buffers.JobLogEntry] = dataclasses.field(
+        init=False,
+        default_factory=list,
+    )
+
     # Minimum sleep before re-checking the queue. Prevents busy-looping when a
     # deferred job's ETA is near zero or when the TOCTOU fallback detects
     # eligible work that the preceding dequeue narrowly missed.
@@ -500,6 +505,10 @@ class QueueManager:
                     if wake_on_listener_failure:
                         wake_on.add(periodic_health_check_task)
                     await asyncio.wait(wake_on, return_when=asyncio.FIRST_COMPLETED)
+
+    async def write_job_ends(self, logs: list[buffers.JobLogEntry]) -> None:
+        """Write *logs* through this manager's queries."""
+        await self.queries.log_jobs(logs)
 
     async def log_failure(
         self,
