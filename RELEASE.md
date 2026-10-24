@@ -89,6 +89,13 @@
   channel follows the prefix and is lowercase too; an installation made with a
   mixed-case prefix needs one `pgq upgrade`, which rewrites the trigger
   function to notify on it. An explicitly set channel keeps its case.
+- Log rows that carry a traceback now read back through `PsycopgDriver`.
+  psycopg returns the `jsonb` traceback column as a parsed dict, which `Log`
+  rejected, so `queue_log()`, `exception_logs()` and `job_log_history()`
+  raised `TypeError` whenever a row they returned had a traceback (a job that
+  failed, was held or was retried), and the web dashboard's failures and job
+  pages returned 500 when its router was mounted on psycopg queries.
+  `Job.headers` already accepted both forms.
 
 ## v1.6.0
 

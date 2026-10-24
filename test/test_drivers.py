@@ -1,8 +1,9 @@
 import asyncio
 import inspect
+import uuid
 from collections.abc import AsyncGenerator, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import psycopg
@@ -27,8 +28,10 @@ from pgqueuer.db import (
     SyncDriver,
     SyncPsycopgDriver,
 )
-from pgqueuer.models import TableChangedEvent
-from pgqueuer.types import Channel
+from pgqueuer.models import TableChangedEvent, TracebackRecord
+from pgqueuer.ports.repository import EntrypointExecutionParameter
+from pgqueuer.queries import Queries
+from pgqueuer.types import Channel, QueueEntrypoint, QueueManagerId
 
 
 def get_user_defined_functions(klass: object) -> list[str]:
@@ -247,6 +250,36 @@ async def test_recovery_after_failed_sql(
 
         result = await d.fetch("SELECT 2 as two")
         assert result == [{"two": 2}]
+
+
+@pytest.mark.parametrize("driver", drivers())
+async def test_log_rows_with_a_traceback_read_back(
+    dsn: str,
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
+) -> None:
+    """Every log read parses the traceback column, whichever form the driver returns jsonb in."""
+    async with driver(dsn) as d:
+        q = Queries(d)
+        await q.clear_queue()
+        await q.clear_queue_log()
+        await q.enqueue("traceback_ep", None)
+        (job,) = await q.dequeue(
+            batch_size=1,
+            entrypoints={QueueEntrypoint("traceback_ep"): EntrypointExecutionParameter(0)},
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
+            global_concurrency_limit=None,
+            heartbeat_timeout=timedelta(seconds=30),
+        )
+        record = TracebackRecord.from_exception(ValueError("boom"), job_id=job.id)
+        await q.log_jobs([(job, "exception", record)])
+
+        (from_queue_log,) = [log for log in await q.queue_log() if log.traceback is not None]
+        (from_exception_logs,) = await q.exception_logs()
+        (from_history,) = [
+            log for log in await q.job_log_history(job.id) if log.traceback is not None
+        ]
+        assert from_queue_log.traceback == from_exception_logs.traceback == record
+        assert from_history.traceback == record
 
 
 async def test_recovery_after_failed_sql_sync(
