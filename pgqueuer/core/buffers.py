@@ -7,12 +7,14 @@ import dataclasses
 import random
 from contextlib import suppress
 from datetime import timedelta
-from typing import Generic, Protocol, Self, TypeVar
+from typing import Generic, Protocol, Self, TypeAlias, TypeVar
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
 
 T = TypeVar("T")
+
+JobLogEntry: TypeAlias = tuple[models.Job, types.JOB_STATUS, models.TracebackRecord | None]
 
 
 @dataclasses.dataclass
@@ -120,16 +122,7 @@ class TimedOverflowBuffer(Generic[T]):
 class JobLogSink(Protocol):
     """Narrow port: accepts batched job status log entries."""
 
-    async def log_jobs(
-        self,
-        job_status: list[
-            tuple[
-                models.Job,
-                types.JOB_STATUS,
-                models.TracebackRecord | None,
-            ]
-        ],
-    ) -> None: ...
+    async def log_jobs(self, job_status: list[JobLogEntry]) -> None: ...
 
 
 class HeartbeatSink(Protocol):
@@ -139,29 +132,12 @@ class HeartbeatSink(Protocol):
 
 
 @dataclasses.dataclass
-class JobStatusLogBuffer(
-    TimedOverflowBuffer[
-        tuple[
-            models.Job,
-            types.JOB_STATUS,
-            models.TracebackRecord | None,
-        ]
-    ]
-):
+class JobStatusLogBuffer(TimedOverflowBuffer[JobLogEntry]):
     """Batched buffer for job completion / failure log entries."""
 
     repository: JobLogSink
 
-    async def flush_items(
-        self,
-        items: list[
-            tuple[
-                models.Job,
-                types.JOB_STATUS,
-                models.TracebackRecord | None,
-            ]
-        ],
-    ) -> None:
+    async def flush_items(self, items: list[JobLogEntry]) -> None:
         await self.repository.log_jobs(items)
 
 
