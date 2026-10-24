@@ -440,7 +440,7 @@ class JobTable:
 
     def finish(self, job: models.Job, status: JOB_STATUS, now: datetime) -> bool:
         job_id = int(job.id)
-        # A job cancelled while it ran already has its terminal log row.
+        # Gone (cleared) or owned by a newer picker: leave the existing log alone.
         if job_id not in self.rows or not self.owned_by(job):
             return False
         row = self.rows[job_id]
@@ -507,9 +507,11 @@ class JobTable:
     def cancel(self, ids: list[JobId]) -> list[JobRow]:
         removed: list[JobRow] = []
         for raw_id in ids:
-            row = self.rows.pop(int(raw_id), None)
-            if row is None:
+            row = self.rows.get(int(raw_id))
+            # A picked row keeps its slot and dedupe key until the worker logs.
+            if row is None or row.status == "picked":
                 continue
+            self.rows.pop(row.id)
             self.release(row)
             row.ready_token += 1
             self.dedupe.forget(row.id)

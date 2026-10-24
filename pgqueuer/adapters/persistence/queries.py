@@ -421,7 +421,12 @@ class Queries:
             await self.driver.execute(self.qbq.build_truncate_queue_query())
 
     async def mark_job_as_cancelled(self, ids: list[types.JobId]) -> None:
-        """Log *ids* as 'canceled' and emit a cancellation NOTIFY."""
+        """Cancel *ids* and emit a cancellation NOTIFY.
+
+        A ``queued`` or ``failed`` row is logged ``canceled`` and removed. A
+        ``picked`` row stays until its worker logs the outcome, so the job keeps
+        its concurrency slot and dedupe key while the handler runs.
+        """
         await asyncio.gather(
             self.driver.execute(
                 self.qbq.build_log_job_query(),

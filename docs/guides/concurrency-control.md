@@ -35,7 +35,8 @@ async def process_shared_resource(job: Job) -> None:
 ```
 
 Setting `concurrency_limit=1` guarantees that only one job of this entrypoint runs
-at a time across all workers.
+at a time across all workers. Cancelling the running job does not free the slot
+until the worker logs the outcome.
 
 ## Global concurrency limit
 

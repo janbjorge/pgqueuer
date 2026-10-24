@@ -18,6 +18,7 @@ import pytest
 
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
 from pgqueuer.domain.types import (
     JOB_STATUS,
@@ -234,40 +235,74 @@ async def test_on_conflict_skip_shape_preservation(
     assert jids[4] is not None
 
 
-async def test_mark_job_cancellation(
-    apgdriver: AsyncpgDriver,
-) -> None:
-    """mark_job_as_cancelled: job marked canceled, log entry created."""
+async def test_cancel_keeps_picked_row_until_worker_logs(apgdriver: AsyncpgDriver) -> None:
+    """Cancel of a running job keeps its slot and dedupe key until the worker logs (#1031)."""
     q = Queries(apgdriver)
+    params = {QueueEntrypoint("serial"): EntrypointExecutionParameter(concurrency_limit=1)}
+    owner = QueueManagerId(uuid.uuid4())
+    timeout = timedelta(seconds=30)
+    (running_id,) = await q.enqueue("serial", None, dedupe_key="a")
+    (waiting_id,) = await q.enqueue("serial", None, dedupe_key="b")
+    (queued_id,) = await q.enqueue("serial", None, dedupe_key="c")
 
-    jids = await q.enqueue(["ep"], [None], [0])
-    qm_id = QueueManagerId(uuid.uuid4())
+    (running,) = await q.dequeue(1, params, owner, None, timeout)
+    assert running.id == running_id
 
-    jobs = await q.dequeue(
-        batch_size=1,
-        entrypoints={QueueEntrypoint("ep"): EntrypointExecutionParameter(concurrency_limit=1)},
-        queue_manager_id=qm_id,
-        global_concurrency_limit=None,
-        heartbeat_timeout=timedelta(seconds=30),
+    await q.mark_job_as_cancelled([running_id, queued_id])
+
+    assert await q.queue_job_by_id(queued_id) is None
+    assert [entry.status for entry in await q.job_log_history(queued_id)] == ["queued", "canceled"]
+    held = await q.queue_job_by_id(running_id)
+    assert held is not None and held.status == "picked"
+    assert [entry.status for entry in await q.job_log_history(running_id)] == ["queued", "picked"]
+    assert await q.dequeue(1, params, owner, None, timeout) == []
+    with pytest.raises(DuplicateJobError):
+        await q.enqueue("serial", None, dedupe_key="a")
+
+    await q.log_jobs([(running, "canceled", None)])
+
+    assert await q.queue_job_by_id(running_id) is None
+    assert [entry.status for entry in await q.job_log_history(running_id)] == [
+        "queued",
+        "picked",
+        "canceled",
+    ]
+    (next_job,) = await q.dequeue(1, params, owner, None, timeout)
+    assert next_job.id == waiting_id
+    (replacement,) = await q.enqueue("serial", None, dedupe_key="a")
+    assert replacement is not None
+
+
+async def test_cancel_removes_failed_job(apgdriver: AsyncpgDriver) -> None:
+    """A held failed job is still removed and logged canceled."""
+    q = Queries(apgdriver)
+    (jid,) = await q.enqueue("ep", None)
+    (job,) = await q.dequeue(
+        1,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        timedelta(seconds=30),
     )
-    assert len(jobs) == 1
+    await q.log_jobs([(job, "failed", None)])
 
-    await q.mark_job_as_cancelled(jids)
+    await q.mark_job_as_cancelled([jid])
 
-    logs = await q.queue_log()
-    cancel_logs = [log for log in logs if log.job_id == int(jids[0]) and log.status == "canceled"]
-    assert len(cancel_logs) == 1
+    assert await q.queue_job_by_id(jid) is None
+    assert [entry.status for entry in await q.job_log_history(jid)] == [
+        "queued",
+        "picked",
+        "failed",
+        "canceled",
+    ]
 
 
 @pytest.mark.parametrize("outcome", ["successful", "canceled", "exception", "failed"])
-@pytest.mark.parametrize(("remove", "terminal"), [("cancel", "canceled"), ("clear", "deleted")])
-async def test_log_jobs_skips_job_no_longer_in_queue(
+async def test_log_jobs_skips_job_cleared_while_it_ran(
     apgdriver: AsyncpgDriver,
-    remove: str,
-    terminal: str,
     outcome: JOB_STATUS,
 ) -> None:
-    """log_jobs writes nothing for a job cancelled or cleared while it ran."""
+    """log_jobs writes nothing for a job cleared while it ran."""
     q = Queries(apgdriver)
     (jid,) = await q.enqueue("ep", None)
     (job,) = await q.dequeue(
@@ -277,16 +312,13 @@ async def test_log_jobs_skips_job_no_longer_in_queue(
         global_concurrency_limit=None,
         heartbeat_timeout=timedelta(seconds=30),
     )
-    if remove == "cancel":
-        await q.mark_job_as_cancelled([jid])
-    else:
-        await q.clear_queue("ep")
+    await q.clear_queue("ep")
 
     await q.log_jobs([(job, outcome, None)])
 
     history = await q.job_log_history(jid)
-    assert [e.status for e in history] == ["queued", "picked", terminal]
-    assert await q.job_status([jid]) == [(jid, terminal)]
+    assert [e.status for e in history] == ["queued", "picked", "deleted"]
+    assert await q.job_status([jid]) == [(jid, "deleted")]
 
 
 async def test_traceback_jsonb_roundtrip(
