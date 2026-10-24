@@ -1109,16 +1109,16 @@ class QuerySchedulerBuilder:
 
     def build_delete_schedule_query(self) -> str:
         # An empty keep deletes every row of the entrypoint. A listed pair is spared.
-        table = self.qualified.schedules_table
-        return f"""DELETE FROM {table}
+        return f"""WITH keep AS (
+            SELECT UNNEST($3::text[]) AS entrypoint,
+                   UNNEST($4::text[]) AS expression
+        )
+        DELETE FROM {self.qualified.schedules_table}
         WHERE id = ANY($1)
             OR (
                 entrypoint = ANY($2)
-                AND NOT EXISTS (
-                    SELECT 1
-                    FROM UNNEST($3::text[], $4::text[]) AS registered(entrypoint, expression)
-                    WHERE registered.entrypoint = {table}.entrypoint
-                        AND registered.expression = {table}.expression
+                AND (entrypoint, expression) NOT IN (
+                    SELECT entrypoint, expression FROM keep
                 )
             )
         """

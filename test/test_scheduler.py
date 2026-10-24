@@ -429,9 +429,10 @@ async def test_schedule_clean_old(
     await asyncio.gather(sm4.run(), shutdown_after(sm4))
 
     schedules = await inspect_schedule(apgdriver)
+    kept = CronExpression("3 * * * *")
     by_expression = {row.expression: row.id for row in schedules}
-    assert set(by_expression) == {"3 * * * *", "4 * * * *"}
-    assert by_expression["3 * * * *"] == kept_id
+    assert set(by_expression) == {kept, CronExpression("4 * * * *")}
+    assert by_expression[kept] == kept_id
 
 
 async def assert_clean_old_keeps_due_schedule(
