@@ -134,7 +134,8 @@ class Log(BaseModel):
     entrypoint: QueueEntrypoint
     traceback: Annotated[
         TracebackRecord | None,
-        BeforeValidator(lambda x: None if x is None else from_json(x)),
+        # asyncpg returns jsonb as text, psycopg as an already-parsed dict.
+        BeforeValidator(lambda x: x if x is None or isinstance(x, dict) else from_json(x)),
     ]
     aggregated: bool
 
