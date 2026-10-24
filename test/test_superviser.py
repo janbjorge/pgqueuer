@@ -7,12 +7,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import partial
+from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
 
 from pgqueuer import AsyncpgDriver, PgQueuer, QueueManager, SchedulerManager
 from pgqueuer.adapters.cli import supervisor
+from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core.buffers import JobLogEntry
 from pgqueuer.errors import FailingListenerError
 from pgqueuer.models import HealthCheckEvent, Job
 from pgqueuer.queries import Queries
@@ -283,6 +286,60 @@ async def test_runit_pgqueuer_failure_without_restart_still_raises() -> None:
             max_concurrent_tasks=None,
             shutdown_on_listener_failure=False,
         )
+
+
+async def test_restart_writes_job_end_the_first_run_could_not() -> None:
+    """An in-process restart writes the job end the failed flush kept."""
+    shared = InMemoryQueries(driver=InMemoryDriver())
+    real_log = shared.log_jobs
+    real_dequeue = shared.dequeue
+    state = {"cycle": 0, "polls": 0}
+    ran = 0
+
+    async def log_jobs(job_status: list[JobLogEntry]) -> None:
+        if state["cycle"] == 1:
+            raise RuntimeError("connection lost")
+        await real_log(job_status)
+
+    async def dequeue(*args: Any, **kwargs: Any) -> list[Job]:
+        if state["cycle"] == 1:
+            state["polls"] += 1
+            if state["polls"] > 1:
+                raise RuntimeError("poll failed")
+        return await real_dequeue(*args, **kwargs)
+
+    shared.log_jobs = log_jobs
+    shared.dequeue = dequeue
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[QueueManager]:
+        state["cycle"] += 1
+        qm = QueueManager(shared)
+
+        @qm.entrypoint("work")
+        async def work(job: Job) -> None:
+            nonlocal ran
+            ran += 1
+
+        yield qm
+
+    await shared.enqueue(["work"], [None], [0])
+    await supervisor.runit(
+        factory=factory,
+        dequeue_timeout=timedelta(seconds=0.05),
+        batch_size=10,
+        restart_delay=timedelta(0),
+        restart_on_failure=True,
+        shutdown=asyncio.Event(),
+        mode=QueueExecutionMode.drain,
+        max_concurrent_tasks=None,
+        shutdown_on_listener_failure=False,
+    )
+
+    assert state["cycle"] == 2
+    assert ran == 1
+    assert sum(row.count for row in await shared.queue_size()) == 0
+    assert any(log.status == "successful" for log in await shared.queue_log())
 
 
 async def test_runit_drain_exits_once_with_restart_on_failure() -> None:

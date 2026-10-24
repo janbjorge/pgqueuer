@@ -9,6 +9,7 @@ import pytest
 
 from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core.buffers import JobLogEntry
 from pgqueuer.core.tm import TaskManager
 from pgqueuer.models import Job, Log
 from pgqueuer.qm import QueueManager
@@ -466,6 +467,62 @@ async def test_drain_shutdown_sets_shutdown_when_queue_empty(
 
     await qm._maybe_drain_shutdown(QueueExecutionMode.drain, TaskManager())
     assert qm.shutdown.is_set()
+
+
+async def test_run_keeps_job_end_when_shutdown_flush_fails(queries: InMemoryQueries) -> None:
+    """A job end that cannot be written as run exits stays on the manager."""
+    qm = QueueManager(queries)
+    real_log = queries.log_jobs
+    real_dequeue = queries.dequeue
+    polls = 0
+
+    async def log_jobs_fails(job_status: list[JobLogEntry]) -> None:
+        raise RuntimeError("connection lost")
+
+    async def dequeue_then_fail(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal polls
+        polls += 1
+        if polls > 1:
+            raise RuntimeError("poll failed")
+        return await real_dequeue(*args, **kwargs)
+
+    queries.log_jobs = log_jobs_fails
+    queries.dequeue = dequeue_then_fail
+
+    @qm.entrypoint("work")
+    async def work(job: Job) -> None:
+        return None
+
+    await queries.enqueue(["work"], [None], [0])
+    with pytest.raises(RuntimeError, match="poll failed"):
+        async with asyncio.timeout(10):
+            await qm.run(dequeue_timeout=timedelta(seconds=0.05))
+
+    assert len(qm.unwritten_job_logs) == 1
+    assert qm.unwritten_job_logs[0][1:] == ("successful", None)
+    assert sum(row.count for row in await queries.queue_size()) == 1
+
+    queries.log_jobs = real_log
+    await queries.log_jobs(qm.unwritten_job_logs)
+    assert sum(row.count for row in await queries.queue_size()) == 0
+
+
+async def test_run_leaves_no_unwritten_job_logs_when_flush_succeeds(
+    queries: InMemoryQueries,
+) -> None:
+    """A flush that succeeds leaves nothing for the caller to write later."""
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("work")
+    async def work(job: Job) -> None:
+        qm.shutdown.set()
+
+    await queries.enqueue(["work"], [None], [0])
+    async with asyncio.timeout(10):
+        await qm.run(dequeue_timeout=timedelta(seconds=0.05))
+
+    assert qm.unwritten_job_logs == []
+    assert sum(row.count for row in await queries.queue_size()) == 0
 
 
 async def test_drain_shutdown_skips_while_tasks_are_in_flight(

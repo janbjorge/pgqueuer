@@ -19,7 +19,7 @@ supervisor                                                         reruns the fa
       │  ├─ main loop                ─► dequeue + probes           raises, run ends
       │  ├─ job task (per job)                                     waited for
       │  │  ├─ heartbeats, buffered  ─► update_heartbeat           logged, kept
-      │  │  └─ results, buffered     ─► log_jobs                   at exit: 5 tries, then dropped
+      │  │  └─ results, buffered     ─► log_jobs                   at exit: 5 tries, then kept
       │  ├─ health check, 10 s       ─► notify                     ends run (opt-in)
       │  └─ log aggregation          ─► aggregate_logs             swallowed
       └─ SchedulerManager.run
@@ -74,14 +74,18 @@ running without NOTIFY.
 
 ## Known gaps
 
-Jobs running at the drop run twice. The queue manager waits for them to finish,
-but their results sit in `JobStatusLogBuffer`, whose last flush runs on the dead
-connection. It tries five times and then drops them. The rows stay `picked` and
-are picked again after `heartbeat_timeout`. In the test, all 10 in-flight jobs
-ran twice on both asyncpg and psycopg. ADR-0004 allows this; the cost is that a
-drop reruns every job in flight. With psycopg it also happened once to jobs that
-had finished before the kill, probably because their flush was still waiting
-for the connection lock that `notifies()` holds.
+Jobs running at the drop still finish. Their results sit in `JobStatusLogBuffer`,
+whose last flush runs on the dead connection. It tries five times.
+`QueueManager.run` then keeps whatever remains on `unwritten_job_logs`.
+`--restart-on-failure` writes those ends on the next cycle's connection before
+dequeuing. A caller that handles the error itself can pass the same list to
+`log_jobs`. A write after another worker owns the job is ignored. A new process
+does not have the list, so those rows stay `picked` and run again after
+`heartbeat_timeout`. ADR-0004 allows that second run. In the 2026-10-14 run,
+before the ends were kept, all 10 in-flight jobs ran twice on both asyncpg and
+psycopg. With psycopg it also happened once to jobs that had finished before the
+kill, probably because their flush was still waiting for the connection lock
+that `notifies()` holds.
 
 The asyncpg pool hides the failure. `AsyncpgPoolDriver` keeps its LISTEN
 connection out of the pool, and that connection dies without an error. Queries
@@ -105,10 +109,11 @@ process die and relies on a supervisor, and PgQueuer works the same way.
 
 PgQueuer keeps its current model: the user passes a connection, and recovery
 means the supervisor reruns the factory. PgQueuer does not reconnect in place
-and does not take a driver factory. Open follow-ups:
+and does not take a driver factory. A failed shutdown flush keeps the job ends
+in the process, on `QueueManager.unwritten_job_logs`. An in-process restart
+writes them; a new process does not have them, and ADR-0004 allows the second
+run. Open follow-ups:
 
-1. Keep the results of in-flight jobs across a restart, or accept the second
-   run that ADR-0004 allows.
-2. Turn on `restart_on_failure` and `shutdown_on_listener_failure` by default.
+1. Turn on `restart_on_failure` and `shutdown_on_listener_failure` by default.
    This changes behaviour, so it waits for v1.7.
-3. Deprecate the pool drivers (#951).
+2. Deprecate the pool drivers (#951).

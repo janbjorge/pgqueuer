@@ -185,8 +185,13 @@ next query, which can be up to `--dequeue-timeout` (30 s) away. With an asyncpg 
 LISTEN connection is never noticed: the worker keeps running, but only picks up jobs by polling
 every `--dequeue-timeout`.
 
-Jobs running when the connection drops still finish, but their results can't be saved, so they
-run again after `--heartbeat-timeout`. Keep jobs idempotent.
+Jobs running when the connection drops still finish. If their status write fails, the
+ends stay on `QueueManager.unwritten_job_logs` until the next `run`. `pgq run
+--restart-on-failure` writes them on the new connection before it takes more work. A
+caller that handles the error itself can pass the same list to `Queries.log_jobs`. A
+write after another worker owns the job does nothing. A new process does not have the
+list: those jobs stay `picked` and run again after `--heartbeat-timeout`. Keep jobs
+idempotent.
 
 ## Graceful shutdown
 

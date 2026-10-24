@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import TypeAlias
 
 from pgqueuer.adapters.cli import factories
-from pgqueuer.core import applications, logconfig, qm, sm, tm
+from pgqueuer.core import applications, buffers, logconfig, qm, sm, tm
 from pgqueuer.domain import types
 
 Manager: TypeAlias = qm.QueueManager | sm.SchedulerManager | applications.PgQueuer
@@ -56,6 +56,26 @@ async def forward_shutdown(source: asyncio.Event, target: asyncio.Event) -> None
     target.set()
 
 
+def copy_unwritten_job_logs(manager: Manager) -> list[buffers.JobLogEntry]:
+    if isinstance(manager, qm.QueueManager):
+        return list(manager.unwritten_job_logs)
+    if isinstance(manager, applications.PgQueuer):
+        return list(manager.qm.unwritten_job_logs)
+    return []
+
+
+async def replay_unwritten_job_logs(manager: Manager, logs: list[buffers.JobLogEntry]) -> bool:
+    """Write *logs* through *manager*. False when *manager* has no queue."""
+    if isinstance(manager, qm.QueueManager):
+        repository = manager.queries
+    elif isinstance(manager, applications.PgQueuer):
+        repository = manager.qm.queries
+    else:
+        return False
+    await repository.log_jobs(logs)
+    return True
+
+
 async def runit(
     factory: ManagerFactory,
     dequeue_timeout: timedelta,
@@ -84,13 +104,18 @@ async def runit(
     if handle_signals:
         setup_signal_handlers(shutdown)
 
+    pending: list[buffers.JobLogEntry] = []
     while not shutdown.is_set():
         cycle_shutdown = asyncio.Event()
         forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
         failed = False
+        manager: Manager | None = None
         try:
             async with factories.validate_factory_result(factory()) as entered:
                 manager = setup_shutdown_handlers(entered, cycle_shutdown)
+                # Previous cycle's connection was dead. This one can write the ends.
+                if pending and await replay_unwritten_job_logs(manager, pending):
+                    pending = []
                 await run_manager(
                     manager,
                     dequeue_timeout,
@@ -109,6 +134,8 @@ async def runit(
                 exc_info=exc,
             )
         finally:
+            if manager is not None and (fresh := copy_unwritten_job_logs(manager)):
+                pending = fresh
             await tm.cancel_and_wait(forward_task)
 
         # Clean completion (drain / signal) ends the supervisor; only failures restart.
