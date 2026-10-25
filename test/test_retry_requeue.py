@@ -549,6 +549,60 @@ def test_database_retry_executor_backoff_caps_at_max_delay() -> None:
     assert len(set(delays)) > 1
 
 
+@pytest.mark.parametrize(
+    ("backoff_multiplier", "attempts", "expected"),
+    [
+        pytest.param(2.0, 3, timedelta(seconds=8), id="x2-below-cap"),
+        pytest.param(2.0, 46, timedelta(minutes=5), id="x2-last-in-timedelta-range"),
+        pytest.param(2.0, 47, timedelta(minutes=5), id="x2-past-timedelta-range"),
+        pytest.param(10.0, 14, timedelta(minutes=5), id="x10-past-timedelta-range"),
+        pytest.param(2.0, 1100, timedelta(minutes=5), id="x2-past-float-range"),
+    ],
+)
+async def test_database_retry_executor_caps_delay_past_timedelta_range(
+    backoff_multiplier: float,
+    attempts: int,
+    expected: timedelta,
+) -> None:
+    """A backoff too large for a timedelta is capped at max_delay instead of raising."""
+
+    async def handler(job: Job) -> None:
+        raise ValueError("still failing")
+
+    executor = DatabaseRetryEntrypointExecutor(
+        parameters=EntrypointExecutorParameters(
+            concurrency_limit=0,
+            func=handler,
+        ),
+        max_attempts=attempts + 1,
+        initial_delay=timedelta(seconds=1),
+        max_delay=timedelta(minutes=5),
+        backoff_multiplier=backoff_multiplier,
+    )
+    job = Job.model_validate(
+        {
+            "id": JobId(1),
+            "priority": 0,
+            "created": "2024-01-01T00:00:00Z",
+            "updated": "2024-01-01T00:00:00Z",
+            "heartbeat": "2024-01-01T00:00:00Z",
+            "execute_after": "2024-01-01T00:00:00Z",
+            "status": "picked",
+            "entrypoint": QueueEntrypoint("overflow_ep"),
+            "payload": None,
+            "attempts": attempts,
+            "queue_manager_id": None,
+            "headers": None,
+        }
+    )
+
+    with pytest.raises(RetryRequested) as excinfo:
+        await executor.execute(job, Context(cancellation=anyio.CancelScope()))
+
+    assert excinfo.value.delay == expected
+    assert isinstance(excinfo.value.__cause__, ValueError)
+
+
 # ---------------------------------------------------------------------------
 # Postgres integration
 # ---------------------------------------------------------------------------
@@ -619,6 +673,53 @@ async def test_retry_preserves_payload_postgres(apgdriver: AsyncpgDriver) -> Non
         )
 
     assert payloads_seen == [b"critical-data", b"critical-data"]
+
+
+@pytest.mark.parametrize(
+    "max_attempts",
+    [
+        pytest.param(10, id="budget-below-overflow"),
+        pytest.param(20, id="budget-past-overflow"),
+    ],
+)
+async def test_database_retry_executor_uses_full_budget_postgres(
+    apgdriver: AsyncpgDriver,
+    max_attempts: int,
+) -> None:
+    """Every attempt in max_attempts runs, even once the uncapped backoff would overflow."""
+    q = Queries(apgdriver)
+    qm = QueueManager(Queries(apgdriver))
+    seen_attempts: list[int] = []
+
+    # 1 ms * 10**17 is past timedelta's range, so attempts 17 and up rely on the cap.
+    @qm.entrypoint(
+        "pg_long_budget_ep",
+        executor_factory=lambda params: DatabaseRetryEntrypointExecutor(
+            parameters=params,
+            max_attempts=max_attempts,
+            initial_delay=timedelta(milliseconds=1),
+            max_delay=timedelta(milliseconds=5),
+            backoff_multiplier=10.0,
+        ),
+    )
+    async def handler(job: Job) -> None:
+        seen_attempts.append(job.attempts)
+        raise ValueError("still failing")
+
+    (job_id,) = await q.enqueue("pg_long_budget_ep", None, priority=0)
+
+    async with asyncio.timeout(15):
+        await qm.run(
+            mode=QueueExecutionMode.drain,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    assert seen_attempts == list(range(max_attempts + 1))
+    (terminal,) = [
+        log for log in await q.queue_log() if log.job_id == job_id and log.status == "exception"
+    ]
+    assert terminal.traceback is not None
+    assert terminal.traceback.exception_type == "ValueError"
 
 
 # ---------------------------------------------------------------------------

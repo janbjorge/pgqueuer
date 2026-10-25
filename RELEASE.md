@@ -96,6 +96,12 @@
   failed, was held or was retried), and the web dashboard's failures and job
   pages returned 500 when its router was mounted on psycopg queries.
   `Job.headers` already accepted both forms.
+- `DatabaseRetryEntrypointExecutor` caps a backoff too large for a
+  `timedelta` at `max_delay`. The delay was multiplied out before the cap, so
+  once `initial_delay * backoff_multiplier**attempts` passed timedelta's range
+  (attempt 47 with the defaults, attempt 14 with a multiplier of 10) the
+  executor raised `OverflowError`, and the job ended as `exception` (or
+  `failed` under `on_failure="hold"`) with attempts left in `max_attempts`.
 
 ## v1.6.0
 

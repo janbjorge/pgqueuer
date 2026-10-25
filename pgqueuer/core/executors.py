@@ -120,10 +120,14 @@ class DatabaseRetryEntrypointExecutor(EntrypointExecutor):
                 raise retry from e
             if job.attempts >= self.max_attempts:
                 raise
-            delay = min(
-                self.initial_delay * (self.backoff_multiplier**job.attempts),
-                self.max_delay,
-            )
+            try:
+                delay = min(
+                    self.initial_delay * (self.backoff_multiplier**job.attempts),
+                    self.max_delay,
+                )
+            except OverflowError:
+                # The uncapped delay no longer fits a timedelta (or a float), so the cap applies.
+                delay = self.max_delay
             raise errors.RetryRequested(delay=delay, reason=str(e)) from e
 
 
