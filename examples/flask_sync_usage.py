@@ -21,11 +21,11 @@ def create_app() -> Flask:
         return cast(SyncPsycopgDriver, g.driver)
 
     @app.teardown_appcontext
-    def teardown_db(exception: BaseException | None) -> None:
+    def teardown_db(_exception: BaseException | None) -> None:
         driver = cast(SyncPsycopgDriver | None, g.pop("driver", None))
 
         if driver is not None:
-            driver._connection.close()
+            driver._connection.close()  # noqa: SLF001 - the example owns this connection
 
     @app.route("/enqueue", methods=["POST"])
     def enqueue() -> Response:

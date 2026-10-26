@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import signal
 import sys
@@ -186,13 +185,8 @@ class DrainSettings(BaseModel):
 _shared_inmem: RepositoryPort | None = None
 
 
-def _get_conninfo(driver: DriverEnum) -> str:
-    """Return connection string. Empty means libpq env vars are used."""
-    return ""
-
-
 async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort:
-    global _shared_inmem
+    global _shared_inmem  # noqa: PLW0603 - in-memory store shared by producer and consumer
     match driver:
         case "apg":
             return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
@@ -222,7 +216,7 @@ class Consumer:
 
     async def run(self) -> None:
         @self.pgq.entrypoint("fetch")
-        async def fetch(job: Job) -> None:
+        async def fetch(_job: Job) -> None:
             self.bar.update()
 
         await self.pgq.run(batch_size=self.batch_size, mode=self.mode)
@@ -282,16 +276,13 @@ class ThroughputStrategy:
         cnt = count()
         tasks = []
         for _ in range(self.settings.enqueue):
-            q = await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+            q = await make_queries(self.settings.driver)
             p = Producer(self.shutdown, q, self.settings.enqueue_batch_size, cnt)
             tasks.append(p.run())
         await asyncio.gather(*tasks)
 
     async def run_dequeuers(self) -> None:
-        queries = [
-            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
-            for _ in range(self.settings.dequeue)
-        ]
+        queries = [await make_queries(self.settings.driver) for _ in range(self.settings.dequeue)]
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver, queries=q))
         with job_progress_bar() as bar:
@@ -314,7 +305,7 @@ class ThroughputStrategy:
         loop.add_signal_handler(signal.SIGTERM, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+        queries = await make_queries(self.settings.driver)
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
@@ -343,9 +334,7 @@ class ThroughputStrategy:
             if not task.cancelled() and (exc := task.exception()):
                 raise exc
 
-        qsize = await (
-            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
-        ).queue_size()
+        qsize = await (await make_queries(self.settings.driver)).queue_size()
         return BenchmarkResult(
             created_at=datetime.now(UTC),
             driver=self.settings.driver,
@@ -376,7 +365,7 @@ class DrainStrategy:
             loop.add_signal_handler(sig, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
+        queries = await make_queries(self.settings.driver)
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
@@ -391,10 +380,7 @@ class DrainStrategy:
             qm.shutdown.set()
 
     async def run(self) -> BenchmarkResult:
-        queries = [
-            await make_queries(self.settings.driver, _get_conninfo(self.settings.driver))
-            for _ in range(self.settings.dequeue)
-        ]
+        queries = [await make_queries(self.settings.driver) for _ in range(self.settings.dequeue)]
         for q in queries:
             self.pgqs.append(PgQueuer(q.driver, queries=q))
 
@@ -439,8 +425,7 @@ class BenchmarkRunner:
         result = await self.strategy.run()
         await self.strategy.teardown()
         if self.output_json:
-            with open(self.output_json, "w") as f:
-                json.dump(result.model_dump(mode="json"), f)
+            Path(self.output_json).write_text(result.model_dump_json())
         result.pretty_print()
 
 

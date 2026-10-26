@@ -18,9 +18,7 @@ def get_pgq_queries(request: Request) -> Queries:
 
 
 def create_app() -> FastAPI:
-    """Create and configure a FastAPI app with a lifespan context manager
-    to handle database connection.
-    """
+    """Create a FastAPI app whose lifespan manages the database connection."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:

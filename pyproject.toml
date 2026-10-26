@@ -141,12 +141,9 @@ ignore = [
     "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
     "CPY", "ERA", "TD", "FIX",
     # Temporary: rules with open violations, fixed and removed per PR (#1048).
-    "ANN001", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",
-    "B017", "B023", "B905", "D205", "DTZ005", "N803",
-    "PERF102", "PLW0603", "PT003", "PT006",
-    "PT007", "PT011", "PT012", "PT018", "PT028", "PTH123", "PYI034", "RUF005",
-    "RUF012", "RUF043", "RUF059", "S101", "S104", "S603",
-    "SLF001", "TRY002", "TRY301",
+    "ANN001", "ASYNC109", "ASYNC110", "B004", "B007", "B008", "B017", "B023", "B905", "DTZ005",
+    "PERF102", "PT003", "PT006", "PT007", "PT011", "PT012", "PT018", "PT028", "PYI034",
+    "RUF005", "RUF012", "RUF043", "RUF059", "S104", "S603", "TRY002", "TRY301",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -167,8 +164,8 @@ extend-immutable-calls = [
 # Optional extras: importing these at module level would make every install need them.
 "pgqueuer/adapters/connections.py" = ["PLC0415"]
 "pgqueuer/adapters/drivers/psycopg.py" = ["PLC0415"]
-"examples/**" = ["T201", "INP001"]
-"tools/**" = ["T201", "INP001"]
+"examples/**" = ["T201", "INP001", "S101"]
+"tools/**" = ["T201", "INP001", "S101"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
