@@ -168,8 +168,7 @@ class LogStatistics(BaseModel):
 
 @dataclasses.dataclass
 class Context:
-    """
-    Runtime context shared across components.
+    """Runtime context shared across components.
 
     Attributes:
         cancellation: The root CancelScope controlling shutdown of running tasks.
@@ -184,8 +183,7 @@ class Context:
 
 @dataclasses.dataclass
 class ScheduleContext:
-    """
-    Runtime context for scheduled tasks, mirroring Context for queue jobs.
+    """Runtime context for scheduled tasks, mirroring Context for queue jobs.
 
     Attributes:
         resources: A mutable mapping for user-provided, pre-initialized shared

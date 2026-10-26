@@ -269,14 +269,12 @@ class Queries:
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> list[models.Job]:
-        """
-        Retrieve and update jobs from the queue to be processed.
+        """Retrieve and update jobs from the queue to be processed.
 
         Selects jobs that are queued or whose heartbeat has gone stale
         (exceeding heartbeat_timeout), locks them with FOR UPDATE SKIP
         LOCKED, and atomically sets their status to 'picked'.
         """
-
         if batch_size < 1:
             raise ValueError("Batch size must be greater than or equal to one (1)")
 
@@ -455,8 +453,7 @@ class Queries:
             ]
         ],
     ) -> None:
-        """
-        Move completed or failed jobs from the queue to the log table.
+        """Move completed or failed jobs from the queue to the log table.
 
         Jobs with status ``'failed'`` are held in the queue table (UPDATE)
         rather than deleted.  All other statuses are removed (DELETE) as before.

@@ -27,8 +27,7 @@ class Relay:
 
 
 class AsyncpgDriver(Driver):
-    """
-    AsyncPG implementation of the `Driver` protocol.
+    """AsyncPG implementation of the `Driver` protocol.
 
     This driver uses an AsyncPG connection to perform asynchronous database operations
     such as fetching records, executing queries, and listening for notifications.
@@ -93,8 +92,7 @@ class AsyncpgDriver(Driver):
 
 
 class AsyncpgPoolDriver(Driver):
-    """
-    Implements the Driver protocol using AsyncPGPool for PostgreSQL database operations.
+    """Implements the Driver protocol using AsyncPGPool for PostgreSQL database operations.
 
     This class manages asynchronous database operations using a connection pool.
     It ensures thread safety through query locking and supports PostgreSQL LISTEN/NOTIFY

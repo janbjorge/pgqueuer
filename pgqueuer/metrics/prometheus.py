@@ -11,8 +11,7 @@ from pgqueuer.ports.repository import QueueRepositoryPort
 
 @dataclass
 class MetricNames:
-    """
-    Configuration for Prometheus metric names.
+    """Configuration for Prometheus metric names.
 
     Allows customization of the metric names emitted by the collector.
     Use this when you need to align with existing naming conventions
@@ -32,10 +31,9 @@ class MetricNames:
 def prometheus_format(
     metric_name: str,
     labels: dict[str, str],
-    value: float | int,
+    value: float,
 ) -> str:
-    """
-    Format a single metric into Prometheus exposition format.
+    """Format a single metric into Prometheus exposition format.
 
     Example:
         >>> prometheus_format("queue_size", {"entrypoint": "send_email"}, 42)
@@ -49,8 +47,7 @@ def aggregated_queue_statistics(
     queue_statistics: list[QueueStatistics],
     metric_names: MetricNames,
 ) -> Generator[str, None, None]:
-    """
-    Generate Prometheus-formatted lines for queue statistics.
+    """Generate Prometheus-formatted lines for queue statistics.
 
     Aggregates queue statistics by entrypoint and status, summing
     the counts for each group.
@@ -74,8 +71,7 @@ def aggregated_log_statistics(
     log_statistics: list[LogStatistics],
     metric_names: MetricNames,
 ) -> Generator[str, None, None]:
-    """
-    Generate Prometheus-formatted lines for log statistics.
+    """Generate Prometheus-formatted lines for log statistics.
 
     Aggregates log statistics by entrypoint and status, summing
     the counts for each group. This reflects job processing history
@@ -113,8 +109,7 @@ async def collect_metrics(
     metric_names: MetricNames | None = None,
     last: timedelta = timedelta(minutes=5),
 ) -> str:
-    """
-    Collect and format all PgQueuer metrics for Prometheus.
+    """Collect and format all PgQueuer metrics for Prometheus.
 
     This is the main entry point for metrics collection. It queries the
     database for current queue sizes and recent job processing statistics,

@@ -123,20 +123,41 @@ dev = [
 line-length = 100
 
 [tool.ruff.lint]
-select = [
-    "C",
-    "E",
-    "F",
-    "I",
-    "PIE",
-    "Q",
-    "RET",
-    "RSE",
-    "SIM",
-    "UP",
-    "W",
-    "C90"
+select = ["ALL"]
+ignore = [
+    "COM812", "ISC001",  # conflict with ruff format
+    "D1",  # missing docstrings; follow-up, starting with D100/D104
+    "D203", "D213",  # pick D211/D212
+    "TC001", "TC002", "TC003",  # pydantic and dataclasses need runtime annotations
+    "TRY003", "EM101", "EM102",  # message strings in raise
+    "FBT001", "FBT002", "FBT003",  # boolean args are public API
+    "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004",  # C901 already caps complexity
+    "ARG002",  # unused args in Protocol/port implementations
+    "A002",  # `id`/`type` kwargs are public API
+    "RUF001", "RUF002",  # intentional unicode in UI strings
+    "S608",  # SQL built from validated identifiers (qb.py); values are bind params
+    "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
+    "CPY", "ERA", "TD", "FIX",
+    # Temporary: rules with open violations, fixed and removed per PR (#1048).
+    "ANN001", "ANN204", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",
+    "B017", "B023", "B905", "BLE001", "D205", "D415", "DTZ005", "FAST002", "N802", "N803",
+    "N812", "N818", "PERF102", "PGH004", "PLC0415", "PLR1714", "PLW0603", "PT003", "PT006",
+    "PT007", "PT011", "PT012", "PT018", "PT028", "PTH109", "PTH123", "PYI034", "RUF005",
+    "RUF009", "RUF012", "RUF043", "RUF059", "S101", "S104", "S105", "S110", "S311", "S603",
+    "SLF001", "TRY002", "TRY004", "TRY301",
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Option", "typer.Argument"]
+
+[tool.ruff.lint.per-file-ignores]
+"test/**" = ["S101", "ARG001", "SLF001", "PLC0415", "INP001", "ANN401", "N803", "N806", "D"]
+"pgqueuer/adapters/cli/**" = ["T201"]
+"examples/**" = ["T201", "INP001"]
+"tools/**" = ["T201", "INP001"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15

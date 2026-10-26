@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     import logfire.propagate
 
 try:
-    import logfire  # noqa: F811
-    import logfire.propagate  # noqa: F811
+    import logfire
+    import logfire.propagate
 
     HAS_LOGFIRE = True
 except ImportError:

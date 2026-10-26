@@ -43,7 +43,7 @@ class _RecordingTransport(Transport):
                 self.transactions.append(item.payload.json)
 
 
-@pytest.fixture()
+@pytest.fixture
 def transactions() -> Iterator[list[dict[str, Any]]]:
     transport = _RecordingTransport()
     previous = sentry_sdk.get_global_scope().client

@@ -200,7 +200,6 @@ class QueueManager:
         ``on_failure='delete'`` (default) removes a terminally-failed job;
         ``'hold'`` parks it with status ``'failed'`` for manual re-queue.
         """
-
         if types.QueueEntrypoint(name) in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
@@ -250,7 +249,6 @@ class QueueManager:
         heartbeat_timeout: timedelta,
     ) -> AsyncGenerator[models.Job, None]:
         """Yield ready jobs one at a time, respecting per-entrypoint and global limits."""
-
         while not self.shutdown.is_set():
             entrypoints = {
                 x: EntrypointExecutionParameter(
@@ -275,7 +273,6 @@ class QueueManager:
 
     async def verify_structure(self) -> None:
         """Assert that required tables, columns, indexes, enums, and triggers exist."""
-
         for table in (
             self.queries.qbe.settings.queue_table,
             self.queries.qbe.settings.statistics_table,
@@ -545,7 +542,6 @@ class QueueManager:
         heartbeat_timeout: timedelta,
     ) -> None:
         """Run *job*'s executor, route retries/cancels/failures, log final status."""
-
         logconfig.logger.debug(
             "Dispatching entrypoint/id: %s/%s",
             job.entrypoint,

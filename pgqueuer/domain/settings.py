@@ -64,8 +64,7 @@ class DurabilityPolicy:
 
 
 class Durability(Enum):
-    """
-    Represents the durability levels for PgQueuer table installations.
+    """Represents the durability levels for PgQueuer table installations.
 
     Each durability level corresponds to a specific `DurabilityPolicy` instance that defines
     the logging configuration for all database tables.

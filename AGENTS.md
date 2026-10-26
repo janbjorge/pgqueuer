@@ -159,7 +159,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 ### Formatting and Linting
 
 - **Formatter/linter**: ruff (line-length=100)
-- **Lint rules**: C, E, F, I, PIE, Q, RET, RSE, SIM, W, C90 (max-complexity=15)
+- **Lint rules**: `select = ["ALL"]` (max-complexity=15, google docstring convention). Every entry in `ignore` carries its reason in `pyproject.toml`; to ignore a new rule, add it there with a reason, or use `# noqa: <code>` with a reason at one site. The "Temporary" block lists rules with open violations (#1048) and only shrinks.
 - **isort**: combined-as-imports, furthest-to-closest relative imports
 - **Mypy** `strict = true` plus `warn_unreachable` and the error codes `truthy-bool`, `truthy-iterable`, `redundant-expr`, `unused-awaitable`, `possibly-undefined`, `ignore-without-code`; Pydantic plugin with `init_typed`; targets Python 3.11. Inside `pgqueuer/`, `tools/` and `examples/` the overrides add `disallow_any_explicit` and `disallow_any_unimported`. Run it as `uv run mypy . --no-incremental`; the incremental cache has reported green on stale signatures.
 

@@ -55,24 +55,24 @@ def _make_job(headers: dict[str, Any] | None = None, entrypoint: str = "say_hell
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def exporter() -> InMemorySpanExporter:
     return InMemorySpanExporter()
 
 
-@pytest.fixture()
+@pytest.fixture
 def tracer_provider(exporter: InMemorySpanExporter) -> TracerProvider:
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     return provider
 
 
-@pytest.fixture()
+@pytest.fixture
 def otel_tracer(tracer_provider: TracerProvider) -> trace.Tracer:
     return tracer_provider.get_tracer("test")
 
 
-@pytest.fixture()
+@pytest.fixture
 def tracing(otel_tracer: trace.Tracer) -> OpenTelemetryTracing:
     return OpenTelemetryTracing(tracer=otel_tracer)
 
