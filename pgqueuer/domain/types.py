@@ -24,13 +24,14 @@ QueueEntrypoint = NewType("QueueEntrypoint", str)
 QueueManagerId = NewType("QueueManagerId", uuid.UUID)
 HealthCheckId = NewType("HealthCheckId", uuid.UUID)
 Slot = NewType("Slot", int)
+# Declaration order of the pgqueuer_status enum, which is how PostgreSQL sorts it.
 JOB_STATUS = Literal[
     "queued",
     "picked",
     "successful",
+    "exception",
     "canceled",
     "deleted",
-    "exception",
     "failed",
 ]
 

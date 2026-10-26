@@ -5,7 +5,7 @@ from __future__ import annotations
 import bisect
 import dataclasses
 from datetime import datetime, timedelta
-from typing import NamedTuple, assert_never
+from typing import NamedTuple, assert_never, get_args
 
 from pgqueuer.adapters.persistence.query_helpers import (
     NormedEnqueueParam,
@@ -25,23 +25,9 @@ from pgqueuer.domain.types import (
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
-def job_status_rank(status: JOB_STATUS) -> int:  # noqa: PLR0911 - one return per status
+def job_status_rank(status: JOB_STATUS) -> int:
     """Declaration order of ``pgqueuer_status``, which is how PostgreSQL sorts it."""
-    if status == "queued":
-        return 0
-    if status == "picked":
-        return 1
-    if status == "successful":
-        return 2
-    if status == "canceled":
-        return 3
-    if status == "deleted":
-        return 4
-    if status == "exception":
-        return 5
-    if status == "failed":
-        return 6
-    assert_never(status)
+    return get_args(JOB_STATUS).index(status)
 
 
 class UniqueViolation(Exception):  # noqa: N818 - mirrors psycopg.errors.UniqueViolation
