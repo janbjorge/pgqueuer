@@ -107,10 +107,11 @@ async def test_eligible_probe_and_dequeue_agree_at_execute_after_now(dsn: str) -
         await connection.close()
 
 
-async def test_requeue_of_a_failed_job_notifies_listeners(
-    dsn: str, apgdriver: AsyncpgDriver
+@pytest.mark.parametrize("retry", [False, True], ids=["requeue", "retry"])
+async def test_requeued_and_retried_jobs_notify_listeners(
+    dsn: str, apgdriver: AsyncpgDriver, retry: bool
 ) -> None:
-    """Requeued work is due now, so an idle worker must hear about it."""
+    """Requeued or retried work may be due now, so an idle worker must hear about it."""
     queries = Queries(apgdriver)
     channel = queries.qbq.settings.channel
     operations: asyncio.Queue[str] = asyncio.Queue()
@@ -144,10 +145,14 @@ async def test_requeue_of_a_failed_job_notifies_listeners(
             None,
             heartbeat_timeout=timedelta(seconds=30),
         )
-        await queries.log_jobs([(job, "failed", None)])
+        if not retry:
+            await queries.log_jobs([(job, "failed", None)])
         await heard_until_marker("before-requeue")
 
-        await queries.requeue_jobs([job.id])
+        if retry:
+            await queries.retry_job(job, timedelta(0), None)
+        else:
+            await queries.requeue_jobs([job.id])
 
         assert await heard_until_marker("after-requeue") == ["update"]
     finally:

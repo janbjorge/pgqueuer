@@ -471,13 +471,14 @@ class Queries:
         bumped, attempts incremented) and writes a log entry recording the
         retry event.  A no-op when another worker has re-picked the job.
         """
-        await self.driver.execute(
+        if await self.driver.fetch(
             self.qbq.build_retry_job_query(),
             job.id,
             delay,
             traceback_record.model_dump_json() if traceback_record else None,
             job.queue_manager_id,
-        )
+        ):
+            await self.notify_table_changed("update")
 
     async def requeue_jobs(self, ids: list[types.JobId]) -> None:
         """Move failed jobs back to queued status for reprocessing.
