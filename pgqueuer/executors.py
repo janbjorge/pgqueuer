@@ -1,4 +1,4 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.core.executors"""
+"""Backward-compatibility shim. Canonical: pgqueuer.core.executors."""
 
 from __future__ import annotations
 

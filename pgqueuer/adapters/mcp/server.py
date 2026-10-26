@@ -442,7 +442,7 @@ def create_mcp_server(
     """
 
     @asynccontextmanager
-    async def app_lifespan(server: FastMCP[PgQueuerDatabase]) -> AsyncIterator[PgQueuerDatabase]:
+    async def app_lifespan(_server: FastMCP[PgQueuerDatabase]) -> AsyncIterator[PgQueuerDatabase]:
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             yield PgQueuerDatabase(pool, settings or DBSettings())
 

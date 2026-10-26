@@ -141,19 +141,25 @@ ignore = [
     "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
     "CPY", "ERA", "TD", "FIX",
     # Temporary: rules with open violations, fixed and removed per PR (#1048).
-    "ANN001", "ANN204", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",
-    "B017", "B023", "B905", "D205", "D415", "DTZ005", "N803",
-    "N812", "PERF102", "PLR1714", "PLW0603", "PT003", "PT006",
-    "PT007", "PT011", "PT012", "PT018", "PT028", "PTH109", "PTH123", "PYI034", "RUF005",
-    "RUF009", "RUF012", "RUF043", "RUF059", "S101", "S104", "S603",
-    "SLF001", "TRY002", "TRY004", "TRY301",
+    "ANN001", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",
+    "B017", "B023", "B905", "D205", "DTZ005", "N803",
+    "PERF102", "PLW0603", "PT003", "PT006",
+    "PT007", "PT011", "PT012", "PT018", "PT028", "PTH123", "PYI034", "RUF005",
+    "RUF012", "RUF043", "RUF059", "S101", "S104", "S603",
+    "SLF001", "TRY002", "TRY301",
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Option", "typer.Argument"]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "typer.Option",
+    "typer.Argument",
+    "pgqueuer.domain.types.Channel",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "test/**" = ["S101", "ARG001", "SLF001", "PLC0415", "INP001", "ANN401", "N803", "N806", "D", "BLE001"]

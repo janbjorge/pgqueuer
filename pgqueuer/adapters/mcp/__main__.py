@@ -1,4 +1,4 @@
-"""Entry point: python -m pgqueuer.adapters.mcp"""
+"""Entry point: python -m pgqueuer.adapters.mcp."""
 
 from __future__ import annotations
 

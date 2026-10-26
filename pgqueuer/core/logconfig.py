@@ -31,7 +31,7 @@ class ISOFormatter(logging.Formatter):
 class MaxLevelFilter(logging.Filter):
     """Only allows log records up to a specified maximum logging level."""
 
-    def __init__(self, max_level: int):
+    def __init__(self, max_level: int) -> None:
         super().__init__()
         self.max_level = max_level
 

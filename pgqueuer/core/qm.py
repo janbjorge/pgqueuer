@@ -204,7 +204,7 @@ class QueueManager:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
 
         if not isinstance(concurrency_limit, int):
-            raise ValueError("Concurrency limit must be int.")
+            raise ValueError("Concurrency limit must be int.")  # noqa: TRY004 - public behaviour
 
         if concurrency_limit < 0:
             raise ValueError("Concurrency limit must be greater or eq. to zero.")

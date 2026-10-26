@@ -1,4 +1,4 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.core.sm"""
+"""Backward-compatibility shim. Canonical: pgqueuer.core.sm."""
 
 from __future__ import annotations
 

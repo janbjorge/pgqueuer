@@ -6,6 +6,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import timedelta
 from itertools import chain
+from typing import Self
 
 from pgqueuer.core import tm
 from pgqueuer.domain import models, types
@@ -72,7 +73,7 @@ class CompletionWatcher:
         repr=False,
     )
 
-    async def __aenter__(self) -> CompletionWatcher:
+    async def __aenter__(self) -> Self:
         if self.refresh_interval is not None:
             self.task_manager.add(asyncio.create_task(self._poll_for_change(self.refresh_interval)))
         await self.driver.add_listener(self.queries.qbe.settings.channel, self._is_relevant_event)

@@ -154,8 +154,9 @@ class OpenTelemetryTracing(TracingProtocol):
 
     @asynccontextmanager
     async def trace_process(self, job: Job) -> AsyncIterator[None]:
-        """Extract W3C trace context from job headers and wrap execution in a
-        ``CONSUMER`` ``process {destination}`` span.
+        """Run the job inside a ``CONSUMER`` ``process {destination}`` span.
+
+        The W3C trace context is extracted from the job headers.
 
         Uses the message's creation context as the span's parent (valid for
         single-message processing per the OTel spec).  Sets ``STATUS_ERROR``

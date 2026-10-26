@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import os
 import sys
 from contextlib import AbstractAsyncContextManager
+from pathlib import Path
 from typing import Protocol
 
 
@@ -16,7 +16,7 @@ class Factory(Protocol):
 
 def load_factory(factory: str | Factory) -> Factory:
     """Resolve a factory: a ``module:attr`` import path, or pass-through if already callable."""
-    sys.path.insert(0, os.getcwd())
+    sys.path.insert(0, str(Path.cwd()))
 
     if callable(factory):
         return factory

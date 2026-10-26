@@ -1,4 +1,4 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.ports.driver + pgqueuer.adapters.drivers.*"""
+"""Backward-compatibility shim. Canonical: pgqueuer.ports.driver + pgqueuer.adapters.drivers.*."""
 
 from __future__ import annotations
 
