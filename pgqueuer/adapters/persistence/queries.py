@@ -485,10 +485,9 @@ class Queries:
         Resets attempts to 0 and sets execute_after to NOW().
         Only affects jobs with status ``'failed'``.
         """
-        await self.driver.execute(
-            self.qbq.build_requeue_jobs_query(),
-            ids,
-        )
+        if await self.driver.fetch(self.qbq.build_requeue_jobs_query(), ids):
+            # The statement-level trigger cannot tell UPDATEs apart, so it stays silent on them.
+            await self.notify_table_changed("update")
 
     async def list_failed_jobs(
         self,
@@ -554,6 +553,19 @@ class Queries:
                 ids=ids,
                 sent_at=models.utc_now(),
                 type="cancellation_event",
+            ).model_dump_json(),
+        )
+
+    async def notify_table_changed(self, operation: types.OPERATIONS) -> None:
+        """Emit a ``table_changed_event`` NOTIFY, as the queue table trigger does."""
+        await self.driver.notify(
+            self.qbq.settings.channel,
+            models.TableChangedEvent(
+                channel=self.qbq.settings.channel,
+                sent_at=models.utc_now(),
+                type="table_changed_event",
+                operation=operation,
+                table=self.qbq.settings.queue_table,
             ).model_dump_json(),
         )
 
