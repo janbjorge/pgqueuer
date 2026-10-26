@@ -69,9 +69,7 @@ def aggregated_queue_statistics(
 def aggregated_log_statistics(
     log_statistics: list[LogStatistics],
 ) -> Generator[str, None, None]:
-    """Generate Prometheus-formatted strings for aggregated log
-    statistics, including time in queue metrics.
-    """
+    """Generate Prometheus lines for aggregated log statistics, incl. time in queue."""
     aggregated_log_statistics = (
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(

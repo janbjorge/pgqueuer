@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 
 import asyncpg
 
@@ -20,7 +20,7 @@ async def create_pgqueuer() -> PgQueuer:
     # Examples: HTTP clients, ML models, connection pools, caches, feature flags.
     resources: dict[str, object] = {
         "feature_flags": {"beta_mode": True},
-        "startup_timestamp": datetime.now(),
+        "startup_timestamp": datetime.now(UTC),
     }
 
     pgq = PgQueuer(driver, resources=resources)
@@ -44,7 +44,7 @@ async def create_pgqueuer() -> PgQueuer:
     async def scheduled_every_minute(schedule: Schedule) -> None:
         # Scheduled tasks currently access shared resources via closure
         print(
-            f"Executed every minute {schedule!r} {datetime.now()!r} "
+            f"Executed every minute {schedule!r} {datetime.now(UTC)!r} "
             f"(processed_jobs={pgq.resources.get('processed_jobs', 0)})"
         )
 
