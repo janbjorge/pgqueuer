@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     import uvloop
 
 try:
-    import uvloop  # noqa: F811
+    import uvloop
 
     HAS_UVLOOP = True
 except ImportError:
@@ -331,11 +331,10 @@ def verify(
 
             if divergence:
                 print("\n".join(divergence))
+            elif expect == VerifyMode.PRESENT:
+                print("All required PgQueuer database objects are present.")
             else:
-                if expect == VerifyMode.PRESENT:
-                    print("All required PgQueuer database objects are present.")
-                else:
-                    print("No PgQueuer database objects found")
+                print("No PgQueuer database objects found")
 
             raise typer.Exit(code=1 if divergence else 0)
 
@@ -527,8 +526,7 @@ def run(
         help="Shutdown the manager if the listener fails.",
     ),
 ) -> None:
-    """
-    Run the job manager, pulling tasks from the queue and handling them with workers.
+    """Run the job manager, pulling tasks from the queue and handling them with workers.
 
     Extra arguments after -- are forwarded to the factory function.
     """

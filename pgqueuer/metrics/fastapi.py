@@ -19,8 +19,7 @@ def create_metrics_router(
     last: timedelta = timedelta(minutes=5),
     path: str = "/metrics",
 ) -> APIRouter:
-    """
-    Create a FastAPI router with a Prometheus metrics endpoint.
+    """Create a FastAPI router with a Prometheus metrics endpoint.
 
     Example:
         >>> from contextlib import asynccontextmanager

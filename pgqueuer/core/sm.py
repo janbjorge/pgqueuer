@@ -51,7 +51,6 @@ class SchedulerManager:
 
         Raises ValueError on invalid cron, RuntimeError on duplicate (entrypoint, expression).
         """
-
         if not croniter.croniter.is_valid(expression):
             raise ValueError(f"Invalid cron expression: {expression}")
 

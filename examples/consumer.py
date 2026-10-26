@@ -53,8 +53,7 @@ async def create_pgqueuer() -> PgQueuer:
 
 @asynccontextmanager
 async def main() -> AsyncGenerator[PgQueuer, None]:
-    """
-    A context manager for setting up and tearing down the PgQueuer instance.
+    """A context manager for setting up and tearing down the PgQueuer instance.
 
     This function manages the lifecycle of the PgQueuer instance, ensuring proper setup and teardown
     when used in an asynchronous context. It includes the following steps:

@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def prometheus_format(
     metric_name: str,
     labels: dict[str, str],
-    value: float | int,
+    value: float,
 ) -> str:
     """Format metric data into a Prometheus-compatible string."""
     label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
@@ -70,7 +70,8 @@ def aggregated_log_statistics(
     log_statistics: list[LogStatistics],
 ) -> Generator[str, None, None]:
     """Generate Prometheus-formatted strings for aggregated log
-    statistics, including time in queue metrics."""
+    statistics, including time in queue metrics.
+    """
     aggregated_log_statistics = (
         (entrypoint, status, tuple(items))
         for (entrypoint, status), items in groupby(

@@ -17,7 +17,6 @@ ManagerFactory: TypeAlias = Callable[[], object]
 
 def setup_shutdown_handlers(manager: object, shutdown: asyncio.Event) -> Manager:
     """Wire *shutdown* into *manager* so cancellation propagates to inner managers."""
-
     if isinstance(manager, qm.QueueManager | sm.SchedulerManager):
         manager.shutdown = shutdown
     elif isinstance(manager, applications.PgQueuer):

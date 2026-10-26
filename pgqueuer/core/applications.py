@@ -34,8 +34,7 @@ if TYPE_CHECKING:
 
 @dataclasses.dataclass
 class PgQueuer:
-    """
-    PgQueuer class
+    """PgQueuer class
 
     This class provides a unified interface for job queue management and task scheduling,
     leveraging PostgreSQL for managing job states and distributed processing.

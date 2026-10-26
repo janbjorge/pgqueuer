@@ -227,8 +227,7 @@ class QueryQueueBuilder:
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> ComposedQuery:
-        """
-        Compose the dequeue statement for the concurrency gates actually in use.
+        """Compose the dequeue statement for the concurrency gates actually in use.
 
         Gate CTEs are selected from the runtime values: entrypoint capacity
         machinery only when some ``concurrency_limits`` entry is positive, the
@@ -828,7 +827,7 @@ class QueryQueueBuilder:
         FROM log_aggregation
         ON CONFLICT ({UNIQUE_COUNT_KEY}) DO UPDATE SET
             count = {stats}.count + EXCLUDED.count
-        """  # noqa
+        """
 
     def build_retry_job_query(self) -> str:
         return f"""WITH retry AS (
@@ -1096,7 +1095,7 @@ class QuerySchedulerBuilder:
                 AND params.expression = {self.qualified.schedules_table}.expression
             ))
     WHERE (entrypoint, expression) IN (SELECT entrypoint, expression FROM picked_jobs)
-    RETURNING *;"""  # noqa: E501
+    RETURNING *;"""
 
     def build_set_schedule_queued_query(self) -> str:
         return f"""UPDATE {self.qualified.schedules_table} SET status = 'queued', last_run = NOW(), updated = NOW() WHERE id = ANY($1);"""  # noqa: E501

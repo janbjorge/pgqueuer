@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     import sentry_sdk
 
 try:
-    import sentry_sdk  # noqa: F811
+    import sentry_sdk
 
     HAS_SENTRY = True
 except ImportError:

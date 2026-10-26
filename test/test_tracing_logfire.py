@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -34,14 +33,14 @@ def _make_job(headers: dict[str, Any] | None, *, entrypoint: str = "say_hello") 
     )
 
 
-@pytest.fixture()
-def exporter() -> Iterator[TestExporter]:
+@pytest.fixture
+def exporter() -> TestExporter:
     exp = TestExporter()
     logfire.configure(
         send_to_logfire=False,
         additional_span_processors=[SimpleSpanProcessor(exp)],
     )
-    yield exp
+    return exp
 
 
 def _spans(exporter: TestExporter) -> list[dict[str, Any]]:

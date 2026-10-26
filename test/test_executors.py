@@ -200,7 +200,7 @@ def test_wants_context_partial_keyword_binding_excludes_context() -> None:
 
     # Binding ctx by keyword turns it keyword-only, so it is no longer positionally bindable.
     # The bound value is never used — wants_context only inspects the signature.
-    bound = functools.partial(handler, ctx=cast(Context, object()))
+    bound = functools.partial(handler, ctx=cast("Context", object()))
     assert not wants_context(bound, Context)
 
 

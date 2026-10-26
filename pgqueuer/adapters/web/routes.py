@@ -250,7 +250,7 @@ def create_web_router(  # noqa: C901
     Pass ``dependencies=[Depends(my_auth)]`` to guard every route with custom auth.
     With ``include_sse=False`` live regions fall back to their polling triggers,
     and no broadcaster is required on ``app.state``.
-    """
+    """  # noqa: D214, D405, D411, D412, D416
     router = APIRouter(dependencies=list(dependencies) if dependencies else None)
     templates = create_templates()
 

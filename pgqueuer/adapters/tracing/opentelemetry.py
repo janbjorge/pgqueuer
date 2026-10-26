@@ -12,11 +12,11 @@ if TYPE_CHECKING:
     import opentelemetry.trace
 
 try:
-    import opentelemetry  # noqa: F811
-    import opentelemetry.context  # noqa: F811
-    import opentelemetry.propagate  # noqa: F811
-    import opentelemetry.semconv.trace  # noqa: F811
-    import opentelemetry.trace  # noqa: F811
+    import opentelemetry
+    import opentelemetry.context
+    import opentelemetry.propagate
+    import opentelemetry.semconv.trace
+    import opentelemetry.trace
 
     HAS_OTEL = True
 except ImportError:
