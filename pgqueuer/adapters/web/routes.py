@@ -19,6 +19,8 @@ except ImportError as e:
         "fastapi is required for this module. Install with: pip install pgqueuer[web]"
     ) from e
 
+from typing import Annotated
+
 from pgqueuer.adapters.web.deps import get_broadcaster, get_insights, get_management
 from pgqueuer.adapters.web.payload import render_payload
 from pgqueuer.adapters.web.sse import Broadcaster
@@ -271,7 +273,7 @@ def create_web_router(  # noqa: C901
 
     @router.get("/healthz", name="healthz", include_in_schema=False)
     async def healthz(
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> dict[str, str]:
         await insights.queue_size()
         return {"status": "ok"}
@@ -280,7 +282,7 @@ def create_web_router(  # noqa: C901
 
         @router.get("/events", name="sse_events", include_in_schema=False)
         async def sse_events(
-            broadcaster: Broadcaster = Depends(get_broadcaster),
+            broadcaster: Annotated[Broadcaster, Depends(get_broadcaster)],
         ) -> StreamingResponse:
             return StreamingResponse(
                 broadcaster.stream(),
@@ -309,14 +311,14 @@ def create_web_router(  # noqa: C901
     @router.get("/", name="overview", response_class=HTMLResponse)
     async def overview(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(request, "overview.html", await overview_context(insights))
 
     @router.get("/partials/overview", name="partial_overview", response_class=HTMLResponse)
     async def partial_overview(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(request, "partials/overview.html", await overview_context(insights))
 
@@ -333,8 +335,8 @@ def create_web_router(  # noqa: C901
     @router.get("/entrypoints", name="entrypoints", response_class=HTMLResponse)
     async def entrypoints(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         window: str = "1h",
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(request, "entrypoints.html", await entrypoints_context(insights, window))
 
@@ -345,8 +347,8 @@ def create_web_router(  # noqa: C901
     )
     async def partial_entrypoints(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         window: str = "1h",
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(
             request,
@@ -388,10 +390,10 @@ def create_web_router(  # noqa: C901
     @router.get("/jobs", name="jobs", response_class=HTMLResponse)
     async def jobs(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         status: str = "",
         entrypoint: str = "",
         page: int = 1,
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(
             request,
@@ -402,10 +404,10 @@ def create_web_router(  # noqa: C901
     @router.get("/partials/jobs", name="partial_jobs", response_class=HTMLResponse)
     async def partial_jobs(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         status: str = "",
         entrypoint: str = "",
         page: int = 1,
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(
             request,
@@ -426,7 +428,7 @@ def create_web_router(  # noqa: C901
     async def job_detail(
         request: Request,
         job_id: int,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         job = await insights.job(types.JobId(job_id))
         history = await insights.job_history(types.JobId(job_id))
@@ -452,14 +454,14 @@ def create_web_router(  # noqa: C901
     @router.get("/failures", name="failures", response_class=HTMLResponse)
     async def failures(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(request, "failures.html", await failures_context(insights))
 
     @router.get("/partials/failures", name="partial_failures", response_class=HTMLResponse)
     async def partial_failures(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(request, "partials/failures.html", await failures_context(insights))
 
@@ -477,16 +479,16 @@ def create_web_router(  # noqa: C901
     @router.get("/workers", name="workers", response_class=HTMLResponse)
     async def workers(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         stale_after: int = 0,
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(request, "workers.html", await workers_context(insights, stale_after))
 
     @router.get("/partials/workers", name="partial_workers", response_class=HTMLResponse)
     async def partial_workers(
         request: Request,
+        insights: Annotated[InsightsService, Depends(get_insights)],
         stale_after: int = 0,
-        insights: InsightsService = Depends(get_insights),
     ) -> HTMLResponse:
         return render(
             request,
@@ -497,7 +499,7 @@ def create_web_router(  # noqa: C901
     @router.get("/schedules", name="schedules", response_class=HTMLResponse)
     async def schedules(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(
             request,
@@ -508,7 +510,7 @@ def create_web_router(  # noqa: C901
     @router.get("/system", name="system", response_class=HTMLResponse)
     async def system(
         request: Request,
-        insights: InsightsService = Depends(get_insights),
+        insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> HTMLResponse:
         return render(
             request,
@@ -526,7 +528,7 @@ def create_web_router(  # noqa: C901
     )
     async def cancel_job(
         job_id: int,
-        management: QueueManagementService = Depends(get_management),
+        management: Annotated[QueueManagementService, Depends(get_management)],
     ) -> Response:
         await management.cancel([types.JobId(job_id)])
         return Response(status_code=204, headers={"HX-Refresh": "true"})
@@ -538,7 +540,7 @@ def create_web_router(  # noqa: C901
     )
     async def requeue_jobs_action(
         request: Request,
-        management: QueueManagementService = Depends(get_management),
+        management: Annotated[QueueManagementService, Depends(get_management)],
     ) -> Response:
         form = await request.form()
         ids = [types.JobId(int(raw)) for raw in form.getlist("ids") if isinstance(raw, str)]
