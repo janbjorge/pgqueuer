@@ -46,5 +46,5 @@ class Heartbeat:
                 break
             try:
                 await self.buffer.add(self.job_id)
-            except Exception as e:
-                logconfig.logger.exception("Failed to send heartbeat: %s", e)
+            except Exception:
+                logconfig.logger.exception("Failed to send heartbeat")

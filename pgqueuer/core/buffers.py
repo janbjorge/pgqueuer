@@ -90,7 +90,7 @@ class TimedOverflowBuffer(Generic[T]):
             items = self.drain_queue()
             try:
                 await self.flush_items(items)
-            except Exception:
+            except Exception:  # noqa: BLE001 - best-effort flush at shutdown; items are requeued
                 logconfig.logger.warning("Shutdown flush failed, %d items remaining", len(items))
                 for item in items:
                     self.events.put_nowait(item)
@@ -115,7 +115,7 @@ class TimedOverflowBuffer(Generic[T]):
                 await self.flush()
 
             with suppress(TimeoutError):
-                async with asyncio.timeout(self.timeout.total_seconds() * random.uniform(0.8, 1.2)):
+                async with asyncio.timeout(self.timeout.total_seconds() * random.uniform(0.8, 1.2)):  # noqa: S311 - timing jitter, not crypto
                     await self.shutdown.wait()
 
 

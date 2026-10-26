@@ -133,7 +133,7 @@ class CompletionWatcher:
         """LISTEN/NOTIFY callback -- schedules a debounced change check."""
         try:
             evt = models.AnyEvent.model_validate_json(payload)
-        except Exception:
+        except Exception:  # noqa: BLE001 - malformed NOTIFY payloads are ignored
             return
         if evt.root.type == "table_changed_event":
             self._schedule_refresh_waiters()

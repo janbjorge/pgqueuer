@@ -5,7 +5,7 @@ from datetime import timedelta
 from pgqueuer.domain.types import ColumnName, SqlType, TableName
 
 
-class PgqException(Exception):
+class PgqException(Exception):  # noqa: N818 - public API name
     """Base class for all exceptions raised by PgQueuer."""
 
 

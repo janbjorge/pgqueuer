@@ -39,7 +39,7 @@ def scheduler(queries: InMemoryQueries) -> SchedulerManager:
     return SchedulerManager(queries)
 
 
-async def shutdown_Scheduler_after(
+async def shutdown_scheduler_after(
     scheduler: SchedulerManager,
     delay: timedelta = timedelta(seconds=1),
 ) -> None:
@@ -183,7 +183,7 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
     await asyncio.gather(
         *[
             scheduler.run(),
-            shutdown_Scheduler_after(scheduler),
+            shutdown_scheduler_after(scheduler),
         ],
     )
 
@@ -326,7 +326,7 @@ async def test_heartbeat_updates(scheduler: SchedulerManager, mocker: Mock) -> N
     await asyncio.gather(
         *[
             scheduler.run(),
-            shutdown_Scheduler_after(scheduler, timedelta(seconds=1)),
+            shutdown_scheduler_after(scheduler, timedelta(seconds=1)),
         ],
     )
     after = await inspect_schedule(scheduler)
@@ -364,7 +364,7 @@ async def test_schedule_storage_and_retrieval(
     await asyncio.gather(
         *[
             scheduler.run(),
-            shutdown_Scheduler_after(scheduler, timedelta(seconds=2)),
+            shutdown_scheduler_after(scheduler, timedelta(seconds=2)),
         ],
     )
 
@@ -445,7 +445,7 @@ async def assert_clean_old_keeps_due_schedule(
     async def nightly(schedule: Schedule) -> None:
         pass
 
-    await asyncio.gather(first.run(), shutdown_Scheduler_after(first, timedelta(seconds=0.1)))
+    await asyncio.gather(first.run(), shutdown_scheduler_after(first, timedelta(seconds=0.1)))
 
     stored = await queries.peek_schedule()
     assert len(stored) == 1
@@ -666,7 +666,7 @@ async def test_schedule_context_resources_via_scheduler(
 
     await asyncio.gather(
         scheduler.run(),
-        shutdown_Scheduler_after(scheduler),
+        shutdown_scheduler_after(scheduler),
     )
 
     assert len(received_resources) >= 1
