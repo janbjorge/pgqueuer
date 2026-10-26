@@ -18,11 +18,11 @@ def create_app() -> Flask:
             conn = psycopg.connect("", autocommit=True)
             g.driver = SyncPsycopgDriver(conn)
 
-        return cast("SyncPsycopgDriver", g.driver)
+        return cast(SyncPsycopgDriver, g.driver)
 
     @app.teardown_appcontext
     def teardown_db(exception: BaseException | None) -> None:
-        driver = cast("SyncPsycopgDriver | None", g.pop("driver", None))
+        driver = cast(SyncPsycopgDriver | None, g.pop("driver", None))
 
         if driver is not None:
             driver._connection.close()

@@ -31,7 +31,7 @@ async def test_shutdown_without_signal(monkeypatch: pytest.MonkeyPatch) -> None:
 
     @asynccontextmanager
     async def factory() -> AsyncGenerator[qm.QueueManager, None]:
-        yield cast("qm.QueueManager", dummy)
+        yield cast(qm.QueueManager, dummy)
 
     async def run_manager(manager: DummyManager, *args: object, **kwargs: object) -> None:
         await manager.run()

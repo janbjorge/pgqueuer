@@ -91,9 +91,9 @@ class EntrypointExecutor(AbstractEntrypointExecutor):
 
     async def execute(self, job: models.Job, context: models.Context) -> None:
         if self.parameters.accepts_context:
-            await cast("AsyncContextEntrypoint", self.parameters.func)(job, context)
+            await cast(AsyncContextEntrypoint, self.parameters.func)(job, context)
         else:
-            await cast("AsyncEntrypoint", self.parameters.func)(job)
+            await cast(AsyncEntrypoint, self.parameters.func)(job)
 
 
 @dataclasses.dataclass
@@ -167,6 +167,6 @@ class ScheduleExecutor(AbstractScheduleExecutor):
 
     async def execute(self, schedule: models.Schedule, context: models.ScheduleContext) -> None:
         if self.parameters.accepts_context:
-            await cast("AsyncContextCrontab", self.parameters.func)(schedule, context)
+            await cast(AsyncContextCrontab, self.parameters.func)(schedule, context)
         else:
-            await cast("AsyncCrontab", self.parameters.func)(schedule)
+            await cast(AsyncCrontab, self.parameters.func)(schedule)

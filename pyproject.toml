@@ -136,6 +136,7 @@ ignore = [
     "A002",  # `id`/`type` kwargs are public API
     "RUF001", "RUF002",  # intentional unicode in UI strings
     "S608",  # SQL built from validated identifiers (qb.py); values are bind params
+    "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
     "CPY", "ERA", "TD", "FIX",
     # Temporary: rules with open violations, fixed and removed per PR (#1048).
     "ANN001", "ANN204", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",

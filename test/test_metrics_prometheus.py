@@ -78,7 +78,7 @@ def test_custom_metric_names_are_used() -> None:
 
 
 async def test_collect_metrics_returns_payload() -> None:
-    fake_repo = cast("QueueRepositoryPort", FakeQueries())
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
 
     metrics_payload = await metrics.collect_metrics(fake_repo)
 
@@ -101,9 +101,7 @@ async def test_collect_metrics_with_statistics() -> None:
         ),
     ]
 
-    fake_repo = cast(
-        "QueueRepositoryPort", FakeQueries(queue_stats=queue_stats, log_stats=log_stats)
-    )
+    fake_repo = cast(QueueRepositoryPort, FakeQueries(queue_stats=queue_stats, log_stats=log_stats))
 
     metrics_payload = await metrics.collect_metrics(fake_repo)
 
@@ -118,7 +116,7 @@ async def test_collect_metrics_with_statistics() -> None:
 
 
 def test_fastapi_create_metrics_router() -> None:
-    fake_repo = cast("QueueRepositoryPort", FakeQueries())
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
     router = create_metrics_router(fake_repo)
 
     app = FastAPI()
@@ -132,7 +130,7 @@ def test_fastapi_create_metrics_router() -> None:
 
 
 def test_fastapi_create_metrics_router_custom_path() -> None:
-    fake_repo = cast("QueueRepositoryPort", FakeQueries())
+    fake_repo = cast(QueueRepositoryPort, FakeQueries())
     router = create_metrics_router(fake_repo, path="/custom/metrics")
 
     app = FastAPI()
