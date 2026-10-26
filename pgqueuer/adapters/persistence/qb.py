@@ -862,6 +862,7 @@ class QueryQueueBuilder:
         )
         INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)
         SELECT id, 'queued', entrypoint, priority FROM requeued
+        RETURNING job_id
         """
 
     def build_list_failed_jobs_query(self, order: SortOrder = "DESC") -> str:

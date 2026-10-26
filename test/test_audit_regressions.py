@@ -107,7 +107,6 @@ async def test_eligible_probe_and_dequeue_agree_at_execute_after_now(dsn: str) -
         await connection.close()
 
 
-@known_bug("#1045")
 async def test_requeue_of_a_failed_job_notifies_listeners(
     dsn: str, apgdriver: AsyncpgDriver
 ) -> None:
