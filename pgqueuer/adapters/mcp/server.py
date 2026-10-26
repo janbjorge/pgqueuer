@@ -186,6 +186,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
             -> period='P7D', look for highest exception total_count
         """
         d = _db(ctx)
+        await d.fetch(d.qbq.build_aggregate_log_data_to_statistics_query())
         interval = _parse_interval(period)
         return await d.fetch(d.qbq.build_throughput_summary_query(), interval)
 

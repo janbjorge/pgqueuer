@@ -68,7 +68,6 @@ async def test_queue_manager_keeps_job_ends_it_could_not_write() -> None:
     ]
 
 
-@known_bug("#1043")
 async def test_mcp_throughput_summary_counts_logs_not_yet_aggregated(
     dsn: str, apgdriver: AsyncpgDriver
 ) -> None:
@@ -82,7 +81,9 @@ async def test_mcp_throughput_summary_counts_logs_not_yet_aggregated(
     assert result.structuredContent is not None
     rows = result.structuredContent["result"]
 
-    assert [(r["entrypoint"], r["status"], r["total_count"]) for r in rows] == [("tp", "queued", 1)]
+    assert [(r["entrypoint"], r["status"], int(r["total_count"])) for r in rows] == [
+        ("tp", "queued", 1)
+    ]
 
 
 @known_bug("#1044")
