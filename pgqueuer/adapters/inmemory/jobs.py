@@ -25,7 +25,7 @@ from pgqueuer.domain.types import (
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
 
-def job_status_rank(status: JOB_STATUS) -> int:
+def job_status_rank(status: JOB_STATUS) -> int:  # noqa: PLR0911 - one return per status
     """Declaration order of ``pgqueuer_status``, which is how PostgreSQL sorts it."""
     if status == "queued":
         return 0

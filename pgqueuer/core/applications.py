@@ -40,7 +40,7 @@ class PgQueuer:
     leveraging PostgreSQL for managing job states and distributed processing.
 
     Resources:
-        resources: Mutable mapping for user‑provided shared objects (DB pools, HTTP
+        resources: Mutable mapping for user-provided shared objects (DB pools, HTTP
             clients, caches, ML models) created once at startup and injected into
             each job Context via QueueManager.
     """

@@ -227,7 +227,7 @@ def parse_statuses(status: str) -> list[types.JOB_STATUS]:
     return [s for s in ACTIVE_STATUSES if s == status] or list(ACTIVE_STATUSES)
 
 
-def create_web_router(  # noqa: C901
+def create_web_router(  # noqa: C901, PLR0915 - registers every route
     *,
     dependencies: Sequence[params.Depends] | None = None,
     include_sse: bool = True,

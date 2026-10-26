@@ -126,24 +126,27 @@ line-length = 100
 select = ["ALL"]
 # Lets BLE001 accept catch-alls that log the traceback through our logger.
 logger-objects = ["pgqueuer.core.logconfig.logger"]
+# The dashboard shows an en dash for missing values.
+allowed-confusables = ["–"]
 ignore = [
-    "COM812", "ISC001",  # conflict with ruff format
+    "COM812",  # conflicts with ruff format
     "D1",  # missing docstrings; follow-up, starting with D100/D104
-    "D203", "D213",  # pick D211/D212
     "TC001", "TC002", "TC003",  # pydantic and dataclasses need runtime annotations
     "TRY003", "EM101", "EM102",  # message strings in raise
     "FBT001", "FBT002", "FBT003",  # boolean args are public API
-    "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004",  # C901 already caps complexity
+    "PLR0913",  # public constructors take many keyword options
+    "PLR2004",  # literal expectations in tests; follow-up for pgqueuer/
     "ARG002",  # unused args in Protocol/port implementations
-    "A002",  # `id`/`type` kwargs are public API
-    "RUF001", "RUF002",  # intentional unicode in UI strings
     "S608",  # SQL built from validated identifiers (qb.py); values are bind params
     "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
-    "CPY", "ERA", "TD", "FIX",
 ]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ruff.lint.flake8-builtins]
+# `id` keyword arguments are public API.
+ignorelist = ["id"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = [

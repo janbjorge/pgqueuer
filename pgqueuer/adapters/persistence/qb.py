@@ -217,7 +217,7 @@ class QueryQueueBuilder:
     def qualified(self) -> QualifiedNames:
         return self.settings.qualified
 
-    def build_dequeue_query(
+    def build_dequeue_query(  # noqa: PLR0912, PLR0915 - one SQL builder for all gate combinations
         self,
         *,
         batch_size: int,
