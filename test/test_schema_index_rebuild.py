@@ -107,7 +107,8 @@ async def test_an_interrupted_rebuild_is_resumed(apgdriver: AsyncpgDriver) -> No
     assert await planned(apgdriver) == ()
     assert await index_definition(apgdriver, replacement) is None
     definition = await index_definition(apgdriver, name)
-    assert definition is not None and "WHERE (NOT aggregated)" in definition
+    assert definition is not None
+    assert "WHERE (NOT aggregated)" in definition
 
 
 @pytest.mark.parametrize(

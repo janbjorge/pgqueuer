@@ -215,7 +215,8 @@ class TestActions:
         response = await client.post("/jobs/requeue", data={"ids": str(job.id)})
         assert response.status_code == 204
         refreshed = await queries.queue_job_by_id(job.id)
-        assert refreshed is not None and refreshed.status == "queued"
+        assert refreshed is not None
+        assert refreshed.status == "queued"
 
     async def test_requeue_without_ids_is_noop(self, client: httpx.AsyncClient) -> None:
         assert (await client.post("/jobs/requeue", data={})).status_code == 204
@@ -319,7 +320,8 @@ class TestBroadcaster:
         assert "queue-change" in frame
 
         # The burst above collapsed into one pending signal at most.
-        assert broadcaster.subscribers and all(q.qsize() <= 1 for q in broadcaster.subscribers)
+        assert broadcaster.subscribers
+        assert all(q.qsize() <= 1 for q in broadcaster.subscribers)
         await stream.aclose()
         assert not broadcaster.subscribers
 

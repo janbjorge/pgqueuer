@@ -102,7 +102,7 @@ async def test_dedupe_constraint_partial_index(
 
     jids1 = await q.enqueue(["ep"], [None], [0], dedupe_key=["k"], on_conflict="raise")
 
-    with pytest.raises(Exception):
+    with pytest.raises(DuplicateJobError):
         await q.enqueue(["ep"], [None], [0], dedupe_key=["k"], on_conflict="raise")
 
     qm_id = QueueManagerId(uuid.uuid4())
@@ -253,7 +253,8 @@ async def test_cancel_keeps_picked_row_until_worker_logs(apgdriver: AsyncpgDrive
     assert await q.queue_job_by_id(queued_id) is None
     assert [entry.status for entry in await q.job_log_history(queued_id)] == ["queued", "canceled"]
     held = await q.queue_job_by_id(running_id)
-    assert held is not None and held.status == "picked"
+    assert held is not None
+    assert held.status == "picked"
     assert [entry.status for entry in await q.job_log_history(running_id)] == ["queued", "picked"]
     assert await q.dequeue(1, params, owner, None, timeout) == []
     with pytest.raises(DuplicateJobError):

@@ -73,12 +73,12 @@ async def drain_with_fleet(
 async def test_slot_contention_does_not_park_workers(
     dsn: str,
     n_workers: int,
-    n_jobs: int = 30,
-    concurrency_limit: int = 1,
-    handler_sleep: float = 0.05,
-    dequeue_timeout: timedelta = timedelta(seconds=10),
 ) -> None:
     """A fleet contending for one capacity slot drains without waiting out a timeout."""
+    n_jobs = 30
+    concurrency_limit = 1
+    handler_sleep = 0.05
+    dequeue_timeout = timedelta(seconds=10)
     elapsed = await drain_with_fleet(
         dsn,
         n_workers,

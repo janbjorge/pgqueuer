@@ -100,7 +100,7 @@ async def test_scheduler_register_raises_invalid_expression(scheduler: Scheduler
     async def sample_task(schedule: Schedule) -> None:
         pass
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Invalid cron expression"):
         scheduler.schedule("sample_task", "bla * * * *")(sample_task)
 
 

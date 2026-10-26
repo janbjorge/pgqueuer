@@ -55,7 +55,7 @@ async def test_enqueue_batch(queries: InMemoryQueries) -> None:
 async def test_enqueue_rejects_short_payload_without_partial_insert(
     queries: InMemoryQueries, on_conflict: OnConflict
 ) -> None:
-    with pytest.raises(ValueError, match="payload"):
+    with pytest.raises(ValueError, match="payload"):  # noqa: PT012 - one call per branch
         if on_conflict == "skip":
             await queries.enqueue(
                 ["a", "b"], [b"first"], [1, 2], dedupe_key=["a", "b"], on_conflict=on_conflict
@@ -567,7 +567,7 @@ async def test_dequeue_empty_entrypoints(queries: InMemoryQueries) -> None:
 
 
 async def test_dequeue_batch_size_validation(queries: InMemoryQueries) -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Batch size"):
         await queries.dequeue(
             0, {}, QueueManagerId(uuid.uuid4()), None, heartbeat_timeout=timedelta(seconds=30)
         )
@@ -676,7 +676,8 @@ async def test_cancel_keeps_picked_row_until_worker_logs(queries: InMemoryQuerie
         "canceled",
     ]
     held = await queries.queue_job_by_id(running_id)
-    assert held is not None and held.status == "picked"
+    assert held is not None
+    assert held.status == "picked"
     assert [entry.status for entry in await queries.job_log_history(running_id)] == [
         "queued",
         "picked",
@@ -902,14 +903,16 @@ async def test_log_statistics_accumulates_existing_bucket(
         assert await queries.log_statistics(limit=None) == []
         await queries.enqueue("ep", None)
         first = await queries.log_statistics(limit=1)
-        assert len(first) == 1 and first[0].count == 1
+        assert len(first) == 1
+        assert first[0].count == 1
 
         await queries.enqueue(["ep", "ep"], [None, None], [0, 0])
         if aggregate_between:
             await queries.aggregate_logs()
         stats = await queries.log_statistics(limit=1)
 
-        assert len(stats) == 1 and stats[0].count == 3
+        assert len(stats) == 1
+        assert stats[0].count == 3
         assert await queries.log_statistics(limit=None) == stats
         await queries.aggregate_logs()
         assert await queries.log_statistics(limit=None) == stats
@@ -926,7 +929,8 @@ async def test_log_statistics_preserves_existing_bucket_order(queries: InMemoryQ
         latest = await queries.log_statistics(limit=1)
         stats = await queries.log_statistics(limit=None)
 
-    assert len(latest) == 1 and latest[0].entrypoint == "second"
+    assert len(latest) == 1
+    assert latest[0].entrypoint == "second"
     assert [row.entrypoint for row in stats] == ["second", "first"]
     assert [row.count for row in stats] == [1, 2]
 

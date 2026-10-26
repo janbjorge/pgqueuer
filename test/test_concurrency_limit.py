@@ -43,10 +43,10 @@ async def test_max_concurrency(
     n_consumers: int,
     max_concurrency: int,
     apgdriver: Driver,
-    n_tasks: int = 500,
-    wait: int = 2,
 ) -> None:
     """concurrency_limit is enforced globally across all workers."""
+    n_tasks = 500
+    wait = 2
     await Queries(apgdriver).enqueue(
         ["fetch"] * n_tasks,
         [f"{i}".encode() for i in range(n_tasks)],

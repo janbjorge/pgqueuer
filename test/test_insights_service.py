@@ -34,7 +34,7 @@ async def dequeue_all(queries: InMemoryQueries, entrypoint: str) -> list[models.
 
 class TestPercentileCont:
     def test_empty_raises(self) -> None:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="empty"):
             percentile_cont([], 0.5)
 
     def test_single_value(self) -> None:
@@ -126,7 +126,8 @@ class TestInsightsService:
         (job_id,) = await queries.enqueue("ep", b"payload")
         service = InsightsService(queries)
         job = await service.job(job_id)
-        assert job is not None and job.payload == b"payload"
+        assert job is not None
+        assert job.payload == b"payload"
         history = await service.job_history(job_id)
         assert [h.status for h in history] == ["queued"]
         assert await service.job(types.JobId(999_999)) is None

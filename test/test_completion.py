@@ -243,7 +243,7 @@ async def test_completion_exit_on_error_cancels_waiters(
     (jid,) = await queries.enqueue(["fetch"], [None], [0])
 
     async def watch() -> asyncio.Future[JOB_STATUS]:
-        with pytest.raises(error):
+        with pytest.raises(error):  # noqa: PT012 - the error must escape the watcher block
             async with CompletionWatcher(driver, queries=queries) as watcher:
                 waiter = watcher.wait_for(jid)
                 raise error

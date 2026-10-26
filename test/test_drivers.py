@@ -239,13 +239,13 @@ async def test_recovery_after_failed_sql(
     driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
     async with driver(dsn) as d:
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="syntax error"):
             await d.execute("SELECT 1 WHERE")
 
         result = await d.fetch("SELECT 1 as one")
         assert result == [{"one": 1}]
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="syntax error"):
             await d.fetch("SELECT 1 WHERE")
 
         result = await d.fetch("SELECT 2 as two")
@@ -285,7 +285,7 @@ async def test_log_rows_with_a_traceback_read_back(
 async def test_recovery_after_failed_sql_sync(
     pgdriver: SyncDriver,
 ) -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(Exception, match="syntax error"):
         pgdriver.fetch("SELECT 1 WHERE")
 
     result = pgdriver.fetch("SELECT 1 as one")

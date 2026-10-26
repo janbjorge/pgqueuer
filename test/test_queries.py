@@ -493,8 +493,8 @@ async def test_eligible_queued_work_excludes_deferred(apgdriver: db.Driver) -> N
 async def test_queue_retry_timer(
     apgdriver: db.Driver,
     N: int,
-    retry_timer: timedelta = timedelta(seconds=0.1),
 ) -> None:
+    retry_timer = timedelta(seconds=0.1)
     q = queries.Queries(apgdriver)
     jobs = list[models.Job]()
 

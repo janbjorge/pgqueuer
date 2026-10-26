@@ -77,9 +77,9 @@ async def locked_consumer(
 async def test_serialized_dispatch(
     n_consumers: int,
     apgdriver: Driver,
-    n_tasks: int = 500,
-    wait: int = 1,
 ) -> None:
+    n_tasks = 500
+    wait = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
     qms = [QueueManager(Queries(apgdriver)) for _ in range(n_consumers)]
@@ -100,9 +100,9 @@ async def test_serialized_dispatch(
 async def test_serialized_dispatch_mixed(
     n_consumers: int,
     apgdriver: Driver,
-    n_tasks: int = 10_000,
-    wait: int = 1,  # Set wait time to 1 second
 ) -> None:
+    n_tasks = 10_000
+    wait = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
     qms = [QueueManager(Queries(apgdriver)) for _ in range(n_consumers)]
@@ -133,9 +133,9 @@ async def test_serialized_dispatch_mixed(
 async def test_no_jobs_processed_when_locked(
     n_consumers: int,
     apgdriver: Driver,
-    n_tasks: int = 100,
-    wait: int = 3,  # Added wait time for timed shutdown
 ) -> None:
+    n_tasks = 100
+    wait = 3
     # Set one job to picked state to simulate an ongoing process
     queries = Queries(apgdriver)
     await enqueue(queries, size=n_tasks)
@@ -172,9 +172,9 @@ async def test_no_jobs_processed_when_locked(
 async def test_mixed_serialized_and_concurrent_processing(
     n_consumers: int,
     apgdriver: Driver,
-    n_tasks: int = 1000,
-    wait: int = 1,  # Set wait time to 1 second
 ) -> None:
+    n_tasks = 1000
+    wait = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
     qms = [QueueManager(Queries(apgdriver)) for _ in range(n_consumers)]
@@ -202,9 +202,9 @@ async def test_mixed_serialized_and_concurrent_processing(
 
 async def test_single_consumer_serialized_behavior(
     apgdriver: Driver,
-    n_tasks: int = 50,
-    wait: int = 10,
 ) -> None:
+    n_tasks = 50
+    wait = 10
     n_consumers = 1
     lock = asyncio.Lock()
     await enqueue(Queries(apgdriver), size=n_tasks)
