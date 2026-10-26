@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from functools import partial
+from typing import Any
 from unittest.mock import ANY, MagicMock, patch
 
 import pytest
@@ -343,6 +344,63 @@ async def test_unwritten_job_logs_capture_what_the_run_could_not_write() -> None
 
     assert written == [entry]
     assert held.entries == [fresh]
+
+
+async def test_restart_writes_job_end_the_first_run_could_not() -> None:
+    """An in-process restart writes the job end the failed flush kept."""
+    shared = InMemoryQueries(driver=InMemoryDriver())
+    real_log = shared.log_jobs
+    real_dequeue = shared.dequeue
+    cycle = 0
+    polls = 0
+    ran = 0
+
+    async def log_jobs(job_status: list[JobLogEntry]) -> None:
+        if cycle == 1:
+            raise RuntimeError("connection lost")
+        await real_log(job_status)
+
+    async def dequeue(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal polls
+        if cycle == 1:
+            polls += 1
+            if polls > 1:
+                raise RuntimeError("poll failed")
+        return await real_dequeue(*args, **kwargs)
+
+    shared.log_jobs = log_jobs
+    shared.dequeue = dequeue
+
+    @asynccontextmanager
+    async def factory() -> AsyncIterator[QueueManager]:
+        nonlocal cycle
+        cycle += 1
+        qm = QueueManager(shared)
+
+        @qm.entrypoint("work")
+        async def work(job: Job) -> None:
+            nonlocal ran
+            ran += 1
+
+        yield qm
+
+    await shared.enqueue(["work"], [None], [0])
+    await supervisor.runit(
+        factory=factory,
+        dequeue_timeout=timedelta(seconds=0.05),
+        batch_size=10,
+        restart_delay=timedelta(0),
+        restart_on_failure=True,
+        shutdown=asyncio.Event(),
+        mode=QueueExecutionMode.drain,
+        max_concurrent_tasks=None,
+        shutdown_on_listener_failure=False,
+    )
+
+    assert cycle == 2
+    assert ran == 1
+    assert sum(row.count for row in await shared.queue_size()) == 0
+    assert any(log.status == "successful" for log in await shared.queue_log())
 
 
 async def test_runit_drain_exits_once_with_restart_on_failure() -> None:

@@ -88,7 +88,7 @@ class PgQueuer:
 
     @property
     def unwritten_job_logs(self) -> list[JobLogEntry]:
-        """The queue manager's unwritten job logs."""
+        """Job ends the queue manager could not write on its last run."""
         return self.qm.unwritten_job_logs
 
     async def write_job_ends(self, logs: list[JobLogEntry]) -> None:
