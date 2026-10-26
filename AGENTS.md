@@ -170,7 +170,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 3. Third-party packages
 4. Internal imports using absolute paths (`from pgqueuer.domain.models import Job`)
 
-**No local imports.** All imports must be at module top level. The only exception is `if TYPE_CHECKING:` blocks for avoiding circular imports at runtime.
+**No local imports.** All imports must be at module top level. Ruff enforces this (`PLC0415`). The exceptions are `if TYPE_CHECKING:` blocks, and third-party packages from optional extras (`asyncpg`, `psycopg`, `uvicorn`), which are imported where they are used so that installs without the extra keep working. Those sites are per-file ignores in `pyproject.toml` or carry `# noqa: PLC0415` with the reason.
 
 ### Type Annotations
 

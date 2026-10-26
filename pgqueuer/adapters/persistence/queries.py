@@ -15,6 +15,8 @@ from typing import assert_never
 
 from pydantic_core import to_json
 
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.persistence import (
     qb,
     query_helpers,
@@ -91,8 +93,6 @@ class Queries:
         settings: DBSettings | None = None,
     ) -> Queries:
         """Build Queries over an asyncpg connection."""
-        from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
-
         return cls(AsyncpgDriver(connection), settings or DBSettings())
 
     @classmethod
@@ -102,8 +102,6 @@ class Queries:
         settings: DBSettings | None = None,
     ) -> Queries:
         """Build Queries over an asyncpg pool."""
-        from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
-
         return cls(AsyncpgPoolDriver(pool), settings or DBSettings())
 
     @classmethod
@@ -113,8 +111,6 @@ class Queries:
         settings: DBSettings | None = None,
     ) -> Queries:
         """Build Queries over a psycopg async connection (must have autocommit=True)."""
-        from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
-
         return cls(PsycopgDriver(connection), settings or DBSettings())
 
     async def install(

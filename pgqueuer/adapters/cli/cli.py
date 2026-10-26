@@ -18,6 +18,9 @@ from tabulate import tabulate
 from typer import Context
 
 from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
+from pgqueuer.adapters.connections import connect_asyncpg, connect_psycopg
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
+from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.adapters.persistence import qb, queries
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
@@ -142,16 +145,10 @@ def create_default_queries_factory(
     @contextlib.asynccontextmanager
     async def factory() -> AsyncGenerator[queries.Queries, None]:
         with contextlib.suppress(ImportError):
-            from pgqueuer.adapters.connections import connect_asyncpg
-            from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
-
             async with connect_asyncpg(dsn=config.pg_dsn or None) as connection:
                 yield queries.Queries(AsyncpgDriver(connection), config.settings)
             return
         with contextlib.suppress(ImportError):
-            from pgqueuer.adapters.connections import connect_psycopg
-            from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
-
             async with connect_psycopg(dsn=config.pg_dsn or None) as connection:
                 yield queries.Queries(PsycopgDriver(connection), config.settings)
             return
@@ -437,9 +434,9 @@ def web(
     ),
 ) -> None:
     try:
-        import uvicorn
+        import uvicorn  # noqa: PLC0415 - optional `web` extra
 
-        from pgqueuer.adapters.web.app import create_web_app
+        from pgqueuer.adapters.web.app import create_web_app  # noqa: PLC0415 - needs fastapi
     except ImportError as exc:
         raise typer.BadParameter(
             "The web dashboard requires extra dependencies. "

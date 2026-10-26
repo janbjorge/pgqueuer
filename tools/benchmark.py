@@ -13,6 +13,8 @@ from itertools import count
 from pathlib import Path
 from typing import NoReturn, Protocol
 
+import asyncpg
+import psycopg
 import typer
 import uvloop
 from pydantic import AwareDatetime, BaseModel
@@ -193,18 +195,12 @@ async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort
     global _shared_inmem
     match driver:
         case "apg":
-            import asyncpg
-
             return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
         case "apgpool":
-            import asyncpg
-
             pool = await asyncpg.create_pool(dsn=conninfo)
             assert pool is not None
             return Queries(AsyncpgPoolDriver(pool))
         case "psy":
-            import psycopg
-
             return Queries(
                 PsycopgDriver(
                     await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
