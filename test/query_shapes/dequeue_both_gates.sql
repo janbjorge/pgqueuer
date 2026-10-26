@@ -48,7 +48,7 @@ unlimited_claims AS (
         FROM pgqueuer candidate
         WHERE candidate.entrypoint = available.entrypoint
           AND candidate.status = 'queued'
-          AND candidate.execute_after < NOW()
+          AND candidate.execute_after <= NOW()
         ORDER BY candidate.priority DESC, candidate.id ASC
         LIMIT $1
         FOR UPDATE SKIP LOCKED
@@ -67,7 +67,7 @@ limited_claims AS (
             FROM pgqueuer candidate
             WHERE candidate.entrypoint = available.entrypoint
               AND candidate.status = 'queued'
-              AND candidate.execute_after < NOW()
+              AND candidate.execute_after <= NOW()
             ORDER BY candidate.priority DESC, candidate.id ASC
             LIMIT LEAST($1, available.remaining)
         ) capped
@@ -76,7 +76,7 @@ limited_claims AS (
             FROM pgqueuer target
             WHERE target.id = capped.id
               AND target.status = 'queued'
-              AND target.execute_after < NOW()
+              AND target.execute_after <= NOW()
             FOR UPDATE OF target SKIP LOCKED
         ) locked
         ORDER BY locked.priority DESC, locked.id ASC
@@ -105,7 +105,7 @@ next_stale AS (
     WHERE stale.status = 'picked'
       AND stale.entrypoint = ANY($2)
       AND stale.heartbeat < NOW() - $4::interval
-      AND stale.execute_after < NOW()
+      AND stale.execute_after <= NOW()
       AND (SELECT total FROM worker_load) < $6
     ORDER BY stale.priority DESC, stale.id ASC
     FOR UPDATE SKIP LOCKED

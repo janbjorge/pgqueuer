@@ -71,6 +71,10 @@ class JobRow:
     # Bumped when the row leaves the ready lane, so the old entry is skipped.
     ready_token: int = 0
 
+    def due(self, now: datetime) -> bool:
+        """Whether ``execute_after`` has been reached; matches ``QueryQueueBuilder.due``."""
+        return self.execute_after <= now
+
     def to_model(self) -> models.Job:
         return models.Job(
             id=JobId(self.id),
@@ -158,7 +162,7 @@ class ReadyLane:
             index += 1
             if not self.pending(entry):
                 continue
-            if entry.row.execute_after > now:
+            if not entry.row.due(now):
                 continue
             chosen.append(entry.row)
         # A deferred row at the cursor must not pin finished rows behind it.
@@ -551,7 +555,7 @@ class JobTable:
     def has_due(self, entrypoints: list[QueueEntrypoint], now: datetime) -> bool:
         wanted = set(entrypoints)
         return any(
-            job.status == "queued" and job.entrypoint in wanted and job.execute_after <= now
+            job.status == "queued" and job.entrypoint in wanted and job.due(now)
             for job in self.rows.values()
         )
 
@@ -564,7 +568,7 @@ class JobTable:
         candidates = [
             job.execute_after
             for job in self.rows.values()
-            if job.status == "queued" and job.entrypoint in wanted and job.execute_after > now
+            if job.status == "queued" and job.entrypoint in wanted and not job.due(now)
         ]
         if not candidates:
             return None

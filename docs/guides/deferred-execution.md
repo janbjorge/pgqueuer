@@ -30,7 +30,7 @@ await Queries(driver).enqueue(
 ```
 
 Jobs remain in the queue with `queued` status until their `execute_after` timestamp is
-surpassed. The `QueueManager` uses `FOR UPDATE SKIP LOCKED` with a timestamp filter, so
+reached. The `QueueManager` uses `FOR UPDATE SKIP LOCKED` with a timestamp filter, so
 deferred jobs are never picked early.
 
 !!! note

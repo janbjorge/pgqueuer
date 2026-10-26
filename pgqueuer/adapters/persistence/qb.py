@@ -217,6 +217,12 @@ class QueryQueueBuilder:
     def qualified(self) -> QualifiedNames:
         return self.settings.qualified
 
+    @staticmethod
+    def due(alias: str = "") -> str:
+        """The one predicate for a job whose ``execute_after`` has been reached."""
+        column = f"{alias}.execute_after" if alias else "execute_after"
+        return f"{column} <= NOW()"
+
     def build_dequeue_query(  # noqa: PLR0912, PLR0915 - one SQL builder for all gate combinations
         self,
         *,
@@ -351,7 +357,7 @@ class QueryQueueBuilder:
                         FROM {queue_table} candidate
                         WHERE candidate.entrypoint = available.entrypoint
                           AND candidate.status = 'queued'
-                          AND candidate.execute_after < NOW()
+                          AND {self.due("candidate")}
                         ORDER BY candidate.priority DESC, candidate.id ASC
                         LIMIT {batch}
                         FOR UPDATE SKIP LOCKED
@@ -374,7 +380,7 @@ class QueryQueueBuilder:
                             FROM {queue_table} candidate
                             WHERE candidate.entrypoint = available.entrypoint
                               AND candidate.status = 'queued'
-                              AND candidate.execute_after < NOW()
+                              AND {self.due("candidate")}
                             ORDER BY candidate.priority DESC, candidate.id ASC
                             LIMIT LEAST({batch}, available.remaining)
                         ) capped
@@ -383,7 +389,7 @@ class QueryQueueBuilder:
                             FROM {queue_table} target
                             WHERE target.id = capped.id
                               AND target.status = 'queued'
-                              AND target.execute_after < NOW()
+                              AND {self.due("target")}
                             FOR UPDATE OF target SKIP LOCKED
                         ) locked
                         ORDER BY locked.priority DESC, locked.id ASC
@@ -415,7 +421,7 @@ class QueryQueueBuilder:
                     FROM {queue_table} candidate
                     WHERE candidate.entrypoint = available.entrypoint
                       AND candidate.status = 'queued'
-                      AND candidate.execute_after < NOW()
+                      AND {self.due("candidate")}
                     ORDER BY candidate.priority DESC, candidate.id ASC
                     LIMIT {batch}
                     FOR UPDATE SKIP LOCKED
@@ -442,7 +448,7 @@ class QueryQueueBuilder:
                 WHERE stale.status = 'picked'
                   AND stale.entrypoint = ANY({eps})
                   AND stale.heartbeat < NOW() - {heartbeat}::interval
-                  AND stale.execute_after < NOW()
+                  AND {self.due("stale")}
                   {budget_and}
                 ORDER BY stale.priority DESC, stale.id ASC
                 FOR UPDATE SKIP LOCKED
@@ -593,7 +599,7 @@ class QueryQueueBuilder:
             FROM {self.qualified.queue_table}
             WHERE entrypoint = ANY($1)
               AND status = 'queued'
-              AND execute_after <= NOW()
+              AND {self.due()}
             LIMIT 1
         ) sub
         """
@@ -967,7 +973,7 @@ class QueryQueueBuilder:
         return f"""SELECT execute_after - NOW() AS eta
         FROM {self.qualified.queue_table}
         WHERE status = 'queued'
-          AND execute_after > NOW()
+          AND NOT ({self.due()})
           AND entrypoint = ANY($1)
         ORDER BY execute_after
         LIMIT 1

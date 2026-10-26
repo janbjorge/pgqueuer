@@ -13,7 +13,7 @@ next_queued AS (
         FROM pgqueuer candidate
         WHERE candidate.entrypoint = available.entrypoint
           AND candidate.status = 'queued'
-          AND candidate.execute_after < NOW()
+          AND candidate.execute_after <= NOW()
         ORDER BY candidate.priority DESC, candidate.id ASC
         LIMIT $1
         FOR UPDATE SKIP LOCKED
@@ -29,7 +29,7 @@ next_stale AS (
     WHERE stale.status = 'picked'
       AND stale.entrypoint = ANY($2)
       AND stale.heartbeat < NOW() - $4::interval
-      AND stale.execute_after < NOW()
+      AND stale.execute_after <= NOW()
     ORDER BY stale.priority DESC, stale.id ASC
     FOR UPDATE SKIP LOCKED
     LIMIT $1
