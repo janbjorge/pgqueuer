@@ -485,8 +485,9 @@ class Queries:
         Resets attempts to 0 and sets execute_after to NOW().
         Only affects jobs with status ``'failed'``.
         """
-        if await self.driver.fetch(self.qbq.build_requeue_jobs_query(), ids):
-            # The statement-level trigger cannot tell UPDATEs apart, so it stays silent on them.
+        requeued = await self.driver.fetch(self.qbq.build_requeue_jobs_query(), ids)
+        # The statement-level trigger cannot tell UPDATEs apart, so it stays silent on them.
+        if requeued:
             await self.notify_table_changed("update")
 
     async def list_failed_jobs(
