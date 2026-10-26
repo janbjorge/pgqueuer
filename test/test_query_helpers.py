@@ -277,7 +277,7 @@ def simulate_enqueue(
 
 
 def test_scatter_matches_simulated_insert_semantics() -> None:
-    rng = random.Random(678)
+    rng = random.Random(678)  # noqa: S311 - seeded test data
     alphabet = ["a", "b", "c", None]
     for _ in range(1000):
         keys = [rng.choice(alphabet) for _ in range(rng.randint(0, 12))]

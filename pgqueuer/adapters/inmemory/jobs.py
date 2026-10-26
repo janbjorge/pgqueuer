@@ -44,7 +44,7 @@ def job_status_rank(status: JOB_STATUS) -> int:
     assert_never(status)
 
 
-class UniqueViolation(Exception):
+class UniqueViolation(Exception):  # noqa: N818 - mirrors psycopg.errors.UniqueViolation
     """Unique violation of the dedupe index, SQLSTATE 23505."""
 
     def __init__(self, constraint_name: str) -> None:

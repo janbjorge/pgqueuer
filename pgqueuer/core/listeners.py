@@ -77,7 +77,7 @@ async def initialize_notice_event_listener(
     def _process_payload(payload: str | bytes | bytearray) -> None:
         try:
             parsed = models.AnyEvent.model_validate_json(payload)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - logged; a bad event must not stop the listener
             logconfig.logger.critical(
                 "Error parsing notification payload: %s", payload, exc_info=exc
             )
@@ -85,7 +85,7 @@ async def initialize_notice_event_listener(
 
         try:
             event_handler(parsed)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - logged; a bad event must not stop the listener
             logconfig.logger.critical(
                 "Error while handling parsed event: %s", payload, exc_info=exc
             )

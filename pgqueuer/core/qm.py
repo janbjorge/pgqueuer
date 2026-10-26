@@ -140,12 +140,12 @@ class QueueManager:
             if self.jobs_logged:
                 try:
                     await self.queries.aggregate_logs()
-                except Exception:
+                except Exception:  # noqa: BLE001, S110 - retried on the next interval
                     pass
                 else:
                     self.jobs_logged = 0
             with suppress(TimeoutError):
-                async with asyncio.timeout(interval.total_seconds() * random.uniform(0.8, 1.2)):
+                async with asyncio.timeout(interval.total_seconds() * random.uniform(0.8, 1.2)):  # noqa: S311 - timing jitter, not crypto
                     await self.shutdown.wait()
 
     def get_context(self, job_id: types.JobId) -> models.Context:
@@ -593,7 +593,7 @@ class QueueManager:
                 self.job_context.pop(job.id, None)
                 try:
                     await self.queries.retry_job(job, retry_exc.delay, tbr)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - recorded as a job failure
                     await self.log_failure(job, executor, e, jbuff)
             except asyncio.CancelledError:
                 logconfig.logger.debug(
@@ -604,7 +604,7 @@ class QueueManager:
                 # shield: same cancel would otherwise abort the log write.
                 await asyncio.shield(jbuff.add((job, "canceled", None)))
                 raise
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - job code may raise anything; recorded as a failure
                 await self.log_failure(job, executor, e, jbuff)
             else:
                 logconfig.logger.debug(

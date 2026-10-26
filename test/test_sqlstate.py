@@ -35,7 +35,7 @@ class ConstraintDiag:
         self.constraint_name = constraint_name
 
 
-class PsycopgNamedUnique(Exception):
+class PsycopgNamedUnique(Exception):  # noqa: N818 - stands in for a driver error
     """psycopg exposes the constraint on ``diag``, which is not settable on the real error."""
 
     sqlstate = sqlstate.UNIQUE_VIOLATION
@@ -68,7 +68,7 @@ def test_code_of_returns_none_for_an_exception_without_a_sqlstate() -> None:
 def test_code_of_ignores_a_sqlstate_that_is_not_a_string() -> None:
     # asyncpg builds errors from server fields; a driver that leaves the
     # attribute unset must not be read as carrying a code.
-    class Unset(Exception):
+    class Unset(Exception):  # noqa: N818 - stands in for a driver error
         sqlstate = None
 
     assert sqlstate.code_of(Unset()) is None

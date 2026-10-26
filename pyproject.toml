@@ -124,6 +124,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["ALL"]
+# Lets BLE001 accept catch-alls that log the traceback through our logger.
+logger-objects = ["pgqueuer.core.logconfig.logger"]
 ignore = [
     "COM812", "ISC001",  # conflict with ruff format
     "D1",  # missing docstrings; follow-up, starting with D100/D104
@@ -140,10 +142,10 @@ ignore = [
     "CPY", "ERA", "TD", "FIX",
     # Temporary: rules with open violations, fixed and removed per PR (#1048).
     "ANN001", "ANN204", "ARG001", "ASYNC109", "ASYNC110", "ASYNC230", "B004", "B007", "B008",
-    "B017", "B023", "B905", "BLE001", "D205", "D415", "DTZ005", "N802", "N803",
-    "N812", "N818", "PERF102", "PGH004", "PLR1714", "PLW0603", "PT003", "PT006",
+    "B017", "B023", "B905", "D205", "D415", "DTZ005", "N803",
+    "N812", "PERF102", "PLR1714", "PLW0603", "PT003", "PT006",
     "PT007", "PT011", "PT012", "PT018", "PT028", "PTH109", "PTH123", "PYI034", "RUF005",
-    "RUF009", "RUF012", "RUF043", "RUF059", "S101", "S104", "S105", "S110", "S311", "S603",
+    "RUF009", "RUF012", "RUF043", "RUF059", "S101", "S104", "S603",
     "SLF001", "TRY002", "TRY004", "TRY301",
 ]
 
@@ -154,7 +156,7 @@ convention = "google"
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "typer.Option", "typer.Argument"]
 
 [tool.ruff.lint.per-file-ignores]
-"test/**" = ["S101", "ARG001", "SLF001", "PLC0415", "INP001", "ANN401", "N803", "N806", "D"]
+"test/**" = ["S101", "ARG001", "SLF001", "PLC0415", "INP001", "ANN401", "N803", "N806", "D", "BLE001"]
 "pgqueuer/adapters/cli/**" = ["T201"]
 # Optional extras: importing these at module level would make every install need them.
 "pgqueuer/adapters/connections.py" = ["PLC0415"]

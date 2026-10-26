@@ -130,10 +130,10 @@ class QueryBuilderEnvironment:
     ) -> Generator[str, None, None]:
         """ALTER statements for *durability*, or the configured level when None."""
         config = (self.settings.durability if durability is None else durability).config
-        yield f"""ALTER TABLE {self.qualified.queue_table} SET {"LOGGED" if config.queue_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.queue_table_log} SET {"LOGGED" if config.queue_log_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.statistics_table} SET {"LOGGED" if config.statistics_table == "" else "UNLOGGED"};"""  # noqa
-        yield f"""ALTER TABLE {self.qualified.schedules_table} SET {"LOGGED" if config.schedules_table == "" else "UNLOGGED"};"""  # noqa
+        yield f"""ALTER TABLE {self.qualified.queue_table} SET {"LOGGED" if config.queue_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.qualified.queue_table_log} SET {"LOGGED" if config.queue_log_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.qualified.statistics_table} SET {"LOGGED" if config.statistics_table == "" else "UNLOGGED"};"""  # noqa: E501
+        yield f"""ALTER TABLE {self.qualified.schedules_table} SET {"LOGGED" if config.schedules_table == "" else "UNLOGGED"};"""  # noqa: E501
 
     def build_optimize_autovacuum_query(self) -> str:
         return f"""ALTER TABLE {self.qualified.queue_table} SET (

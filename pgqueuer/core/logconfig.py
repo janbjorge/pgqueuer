@@ -24,7 +24,7 @@ class LogLevel(Enum):
 class ISOFormatter(logging.Formatter):
     """Outputs log timestamps in ISO 8601 format with timezone information."""
 
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802 - overrides logging.Formatter.formatTime
         return datetime.fromtimestamp(record.created).astimezone().isoformat()
 
 
