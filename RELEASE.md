@@ -102,6 +102,10 @@
   (attempt 47 with the defaults, attempt 14 with a multiplier of 10) the
   executor raised `OverflowError`, and the job ended as `exception` (or
   `failed` under `on_failure="hold"`) with attempts left in `max_attempts`.
+- The web dashboard's per-entrypoint throughput sparkline ends at the current
+  time. It ended at that entrypoint's latest bucket, so an entrypoint that went
+  quiet 40 minutes ago drew its last jobs in the newest slot, as if they had
+  just run, and rows on the Entrypoints page did not share a time axis.
 
 ## v1.6.0
 

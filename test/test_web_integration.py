@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.web.routes import create_web_router
 from pgqueuer.adapters.web.sse import Broadcaster
+from pgqueuer.core.insights import InsightsService
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain import models
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
@@ -219,3 +220,25 @@ async def test_insights_queries_shapes_against_db(apgdriver: AsyncpgDriver) -> N
     tables = await q.schema_info()
     assert len(tables) == 4
     assert await q.unaggregated_log_count() == 0
+
+
+async def test_entrypoint_sparkline_places_a_quiet_entrypoint_by_age(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    # 1 h window, 30 slots of 2 min: 48.5 min ago is slot 5, now is slot 29.
+    q = Queries(apgdriver)
+    log_table = qb.DBSettings().queue_table_log
+    await apgdriver.execute(
+        f"""INSERT INTO {log_table} (created, job_id, status, priority, entrypoint)
+        VALUES
+          (NOW() - interval '48 minutes 30 seconds', 1, 'successful', 0, 'quiet_ep'),
+          (NOW(), 2, 'successful', 0, 'busy_ep')
+        """,
+    )
+    sparklines = {
+        stat.entrypoint: stat.sparkline
+        for stat in await InsightsService(q).entrypoint_stats(timedelta(hours=1))
+    }
+    assert sparklines[QueueEntrypoint("busy_ep")][29] == 1
+    assert sparklines[QueueEntrypoint("quiet_ep")][5] == 1
+    assert sum(sparklines[QueueEntrypoint("quiet_ep")]) == 1
