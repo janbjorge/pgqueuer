@@ -156,11 +156,12 @@ async def test_requeue_of_a_failed_job_notifies_listeners(
         await listener.close()
 
 
-@known_bug("#1046")
 def test_sparkline_window_ends_now_like_the_overview_chart() -> None:
-    """A burst 50 minutes ago sits near the start of the last hour, not at its end."""
+    """A burst 45 minutes ago sits near the start of the last hour, not at its end."""
+    # 45 minutes puts the burst mid-slot; on a slot edge the clock read inside
+    # sparkline_buckets, a moment later, would tip it into the slot before.
     burst = models.ThroughputBucket(
-        bucket=models.utc_now() - timedelta(minutes=50),
+        bucket=models.utc_now() - timedelta(minutes=45),
         entrypoint=QueueEntrypoint("ep"),
         status="successful",
         count=3,
