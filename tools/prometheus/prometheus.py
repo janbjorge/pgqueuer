@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, Callable, Generator, Iterable
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from itertools import groupby
-from typing import TypeAlias
+from typing import Annotated, TypeAlias
 
 import asyncpg
 from fastapi import APIRouter, Depends, FastAPI, Request
@@ -102,7 +102,7 @@ def create_metrics_router() -> APIRouter:
     router = APIRouter()
 
     @router.get("/metrics", response_class=Response)
-    async def metrics(queries: Queries = Depends(get_queries)) -> Response:
+    async def metrics(queries: Annotated[Queries, Depends(get_queries)]) -> Response:
         queue_statistics = await queries.queue_size()
         log_statistics = await queries.log_statistics(
             limit=None,
