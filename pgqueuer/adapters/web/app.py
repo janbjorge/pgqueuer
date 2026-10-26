@@ -10,6 +10,8 @@ except ImportError as e:
         "fastapi is required for this module. Install with: pip install pgqueuer[web]"
     ) from e
 
+from pgqueuer.adapters.connections import create_asyncpg_pool
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
 from pgqueuer.adapters.persistence import queries
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
 from pgqueuer.adapters.web.routes import create_web_router
@@ -41,9 +43,6 @@ def create_web_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        from pgqueuer.adapters.connections import create_asyncpg_pool
-        from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
-
         async with create_asyncpg_pool(dsn=dsn, settings=connection_settings) as pool:
             driver = AsyncpgPoolDriver(pool)
             q = queries.Queries(driver, settings or DBSettings())
