@@ -38,7 +38,7 @@ def get_user_defined_functions(klass: object) -> list[str]:
     return [
         name
         for name, _ in inspect.getmembers(klass, inspect.isfunction)
-        if not name.startswith("__")
+        if name.startswith("build_")
     ]
 
 
