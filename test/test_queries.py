@@ -1018,7 +1018,6 @@ async def test_log_statistics(
     N: int,
 ) -> None:
     q = queries.Queries(apgdriver)
-    # N = 10
 
     # Enqueue jobs
     await q.enqueue(["placeholder"] * N, [None] * N, [0] * N)

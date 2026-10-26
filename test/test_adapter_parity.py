@@ -151,7 +151,7 @@ def as_id(value: object) -> JobId:
     return JobId(value[0])
 
 
-async def trace(q: Repository) -> list[object]:
+async def trace(q: Repository) -> list[object]:  # noqa: PLR0915 - one scripted scenario
     found: list[object] = []
 
     async def step(name: str, call: Awaitable[object]) -> object:
