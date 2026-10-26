@@ -62,7 +62,7 @@ async def test_job_fetch(
     for qm in qmpool:
 
         @qm.entrypoint("fetch")
-        async def fetch(context: Job) -> None:
+        async def fetch(context: Job, qm: QueueManager = qm) -> None:
             assert context.payload is not None
             assert qm.resources["test"] == "job_fetch"
             seen.append(int(context.payload))

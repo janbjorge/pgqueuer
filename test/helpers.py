@@ -79,7 +79,7 @@ class ShutdownCapable(Protocol):
 
 
 def mocked_job(
-    id: int | count[int] = count(),
+    id: int | count[int] = count(),  # noqa: B008 - one counter shared across calls
     priority: int = 1,
     created: datetime | None = None,
     heartbeat: datetime | None = None,

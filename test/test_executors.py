@@ -153,7 +153,7 @@ async def handler_positional_context(job: Job, ctx: Context) -> None: ...
 async def handler_positional_only_context(job: Job, ctx: Context, /) -> None: ...
 async def handler_string_context(job: Job, ctx: "Context") -> None: ...
 async def handler_context_first(ctx: Context) -> None: ...
-async def handler_unannotated_second(job: Job, ctx) -> None: ...  # type: ignore[no-untyped-def]
+async def handler_unannotated_second(job: Job, ctx) -> None: ...  # type: ignore[no-untyped-def]  # noqa: ANN001
 async def handler_unrelated_second(job: Job, config: dict[str, Any] | None = None) -> None: ...
 async def handler_keyword_only_context(job: Job, *, ctx: Context) -> None: ...
 async def handler_var_positional(job: Job, *args: object) -> None: ...
@@ -479,12 +479,12 @@ def test_is_async_callable_inspect_vs_call_attribute() -> None:
 
     # Plain async function: its own object is a coroutine function, its __call__ isn't.
     assert inspect.iscoroutinefunction(_async_fn) is True
-    assert inspect.iscoroutinefunction(getattr(_async_fn, "__call__", None)) is False
+    assert inspect.iscoroutinefunction(getattr(_async_fn, "__call__", None)) is False  # noqa: B004 - inspects __call__
 
     # Instance with async __call__: the instance itself is not a coroutine function
     # but its __call__ method is.
     assert inspect.iscoroutinefunction(async_inst) is False
-    assert inspect.iscoroutinefunction(getattr(async_inst, "__call__", None)) is True
+    assert inspect.iscoroutinefunction(getattr(async_inst, "__call__", None)) is True  # noqa: B004 - inspects __call__
 
     # Helper should classify both as async callables.
     assert is_async_callable(_async_fn) is True

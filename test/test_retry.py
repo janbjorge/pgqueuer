@@ -124,7 +124,7 @@ async def test_heartbeat_no_updates(apgdriver: db.Driver) -> None:
     )
 
     assert len(heartbeats) == 1
-    for k, v in heartbeats.items():
+    for v in heartbeats.values():
         assert len(v) == 2
         assert v[1] == v[0]
 
