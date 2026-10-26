@@ -140,7 +140,7 @@ concurrency-limit gating and a pick-logging CTE):
 WITH
 next_queued AS (        -- fresh work
     SELECT q.id FROM pgqueuer q
-    WHERE q.status='queued' AND q.execute_after < NOW()
+    WHERE q.status='queued' AND q.execute_after <= NOW()
     ORDER BY q.priority DESC, q.id ASC
     FOR UPDATE SKIP LOCKED LIMIT $1
 ),
