@@ -8,7 +8,7 @@ import os
 import sys
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum
 from typing import TYPE_CHECKING, TypeVar, assert_never
 
@@ -175,6 +175,11 @@ async def yield_queries(ctx: Context) -> AsyncGenerator[queries.Queries, None]:
 def tablefmt() -> str:
     """Tabulate table format; PGQUEUER_TABLEFMT preferred, legacy TABLEFMT honored."""
     return os.environ.get("PGQUEUER_TABLEFMT", os.environ.get("TABLEFMT", "pretty"))
+
+
+def local_time(value: datetime) -> str:
+    """Terminal-local time with its offset, whatever zone the driver returned."""
+    return value.astimezone().isoformat(sep=" ", timespec="seconds")
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
@@ -649,7 +654,7 @@ def failed(
                     j.id,
                     j.entrypoint,
                     j.attempts,
-                    j.created.strftime("%Y-%m-%d %H:%M:%S"),
+                    local_time(j.created),
                     len(j.payload) if j.payload else 0,
                 ]
                 for j in jobs
@@ -705,7 +710,7 @@ def stale(
                     j.id,
                     j.entrypoint,
                     j.queue_manager_id,
-                    j.heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
+                    local_time(j.heartbeat),
                     round(j.seconds_since_heartbeat),
                 ]
                 for j in jobs
@@ -747,8 +752,8 @@ def workers(
                 [
                     w.queue_manager_id,
                     w.active_jobs,
-                    w.oldest_heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
-                    w.newest_heartbeat.strftime("%Y-%m-%d %H:%M:%S"),
+                    local_time(w.oldest_heartbeat),
+                    local_time(w.newest_heartbeat),
                     ", ".join(w.entrypoints),
                 ]
                 for w in active
@@ -790,7 +795,7 @@ def backlog(
                 [
                     a.entrypoint,
                     a.queued_count,
-                    a.oldest_created.strftime("%Y-%m-%d %H:%M:%S"),
+                    local_time(a.oldest_created),
                     round(a.oldest_age_seconds),
                     round(a.avg_age_seconds),
                 ]
