@@ -189,6 +189,52 @@ class TestSparklineBuckets:
         buckets = sparkline_buckets(series, "ep", timedelta(hours=1))
         assert sum(buckets) == 5
 
+    @pytest.mark.parametrize(
+        ("age", "slot"),
+        [
+            (timedelta(seconds=-30), 29),
+            (timedelta(0), 29),
+            (timedelta(minutes=31), 14),
+            (timedelta(minutes=49), 5),
+        ],
+        ids=["ahead", "now", "31m", "49m"],
+    )
+    def test_bucket_lands_by_its_age(self, age: timedelta, slot: int) -> None:
+        # One entrypoint that went quiet: its last bucket is not "now". A negative
+        # age is a bucket ahead of this clock, as skew with the database gives.
+        series = [
+            models.ThroughputBucket(
+                bucket=models.utc_now() - age,
+                entrypoint=QueueEntrypoint("ep"),
+                status="successful",
+                count=4,
+            )
+        ]
+        buckets = sparkline_buckets(series, "ep", timedelta(hours=1))
+        assert buckets[slot] == 4
+        assert sum(buckets) == 4
+
+    def test_bucket_older_than_window_start_counts_in_first_slot(self) -> None:
+        # The timeseries truncates to the minute, so its oldest bucket can start
+        # up to a minute before the window does.
+        series = [
+            models.ThroughputBucket(
+                bucket=models.utc_now() - timedelta(hours=1, seconds=40),
+                entrypoint=QueueEntrypoint("ep"),
+                status="successful",
+                count=1,
+            ),
+            models.ThroughputBucket(
+                bucket=models.utc_now(),
+                entrypoint=QueueEntrypoint("ep"),
+                status="successful",
+                count=2,
+            ),
+        ]
+        buckets = sparkline_buckets(series, "ep", timedelta(hours=1))
+        assert buckets[0] == 1
+        assert buckets[29] == 2
+
 
 class TestQueueManagementService:
     async def test_requeue_flips_failed_only(self, queries: InMemoryQueries) -> None:
