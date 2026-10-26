@@ -48,7 +48,6 @@ class LogTableDown(InMemoryQueries):
         raise RuntimeError("log table down")
 
 
-@known_bug("#1042")
 async def test_queue_manager_keeps_job_ends_it_could_not_write() -> None:
     """A job end that never reached the log is left on the manager for the supervisor."""
     queries = LogTableDown(driver=InMemoryDriver())

@@ -422,6 +422,7 @@ class QueueManager:
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
                 repository=self.queries,
+                unwritten=self.unwritten_job_logs,
             ) as jbuff,
             buffers.HeartbeatBuffer(
                 # Flush will be mainly driven by timeouts, but allow flush if
