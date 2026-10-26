@@ -86,7 +86,6 @@ async def test_mcp_throughput_summary_counts_logs_not_yet_aggregated(
     ]
 
 
-@known_bug("#1044")
 async def test_eligible_probe_and_dequeue_agree_at_execute_after_now(dsn: str) -> None:
     """A job due exactly at NOW() is either eligible and dequeued, or neither."""
     connection = await asyncpg.connect(dsn)

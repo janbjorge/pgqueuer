@@ -351,7 +351,7 @@ class QueryQueueBuilder:
                         FROM {queue_table} candidate
                         WHERE candidate.entrypoint = available.entrypoint
                           AND candidate.status = 'queued'
-                          AND candidate.execute_after < NOW()
+                          AND candidate.execute_after <= NOW()
                         ORDER BY candidate.priority DESC, candidate.id ASC
                         LIMIT {batch}
                         FOR UPDATE SKIP LOCKED
@@ -374,7 +374,7 @@ class QueryQueueBuilder:
                             FROM {queue_table} candidate
                             WHERE candidate.entrypoint = available.entrypoint
                               AND candidate.status = 'queued'
-                              AND candidate.execute_after < NOW()
+                              AND candidate.execute_after <= NOW()
                             ORDER BY candidate.priority DESC, candidate.id ASC
                             LIMIT LEAST({batch}, available.remaining)
                         ) capped
@@ -383,7 +383,7 @@ class QueryQueueBuilder:
                             FROM {queue_table} target
                             WHERE target.id = capped.id
                               AND target.status = 'queued'
-                              AND target.execute_after < NOW()
+                              AND target.execute_after <= NOW()
                             FOR UPDATE OF target SKIP LOCKED
                         ) locked
                         ORDER BY locked.priority DESC, locked.id ASC
@@ -415,7 +415,7 @@ class QueryQueueBuilder:
                     FROM {queue_table} candidate
                     WHERE candidate.entrypoint = available.entrypoint
                       AND candidate.status = 'queued'
-                      AND candidate.execute_after < NOW()
+                      AND candidate.execute_after <= NOW()
                     ORDER BY candidate.priority DESC, candidate.id ASC
                     LIMIT {batch}
                     FOR UPDATE SKIP LOCKED
@@ -442,7 +442,7 @@ class QueryQueueBuilder:
                 WHERE stale.status = 'picked'
                   AND stale.entrypoint = ANY({eps})
                   AND stale.heartbeat < NOW() - {heartbeat}::interval
-                  AND stale.execute_after < NOW()
+                  AND stale.execute_after <= NOW()
                   {budget_and}
                 ORDER BY stale.priority DESC, stale.id ASC
                 FOR UPDATE SKIP LOCKED
