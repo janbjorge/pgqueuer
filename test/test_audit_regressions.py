@@ -37,10 +37,6 @@ from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.queries import Queries
 
 
-def known_bug(issue: str) -> pytest.MarkDecorator:
-    return pytest.mark.xfail(strict=True, reason=f"open defect, see {issue}")
-
-
 class LogTableDown(InMemoryQueries):
     """In-memory queries whose job-log writes always fail."""
 
@@ -175,7 +171,6 @@ def test_sparkline_window_ends_now_like_the_overview_chart() -> None:
     assert buckets == [0, 3, 0, 0, 0, 0]
 
 
-@known_bug("#1047")
 def test_inmemory_status_rank_follows_the_postgres_enum() -> None:
     """In-memory sorts statuses the way PostgreSQL sorts pgqueuer_status."""
     (status_enum,) = target(DBSettings()).enums

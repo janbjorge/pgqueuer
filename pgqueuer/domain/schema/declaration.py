@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import get_args
+
 from pgqueuer.domain.schema.model import ColumnRef, EnumType, Retired, Schema
 from pgqueuer.domain.schema.notify import notify_function, notify_trigger
 from pgqueuer.domain.schema.queue import queue_indexes, queue_table
@@ -7,7 +9,7 @@ from pgqueuer.domain.schema.queue_log import queue_log_indexes, queue_log_table
 from pgqueuer.domain.schema.schedules import schedules_table
 from pgqueuer.domain.schema.statistics import statistics_indexes, statistics_table
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import ColumnName, IndexName, TableName, TypeName
+from pgqueuer.domain.types import JOB_STATUS, ColumnName, IndexName, TableName, TypeName
 
 
 def target(settings: DBSettings) -> Schema:
@@ -32,15 +34,7 @@ def target(settings: DBSettings) -> Schema:
         enums=(
             EnumType(
                 name=TypeName(settings.queue_status_type),
-                labels=(
-                    "queued",
-                    "picked",
-                    "successful",
-                    "exception",
-                    "canceled",
-                    "deleted",
-                    "failed",
-                ),
+                labels=get_args(JOB_STATUS),
             ),
         ),
         tables=tuple(sorted(tables, key=lambda table: table.name)),
