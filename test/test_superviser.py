@@ -79,7 +79,7 @@ async def test_setup_shutdown_handlers_invalid_manager(
     class InvalidManager:
         pass
 
-    with pytest.raises(NotImplementedError, match="Unsupported instance type: .*InvalidManager.*"):
+    with pytest.raises(NotImplementedError, match=r"Unsupported instance type: .*InvalidManager.*"):
         supervisor.setup_shutdown_handlers(InvalidManager(), shutdown_event)
 
 

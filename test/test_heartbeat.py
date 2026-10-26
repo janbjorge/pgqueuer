@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -35,7 +35,7 @@ async def test_heartbeat_interval(interval: timedelta) -> None:
 
     async def callback(jids: list[JobId]) -> None:
         nonlocal callbacks
-        callbacks.append((jids, datetime.now()))
+        callbacks.append((jids, datetime.now(UTC)))
 
     async with (
         HeartbeatBuffer(
@@ -60,7 +60,7 @@ async def test_heartbeat_max_size(max_size: int) -> None:
 
     async def callback(jids: list[JobId]) -> None:
         nonlocal callbacks
-        callbacks.append((jids, datetime.now()))
+        callbacks.append((jids, datetime.now(UTC)))
 
     async with (
         HeartbeatBuffer(

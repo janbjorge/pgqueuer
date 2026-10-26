@@ -140,10 +140,6 @@ ignore = [
     "S608",  # SQL built from validated identifiers (qb.py); values are bind params
     "TC006",  # quoted cast types only help with TYPE_CHECKING imports; TC001-TC003 are ignored
     "CPY", "ERA", "TD", "FIX",
-    # Temporary: rules with open violations, fixed and removed per PR (#1048).
-    "ANN001", "ASYNC109", "ASYNC110", "B004", "B007", "B008", "B017", "B023", "B905", "DTZ005",
-    "PERF102", "PYI034", "RUF005", "RUF012", "RUF043", "RUF059", "S104", "S603", "TRY002",
-    "TRY301",
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -159,8 +155,28 @@ extend-immutable-calls = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# PT006/PT007: tuple vs list in parametrize is style-only churn.
-"test/**" = ["S101", "ARG001", "SLF001", "PLC0415", "INP001", "ANN401", "N803", "N806", "D", "BLE001", "PT006", "PT007"]
+# Tests: asserts, fakes and private access are the point; PT006/PT007 are style-only churn;
+# ASYNC109/ASYNC110 fakes and polling loops; S104/S603/TRY002/TRY301 deliberate literals and raises.
+"test/**" = [
+    "S101",
+    "ARG001",
+    "SLF001",
+    "PLC0415",
+    "INP001",
+    "ANN401",
+    "N803",
+    "N806",
+    "D",
+    "BLE001",
+    "PT006",
+    "PT007",
+    "ASYNC109",
+    "ASYNC110",
+    "S104",
+    "S603",
+    "TRY002",
+    "TRY301",
+]
 "pgqueuer/adapters/cli/**" = ["T201"]
 # Optional extras: importing these at module level would make every install need them.
 "pgqueuer/adapters/connections.py" = ["PLC0415"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
+from typing import ClassVar
 
 import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
@@ -58,7 +59,7 @@ async def call(dsn: str, tool: str) -> list[dict[str, object]]:
 
 
 class TestMcpToolOutput:
-    log_fields = {
+    log_fields: ClassVar[set[str]] = {
         "aggregated",
         "created",
         "entrypoint",
@@ -69,7 +70,7 @@ class TestMcpToolOutput:
         "traceback",
     }
 
-    fields = {
+    fields: ClassVar[dict[str, set[str]]] = {
         "queue_size": {"count", "entrypoint", "priority", "status"},
         "queue_table_info": {
             "attempts",

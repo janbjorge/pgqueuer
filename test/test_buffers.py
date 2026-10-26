@@ -25,8 +25,8 @@ class _FakeJobLogSink:
 
 
 def job_faker(
-    cnt: count[int] = count(),
-    queue_manager_id: uuid.UUID = uuid.uuid4(),
+    cnt: count[int] = count(),  # noqa: B008 - one counter shared across calls
+    queue_manager_id: uuid.UUID = uuid.uuid4(),  # noqa: B008 - one id shared across calls
 ) -> Job:
     return mocked_job(
         id=next(cnt),

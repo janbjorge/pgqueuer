@@ -6,6 +6,8 @@ absent (not None), so DSN parameters and libpq env vars keep full control.
 
 from __future__ import annotations
 
+from typing import Self
+
 import pytest
 
 from pgqueuer.adapters import connections
@@ -73,7 +75,7 @@ class TestCreateAsyncpgPoolForwarding:
         captured: dict[str, object] = {}
 
         class FakePool:
-            async def __aenter__(self) -> FakePool:
+            async def __aenter__(self) -> Self:
                 return self
 
             async def __aexit__(self, *exc: object) -> None:

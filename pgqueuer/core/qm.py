@@ -99,7 +99,7 @@ class QueueManager:
 
     async def listener_healthy(
         self,
-        timeout: timedelta = timedelta(seconds=10),
+        timeout: timedelta = timedelta(seconds=10),  # noqa: ASYNC109 - public API
     ) -> models.HealthCheckEvent:
         """Round-trip a NOTIFY/LISTEN probe. Raises ``FailingListenerError`` on timeout."""
         health_check_event_id = types.HealthCheckId(uuid.uuid4())

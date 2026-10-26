@@ -32,7 +32,7 @@ def is_async_callable(obj: object) -> bool:
         obj = obj.func
 
     return inspect.iscoroutinefunction(obj) or (
-        callable(obj) and inspect.iscoroutinefunction(getattr(obj, "__call__", None))
+        callable(obj) and inspect.iscoroutinefunction(getattr(obj, "__call__", None))  # noqa: B004 - inspects __call__
     )
 
 

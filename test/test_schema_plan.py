@@ -184,8 +184,8 @@ def test_retirement_drops_indexes_and_types_but_never_data() -> None:
     schema = target(settings)
     live = dataclasses.replace(
         schema,
-        indexes=schema.indexes
-        + (
+        indexes=(
+            *schema.indexes,
             Index(
                 name=IndexName(f"{settings.queue_table}_heartbeat_id_id1_idx"),
                 table=TableName(settings.queue_table),
@@ -193,8 +193,8 @@ def test_retirement_drops_indexes_and_types_but_never_data() -> None:
                 body=SqlExpression("USING btree (heartbeat, id DESC)"),
             ),
         ),
-        enums=schema.enums
-        + (
+        enums=(
+            *schema.enums,
             EnumType(
                 name=TypeName(settings.legacy_statistics_status_type),
                 labels=("exception", "successful"),
@@ -203,12 +203,10 @@ def test_retirement_drops_indexes_and_types_but_never_data() -> None:
         tables=tuple(
             dataclasses.replace(
                 entry,
-                columns=entry.columns
-                + (
+                columns=(
+                    *entry.columns,
                     Column(
-                        name=ColumnName("time_in_queue"),
-                        type=SqlType("interval"),
-                        not_null=True,
+                        name=ColumnName("time_in_queue"), type=SqlType("interval"), not_null=True
                     ),
                 ),
             )
@@ -597,7 +595,7 @@ def test_a_retired_index_is_dropped_only_when_present() -> None:
         body=SqlExpression("USING btree (heartbeat, id DESC)"),
     )
     live = dataclasses.replace(
-        schema, indexes=tuple(sorted(schema.indexes + (stale,), key=lambda entry: entry.name))
+        schema, indexes=tuple(sorted((*schema.indexes, stale), key=lambda entry: entry.name))
     )
 
     assert plan(live, schema, settings).statements == (f"DROP INDEX IF EXISTS {stale.name};",)

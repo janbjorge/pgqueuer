@@ -112,7 +112,7 @@ async def test_emit_stable_changed_insert(apgdriver: db.Driver) -> None:
         evnets.append,
     )
 
-    (job_id,) = await Queries(apgdriver).enqueue(
+    (_job_id,) = await Queries(apgdriver).enqueue(
         "test_emit_stable_changed_insert",
         None,
     )
