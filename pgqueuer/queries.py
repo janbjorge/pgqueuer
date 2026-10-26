@@ -1,4 +1,4 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.adapters.persistence.queries"""
+"""Backward-compatibility shim. Canonical: pgqueuer.adapters.persistence.queries."""
 
 from __future__ import annotations
 

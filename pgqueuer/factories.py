@@ -1,4 +1,4 @@
-"""Backward-compatibility shim. Canonical: pgqueuer.adapters.cli.factories"""
+"""Backward-compatibility shim. Canonical: pgqueuer.adapters.cli.factories."""
 
 from __future__ import annotations
 

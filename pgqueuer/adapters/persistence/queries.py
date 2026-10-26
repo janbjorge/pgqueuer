@@ -210,7 +210,6 @@ class Queries:
             table,
             column,
         )
-        assert len(rows) == 1
         (row,) = rows
         return cell(row, "exists", bool)
 
@@ -221,7 +220,6 @@ class Queries:
             table,
             index,
         )
-        assert len(rows) == 1
         (row,) = rows
         return cell(row, "exists", bool)
 
@@ -235,7 +233,6 @@ class Queries:
             self.qbe.build_has_table_query(),
             table,
         )
-        assert len(rows) == 1
         (row,) = rows
         return cell(row, "exists", bool)
 
@@ -244,7 +241,6 @@ class Queries:
             self.qbe.build_has_function_query(),
             function,
         )
-        assert len(rows) == 1
         (row,) = rows
         return cell(row, "exists", bool)
 
@@ -253,7 +249,6 @@ class Queries:
             self.qbe.build_has_trigger_query(),
             trigger,
         )
-        assert len(rows) == 1
         (row,) = rows
         return cell(row, "exists", bool)
 
@@ -391,7 +386,7 @@ class Queries:
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
-        if on_conflict == "raise" or on_conflict == "update_priority":
+        if on_conflict == "raise" or on_conflict == "update_priority":  # noqa: PLR1714 - mypy narrows ==, not in
             return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 
@@ -918,7 +913,7 @@ class SyncQueries:
 
         if on_conflict == "skip":
             return query_helpers.scatter_ids_by_ordinal(rows, len(normed_params.entrypoint))
-        if on_conflict == "raise" or on_conflict == "update_priority":
+        if on_conflict == "raise" or on_conflict == "update_priority":  # noqa: PLR1714 - mypy narrows ==, not in
             return [types.JobId(cell(row, "id", int)) for row in rows]
         assert_never(on_conflict)
 

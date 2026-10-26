@@ -24,5 +24,5 @@ def get_management(request: Request) -> QueueManagementService:
 def get_broadcaster(request: Request) -> Broadcaster:
     broadcaster: object = request.app.state.pgq_broadcaster
     if not isinstance(broadcaster, Broadcaster):
-        raise RuntimeError("app.state.pgq_broadcaster is not a Broadcaster")
+        raise TypeError("app.state.pgq_broadcaster is not a Broadcaster")
     return broadcaster

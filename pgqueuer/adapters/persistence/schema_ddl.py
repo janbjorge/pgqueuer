@@ -21,7 +21,7 @@ from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import IndexName, TableName
 
 try:
-    from pgqueuer._version import version as VERSION
+    from pgqueuer._version import version as VERSION  # noqa: N812 - module constant
 except ImportError:  # Source checkout without a build; the header says so.
     VERSION = "0.0.0"
 
