@@ -273,6 +273,7 @@ async def test_retry_write_stops_on_shutdown_and_leaves_the_job_picked(
             dequeue_timeout=timedelta(seconds=1),
         )
 
+    assert isinstance(pq.qm.queries, InMemoryQueries)
     job = await pq.qm.queries.queue_job_by_id(job_id)
     assert job is not None
     assert job.status == "picked"

@@ -553,13 +553,14 @@ class QueueManager:
         while True:
             try:
                 await self.queries.retry_job(job, delay, traceback_record)
-                return
             except Exception:
                 logconfig.logger.exception(
                     "Retry write failed for entrypoint/job-id: %s/%s",
                     job.entrypoint,
                     job.id,
                 )
+            else:
+                return
             if self.shutdown.is_set():
                 return
             with suppress(TimeoutError):
