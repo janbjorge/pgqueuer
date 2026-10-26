@@ -106,6 +106,11 @@
   time. It ended at that entrypoint's latest bucket, so an entrypoint that went
   quiet 40 minutes ago drew its last jobs in the newest slot, as if they had
   just run, and rows on the Entrypoints page did not share a time axis.
+- `pgq failed`, `pgq stale`, `pgq workers` and `pgq backlog` print their
+  times in the terminal's local zone with the offset, like `pgq dashboard` and
+  `pgq schedules`. They printed the driver's wall clock with no zone: UTC on
+  asyncpg, the session `TimeZone` on psycopg, so the same row read hours apart
+  depending on the driver. `--json` output is unchanged.
 
 ## v1.6.0
 
