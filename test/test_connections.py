@@ -172,7 +172,8 @@ class TestPsycopgPoolIntegration:
             assert conn.autocommit
             cursor = await conn.execute("SELECT 1")
             row = await cursor.fetchone()
-            assert row is not None and row[0] == 1
+            assert row is not None
+            assert row[0] == 1
 
     async def test_application_name_applied_when_set(self, dsn: str) -> None:
         settings = ConnectionSettings(application_name="pgq-psycopg-test")
@@ -182,7 +183,8 @@ class TestPsycopgPoolIntegration:
         ):
             cursor = await conn.execute("SELECT current_setting('application_name')")
             row = await cursor.fetchone()
-        assert row is not None and row[0] == "pgq-psycopg-test"
+        assert row is not None
+        assert row[0] == "pgq-psycopg-test"
 
     async def test_dsn_application_name_not_clobbered(self, dsn: str) -> None:
         async with (
@@ -193,12 +195,14 @@ class TestPsycopgPoolIntegration:
         ):
             cursor = await conn.execute("SELECT current_setting('application_name')")
             row = await cursor.fetchone()
-        assert row is not None and row[0] == "weird"
+        assert row is not None
+        assert row[0] == "weird"
 
     async def test_single_connection_via_connect_psycopg(self, dsn: str) -> None:
         async with connections.connect_psycopg(dsn=dsn) as connection:
             assert connection.autocommit  # PsycopgDriver requires autocommit.
             cursor = await connection.execute("SELECT 1")
             row = await cursor.fetchone()
-            assert row is not None and row[0] == 1
+            assert row is not None
+            assert row[0] == 1
         assert connection.closed

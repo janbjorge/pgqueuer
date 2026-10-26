@@ -123,7 +123,8 @@ async def test_entrypoint_executor_forward_reference_with_flag(apgdriver: Driver
     assert executor.parameters.accepts_context
 
     await executor.execute(job, job_context)
-    assert contexts and contexts[0] is job_context
+    assert contexts
+    assert contexts[0] is job_context
 
 
 async def test_entrypoint_executor_without_context_detection(apgdriver: Driver) -> None:

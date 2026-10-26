@@ -83,8 +83,8 @@ async def test_job_fetch(
 
 async def test_pick_local_entrypoints(
     apgdriver: db.Driver,
-    N: int = 100,
 ) -> None:
+    N = 100
     q = Queries(apgdriver)
     qm = QueueManager(Queries(apgdriver), resources={"test": "pick_local"})
     pikced_by = list[str]()
@@ -114,8 +114,8 @@ async def test_pick_local_entrypoints(
 
 async def test_pick_set_queue_manager_id(
     apgdriver: db.Driver,
-    N: int = 100,
 ) -> None:
+    N = 100
     q = Queries(apgdriver)
     qm = QueueManager(Queries(apgdriver), resources={"test": "pick_qm_id"})
     qmids = set[uuid.UUID]()

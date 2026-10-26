@@ -23,25 +23,25 @@ from pgqueuer.types import QueueExecutionMode
 from test.helpers import mocked_job
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 async def queue_manager(apgdriver: AsyncpgDriver) -> QueueManager:
     """Fixture to instantiate QueueManager."""
     return QueueManager(Queries(apgdriver))
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 async def scheduler_manager(apgdriver: AsyncpgDriver) -> SchedulerManager:
     """Fixture to instantiate SchedulerManager."""
     return SchedulerManager(Queries(apgdriver))
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 async def pg_queuer(apgdriver: AsyncpgDriver) -> PgQueuer:
     """Fixture to instantiate PgQueuer."""
     return PgQueuer(connection=apgdriver)
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def shutdown_event() -> asyncio.Event:
     """Fixture to create a shutdown asyncio.Event."""
     return asyncio.Event()
