@@ -29,6 +29,8 @@ class TimedOverflowBuffer(Generic[T]):
     timeout: timedelta = dataclasses.field(
         default_factory=lambda: timedelta(seconds=0.1),
     )
+    # Receives the items the shutdown flush could not write.
+    unwritten: list[T] = dataclasses.field(default_factory=list)
 
     events: asyncio.Queue[T] = dataclasses.field(
         init=False,
@@ -95,6 +97,7 @@ class TimedOverflowBuffer(Generic[T]):
                 for item in items:
                     self.events.put_nowait(item)
                 await asyncio.sleep(0)
+        self.unwritten.extend(self.drain_queue())
 
     def drain_queue(self) -> list[T]:
         items: list[T] = []
