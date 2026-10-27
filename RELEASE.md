@@ -111,6 +111,10 @@
   `pgq schedules`. They printed the driver's wall clock with no zone: UTC on
   asyncpg, the session `TimeZone` on psycopg, so the same row read hours apart
   depending on the driver. `--json` output is unchanged.
+- A failed `retry_job` write is retried while the worker keeps the job
+  `picked` and heartbeating. Shutdown before the write lands leaves the row
+  `picked` for stale recovery, and `attempts` stays where it was. One dropped
+  statement no longer records the job as `exception` or `failed`.
 
 ## v1.6.0
 
