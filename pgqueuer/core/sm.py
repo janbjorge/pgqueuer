@@ -136,7 +136,9 @@ class SchedulerManager:
                         )
                     )
 
-                leeway = timedelta(seconds=1)
+                # Under the one-second cron resolution: a full second of slack woke the
+                # loop after the next tick of an every-second schedule had passed.
+                leeway = timedelta(milliseconds=100)
                 wait = (
                     min(x.next_in() for x in self.registry.values())
                     if self.registry

@@ -121,6 +121,10 @@
   it and the other jobs in that flush `picked` until stale recovery ran them
   again, and a `RetryRequested` reason with a NUL kept its retry write failing
   until shutdown.
+- An every-second schedule (`* * * * * *`) runs every second. `SchedulerManager`
+  slept a full second past the next due time, so the following tick had already
+  passed when it woke and was skipped: the schedule ran every two seconds. The
+  wait past the due time is now 100 ms, under the one-second cron resolution.
 
 ## v1.6.0
 
