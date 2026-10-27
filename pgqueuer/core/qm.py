@@ -409,6 +409,8 @@ class QueueManager:
         ``pgqueuer_log`` into ``pgqueuer_statistics`` on a timer instead of only
         on stats reads; pass ``timedelta(0)`` to disable (pure on-demand).
         """
+        # Drop the previous run's ends before anything here can raise.
+        self.unwritten_job_logs = []
         await self.verify_structure()
 
         # 0 has always meant unlimited; keep unlimited as None all the way to
