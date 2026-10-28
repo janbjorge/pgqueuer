@@ -535,6 +535,35 @@ async def test_two_second_schedule_keeps_its_cadence_postgres(apgdriver: Asyncpg
     assert span > 4.5, span
 
 
+async def fetches_in_two_seconds(scheduler: SchedulerManager, mocker: Mock) -> int:
+    """Run *scheduler* for 2 s and count its fetch_schedule calls."""
+    fetch = mocker.spy(scheduler.queries, "fetch_schedule")
+    await asyncio.gather(
+        scheduler.run(),
+        shutdown_scheduler_after(scheduler, timedelta(seconds=2)),
+    )
+    count: int = fetch.call_count
+    return count
+
+
+async def test_empty_scheduler_polls_once_a_second(
+    scheduler: SchedulerManager,
+    mocker: Mock,
+) -> None:
+    """With nothing registered, run() fetches about once a second, not every 100 ms."""
+    count = await fetches_in_two_seconds(scheduler, mocker)
+    assert count <= 3, count
+
+
+async def test_empty_scheduler_polls_once_a_second_postgres(
+    apgdriver: AsyncpgDriver,
+    mocker: Mock,
+) -> None:
+    """With nothing registered, run() fetches about once a second, not every 100 ms."""
+    count = await fetches_in_two_seconds(SchedulerManager(Queries(apgdriver)), mocker)
+    assert count <= 3, count
+
+
 # ============================================================================
 # INTEGRATION TESTS FOR ISSUE #536: Race Condition in Scheduler
 # ============================================================================
