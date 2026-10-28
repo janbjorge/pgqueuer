@@ -39,8 +39,17 @@ def prometheus_format(
         >>> prometheus_format("queue_size", {"entrypoint": "send_email"}, 42)
         'queue_size{entrypoint="send_email"} 42'
     """
-    label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
+    label_parts = ",".join(f'{k}="{_escape_label_value(v)}"' for k, v in labels.items())
     return f"{metric_name}{{{label_parts}}} {value}"
+
+
+def _escape_label_value(value: str) -> str:
+    """Escape a label value as the text exposition format requires.
+
+    A backslash, double quote or newline in a value (an entrypoint name, say)
+    would otherwise end the value early or split the line.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def aggregated_queue_statistics(

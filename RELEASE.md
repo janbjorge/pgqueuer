@@ -125,6 +125,10 @@
   slept a full second past the next due time, so the following tick had already
   passed when it woke and was skipped: the schedule ran every two seconds. The
   wait past the due time is now 100 ms, under the one-second cron resolution.
+- Prometheus label values are escaped. An entrypoint name with a double quote,
+  backslash or newline was written into the `entrypoint` label as is, so in the
+  `/metrics` output a quote ended the value early, a backslash changed it, and a
+  newline split the sample line so the response no longer parsed.
 
 ## v1.6.0
 
