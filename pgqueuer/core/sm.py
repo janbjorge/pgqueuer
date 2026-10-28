@@ -142,7 +142,7 @@ class SchedulerManager:
                 wait = (
                     min(x.next_in() for x in self.registry.values())
                     if self.registry
-                    else timedelta(seconds=0)
+                    else timedelta(seconds=1)
                 )
 
                 with suppress(TimeoutError):
