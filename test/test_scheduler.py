@@ -490,6 +490,51 @@ async def test_clean_old_keeps_due_firing_postgres(apgdriver: AsyncpgDriver) -> 
     await assert_clean_old_keeps_due_schedule(queries, backdate)
 
 
+async def span_of_firings(
+    queries: InMemoryQueries | Queries,
+    expression: str,
+    firings: int = 4,
+) -> float:
+    """Run a scheduler until *expression* fired *firings* times; seconds from first to last."""
+    scheduler = SchedulerManager(queries)
+    fired: list[float] = []
+
+    @scheduler.schedule("tick", expression)
+    async def tick(schedule: Schedule) -> None:
+        fired.append(asyncio.get_running_loop().time())
+        if len(fired) == firings:
+            scheduler.shutdown.set()
+
+    await asyncio.wait_for(scheduler.run(), timeout=15)
+    return fired[-1] - fired[0]
+
+
+async def test_every_second_schedule_fires_every_second(queries: InMemoryQueries) -> None:
+    """Four firings of '* * * * * *' take about 3 s, not 6 s (every other tick skipped)."""
+    span = await span_of_firings(queries, "* * * * * *")
+    assert span < 4.5, span
+
+
+async def test_every_second_schedule_fires_every_second_postgres(
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """Four firings of '* * * * * *' take about 3 s, not 6 s (every other tick skipped)."""
+    span = await span_of_firings(Queries(apgdriver), "* * * * * *")
+    assert span < 4.5, span
+
+
+async def test_two_second_schedule_keeps_its_cadence(queries: InMemoryQueries) -> None:
+    """Four firings of '* * * * * */2' still take about 6 s, so it does not fire more often."""
+    span = await span_of_firings(queries, "* * * * * */2")
+    assert span > 4.5, span
+
+
+async def test_two_second_schedule_keeps_its_cadence_postgres(apgdriver: AsyncpgDriver) -> None:
+    """Four firings of '* * * * * */2' still take about 6 s, so it does not fire more often."""
+    span = await span_of_firings(Queries(apgdriver), "* * * * * */2")
+    assert span > 4.5, span
+
+
 # ============================================================================
 # INTEGRATION TESTS FOR ISSUE #536: Race Condition in Scheduler
 # ============================================================================
