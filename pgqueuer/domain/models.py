@@ -309,20 +309,6 @@ class OverviewSnapshot(BaseModel):
     exceptions_recent: int
 
 
-def _escape_nul(value: object) -> object:
-    """Spell out NUL characters in *value*, in strings nested in dicts and lists too.
-
-    PostgreSQL's jsonb refuses a NUL, so one in a record fails the whole log write.
-    """
-    if isinstance(value, str):
-        return value.replace("\x00", "\\x00")
-    if isinstance(value, dict):
-        return {_escape_nul(key): _escape_nul(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(_escape_nul(item) for item in value)
-    return value
-
-
 class TracebackRecord(BaseModel):
     job_id: JobId
     timestamp: datetime
@@ -333,8 +319,18 @@ class TracebackRecord(BaseModel):
 
     @field_validator("exception_message", "traceback", "additional_context", mode="after")
     @classmethod
-    def _without_nul(cls, value: object) -> object:
-        return _escape_nul(value)
+    def escape_nul(cls, value: object) -> object:
+        """Spell out NUL in strings, including ones nested in dicts, lists, and tuples.
+
+        PostgreSQL's jsonb refuses a NUL, so one in a record fails the whole log write.
+        """
+        if isinstance(value, str):
+            return value.replace("\x00", "\\x00")
+        if isinstance(value, dict):
+            return {cls.escape_nul(key): cls.escape_nul(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return type(value)(cls.escape_nul(item) for item in value)
+        return value
 
     @classmethod
     def from_exception(
