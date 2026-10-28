@@ -282,6 +282,48 @@ async def test_log_rows_with_a_traceback_read_back(
         assert from_history.traceback == record
 
 
+@pytest.mark.parametrize("driver", drivers())
+async def test_a_nul_in_an_exception_message_is_logged(
+    dsn: str,
+    driver: Callable[..., AbstractAsyncContextManager[Driver]],
+) -> None:
+    """jsonb refuses a NUL, so the traceback record spells it out instead of failing the write."""
+    async with driver(dsn) as d:
+        q = Queries(d)
+        await q.clear_queue()
+        await q.clear_queue_log()
+        await q.enqueue(["nul_ep", "nul_ep", "nul_ep"], [None, None, None], [0, 0, 0])
+        jobs = await q.dequeue(
+            batch_size=3,
+            entrypoints={QueueEntrypoint("nul_ep"): EntrypointExecutionParameter(0)},
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
+            global_concurrency_limit=None,
+            heartbeat_timeout=timedelta(seconds=30),
+        )
+        failed, ok, retried = jobs
+        context: dict[str, object] = {"reason": "bad\x00line", "nested": ["a\x00b"]}
+        # one batch: the record with a NUL must not take the other job's end down with it
+        record = TracebackRecord.from_exception(ValueError("a\x00b"), failed.id)
+        await q.log_jobs([(failed, "exception", record), (ok, "successful", None)])
+        await q.retry_job(
+            retried,
+            timedelta(0),
+            TracebackRecord.from_exception(ValueError("c\x00d"), retried.id, context),
+        )
+
+        logs = await q.queue_log()
+        assert (ok.id, "successful") in {(log.job_id, log.status) for log in logs}
+        logged = {log.job_id: log.traceback for log in logs if log.traceback}
+        assert logged[failed.id] is not None
+        assert logged[failed.id].exception_message == "a\\x00b"
+        assert logged[retried.id] is not None
+        assert logged[retried.id].exception_message == "c\\x00d"
+        assert logged[retried.id].additional_context == {
+            "reason": "bad\\x00line",
+            "nested": ["a\\x00b"],
+        }
+
+
 async def test_recovery_after_failed_sql_sync(
     pgdriver: SyncDriver,
 ) -> None:

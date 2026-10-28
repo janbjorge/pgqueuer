@@ -115,6 +115,12 @@
   `picked` and heartbeating. Shutdown before the write lands leaves the row
   `picked` for stale recovery, and `attempts` stays where it was. One dropped
   statement no longer records the job as `exception` or `failed`.
+- A NUL character in a failing job's exception message, traceback or
+  `additional_context` is written as the text `\x00`. PostgreSQL's `jsonb`
+  rejects `\u0000`, so one such job failed the whole `log_jobs` batch, leaving
+  it and the other jobs in that flush `picked` until stale recovery ran them
+  again, and a `RetryRequested` reason with a NUL kept its retry write failing
+  until shutdown.
 
 ## v1.6.0
 

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple
 
 import anyio
-from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel
+from pydantic import AwareDatetime, BaseModel, BeforeValidator, Field, RootModel, field_validator
 from pydantic_core import from_json
 
 from pgqueuer.domain.types import (
@@ -309,6 +309,20 @@ class OverviewSnapshot(BaseModel):
     exceptions_recent: int
 
 
+def _escape_nul(value: object) -> object:
+    """Spell out NUL characters in *value*, in strings nested in dicts and lists too.
+
+    PostgreSQL's jsonb refuses a NUL, so one in a record fails the whole log write.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "\\x00")
+    if isinstance(value, dict):
+        return {_escape_nul(key): _escape_nul(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return type(value)(_escape_nul(item) for item in value)
+    return value
+
+
 class TracebackRecord(BaseModel):
     job_id: JobId
     timestamp: datetime
@@ -316,6 +330,11 @@ class TracebackRecord(BaseModel):
     exception_message: str
     traceback: str
     additional_context: dict[str, object] | None
+
+    @field_validator("exception_message", "traceback", "additional_context", mode="after")
+    @classmethod
+    def _without_nul(cls, value: object) -> object:
+        return _escape_nul(value)
 
     @classmethod
     def from_exception(

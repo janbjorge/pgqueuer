@@ -67,3 +67,28 @@ def test_default_additional_context() -> None:
     except Exception as exc:
         record: TracebackRecord = TracebackRecord.from_exception(exc, job_id)
     assert record.additional_context is None
+
+
+def test_nul_is_spelled_out_wherever_it_appears() -> None:
+    """jsonb cannot hold a NUL, so every string a record carries is free of it."""
+    context: dict[str, object] = {
+        "reason": "a\x00b",
+        "nested": {"k\x00": ["c\x00d"]},
+        "pair": ("e\x00f", 2),
+        "n": 1,
+    }
+    try:
+        raise ValueError("x\x00y")
+    except Exception as exc:
+        record = TracebackRecord.from_exception(exc, JobId(1), context)
+
+    assert record.exception_message == "x\\x00y"
+    assert "\x00" not in record.traceback
+    assert "x\\x00y" in record.traceback
+    assert record.additional_context == {
+        "reason": "a\\x00b",
+        "nested": {"k\\x00": ["c\\x00d"]},
+        "pair": ("e\\x00f", 2),
+        "n": 1,
+    }
+    assert "\\u0000" not in record.model_dump_json()
