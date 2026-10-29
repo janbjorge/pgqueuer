@@ -16,6 +16,7 @@ from pgqueuer.ports.repository import InsightsRepositoryPort, QueueRepositoryPor
 DEFAULT_WINDOW = timedelta(hours=1)
 MAX_WINDOW = timedelta(hours=24)
 DEFAULT_STALE_THRESHOLD = timedelta(minutes=5)
+DEFAULT_BUCKET = timedelta(minutes=1)
 
 
 def clamp_window(last: timedelta | None) -> timedelta:
@@ -23,6 +24,19 @@ def clamp_window(last: timedelta | None) -> timedelta:
     if last is None:
         return DEFAULT_WINDOW
     return max(min(last, MAX_WINDOW), timedelta(seconds=1))
+
+
+def check_bucket(bucket: timedelta | None) -> timedelta:
+    """A timeseries bucket; None means DEFAULT_BUCKET.
+
+    Statistics rows are per second, so a bucket must be a whole number of seconds,
+    or a second's count would be split between two buckets.
+    """
+    if bucket is None:
+        return DEFAULT_BUCKET
+    if bucket < timedelta(seconds=1) or bucket % timedelta(seconds=1):
+        raise ValueError(f"bucket must be a whole number of seconds, at least one: {bucket!r}")
+    return bucket
 
 
 @dataclasses.dataclass
@@ -52,8 +66,13 @@ class InsightsService:
     async def throughput_timeseries(
         self,
         last: timedelta | None = None,
+        bucket: timedelta | None = None,
     ) -> list[models.ThroughputBucket]:
-        return await self.repository.throughput_timeseries(clamp_window(last))
+        """Processed-job counts per *bucket* (a minute by default) within the *last* window."""
+        if bucket is None:
+            # A repository written before *bucket* existed still serves the default.
+            return await self.repository.throughput_timeseries(clamp_window(last))
+        return await self.repository.throughput_timeseries(clamp_window(last), check_bucket(bucket))
 
     async def active_workers(self) -> list[models.ActiveWorker]:
         return await self.repository.active_workers()

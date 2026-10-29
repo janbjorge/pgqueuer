@@ -1019,8 +1019,9 @@ class QueryQueueBuilder:
         """
 
     def build_throughput_timeseries_query(self) -> str:
+        # Buckets start at a fixed UTC origin, so a bucket of a minute matches the minute.
         return f"""SELECT
-            DATE_TRUNC('minute', created) AS bucket,
+            date_bin($2::interval, created, TIMESTAMPTZ '2001-01-01 00:00:00+00') AS bucket,
             entrypoint,
             status,
             SUM(count) AS count

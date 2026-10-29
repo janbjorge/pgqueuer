@@ -8,10 +8,12 @@ import pytest
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.adapters.inmemory.logs import percentile_cont
 from pgqueuer.core.insights import (
+    DEFAULT_BUCKET,
     DEFAULT_WINDOW,
     MAX_WINDOW,
     InsightsService,
     QueueManagementService,
+    check_bucket,
     clamp_window,
     sparkline_buckets,
 )
@@ -47,6 +49,49 @@ class TestPercentileCont:
     def test_matches_postgres_definition(self) -> None:
         # percentile_cont(0.95) over [1..4]: rank = 3 * 0.95 = 2.85 -> 3 + 0.85
         assert percentile_cont([1.0, 2.0, 3.0, 4.0], 0.95) == pytest.approx(3.85)
+
+
+class TestCheckBucket:
+    def test_none_is_one_minute(self) -> None:
+        assert check_bucket(None) == DEFAULT_BUCKET == timedelta(minutes=1)
+
+    @pytest.mark.parametrize(
+        "bucket",
+        (timedelta(seconds=1), timedelta(minutes=5), timedelta(days=1)),
+    )
+    def test_whole_seconds_pass_through(self, bucket: timedelta) -> None:
+        assert check_bucket(bucket) == bucket
+
+    @pytest.mark.parametrize(
+        "bucket",
+        (timedelta(0), timedelta(seconds=-60), timedelta(milliseconds=500), timedelta(seconds=1.5)),
+    )
+    def test_rejects_less_than_a_second_or_part_seconds(self, bucket: timedelta) -> None:
+        with pytest.raises(ValueError, match="whole number of seconds"):
+            check_bucket(bucket)
+
+    async def test_service_passes_bucket_to_repository(self, queries: InMemoryQueries) -> None:
+        await queries.enqueue(["ep"], [None], [0])
+        await dequeue_all(queries, "ep")
+        service = InsightsService(queries)
+        with pytest.raises(ValueError, match="whole number of seconds"):
+            await service.throughput_timeseries(bucket=timedelta(milliseconds=10))
+        hourly = await service.throughput_timeseries(bucket=timedelta(hours=1))
+        assert all(row.bucket.minute == row.bucket.second == 0 for row in hourly)
+
+    async def test_default_bucket_keeps_old_repository_signature(
+        self, queries: InMemoryQueries
+    ) -> None:
+        """A repository without the *bucket* parameter still serves the default bucket."""
+
+        class OldRepository:
+            async def throughput_timeseries(self, last: timedelta) -> list[models.ThroughputBucket]:
+                return await queries.throughput_timeseries(last)
+
+        await queries.enqueue(["ep"], [None], [0])
+        service = InsightsService(OldRepository())  # type: ignore[arg-type]
+        (row,) = await service.throughput_timeseries()
+        assert row.count == 1
 
 
 class TestClampWindow:

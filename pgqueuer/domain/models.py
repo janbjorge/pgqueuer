@@ -241,7 +241,7 @@ class ThroughputStats(BaseModel):
 
 
 class ThroughputBucket(BaseModel):
-    """Per-minute processed-job count for one (entrypoint, status)."""
+    """Processed-job count for one (entrypoint, status) in one time bucket."""
 
     bucket: AwareDatetime
     entrypoint: QueueEntrypoint

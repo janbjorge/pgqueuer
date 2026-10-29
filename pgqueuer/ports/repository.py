@@ -193,6 +193,7 @@ class InsightsRepositoryPort(Protocol):
     async def throughput_timeseries(
         self,
         last: timedelta,
+        bucket: timedelta = timedelta(minutes=1),
     ) -> list[models.ThroughputBucket]: ...
 
     async def log_statistics(
