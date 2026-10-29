@@ -151,14 +151,14 @@ will put back.
 
 ## PostgreSQL JIT
 
-PostgreSQL JIT-compiles a statement when its estimated cost exceeds
-`jit_above_cost` (default `100000`). It decides from the estimate alone, and
-it does not reuse the compiled code on the next execution.
+PostgreSQL compiles a statement when its estimated cost is above
+`jit_above_cost` (default `100000`). The compiled code is not reused, so the
+next poll compiles it again.
 
-A dequeue that uses a per-entrypoint `concurrency_limit` is estimated as if it
-read much of the queued backlog, even though it returns at most `batch_size`
-rows. Once that estimate crosses the threshold, every poll pays to compile.
-On a busy queue that is a steady slice of a CPU core until the backlog drains.
+With a per-entrypoint `concurrency_limit`, the dequeue estimate grows with
+the number of queued rows. The statement returns at most `batch_size` rows.
+Past that threshold, each poll compiles again, which uses database CPU until
+the backlog drops.
 
 Turn JIT off for the role your workers connect as, then reconnect:
 
@@ -166,8 +166,8 @@ Turn JIT off for the role your workers connect as, then reconnect:
 ALTER ROLE pgqueuer_app SET jit = off;
 ```
 
-Raising `jit_above_cost` has the same effect. The dequeue is a short index
-probe; compiling it does not make it faster.
+Raising `jit_above_cost` has the same effect. Compiling this dequeue does not
+make it faster.
 
 ## Quick-reference checklist
 
@@ -177,4 +177,4 @@ probe; compiling it does not make it faster.
 - [ ] Set `heartbeat_timeout` on `pgq.run()` to recover from worker crashes automatically
 - [ ] Add `--shutdown-on-listener-failure` when running behind a PgBouncer pool
 - [ ] Monitor `pgqueuer_log` table size and prune if needed
-- [ ] If entrypoints set `concurrency_limit` and the queue can backlog, set `jit = off` for the worker role
+- [ ] With `concurrency_limit` and a large backlog, set `jit = off` for the worker role
