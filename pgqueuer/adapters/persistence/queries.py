@@ -721,14 +721,16 @@ class Queries:
     async def throughput_timeseries(
         self,
         last: timedelta,
+        bucket: timedelta = timedelta(minutes=1),
     ) -> list[models.ThroughputBucket]:
-        """Per-minute processed-job counts within the *last* window."""
+        """Processed-job counts per *bucket* (a minute by default) within the *last* window."""
         await self.driver.execute(self.qbq.build_aggregate_log_data_to_statistics_query())
         return [
             models.ThroughputBucket.model_validate(row)
             for row in await self.driver.fetch(
                 self.qbq.build_throughput_timeseries_query(),
                 last,
+                bucket,
             )
         ]
 

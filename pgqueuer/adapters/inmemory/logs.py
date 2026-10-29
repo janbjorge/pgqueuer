@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 from pgqueuer.adapters.inmemory.jobs import job_status_rank
@@ -66,6 +66,10 @@ class StatisticsBucket(NamedTuple):
 class ThroughputGroup(NamedTuple):
     entrypoint: QueueEntrypoint
     status: JOB_STATUS
+
+
+# Origin of the throughput buckets, as in build_throughput_timeseries_query.
+BUCKET_ORIGIN = datetime(2001, 1, 1, tzinfo=UTC)
 
 
 class TimeseriesGroup(NamedTuple):
@@ -265,7 +269,11 @@ class LogBook:
             for group in ordered
         ]
 
-    def throughput_timeseries(self, last: timedelta) -> list[models.ThroughputBucket]:
+    def throughput_timeseries(
+        self,
+        last: timedelta,
+        bucket: timedelta = timedelta(minutes=1),
+    ) -> list[models.ThroughputBucket]:
         self.aggregate()
         cutoff = utc_now() - last
         buckets: dict[TimeseriesGroup, int] = {}
@@ -273,7 +281,8 @@ class LogBook:
             if row.created <= cutoff:
                 continue
             group = TimeseriesGroup(
-                row.created.replace(second=0, microsecond=0),
+                # Same as date_bin(bucket, created, BUCKET_ORIGIN) in the Postgres query.
+                BUCKET_ORIGIN + (row.created - BUCKET_ORIGIN) // bucket * bucket,
                 row.entrypoint,
                 row.status,
             )

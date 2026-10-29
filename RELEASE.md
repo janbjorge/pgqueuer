@@ -14,6 +14,15 @@
 
 ## v1.7.0
 
+### Added
+
+- `InsightsService.throughput_timeseries(bucket=...)` and the repository
+  `throughput_timeseries` take a bucket size, a whole number of seconds; the
+  default stays one minute. Buckets start from a fixed UTC origin, so an hour
+  bucket is a UTC hour. Rows are still stored per second (#622). A custom
+  repository passed to `InsightsService` needs the new `bucket` parameter only
+  to serve a bucket other than the default.
+
 ### Changed
 
 - `Queries`, `SyncQueries`, `InMemoryQueries`, `PgQueuer`, `create_web_app` and

@@ -99,11 +99,14 @@ The dashboard is one frontend over `pgqueuer.core.insights`. Any code can
 consume the same getters, whether from a one-off script or a metrics exporter:
 
 ```python
+from datetime import timedelta
+
 from pgqueuer.core.insights import InsightsService, QueueManagementService
 
 insights = InsightsService(queries)
 snapshot = await insights.overview()
 per_entrypoint = await insights.entrypoint_stats()
+hourly = await insights.throughput_timeseries(last=timedelta(hours=24), bucket=timedelta(hours=1))
 
 management = QueueManagementService(queries)
 await management.requeue([job_id])
