@@ -32,6 +32,9 @@ class FakeAsyncpgConnection:
     async def reset(self) -> None:
         self.listeners.clear()
 
+    def is_closed(self) -> bool:
+        return False
+
 
 @dataclass
 class FakePool:
