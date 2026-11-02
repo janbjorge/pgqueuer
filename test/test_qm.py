@@ -486,3 +486,91 @@ async def test_drain_shutdown_skips_while_tasks_are_in_flight(
     finally:
         blocker.set()
         await task_manager.gather_tasks()
+
+
+async def test_run_recovers_after_transient_dequeue_failure(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+    dequeue_calls = 0
+    failed = asyncio.Event()
+    retried = asyncio.Event()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    original_dequeue = queries.dequeue
+
+    async def fail_once(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal dequeue_calls
+        dequeue_calls += 1
+        if dequeue_calls == 1:
+            return await original_dequeue(*args, **kwargs)
+        if dequeue_calls == 2:
+            failed.set()
+            raise OSError("temporary database outage")
+        retried.set()
+        return await original_dequeue(*args, **kwargs)
+
+    queries.dequeue = fail_once
+
+    @qm.entrypoint("fetch")
+    async def fetch(job: Job) -> None:
+        started.set()
+        await release.wait()
+        qm.shutdown.set()
+
+    await queries.enqueue("fetch", None, 0)
+
+    run = asyncio.create_task(qm.run(log_aggregation_interval=timedelta(0)))
+    await started.wait()
+    await failed.wait()
+    await retried.wait()
+    assert not run.done()
+    release.set()
+    async with asyncio.timeout(5):
+        await run
+
+    assert dequeue_calls >= 3
+
+
+async def test_run_stops_retrying_after_repeated_poll_failures(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+    dequeue_calls = 0
+
+    async def always_fail(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal dequeue_calls
+        dequeue_calls += 1
+        raise RuntimeError("poll programming error")
+
+    queries.dequeue = always_fail
+
+    with pytest.raises(RuntimeError, match="poll programming error"):
+        async with asyncio.timeout(5):
+            await qm.run(log_aggregation_interval=timedelta(0))
+
+    assert dequeue_calls == 5
+
+
+async def test_run_shutdown_interrupts_poll_retry_backoff(
+    queries: InMemoryQueries,
+) -> None:
+    qm = QueueManager(queries)
+    failed = asyncio.Event()
+    dequeue_calls = 0
+
+    async def fail_and_signal(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal dequeue_calls
+        dequeue_calls += 1
+        failed.set()
+        raise OSError("temporary database outage")
+
+    queries.dequeue = fail_and_signal
+    run = asyncio.create_task(qm.run(log_aggregation_interval=timedelta(0)))
+    await failed.wait()
+    qm.shutdown.set()
+
+    async with asyncio.timeout(5):
+        await run
+
+    assert dequeue_calls == 1
