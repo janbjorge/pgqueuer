@@ -22,6 +22,11 @@
   bucket is a UTC hour. Rows are still stored per second (#622). A custom
   repository passed to `InsightsService` needs the new `bucket` parameter only
   to serve a bucket other than the default.
+- Index `pgqueuer_statistics_created` on `pgqueuer_statistics (created)`.
+  `throughput_timeseries` filters on `created`, and the only other index on the
+  table leads with `priority`, so the window read the whole table. `pgq upgrade`
+  builds it with a plain `CREATE INDEX`, which blocks writes to
+  `pgqueuer_statistics` for the build.
 
 ### Changed
 
