@@ -25,6 +25,10 @@ from pgqueuer.domain import errors, models, types
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 
+MAX_POLL_FAILURES = 5
+POLL_FAILURE_BACKOFF_BASE_SECONDS = 0.1
+POLL_FAILURE_BACKOFF_MAX_SECONDS = 5.0
+
 
 @dataclasses.dataclass
 class QueueManager:
@@ -386,6 +390,31 @@ class QueueManager:
             return self.min_dequeue_poll_interval
         return dequeue_timeout
 
+    async def _backoff_after_poll_failure(self, exc: Exception, failure_count: int) -> None:
+        """Retry transient polling failures, then surface persistent errors.
+
+        The wait is interruptible so shutdown does not have to wait for the
+        backoff timer. A finite failure limit ensures programming and
+        configuration errors are surfaced instead of retried forever.
+        """
+        if failure_count >= MAX_POLL_FAILURES:
+            raise exc
+
+        delay = min(
+            POLL_FAILURE_BACKOFF_BASE_SECONDS * 2 ** (failure_count - 1),
+            POLL_FAILURE_BACKOFF_MAX_SECONDS,
+        )
+        logconfig.logger.warning(
+            "Queue polling failed; retrying in %.2f seconds (%d/%d)",
+            delay,
+            failure_count,
+            MAX_POLL_FAILURES,
+            exc_info=exc,
+        )
+        with suppress(TimeoutError):
+            async with asyncio.timeout(delay):
+                await self.shutdown.wait()
+
     async def run(
         self,
         dequeue_timeout: timedelta = timedelta(seconds=30),
@@ -465,26 +494,35 @@ class QueueManager:
                 ),
             )
 
+            poll_failure_count = 0
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(
-                    batch_size, max_concurrent_tasks, heartbeat_timeout
-                ):
-                    # A late heartbeat lets our own dequeue re-pick a job still running here.
-                    if job.id in self.job_context:
-                        continue
-                    context = models.Context(
-                        cancellation=anyio.CancelScope(),
-                        resources=self.resources,
-                    )
-                    self.job_context[job.id] = context
-                    task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
-                    task.add_done_callback(functools.partial(self.forget_job, job.id, context))
-                    task_manager.add(task)
+                try:
+                    async for job in self.fetch_jobs(
+                        batch_size, max_concurrent_tasks, heartbeat_timeout
+                    ):
+                        # A late heartbeat lets our own dequeue re-pick a job still running here.
+                        if job.id in self.job_context:
+                            continue
+                        context = models.Context(
+                            cancellation=anyio.CancelScope(),
+                            resources=self.resources,
+                        )
+                        self.job_context[job.id] = context
+                        task = asyncio.create_task(
+                            self._dispatch(job, jbuff, hbuff, heartbeat_timeout)
+                        )
+                        task.add_done_callback(functools.partial(self.forget_job, job.id, context))
+                        task_manager.add(task)
 
-                    with contextlib.suppress(asyncio.QueueEmpty):
-                        notice_event_listener.get_nowait()
+                        with contextlib.suppress(asyncio.QueueEmpty):
+                            notice_event_listener.get_nowait()
 
-                await self._maybe_drain_shutdown(mode, task_manager)
+                    await self._maybe_drain_shutdown(mode, task_manager)
+                except Exception as exc:  # noqa: BLE001 - polling failures may come from either driver
+                    poll_failure_count += 1
+                    await self._backoff_after_poll_failure(exc, poll_failure_count)
+                    continue
+
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
@@ -495,10 +533,19 @@ class QueueManager:
                 wake_on_listener_failure = (
                     shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
                 )
+                try:
+                    effective_dequeue_timeout = await self._effective_dequeue_timeout(
+                        dequeue_timeout
+                    )
+                except Exception as exc:  # noqa: BLE001 - polling failures may come from either driver
+                    poll_failure_count += 1
+                    await self._backoff_after_poll_failure(exc, poll_failure_count)
+                    continue
+                poll_failure_count = 0
                 async with tm.cancel_on_exit(
                     listeners.wait_for_notice_event(
                         notice_event_listener,
-                        await self._effective_dequeue_timeout(dequeue_timeout),
+                        effective_dequeue_timeout,
                     )
                 ) as event_task:
                     wake_on: set[asyncio.Task[object]] = {shutdown_task, event_task}
