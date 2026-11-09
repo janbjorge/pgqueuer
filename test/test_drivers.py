@@ -1,7 +1,7 @@
 import asyncio
 import inspect
 import uuid
-from collections.abc import AsyncGenerator, Callable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 
@@ -351,3 +351,59 @@ async def test_a_one_connection_pool_queries_but_cannot_listen(dsn: str) -> None
 
         with pytest.raises(RuntimeError, match="Pool max size"):
             await driver.add_listener(Channel("ch_one_connection"), lambda _: None)
+
+
+def _gone(connection: asyncpg.pool.PoolConnectionProxy) -> bool:
+    """True once asyncpg sees the connection closed or has returned it to the pool.
+
+    Written out here rather than importing the driver's _released, so the test does not
+    check the fix with the fix's own predicate.
+    """
+    try:
+        return connection.is_closed()
+    except asyncpg.InterfaceError:
+        return True
+
+
+async def test_a_pool_driver_exits_cleanly_after_its_listener_connection_dies(
+    dsn: str,
+) -> None:
+    """A dead listener connection does not turn the exit into an InterfaceError (#1026)."""
+    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=4) as pool:
+        driver = AsyncpgPoolDriver(pool)
+        async with driver:
+            await driver.add_listener(Channel("ch_dies"), lambda _: None)
+            listener = driver._listener_connection
+            assert listener is not None
+            await pool.execute("SELECT pg_terminate_backend($1)", listener.get_server_pid())
+            for _ in range(200):
+                if _gone(listener):
+                    break
+                await asyncio.sleep(0.01)
+            assert _gone(listener)
+
+        assert driver._listener_connection is None
+        assert await pool.fetchval("SELECT 1") == 1
+
+
+async def _keep_session(connection: asyncpg.Connection) -> None:
+    """A pool reset callback that leaves LISTEN in place."""
+
+
+@pytest.mark.parametrize("reset", [None, _keep_session])
+async def test_a_pool_driver_exit_still_unlistens(
+    dsn: str, reset: Callable[[asyncpg.Connection], Awaitable[None]] | None
+) -> None:
+    """Control: a live listener connection goes back to the pool with no LISTEN left."""
+    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2, reset=reset) as pool:
+        async with AsyncpgPoolDriver(pool) as driver:
+            await driver.add_listener(Channel("ch_unlisten"), lambda _: None)
+            listener = driver._listener_connection
+            assert listener is not None
+            assert await listener.fetchval("SELECT count(*) FROM pg_listening_channels()") == 1
+
+        async with pool.acquire() as first, pool.acquire() as second:
+            for connection in (first, second):
+                assert (
+                    await connection.fetchval("SELECT count(*) FROM pg_listening_channels()") == 0
+                )
