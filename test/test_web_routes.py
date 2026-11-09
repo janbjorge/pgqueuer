@@ -82,6 +82,16 @@ class TestPages:
             response = await client.get(f"/static/{filename}")
             assert response.status_code == 200
 
+    async def test_tracebacks_wrap_without_horizontal_scrolling(
+        self, client: httpx.AsyncClient
+    ) -> None:
+        stylesheet = (await client.get("/static/style.css")).text
+        start = stylesheet.index(".exc-tb")
+        rules = stylesheet[start : stylesheet.index("}", start)]
+        assert "overflow-x" not in rules
+        assert "white-space: pre-wrap;" in rules
+        assert "overflow-wrap: anywhere;" in rules
+
     async def test_live_regions_morph_and_throttle(self, client: httpx.AsyncClient) -> None:
         """Live dashboards must morph the DOM and throttle SSE refreshes to avoid flicker."""
         for path in ("/", "/failures", "/workers"):

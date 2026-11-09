@@ -144,7 +144,7 @@ code { font-size: 0.85em; }
   border-left: none;
   padding: 0;
   max-height: 420px;
-  overflow: auto;
-  white-space: pre;
-  word-break: normal;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

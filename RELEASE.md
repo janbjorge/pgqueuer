@@ -12,7 +12,16 @@
 
 ---
 
-## v1.7.0
+## v2.0.1
+
+### Fixed
+
+- Exception tracebacks on the web dashboard wrap long unbroken text instead of
+  forcing horizontal scrolling.
+
+---
+
+## v2.0.0
 
 ### Added
 
@@ -38,6 +47,7 @@
 
 ### Removed
 
+- Python 3.10 support. PgQueuer now requires Python 3.11 or later.
 - `--dry-run` on `pgq install`, `uninstall`, `upgrade`, `durability` and
   `autovac`. Use `pgq sql install` and its siblings, which print the same SQL.
 - `pgq upgrade --durability` / `-d`. It was already ignored; use
@@ -51,6 +61,9 @@
 
 ### Fixed
 
+- Cancelling a picked job leaves its queue row in place until its worker records
+  the end. It continues to occupy its concurrency slot and retain its dedupe
+  key while its handler stops (#1031).
 - In-memory `job_status` orders rows by `job_id`, matching PostgreSQL.
   Reverse log order put the later job first.
 - In-memory `requeue_jobs` raises unique violation `23505` when a held job's
@@ -73,6 +86,11 @@
 - `pgq --prefix foo_ listen` now listens on `foo_ch_pgqueuer`. The default
   channel was read once at import, before `--prefix` was applied, so it
   stayed on the unprefixed channel.
+- `retry_job()` and `requeue_jobs()` notify listeners after putting work back
+  in the queue. Idle workers no longer wait for their next poll before taking
+  it.
+- A job whose `execute_after` equals the database's current time is eligible
+  for dequeue, consistent with the queued-work probe.
 - `clear_queue([])`, `clear_queue_log([])` and `clear_statistics_log([])` now
   delete nothing. An empty list used to truncate the table, because `[]` is
   falsy. Only `None`, the default, truncates. `""` is the empty-string
@@ -139,6 +157,8 @@
   slept a full second past the next due time, so the following tick had already
   passed when it woke and was skipped: the schedule ran every two seconds. The
   wait past the due time is now 100 ms, under the one-second cron resolution.
+- `SchedulerManager` checks for new schedules once a second when none are
+  registered. It previously waited for the full dequeue timeout.
 - Prometheus label values are escaped. An entrypoint name with a double quote,
   backslash or newline was written into the `entrypoint` label as is, so in the
   `/metrics` output a quote ended the value early, a backslash changed it, and a
