@@ -47,4 +47,6 @@ def statistics_indexes(settings: DBSettings) -> tuple[Index, ...]:
             f"USING btree ({UNIQUE_COUNT_KEY})",
             unique=True,
         ),
+        # throughput_timeseries reads a recent window by ``created``.
+        index(f"{stats}_created", stats, "USING btree (created)"),
     )

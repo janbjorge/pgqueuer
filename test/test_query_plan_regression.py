@@ -11,6 +11,7 @@ import pytest
 
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
+from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
 QUEUE_TABLE = qb.DBSettings().queue_table
@@ -332,3 +333,59 @@ async def test_dequeue_stale_scan_finds_stale_jobs(apgdriver: db.Driver) -> None
     dequeued, read = await _dequeue_picked_backlog(apgdriver, stale=3)
     assert dequeued == {1, 2, 3}
     assert read < 100, f"dequeue read {read} rows to find 3 stale jobs"
+
+
+STATS_TABLE = qb.DBSettings().statistics_table
+STATS_CREATED_IDX = f"{STATS_TABLE}_created"
+# A minute apart, so 200k rows span about 139 days of history.
+HISTORY_ROWS = 200_000
+
+
+async def test_throughput_timeseries_range_scans_created(apgdriver: db.Driver) -> None:
+    """The window is read through the created index, not by walking the history."""
+    await apgdriver.execute(
+        f"""
+        INSERT INTO {STATS_TABLE} (created, count, priority, status, entrypoint)
+        SELECT date_trunc('sec', NOW()) - g * interval '1 minute', 1, 0, 'successful',
+               'ep_' || (g % 4)
+        FROM generate_series(1, {HISTORY_ROWS}) g;
+        """
+    )
+    await apgdriver.execute(f"ANALYZE {STATS_TABLE};")
+    last = timedelta(hours=1)
+    (row,) = await apgdriver.fetch(
+        f"SELECT COUNT(*) AS n FROM {STATS_TABLE} WHERE created > NOW() - $1::interval", last
+    )
+    window = cell(row, "n", int)
+    (row,) = await apgdriver.fetch(
+        "SELECT relpages FROM pg_class WHERE oid = $1::regclass", STATS_TABLE
+    )
+    pages = cell(row, "relpages", int)
+    query = queries.Queries(apgdriver).qbq.build_throughput_timeseries_query()
+    nodes = await _analyze_nodes(apgdriver, query, last, timedelta(minutes=1))
+
+    summary = [(n.get("Node Type"), n.get("Relation Name"), n.get("Index Name")) for n in nodes]
+    assert any(
+        n.get("Index Name") == STATS_CREATED_IDX and "created" in n.get("Index Cond", "")
+        for n in nodes
+    ), f"throughput_timeseries no longer range-scans {STATS_CREATED_IDX}; nodes={summary}"
+    stats_scans = [n for n in nodes if n.get("Relation Name") == STATS_TABLE]
+    read = sum(
+        (
+            n.get("Actual Rows", 0)
+            + n.get("Rows Removed by Filter", 0)
+            + n.get("Rows Removed by Index Recheck", 0)
+        )
+        * n.get("Actual Loops", 1)
+        for n in stats_scans
+    )
+    bound = window + 10
+    assert read <= bound, (
+        f"throughput_timeseries read {read} statistics rows for a {window}-row window "
+        f"(bound {bound}) out of {HISTORY_ROWS}; nodes={summary}"
+    )
+    blocks = nodes[0].get("Shared Hit Blocks", 0) + nodes[0].get("Shared Read Blocks", 0)
+    assert blocks < pages // 10, (
+        f"throughput_timeseries touched {blocks} buffers; the table has "
+        f"{pages} pages. nodes={summary}"
+    )

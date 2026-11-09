@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Awaitable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Literal, assert_never
 
 import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.adapters.inmemory.logs import StatisticsRow
 from pgqueuer.adapters.persistence import queries, sqlstate
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import DuplicateJobError
@@ -379,3 +380,91 @@ async def test_throughput_summary_order_matches(apgdriver: AsyncpgDriver) -> Non
         return [(row.status, row.total_count) for row in rows]
 
     assert await run(memory) == await run(postgres)
+
+
+# Seconds after an hour boundary, and the statistics count stored at that second.
+BUCKET_ROWS = ((0, 1), (59, 2), (60, 4), (899, 8), (900, 16), (3599, 32), (3600, 64))
+
+
+@pytest.mark.parametrize(
+    "bucket, expected",
+    (
+        (None, {0: 3, 60: 4, 840: 8, 900: 16, 3540: 32, 3600: 64}),
+        (timedelta(minutes=15), {0: 15, 900: 16, 2700: 32, 3600: 64}),
+        (timedelta(hours=1), {0: 63, 3600: 64}),
+        (timedelta(seconds=1), dict(BUCKET_ROWS)),
+    ),
+)
+async def test_throughput_timeseries_bucket_matches(
+    apgdriver: AsyncpgDriver,
+    bucket: timedelta | None,
+    expected: dict[int, int],
+) -> None:
+    memory, postgres = pair(apgdriver)
+    start = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) - timedelta(hours=3)
+    for offset, count in BUCKET_ROWS:
+        await apgdriver.execute(
+            f"INSERT INTO {postgres.qbq.qualified.statistics_table} "
+            "(created, count, priority, status, entrypoint) "
+            "VALUES ($1, $2, 0, 'successful', 'ep')",
+            start + timedelta(seconds=offset),
+            count,
+        )
+        memory.logs.statistics.append(
+            StatisticsRow(
+                id=offset,
+                created=start + timedelta(seconds=offset),
+                count=count,
+                entrypoint=QueueEntrypoint("ep"),
+                priority=0,
+                status="successful",
+            )
+        )
+
+    async def run(q: Repository) -> dict[int, int]:
+        window = timedelta(hours=6)
+        rows = await (
+            q.throughput_timeseries(window)
+            if bucket is None
+            else q.throughput_timeseries(window, bucket)
+        )
+        assert {(row.entrypoint, row.status) for row in rows} == {("ep", "successful")}
+        return {int((row.bucket - start).total_seconds()): row.count for row in rows}
+
+    assert await run(memory) == await run(postgres) == expected
+
+
+@pytest.mark.parametrize("bucket", (timedelta(seconds=7), timedelta(days=1)))
+async def test_throughput_timeseries_unaligned_bucket_matches(
+    apgdriver: AsyncpgDriver,
+    bucket: timedelta,
+) -> None:
+    """Buckets that don't divide an hour start from the same origin on both adapters."""
+    memory, postgres = pair(apgdriver)
+    start = datetime.now(UTC).replace(microsecond=0) - timedelta(hours=3)
+    for offset, count in BUCKET_ROWS:
+        await apgdriver.execute(
+            f"INSERT INTO {postgres.qbq.qualified.statistics_table} "
+            "(created, count, priority, status, entrypoint) "
+            "VALUES ($1, $2, 0, 'successful', 'ep')",
+            start + timedelta(seconds=offset),
+            count,
+        )
+        memory.logs.statistics.append(
+            StatisticsRow(
+                id=offset,
+                created=start + timedelta(seconds=offset),
+                count=count,
+                entrypoint=QueueEntrypoint("ep"),
+                priority=0,
+                status="successful",
+            )
+        )
+
+    async def run(q: Repository) -> list[tuple[datetime, int]]:
+        rows = await q.throughput_timeseries(timedelta(hours=6), bucket)
+        return [(row.bucket, row.count) for row in rows]
+
+    memory_rows, postgres_rows = await run(memory), await run(postgres)
+    assert memory_rows == postgres_rows
+    assert sum(count for _, count in postgres_rows) == sum(count for _, count in BUCKET_ROWS)

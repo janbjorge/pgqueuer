@@ -444,8 +444,9 @@ class InMemoryQueries:
     async def throughput_timeseries(
         self,
         last: timedelta,
+        bucket: timedelta = timedelta(minutes=1),
     ) -> list[models.ThroughputBucket]:
-        return self.logs.throughput_timeseries(last)
+        return self.logs.throughput_timeseries(last, bucket)
 
     async def active_workers(self) -> list[models.ActiveWorker]:
         return self.job_table.active_workers()
