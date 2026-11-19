@@ -183,6 +183,7 @@ extend-immutable-calls = [
 "pgqueuer/adapters/cli/**" = ["T201"]
 # Optional extras: importing these at module level would make every install need them.
 "pgqueuer/adapters/connections.py" = ["PLC0415"]
+"pgqueuer/adapters/drivers/asyncpg.py" = ["PLC0415"]
 "pgqueuer/adapters/drivers/psycopg.py" = ["PLC0415"]
 "examples/**" = ["T201", "INP001", "S101"]
 "tools/**" = ["T201", "INP001", "S101"]

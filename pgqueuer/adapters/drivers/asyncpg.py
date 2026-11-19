@@ -26,6 +26,16 @@ class Relay:
             self.callback(payload)
 
 
+def _released(connection: asyncpg.pool.PoolConnectionProxy) -> bool:
+    """True if the connection has closed or asyncpg has already returned it to the pool."""
+    import asyncpg
+
+    try:
+        return connection.is_closed()
+    except asyncpg.InterfaceError:
+        return True
+
+
 class AsyncpgDriver(Driver):
     """AsyncPG implementation of the `Driver` protocol.
 
@@ -168,6 +178,8 @@ class AsyncpgPoolDriver(Driver):
             return
         async with self._lock:
             if self._listener_connection is not None:
-                await self._listener_connection.reset()
+                # asyncpg returns a connection that dies to the pool by itself; reset() would raise.
+                if not _released(self._listener_connection):
+                    await self._listener_connection.reset()
                 await self._pool.release(self._listener_connection)
                 self._listener_connection = None
