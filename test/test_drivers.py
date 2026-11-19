@@ -369,7 +369,7 @@ async def test_a_pool_driver_exits_cleanly_after_its_listener_connection_dies(
     dsn: str,
 ) -> None:
     """A dead listener connection does not turn the exit into an InterfaceError (#1026)."""
-    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=4) as pool:
+    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2) as pool:
         driver = AsyncpgPoolDriver(pool)
         async with driver:
             await driver.add_listener(Channel("ch_dies"), lambda _: None)
@@ -383,7 +383,55 @@ async def test_a_pool_driver_exits_cleanly_after_its_listener_connection_dies(
             assert _gone(listener)
 
         assert driver._listener_connection is None
-        assert await pool.fetchval("SELECT 1") == 1
+        await _assert_every_slot_free(pool)
+
+
+async def _assert_every_slot_free(pool: asyncpg.Pool) -> None:
+    """Acquire every connection of a max_size=2 pool, so a leaked slot times out."""
+    async with pool.acquire(timeout=5) as first, pool.acquire(timeout=5) as second:
+        assert await first.fetchval("SELECT 1") == 1
+        assert await second.fetchval("SELECT 1") == 1
+
+
+class _SlowReset(asyncpg.Connection):
+    """Connection whose reset stalls server-side when its pid is in slow_pids."""
+
+    slow_pids: frozenset[int] = frozenset()
+
+    def get_reset_query(self) -> str:
+        query = super().get_reset_query()
+        if self.get_server_pid() in _SlowReset.slow_pids:
+            return "SELECT pg_sleep(2);\n" + query
+        return query
+
+
+async def test_a_pool_driver_exits_cleanly_when_its_listener_dies_during_reset(
+    dsn: str,
+) -> None:
+    """A listener connection killed while reset() runs does not make the exit raise."""
+    async with asyncpg.create_pool(
+        dsn=dsn, min_size=2, max_size=2, connection_class=_SlowReset
+    ) as pool:
+        driver = AsyncpgPoolDriver(pool)
+
+        async def kill(pid: int) -> None:
+            await asyncio.sleep(0.5)
+            await pool.execute("SELECT pg_terminate_backend($1)", pid)
+
+        try:
+            async with driver:
+                await driver.add_listener(Channel("ch_dies_in_reset"), lambda _: None)
+                listener = driver._listener_connection
+                assert listener is not None
+                pid = listener.get_server_pid()
+                _SlowReset.slow_pids = frozenset({pid})
+                killer = asyncio.create_task(kill(pid))
+        finally:
+            _SlowReset.slow_pids = frozenset()
+        await killer
+
+        assert driver._listener_connection is None
+        await _assert_every_slot_free(pool)
 
 
 async def _keep_session(connection: asyncpg.Connection) -> None:
