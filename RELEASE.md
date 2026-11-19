@@ -18,6 +18,14 @@
 
 - Exception tracebacks on the web dashboard wrap long unbroken text instead of
   forcing horizontal scrolling.
+- `AsyncpgPoolDriver` no longer raises on exit when its listener connection has
+  died. asyncpg had returned that connection to the pool, so the `reset()` on
+  exit raised `InterfaceError`; a connection that died during `reset()` raised
+  `ConnectionDoesNotExistError`. With `shutdown_on_listener_failure=True`,
+  `QueueManager.run` raised that error in place of `FailingListenerError`;
+  after a plain `shutdown.set()` it raised it instead of returning. The driver
+  now skips `reset()` for a connection that is closed or already back in the
+  pool, and logs a warning when the connection is lost during `reset()`.
 
 ---
 
@@ -163,13 +171,6 @@
   backslash or newline was written into the `entrypoint` label as is, so in the
   `/metrics` output a quote ended the value early, a backslash changed it, and a
   newline split the sample line so the response no longer parsed.
-- `AsyncpgPoolDriver` no longer raises `InterfaceError` on exit when its
-  listener connection has already died. asyncpg had returned that connection to
-  the pool, so the `reset()` on exit failed. With
-  `shutdown_on_listener_failure=True`, `QueueManager.run` raised that error in
-  place of `FailingListenerError`; after a plain `shutdown.set()` it raised it
-  instead of returning. The driver now skips `reset()` for a connection that is
-  closed or already back in the pool.
 
 ## v1.6.0
 

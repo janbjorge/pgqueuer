@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
+from pgqueuer.core import logconfig
 from pgqueuer.ports.driver import Driver, NotifyCallback
 
 if TYPE_CHECKING:
@@ -176,10 +177,16 @@ class AsyncpgPoolDriver(Driver):
         self._entered -= 1
         if self._entered > 0:
             return
+        import asyncpg
+
         async with self._lock:
-            if self._listener_connection is not None:
-                # asyncpg returns a connection that dies to the pool by itself; reset() would raise.
-                if not _released(self._listener_connection):
-                    await self._listener_connection.reset()
-                await self._pool.release(self._listener_connection)
-                self._listener_connection = None
+            listener, self._listener_connection = self._listener_connection, None
+            if listener is None:
+                return
+            # asyncpg returns a connection that dies to the pool by itself; reset() would raise.
+            if not _released(listener):
+                try:
+                    await listener.reset()
+                except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, OSError):
+                    logconfig.logger.warning("Listener connection lost during reset", exc_info=True)
+            await self._pool.release(listener)
