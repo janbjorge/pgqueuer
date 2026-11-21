@@ -155,8 +155,8 @@ beyond a SQL comment over retired columns, does not bring `NOT NULL`,
 unique constraints or column kinds into line, and widens only tables
 with a serial `id`, so the log table's identity `id` is never widened
 offline.
-It builds its settings from flags, so `PGQUEUER_DURABILITY` and
-`PGQUEUER_WIDEN_ID` are ignored.
+Its `--durability` and `--widen-id/--no-widen-id` flags override
+`PGQUEUER_DURABILITY` and `PGQUEUER_WIDEN_ID`, which supply the defaults.
 
 ## Invariants
 

@@ -272,10 +272,11 @@ def located(settings: qb.DBSettings) -> str:
 @app.command(help="Install the necessary database schema for PgQueuer.")
 def install(
     ctx: Context,
-    durability: sql_cmd.DurabilityOption = qb.Durability.durable,
+    durability: sql_cmd.DurabilityOption = None,
     create_schema: sql_cmd.CreateSchemaOption = True,
 ) -> None:
     config: AppConfig = ctx.obj
+    durability = config.settings.durability if durability is None else durability
     settings = config.settings.model_copy(update={"durability": durability})
 
     async def run() -> bool:
@@ -380,9 +381,10 @@ def upgrade(
         "--plan",
         help="Print the exact delta this database needs and exit without applying it.",
     ),
-    widen_id: sql_cmd.WidenIdOption = True,
+    widen_id: sql_cmd.WidenIdOption = None,
 ) -> None:
     config: AppConfig = ctx.obj
+    widen_id = config.settings.widen_id if widen_id is None else widen_id
     settings = config.settings.model_copy(update={"widen_id": widen_id})
 
     async def run() -> schema_model.Plan:

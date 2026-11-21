@@ -179,3 +179,19 @@ def test_report_upgrade_prefixes_notes(capsys: pytest.CaptureFixture[str]) -> No
     captured = capsys.readouterr()
     assert "note: time_in_queue is unused" in captured.err
     assert "already up to date" in captured.err
+
+
+def test_sql_upgrade_widen_id_falls_back_to_env() -> None:
+    env = {"PGQUEUER_WIDEN_ID": "false"}
+    from_env = CliRunner().invoke(app, ["sql", "upgrade"], env=env).output
+    flag_wins = CliRunner().invoke(app, ["sql", "upgrade", "--widen-id"], env=env).output
+    assert "ALTER COLUMN id TYPE BIGINT" not in from_env
+    assert "ALTER COLUMN id TYPE BIGINT" in flag_wins
+
+
+def test_sql_install_durability_falls_back_to_env() -> None:
+    env = {"PGQUEUER_DURABILITY": "volatile"}
+    from_env = CliRunner().invoke(app, ["sql", "install"], env=env).output
+    flag_wins = CliRunner().invoke(app, ["sql", "install", "-d", "durable"], env=env).output
+    assert "UNLOGGED" in from_env
+    assert "UNLOGGED" not in flag_wins
