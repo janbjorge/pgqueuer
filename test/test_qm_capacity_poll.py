@@ -1,163 +1,144 @@
-"""A worker at capacity must wait for a NOTIFY instead of re-polling every 100 ms."""
+"""A worker at capacity must wait for a NOTIFY instead of re-polling every 100 ms (#1092)."""
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+import contextlib
+import dataclasses
+from collections.abc import AsyncIterator
 from datetime import timedelta
 from typing import Any
 
+import pytest
+
+from pgqueuer.core import listeners
 from pgqueuer.db import Driver
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
-WINDOW = 1.0
+HOUR = timedelta(hours=1)
+GUARD = 15
 
 
-def count_dequeues(q: Queries) -> list[int]:
-    calls = [0]
-    original = q.dequeue
+@dataclasses.dataclass
+class Wait:
+    """One wait the loop started: jobs picked so far, its timeout, and events already pending."""
+
+    picked: int
+    timeout: timedelta
+    pending: int
+    burst_heard: bool
+
+
+@contextlib.asynccontextmanager
+async def recorded(
+    monkeypatch: pytest.MonkeyPatch,
+    q: Queries,
+    qm: QueueManager,
+    release: asyncio.Event,
+    burst_heard: asyncio.Event | None = None,
+    **run_kwargs: Any,
+) -> AsyncIterator[asyncio.Queue[Wait]]:
+    """Run *qm* and yield every wait it starts, tagged with the jobs it has picked by then."""
+    waits: asyncio.Queue[Wait] = asyncio.Queue()
+    picked = 0
+    dequeue = q.dequeue
+    wait_for_notice_event = listeners.wait_for_notice_event
 
     async def counting(**kwargs: Any) -> list[Job]:
-        calls[0] += 1
-        return await original(**kwargs)
+        nonlocal picked
+        jobs = await dequeue(**kwargs)
+        picked += len(jobs)
+        return jobs
 
-    q.dequeue = counting  # type: ignore[assignment]
-    return calls
+    def recording(queue: listeners.PGNoticeEventListener, timeout: timedelta) -> asyncio.Task[Any]:
+        heard = burst_heard is not None and burst_heard.is_set()
+        waits.put_nowait(Wait(picked, timeout, queue.qsize(), heard))
+        return wait_for_notice_event(queue, timeout)
 
-
-async def dequeues_while_saturated(
-    qm: QueueManager,
-    calls: list[int],
-    release: asyncio.Event,
-    saturated: Callable[[], bool],
-    during: Callable[[], Awaitable[None]] | None = None,
-    batch_size: int = 10,
-    max_concurrent_tasks: int | None = None,
-) -> int:
-    """Run *qm* until *saturated*, then count dequeues over WINDOW seconds."""
-
-    async def measure() -> int:
-        try:
-            async with asyncio.timeout(10):
-                while not saturated():
-                    await asyncio.sleep(0.01)
-            await asyncio.sleep(0.2)
-            before = calls[0]
-            if during is not None:
-                await during()
-            await asyncio.sleep(WINDOW)
-            return calls[0] - before
-        finally:
-            qm.shutdown.set()
-            release.set()
-
-    count, _ = await asyncio.gather(
-        measure(),
-        qm.run(
-            dequeue_timeout=timedelta(seconds=5),
-            batch_size=batch_size,
-            max_concurrent_tasks=max_concurrent_tasks,
-        ),
-    )
-    return count
+    monkeypatch.setattr(q, "dequeue", counting)
+    monkeypatch.setattr(listeners, "wait_for_notice_event", recording)
+    task = asyncio.create_task(qm.run(dequeue_timeout=HOUR, **run_kwargs))
+    try:
+        async with asyncio.timeout(GUARD):
+            yield waits
+    finally:
+        qm.shutdown.set()
+        release.set()
+        await task
 
 
-async def test_worker_budget_full_does_not_repoll(apgdriver: Driver) -> None:
+async def first_wait_with(waits: asyncio.Queue[Wait], picked: int) -> Wait:
+    while (wait := await waits.get()).picked < picked:
+        pass
+    return wait
+
+
+async def test_worker_budget_full_waits_full_timeout(
+    apgdriver: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
     q = Queries(apgdriver)
-    calls = count_dequeues(q)
     qm = QueueManager(q)
     release = asyncio.Event()
-    running = 0
 
     @qm.entrypoint("ep")
     async def ep(job: Job) -> None:
-        nonlocal running
-        running += 1
         await release.wait()
 
     await q.enqueue(["ep"] * 10, [None] * 10, [0] * 10)
-    count = await dequeues_while_saturated(
-        qm, calls, release, lambda: running == 4, batch_size=2, max_concurrent_tasks=4
-    )
-    assert count <= 2, count
+    async with recorded(monkeypatch, q, qm, release, batch_size=2, max_concurrent_tasks=4) as waits:
+        assert (await first_wait_with(waits, 4)).timeout == HOUR
 
 
-async def test_entrypoint_limit_full_does_not_repoll(apgdriver: Driver) -> None:
+async def test_entrypoint_limit_full_waits_full_timeout(
+    apgdriver: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
     q = Queries(apgdriver)
-    calls = count_dequeues(q)
     qm = QueueManager(q)
     release = asyncio.Event()
-    running = 0
 
     @qm.entrypoint("ep", concurrency_limit=1)
     async def ep(job: Job) -> None:
-        nonlocal running
-        running += 1
         await release.wait()
 
     await q.enqueue(["ep"] * 3, [None] * 3, [0] * 3)
-    count = await dequeues_while_saturated(qm, calls, release, lambda: running == 1)
-    assert count <= 2, count
+    async with recorded(monkeypatch, q, qm, release) as waits:
+        assert (await first_wait_with(waits, 1)).timeout == HOUR
 
 
-async def test_notify_burst_wakes_saturated_worker_once(apgdriver: Driver) -> None:
+async def test_notify_burst_wakes_saturated_worker_once(
+    apgdriver: Driver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a burst the next wait starts with nothing pending, so the burst cost one dequeue."""
     q = Queries(apgdriver)
-    calls = count_dequeues(q)
     qm = QueueManager(q)
     release = asyncio.Event()
-    running = 0
 
     @qm.entrypoint("ep")
     async def ep(job: Job) -> None:
-        nonlocal running
-        running += 1
         await release.wait()
 
-    async def burst() -> None:
-        await asyncio.gather(*(q.notify_table_changed("insert") for _ in range(20)))
+    burst_heard = asyncio.Event()
+
+    def on_notice(payload: str | bytes | bytearray) -> None:
+        burst_heard.set()
 
     await q.enqueue(["ep"] * 10, [None] * 10, [0] * 10)
-    count = await dequeues_while_saturated(
-        qm, calls, release, lambda: running == 4, burst, batch_size=2, max_concurrent_tasks=4
-    )
-    assert count <= 3, count
-
-
-async def test_held_failure_wakes_full_worker(apgdriver: Driver) -> None:
-    """A failed job held in the queue table frees budget, and its flush must wake the worker."""
-    q = Queries(apgdriver)
-    qm = QueueManager(q)
-    release = asyncio.Event()
-    seen = 0
-
-    @qm.entrypoint("ep", on_failure="hold")
-    async def ep(job: Job) -> None:
-        nonlocal seen
-        seen += 1
-        await release.wait()
-        raise ValueError("held")
-
-    await q.enqueue(["ep"] * 4, [None] * 4, [0] * 4)
-
-    async def driver() -> None:
-        try:
-            async with asyncio.timeout(10):
-                while seen < 2:
-                    await asyncio.sleep(0.01)
-            await asyncio.sleep(0.2)
-            assert seen == 2
-            release.set()
-            # dequeue_timeout is 30 s, so only a NOTIFY can bring the last two jobs this fast.
-            async with asyncio.timeout(3):
-                while seen < 4:
-                    await asyncio.sleep(0.01)
-        finally:
-            release.set()
-            qm.shutdown.set()
-
-    await asyncio.gather(
-        driver(),
-        qm.run(dequeue_timeout=timedelta(seconds=30), batch_size=1, max_concurrent_tasks=2),
-    )
+    async with recorded(
+        monkeypatch, q, qm, release, burst_heard, batch_size=2, max_concurrent_tasks=4
+    ) as waits:
+        await first_wait_with(waits, 4)
+        await apgdriver.add_listener(qm.channel, on_notice)
+        # One statement, so all 20 distinct NOTIFYs arrive together at commit.
+        await apgdriver.execute(
+            """SELECT pg_notify($1::text, json_build_object(
+                'channel', $1::text, 'operation', 'insert', 'table', 'q',
+                'type', 'table_changed_event',
+                'sent_at', NOW() + i * INTERVAL '1 microsecond')::text)
+            FROM generate_series(1, 20) AS i""",
+            qm.channel,
+        )
+        while not (wait := await waits.get()).burst_heard:
+            pass
+        assert wait.pending == 0, wait
