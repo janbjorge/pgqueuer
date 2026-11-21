@@ -84,7 +84,7 @@ class TestMcpToolsIntegration:
         q = Queries(apgdriver)
         await q.enqueue("browse_ep", b"data", priority=5)
 
-        rows = await mcpdb.fetch(mcpdb.qbq.build_queue_table_browse_query(), 10, 0)
+        rows = await mcpdb.fetch(mcpdb.qbq.build_browse_queue_query(), 10, 0, None, None)
         assert len(rows) >= 1
         assert any(r["entrypoint"] == "browse_ep" for r in rows)
 
@@ -99,8 +99,7 @@ class TestMcpToolsIntegration:
         assert any(r["entrypoint"] == "log_test" for r in rows)
 
     async def test_failed_jobs_empty(self, mcpdb: PgQueuerDatabase) -> None:
-        rows = await mcpdb.fetch(mcpdb.qbq.build_failed_jobs_query(), 50)
-        assert rows == []
+        assert await mcpdb.insights.exception_logs(50) == []
 
     async def test_stats_aggregation(
         self, mcpdb: PgQueuerDatabase, apgdriver: AsyncpgDriver
@@ -108,14 +107,10 @@ class TestMcpToolsIntegration:
         q = Queries(apgdriver)
         await q.enqueue("stats_ep", b"x", priority=0)
 
-        await mcpdb.fetch(mcpdb.qbq.build_aggregate_log_data_to_statistics_query())
-        stats_query = mcpdb.qbq.build_log_statistics_query(limit=50, last=None)
-        rows = await mcpdb.fetch(stats_query.sql, *stats_query.args)
-        assert len(rows) >= 1
+        assert len(await mcpdb.queries.log_statistics(50)) >= 1
 
     async def test_throughput_summary_empty(self, mcpdb: PgQueuerDatabase) -> None:
-        rows = await mcpdb.fetch(mcpdb.qbq.build_throughput_summary_query(), None)
-        assert rows == []
+        assert await mcpdb.queries.throughput_summary(None) == []
 
     async def test_throughput_summary_after_enqueue(
         self, mcpdb: PgQueuerDatabase, apgdriver: AsyncpgDriver
@@ -123,7 +118,5 @@ class TestMcpToolsIntegration:
         q = Queries(apgdriver)
         await q.enqueue("tp_test", b"x", priority=0)
 
-        await mcpdb.fetch(mcpdb.qbq.build_aggregate_log_data_to_statistics_query())
-        rows = await mcpdb.fetch(mcpdb.qbq.build_throughput_summary_query(), None)
-        assert len(rows) >= 1
-        assert any(r["entrypoint"] == "tp_test" for r in rows)
+        rows = await mcpdb.queries.throughput_summary(None)
+        assert any(r.entrypoint == "tp_test" for r in rows)

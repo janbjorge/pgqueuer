@@ -174,7 +174,7 @@ That is the whole setup: PostgreSQL and your application code.
 
     ---
 
-    Optional MCP server with 11 read-only tools: queue size, throughput,
+    Optional MCP server with 11 inspection tools: queue size, throughput,
     failures, stale jobs, schedules, schema. Works with Claude, Cursor,
     and any MCP client.
 

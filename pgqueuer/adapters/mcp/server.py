@@ -1,4 +1,8 @@
-"""PgQueuer MCP server — read-only insights into queue state and statistics."""
+"""PgQueuer MCP server — insights into queue state and statistics.
+
+queue_stats and throughput_summary fold pending log rows into statistics first,
+so they need write access to the log and statistics tables.
+"""
 
 from __future__ import annotations
 
@@ -19,13 +23,13 @@ from pgqueuer.domain.settings import ConnectionSettings, DBSettings
 
 
 class PgQueuerDatabase:
-    """Thin wrapper holding a connection pool and query builders."""
+    """Thin wrapper holding a connection pool, queries and insights."""
 
     def __init__(self, pool: asyncpg.Pool, settings: DBSettings) -> None:
         self.pool = pool
-        queries = Queries(AsyncpgPoolDriver(pool), settings)
-        self.qbq = queries.qbq
-        self.insights = InsightsService(queries)
+        self.queries = Queries(AsyncpgPoolDriver(pool), settings)
+        self.qbq = self.queries.qbq
+        self.insights = InsightsService(self.queries)
 
     async def fetch(self, sql: str, *args: object) -> list[dict[str, object]]:
         async with self.pool.acquire() as conn:
@@ -56,7 +60,10 @@ def _db(ctx: Ctx) -> PgQueuerDatabase:
 
 
 def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
-    """Register all read-only insight tools onto the given FastMCP instance."""
+    """Register all insight tools onto the given FastMCP instance.
+
+    queue_stats and throughput_summary write: they fold pending log rows into statistics.
+    """
 
     @mcp.tool()
     async def queue_size(ctx: Ctx) -> list[dict[str, object]]:
@@ -118,7 +125,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         failed_jobs to see those.
         """
         d = _db(ctx)
-        return await d.fetch(d.qbq.build_queue_table_browse_query(), limit, offset)
+        # Raw rows, not models.Job, which has no dedupe_key.
+        return await d.fetch(d.qbq.build_browse_queue_query(), limit, offset, None, None)
 
     @mcp.tool()
     async def queue_stats(
@@ -152,11 +160,8 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
           - "How many jobs succeeded in the last hour?" -> period='PT1H'
           - "Show me the last 200 stats entries" -> limit=200
         """
-        d = _db(ctx)
-        await d.fetch(d.qbq.build_aggregate_log_data_to_statistics_query())
-        interval = _parse_interval(period)
-        query = d.qbq.build_log_statistics_query(limit=limit, last=interval)
-        return await d.fetch(query.sql, *query.args)
+        stats = await _db(ctx).queries.log_statistics(limit, _parse_interval(period))
+        return [s.model_dump() for s in stats]
 
     @mcp.tool()
     async def throughput_summary(
@@ -185,10 +190,9 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
           - "Which entrypoint has the most failures this week?"
             -> period='P7D', look for highest exception total_count
         """
-        d = _db(ctx)
-        await d.fetch(d.qbq.build_aggregate_log_data_to_statistics_query())
-        interval = _parse_interval(period)
-        return await d.fetch(d.qbq.build_throughput_summary_query(), interval)
+        # Not insights.throughput: it clamps the window, and None here means all history.
+        stats = await _db(ctx).queries.throughput_summary(_parse_interval(period))
+        return [s.model_dump() for s in stats]
 
     @mcp.tool()
     async def failed_jobs(
@@ -201,7 +205,6 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         traceback as a JSON object so you can see exactly what went wrong.
 
         Returned columns:
-          - id:         log entry identifier
           - created:    when the failure was recorded (timestamptz)
           - job_id:     the original job id from the queue table
           - status:     always 'exception' for this tool
@@ -224,8 +227,7 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         (downstream service down), serialization errors (bad payload), or
         business logic exceptions.
         """
-        d = _db(ctx)
-        return await d.fetch(d.qbq.build_failed_jobs_query(), limit)
+        return [log.model_dump() for log in await _db(ctx).insights.exception_logs(limit)]
 
     @mcp.tool()
     async def queue_log(
@@ -454,7 +456,8 @@ def create_mcp_server(
         """Suggested workflow for inspecting a PgQueuer installation."""
         return """\
 You are connected to a PostgreSQL database running PgQueuer via MCP tools.
-All tools are read-only and use predefined queries — they cannot modify data.
+All tools use predefined queries and cannot modify job data. `queue_stats` and
+`throughput_summary` first fold pending log rows into the statistics table.
 
 Recommended investigation workflow:
 

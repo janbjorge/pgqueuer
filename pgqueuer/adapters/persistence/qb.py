@@ -873,12 +873,6 @@ class QueryQueueBuilder:
         LIMIT $1
         """
 
-    def build_queue_table_browse_query(self) -> str:
-        return f"""SELECT * FROM {self.qualified.queue_table}
-        ORDER BY priority DESC, id ASC
-        LIMIT $1 OFFSET $2
-        """
-
     def build_failed_jobs_query(self) -> str:
         return f"""SELECT * FROM {self.qualified.queue_table_log}
         WHERE status = 'exception'::{self.qualified.queue_status_type}
