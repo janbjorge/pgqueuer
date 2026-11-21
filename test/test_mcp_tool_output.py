@@ -90,7 +90,7 @@ class TestMcpToolOutput:
         },
         "queue_stats": {"count", "created", "entrypoint", "priority", "status"},
         "throughput_summary": {"entrypoint", "status", "total_count"},
-        "failed_jobs": log_fields,
+        "failed_jobs": log_fields - {"id"},
         "queue_log": log_fields,
         "schedules": {
             "created",

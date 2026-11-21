@@ -1,7 +1,7 @@
 # MCP Server
 
 PgQueuer ships an optional [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server
-that gives AI agents read-only access to your queue state, statistics, and schedules.
+that gives AI agents access to your queue state, statistics, and schedules.
 All queries are predefined; the server does not accept arbitrary SQL.
 
 ## Installation
@@ -119,8 +119,10 @@ for the full list.
 
 ## Available tools
 
-All tools are **read-only** and use predefined static SQL queries.
-They cannot modify queue data.
+All tools use predefined static SQL queries and cannot modify job data.
+`queue_stats` and `throughput_summary` first fold pending log rows into the
+statistics table, so the database role needs write access to the log and
+statistics tables.
 
 ### Queue overview
 
