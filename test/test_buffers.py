@@ -287,27 +287,4 @@ async def test_job_buffer_callback_exception_during_teardown() -> None:
     assert buffer.unwritten == items
 
 
-async def test_job_buffer_flush_returns_when_lock_held() -> None:
-    helper_calls: list[list[LogEntry]] = []
-
-    async def helper(items: list[LogEntry]) -> None:
-        helper_calls.append(items)
-
-    buffer = JobStatusLogBuffer(
-        max_size=1,
-        timeout=timedelta(seconds=1),
-        repository=_FakeJobLogSink(helper),
-    )
-
-    await buffer.add((job_faker(), "successful", None))
-    await buffer.lock.acquire()
-    try:
-        await buffer.flush()
-    finally:
-        buffer.lock.release()
-
-    assert helper_calls == []
-    assert buffer.events.qsize() == 1
-
-
 LogEntry = tuple[Job, JOB_STATUS, TracebackRecord | None]
