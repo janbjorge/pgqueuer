@@ -990,6 +990,16 @@ class QueryQueueBuilder:
         LIMIT 1
         """
 
+    def build_next_stale_eta_query(self) -> str:
+        return f"""SELECT GREATEST(heartbeat + $3::interval - NOW(), INTERVAL '0') AS eta
+        FROM {self.qualified.queue_table}
+        WHERE status = 'picked'
+          AND entrypoint = ANY($1)
+          AND queue_manager_id IS DISTINCT FROM $2
+        ORDER BY heartbeat
+        LIMIT 1
+        """
+
     def build_job_duration_percentiles_query(self) -> str:
         """Execution-duration percentiles per entrypoint, derived from log transitions.
 

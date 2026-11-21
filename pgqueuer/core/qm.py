@@ -367,8 +367,9 @@ class QueueManager:
         dequeue_timeout: timedelta,
         max_concurrent_tasks: int | None = None,
         running_tasks: int = 0,
+        heartbeat_timeout: timedelta = timedelta(seconds=30),
     ) -> timedelta:
-        """Return a potentially shortened timeout if work is ready or a deferred job is due soon."""
+        """Return a shortened timeout if work is ready, or a deferred or stale job is due soon."""
         # A full worker cannot take work; the NOTIFY from flushing a job end wakes it.
         if max_concurrent_tasks is not None and running_tasks >= max_concurrent_tasks:
             return dequeue_timeout
@@ -381,8 +382,6 @@ class QueueManager:
         if await self.queries.eligible_queued_work(entrypoints, concurrency_limits=limits) > 0:
             return self.min_dequeue_poll_interval
         eta = await self.queries.next_deferred_eta(entrypoints)
-        if eta is not None and eta < dequeue_timeout:
-            return max(eta, self.min_dequeue_poll_interval)
         # A deferred job can cross its execute_after between the two probes
         # above: the eligibility probe still saw it as deferred, the eta probe
         # no longer sees it as future. Re-probing eligibility closes the gap.
@@ -391,6 +390,15 @@ class QueueManager:
             and await self.queries.eligible_queued_work(entrypoints, concurrency_limits=limits) > 0
         ):
             return self.min_dequeue_poll_interval
+        # A dead worker's picked job, which may hold a full slot, is claimable once stale.
+        stale = await self.queries.next_stale_eta(
+            entrypoints,
+            queue_manager_id=self.queue_manager_id,
+            heartbeat_timeout=heartbeat_timeout,
+        )
+        soonest = min((x for x in (eta, stale) if x is not None), default=None)
+        if soonest is not None and soonest < dequeue_timeout:
+            return max(soonest, self.min_dequeue_poll_interval)
         return dequeue_timeout
 
     async def run(
@@ -503,7 +511,10 @@ class QueueManager:
                 while not notice_event_listener.empty():
                     notice_event_listener.get_nowait()
                 timeout = await self._effective_dequeue_timeout(
-                    dequeue_timeout, max_concurrent_tasks, len(task_manager.tasks)
+                    dequeue_timeout,
+                    max_concurrent_tasks,
+                    len(task_manager.tasks),
+                    heartbeat_timeout,
                 )
                 async with tm.cancel_on_exit(
                     listeners.wait_for_notice_event(notice_event_listener, timeout)

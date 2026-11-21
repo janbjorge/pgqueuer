@@ -257,6 +257,26 @@ async def test_eligible_queued_work_capacity_matches(apgdriver: AsyncpgDriver) -
         assert await postgres.eligible_queued_work(eps, concurrency_limits=limits) == expected
 
 
+async def test_next_stale_eta_matches(apgdriver: AsyncpgDriver) -> None:
+    """Only another manager's picked jobs count; an expired heartbeat reads as zero."""
+    memory, postgres = pair(apgdriver)
+    eps = [QueueEntrypoint("ep")]
+    other = QueueManagerId(uuid.uuid4())
+    hour = timedelta(hours=1)
+    for q in (memory, postgres):
+        assert await q.next_stale_eta(eps, queue_manager_id=other, heartbeat_timeout=hour) is None
+        await q.enqueue(["ep", "ep"], [None, None], [0, 0])
+        await q.dequeue(1, EP, OWNER, None, TIMEOUT)
+        assert await q.next_stale_eta(eps, queue_manager_id=OWNER, heartbeat_timeout=hour) is None
+        expired = await q.next_stale_eta(
+            eps, queue_manager_id=other, heartbeat_timeout=timedelta(0)
+        )
+        assert expired == timedelta(0)
+        eta = await q.next_stale_eta(eps, queue_manager_id=other, heartbeat_timeout=hour)
+        assert eta is not None
+        assert timedelta(0) < eta <= hour
+
+
 async def test_queue_size_order_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
     entrypoints = {QueueEntrypoint("a"): EntrypointExecutionParameter(0)}

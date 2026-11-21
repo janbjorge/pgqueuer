@@ -692,6 +692,22 @@ class Queries:
             return None
         return cell(rows[0], "eta", timedelta)
 
+    async def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+    ) -> timedelta | None:
+        """Time until a job picked by another manager first goes stale (zero if one is), or None."""
+        rows = await self.driver.fetch(
+            self.qbq.build_next_stale_eta_query(),
+            entrypoints,
+            queue_manager_id,
+            heartbeat_timeout,
+        )
+        return cell(rows[0], "eta", timedelta) if rows else None
+
     async def queue_age(self) -> list[models.QueueAgeStats]:
         """Backlog age of queued jobs per entrypoint, ordered by entrypoint."""
         return [

@@ -438,6 +438,18 @@ class InMemoryQueries:
         """Return time until the soonest deferred job becomes eligible, or None."""
         return self.job_table.next_deferred_eta(entrypoints, utc_now())
 
+    async def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+    ) -> timedelta | None:
+        """Time until a job picked by another manager first goes stale (zero if one is), or None."""
+        return self.job_table.next_stale_eta(
+            entrypoints, queue_manager_id, heartbeat_timeout, utc_now()
+        )
+
     async def queue_age(self) -> list[models.QueueAgeStats]:
         return self.job_table.queue_age(utc_now())
 

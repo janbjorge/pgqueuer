@@ -181,6 +181,16 @@ class QueueRepositoryPort(Protocol):
         """Return time until the soonest deferred job becomes eligible, or None."""
         ...
 
+    async def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+    ) -> timedelta | None:
+        """Time until a job picked by another manager first goes stale (zero if one is), or None."""
+        ...
+
 
 class InsightsRepositoryPort(Protocol):
     """Read-only queue introspection consumed by presentation layers (web, MCP, CLI)."""
