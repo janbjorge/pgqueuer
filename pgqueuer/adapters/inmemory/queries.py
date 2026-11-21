@@ -338,9 +338,21 @@ class InMemoryQueries:
         """1 when any queued job matches these entrypoints, else 0."""
         return int(self.job_table.has_queued(entrypoints))
 
-    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
+    async def eligible_queued_work(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        concurrency_limits: list[int] | None = None,
+    ) -> int:
         """1 when a queued job for these entrypoints is due, else 0."""
-        return int(self.job_table.has_due(entrypoints, utc_now()))
+        limits = concurrency_limits or [0] * len(entrypoints)
+        picked = self.job_table.picked_by_entrypoint
+        free = [
+            ep
+            for ep, limit in zip(entrypoints, limits, strict=True)
+            if limit <= 0 or picked.get(ep, 0) < limit
+        ]
+        return int(self.job_table.has_due(free, utc_now()))
 
     async def queue_log(self) -> list[models.Log]:
         return self.logs.to_models()

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import dataclasses
 import functools
 import random
@@ -363,22 +362,34 @@ class QueueManager:
             self.shutdown.set()
             await periodic_health_check_task
 
-    async def _effective_dequeue_timeout(self, dequeue_timeout: timedelta) -> timedelta:
+    async def _effective_dequeue_timeout(
+        self,
+        dequeue_timeout: timedelta,
+        max_concurrent_tasks: int | None = None,
+        running_tasks: int = 0,
+    ) -> timedelta:
         """Return a potentially shortened timeout if work is ready or a deferred job is due soon."""
+        # A full worker cannot take work; the NOTIFY from flushing a job end wakes it.
+        if max_concurrent_tasks is not None and running_tasks >= max_concurrent_tasks:
+            return dequeue_timeout
         entrypoints = list(self.entrypoint_registry.keys())
         # A job may have become eligible between the preceding dequeue and this
-        # check (TOCTOU), and its notification may already have been consumed by
-        # the per-dispatch drain. Eligible work always warrants a fast re-poll,
-        # even when deferred jobs exist.
-        if await self.queries.eligible_queued_work(entrypoints) > 0:
+        # check (TOCTOU), and its notification may already have been drained by
+        # the caller. Eligible work always warrants a fast re-poll, even when
+        # deferred jobs exist.
+        limits = [self.entrypoint_registry[x].parameters.concurrency_limit for x in entrypoints]
+        if await self.queries.eligible_queued_work(entrypoints, concurrency_limits=limits) > 0:
             return self.min_dequeue_poll_interval
         eta = await self.queries.next_deferred_eta(entrypoints)
         if eta is not None and eta < dequeue_timeout:
             return max(eta, self.min_dequeue_poll_interval)
         # A deferred job can cross its execute_after between the two probes
         # above: the eligibility probe still saw it as deferred, the eta probe
-        # no longer sees it as future. queued_work counts both, closing the gap.
-        if eta is None and await self.queries.queued_work(entrypoints) > 0:
+        # no longer sees it as future. Re-probing eligibility closes the gap.
+        if (
+            eta is None
+            and await self.queries.eligible_queued_work(entrypoints, concurrency_limits=limits) > 0
+        ):
             return self.min_dequeue_poll_interval
         return dequeue_timeout
 
@@ -477,9 +488,6 @@ class QueueManager:
                     task.add_done_callback(functools.partial(self.forget_job, job.id, context))
                     task_manager.add(task)
 
-                    with contextlib.suppress(asyncio.QueueEmpty):
-                        notice_event_listener.get_nowait()
-
                 await self._maybe_drain_shutdown(mode, task_manager)
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
@@ -491,11 +499,14 @@ class QueueManager:
                 wake_on_listener_failure = (
                     shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
                 )
+                # NOTIFY follows commit, so the probes below already see what drained events signal.
+                while not notice_event_listener.empty():
+                    notice_event_listener.get_nowait()
+                timeout = await self._effective_dequeue_timeout(
+                    dequeue_timeout, max_concurrent_tasks, len(task_manager.tasks)
+                )
                 async with tm.cancel_on_exit(
-                    listeners.wait_for_notice_event(
-                        notice_event_listener,
-                        await self._effective_dequeue_timeout(dequeue_timeout),
-                    )
+                    listeners.wait_for_notice_event(notice_event_listener, timeout)
                 ) as event_task:
                     wake_on: set[asyncio.Task[object]] = {shutdown_task, event_task}
                     if wake_on_listener_failure:

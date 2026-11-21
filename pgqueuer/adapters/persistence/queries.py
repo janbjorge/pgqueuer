@@ -394,9 +394,17 @@ class Queries:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
         return cell(rows[0], "queued_work", int) if rows else 0
 
-    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
+    async def eligible_queued_work(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        concurrency_limits: list[int] | None = None,
+    ) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
-        rows = await self.driver.fetch(self.qbq.build_has_eligible_queued_work(), entrypoints)
+        limits = concurrency_limits or [0] * len(entrypoints)
+        rows = await self.driver.fetch(
+            self.qbq.build_has_eligible_queued_work(), entrypoints, limits
+        )
         return cell(rows[0], "queued_work", int) if rows else 0
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
