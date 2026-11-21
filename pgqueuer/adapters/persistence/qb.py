@@ -592,14 +592,29 @@ class QueryQueueBuilder:
         """
 
     def build_has_eligible_queued_work(self) -> str:
+        """$2 is parallel to $1; an entrypoint with a positive limit counts only below it."""
+        queue_table = self.qualified.queue_table
         return f"""
         SELECT COUNT(*) AS queued_work
         FROM (
             SELECT 1
-            FROM {self.qualified.queue_table}
-            WHERE entrypoint = ANY($1)
-              AND status = 'queued'
-              AND {self.due()}
+            FROM UNNEST($1::text[], $2::bigint[]) AS params(entrypoint, concurrency_limit)
+            WHERE (
+                params.concurrency_limit <= 0
+                OR (
+                    SELECT COUNT(*)
+                    FROM {queue_table} p
+                    WHERE p.entrypoint = params.entrypoint
+                      AND p.queue_manager_id IS NOT NULL
+                ) < params.concurrency_limit
+            )
+              AND EXISTS (
+                SELECT 1
+                FROM {queue_table} q
+                WHERE q.entrypoint = params.entrypoint
+                  AND q.status = 'queued'
+                  AND {self.due("q")}
+              )
             LIMIT 1
         ) sub
         """
@@ -972,6 +987,16 @@ class QueryQueueBuilder:
           AND NOT ({self.due()})
           AND entrypoint = ANY($1)
         ORDER BY execute_after
+        LIMIT 1
+        """
+
+    def build_next_stale_eta_query(self) -> str:
+        return f"""SELECT GREATEST(heartbeat + $3::interval - NOW(), INTERVAL '0') AS eta
+        FROM {self.qualified.queue_table}
+        WHERE status = 'picked'
+          AND entrypoint = ANY($1)
+          AND queue_manager_id IS DISTINCT FROM $2
+        ORDER BY heartbeat
         LIMIT 1
         """
 

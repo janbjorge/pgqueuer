@@ -394,9 +394,17 @@ class Queries:
         rows = await self.driver.fetch(self.qbq.build_has_queued_work(), entrypoints)
         return cell(rows[0], "queued_work", int) if rows else 0
 
-    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
+    async def eligible_queued_work(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        concurrency_limits: list[int] | None = None,
+    ) -> int:
         """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
-        rows = await self.driver.fetch(self.qbq.build_has_eligible_queued_work(), entrypoints)
+        limits = concurrency_limits or [0] * len(entrypoints)
+        rows = await self.driver.fetch(
+            self.qbq.build_has_eligible_queued_work(), entrypoints, limits
+        )
         return cell(rows[0], "queued_work", int) if rows else 0
 
     async def clear_queue(self, entrypoint: str | list[str] | None = None) -> None:
@@ -683,6 +691,22 @@ class Queries:
         if not rows or rows[0]["eta"] is None:
             return None
         return cell(rows[0], "eta", timedelta)
+
+    async def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+    ) -> timedelta | None:
+        """Time until a job picked by another manager first goes stale (zero if one is), or None."""
+        rows = await self.driver.fetch(
+            self.qbq.build_next_stale_eta_query(),
+            entrypoints,
+            queue_manager_id,
+            heartbeat_timeout,
+        )
+        return cell(rows[0], "eta", timedelta) if rows else None
 
     async def queue_age(self) -> list[models.QueueAgeStats]:
         """Backlog age of queued jobs per entrypoint, ordered by entrypoint."""

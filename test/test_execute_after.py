@@ -240,12 +240,14 @@ async def test_effective_dequeue_timeout_deferred_job_crossing_eligibility() -> 
     async def handler(job: Job) -> None:
         pass
 
-    # The job is queued throughout, but both probes miss it: the eligibility
-    # probe ran before execute_after passed, the eta probe after.
+    # The job is queued throughout, but the first two probes miss it: the
+    # eligibility probe ran before execute_after passed, the eta probe after.
     await pq.qm.queries.enqueue("ep", None, 0, timedelta(seconds=5))
 
     with (
-        patch.object(pq.qm.queries, "eligible_queued_work", new_callable=AsyncMock, return_value=0),
+        patch.object(
+            pq.qm.queries, "eligible_queued_work", new_callable=AsyncMock, side_effect=[0, 1]
+        ),
         patch.object(pq.qm.queries, "next_deferred_eta", new_callable=AsyncMock, return_value=None),
     ):
         timeout = await pq.qm._effective_dequeue_timeout(timedelta(seconds=30))

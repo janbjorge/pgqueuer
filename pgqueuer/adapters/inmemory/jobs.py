@@ -560,6 +560,25 @@ class JobTable:
             return None
         return min(candidates) - now
 
+    def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+        now: datetime,
+    ) -> timedelta | None:
+        wanted = set(entrypoints)
+        beats = [
+            job.heartbeat
+            for job in self.rows.values()
+            if job.status == "picked"
+            and job.entrypoint in wanted
+            and job.queue_manager_id != queue_manager_id
+        ]
+        if not beats:
+            return None
+        return max(min(beats) + heartbeat_timeout - now, timedelta(0))
+
     def queue_size(self) -> list[models.QueueStatistics]:
         counts: dict[QueueSizeGroup, int] = {}
         for job in self.rows.values():

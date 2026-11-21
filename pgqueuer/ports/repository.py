@@ -142,8 +142,17 @@ class QueueRepositoryPort(Protocol):
 
     async def queued_work(self, entrypoints: list[QueueEntrypoint]) -> int: ...
 
-    async def eligible_queued_work(self, entrypoints: list[QueueEntrypoint]) -> int:
-        """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed."""
+    async def eligible_queued_work(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        concurrency_limits: list[int] | None = None,
+    ) -> int:
+        """Like ``queued_work`` but counting only jobs whose ``execute_after`` has passed.
+
+        With ``concurrency_limits`` (parallel to *entrypoints*, 0 for unlimited), an
+        entrypoint counts only while its picked jobs are below its limit.
+        """
         ...
 
     async def queue_log(self) -> list[models.Log]: ...
@@ -170,6 +179,16 @@ class QueueRepositoryPort(Protocol):
 
     async def next_deferred_eta(self, entrypoints: list[QueueEntrypoint]) -> timedelta | None:
         """Return time until the soonest deferred job becomes eligible, or None."""
+        ...
+
+    async def next_stale_eta(
+        self,
+        entrypoints: list[QueueEntrypoint],
+        *,
+        queue_manager_id: QueueManagerId,
+        heartbeat_timeout: timedelta,
+    ) -> timedelta | None:
+        """Time until a job picked by another manager first goes stale (zero if one is), or None."""
         ...
 
 
