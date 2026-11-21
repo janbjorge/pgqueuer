@@ -40,10 +40,6 @@ class TimedOverflowBuffer(Generic[T]):
         init=False,
         default_factory=asyncio.Event,
     )
-    lock: asyncio.Lock = dataclasses.field(
-        init=False,
-        default_factory=asyncio.Lock,
-    )
     pending_tasks: set[asyncio.Task[None]] = dataclasses.field(
         init=False,
         default_factory=set,
@@ -56,17 +52,12 @@ class TimedOverflowBuffer(Generic[T]):
     async def add(self, item: T) -> None:
         """Add an item; trigger flush if buffer reaches *max_size*."""
         await self.events.put(item)
-        if self.events.qsize() >= self.max_size and not self.lock.locked():
+        if self.events.qsize() >= self.max_size:
             self.schedule_flush()
 
     async def flush(self) -> None:
         """Drain the queue and call :meth:`flush_items`. Requeues on failure."""
-        if self.lock.locked():
-            return
-
-        async with self.lock:
-            items = self.drain_queue()
-
+        items = self.drain_queue()
         if not items:
             return
 
@@ -114,7 +105,7 @@ class TimedOverflowBuffer(Generic[T]):
 
     async def periodic_flush(self) -> None:
         while not self.shutdown.is_set():
-            if not self.lock.locked() and self.events.qsize() > 0:
+            if self.events.qsize() > 0:
                 await self.flush()
 
             with suppress(TimeoutError):

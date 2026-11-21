@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from itertools import groupby
@@ -52,6 +52,22 @@ def _escape_label_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+def _aggregate(
+    statistics: Sequence[QueueStatistics | LogStatistics],
+    metric_name: str,
+) -> Generator[str, None, None]:
+    """Sum counts per (entrypoint, status) and format each group as a metric line."""
+    for (entrypoint, status), items in groupby(
+        sorted(statistics, key=lambda x: (x.entrypoint, x.status)),
+        key=lambda x: (x.entrypoint, x.status),
+    ):
+        yield prometheus_format(
+            metric_name=metric_name,
+            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
+            value=sum(x.count for x in items),
+        )
+
+
 def aggregated_queue_statistics(
     queue_statistics: list[QueueStatistics],
     metric_names: MetricNames,
@@ -61,19 +77,7 @@ def aggregated_queue_statistics(
     Aggregates queue statistics by entrypoint and status, summing
     the counts for each group.
     """
-    aggregated = (
-        (entrypoint, status, tuple(items))
-        for (entrypoint, status), items in groupby(
-            sorted(queue_statistics, key=lambda x: (x.entrypoint, x.status)),
-            key=lambda x: (x.entrypoint, x.status),
-        )
-    )
-    for entrypoint, status, items in aggregated:
-        yield prometheus_format(
-            metric_name=metric_names.queue_count,
-            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
-            value=sum(x.count for x in items),
-        )
+    yield from _aggregate(queue_statistics, metric_names.queue_count)
 
 
 def aggregated_log_statistics(
@@ -86,20 +90,7 @@ def aggregated_log_statistics(
     the counts for each group. This reflects job processing history
     over a configurable time window.
     """
-    aggregated = (
-        (entrypoint, status, tuple(items))
-        for (entrypoint, status), items in groupby(
-            sorted(log_statistics, key=lambda x: (x.entrypoint, x.status)),
-            key=lambda x: (x.entrypoint, x.status),
-        )
-    )
-
-    for entrypoint, status, items in aggregated:
-        yield prometheus_format(
-            metric_name=metric_names.log_count,
-            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
-            value=sum(x.count for x in items),
-        )
+    yield from _aggregate(log_statistics, metric_names.log_count)
 
 
 def aggregated_statistics(

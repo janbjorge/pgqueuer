@@ -238,10 +238,6 @@ class QueueManager:
 
         return register
 
-    def entrypoints_below_capacity_limits(self) -> set[types.QueueEntrypoint]:
-        """All registered entrypoints; per-entrypoint limits are enforced in SQL."""
-        return set(self.entrypoint_registry)
-
     async def fetch_jobs(
         self,
         batch_size: int,
@@ -254,7 +250,7 @@ class QueueManager:
                 x: EntrypointExecutionParameter(
                     concurrency_limit=self.entrypoint_registry[x].parameters.concurrency_limit,
                 )
-                for x in self.entrypoints_below_capacity_limits()
+                for x in self.entrypoint_registry
             }
 
             if not (
