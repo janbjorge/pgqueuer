@@ -21,8 +21,13 @@ sql_app = typer.Typer(
 # Shared option/argument definitions; the executing twins in cli.py reuse these
 # so `pgq sql X` and `pgq X` stay flag-compatible without drifting help text.
 DurabilityOption = Annotated[
-    qb.Durability,
-    typer.Option("--durability", "-d", help="Durability level for tables."),
+    qb.Durability | None,
+    typer.Option(
+        "--durability",
+        "-d",
+        help="Durability level for tables. Defaults to PGQUEUER_DURABILITY.",
+        show_default=False,
+    ),
 ]
 CreateSchemaOption = Annotated[
     bool,
@@ -35,14 +40,15 @@ CreateSchemaOption = Annotated[
     ),
 ]
 WidenIdOption = Annotated[
-    bool,
+    bool | None,
     typer.Option(
         "--widen-id/--no-widen-id",
         help=(
             "Widen legacy int4 id columns and sequences to BIGINT. Takes an "
             "ACCESS EXCLUSIVE lock and rewrites each table; use --no-widen-id "
-            "to skip and apply the widening out-of-band."
+            "to skip and apply the widening out-of-band. Defaults to PGQUEUER_WIDEN_ID."
         ),
+        show_default=False,
     ),
 ]
 DurabilityArgument = Annotated[
@@ -95,10 +101,12 @@ def render_autovac(rollback: bool, settings: qb.DBSettings) -> str:
 @sql_app.command(help="SQL to create the PgQueuer schema.")
 def install(
     ctx: typer.Context,
-    durability: DurabilityOption = qb.Durability.durable,
+    durability: DurabilityOption = None,
     create_schema: CreateSchemaOption = True,
 ) -> None:
-    settings = ctx.obj.settings.model_copy(update={"durability": durability})
+    settings: qb.DBSettings = ctx.obj.settings
+    durability = settings.durability if durability is None else durability
+    settings = settings.model_copy(update={"durability": durability})
     typer.echo(schema_ddl.render_install(settings, create_schema=create_schema))
 
 
@@ -116,10 +124,13 @@ def uninstall(ctx: typer.Context) -> None:
 )
 def upgrade(
     ctx: typer.Context,
-    durability: DurabilityOption = qb.Durability.durable,
-    widen_id: WidenIdOption = True,
+    durability: DurabilityOption = None,
+    widen_id: WidenIdOption = None,
 ) -> None:
-    settings = ctx.obj.settings.model_copy(update={"durability": durability, "widen_id": widen_id})
+    settings: qb.DBSettings = ctx.obj.settings
+    durability = settings.durability if durability is None else durability
+    widen_id = settings.widen_id if widen_id is None else widen_id
+    settings = settings.model_copy(update={"durability": durability, "widen_id": widen_id})
     typer.echo(render_upgrade(settings))
 
 
