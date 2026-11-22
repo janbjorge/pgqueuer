@@ -297,6 +297,7 @@ The grandfathered `tracing.TRACER` is the sole legacy exception; add no more, an
 - Hierarchy: `PgqException > RetryException > RetryRequested`; also `DuplicateJobError`, `FailingListenerError`, `SchemaDriftError`
 - Use `logconfig.logger.exception(...)` for logging errors in job dispatch
 - Use `contextlib.suppress(...)` for non-critical errors
+- **Every resource is cleaned up by a context manager.** A `finally` block is the last resort, used only where no context manager can express the cleanup.
 - Use `pytest.raises` in tests for expected exceptions
 
 ### Docstrings
