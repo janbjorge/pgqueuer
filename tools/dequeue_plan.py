@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import uuid
@@ -59,12 +60,11 @@ def parse_plan(raw: object) -> dict[str, object]:
 
 async def rolled_back(conn: asyncpg.Connection, sql: str) -> object:
     """Run *sql* in a transaction that is always rolled back, since dequeue writes."""
-    transaction = conn.transaction()
-    await transaction.start()
-    try:
+    async with contextlib.AsyncExitStack() as stack:
+        transaction = conn.transaction()
+        await transaction.start()
+        stack.push_async_callback(transaction.rollback)
         return await conn.fetchval(sql)
-    finally:
-        await transaction.rollback()
 
 
 async def plan_counts(conn: asyncpg.Connection) -> dict[str, int]:
@@ -96,8 +96,9 @@ async def explain_mode(
 ) -> PlanRecord:
     sql, args = query.sql, query.args
     await conn.execute(f"SET plan_cache_mode = {mode}")
-    await conn.execute(f"PREPARE {STATEMENT} AS {sql}")
-    try:
+    async with contextlib.AsyncExitStack() as stack:
+        await conn.execute(f"PREPARE {STATEMENT} AS {sql}")
+        stack.push_async_callback(conn.execute, f"DEALLOCATE {STATEMENT}")
         call = await execute_call(conn, args)
         for _ in range(WARMUP_EXECUTIONS):
             await rolled_back(conn, call)
@@ -107,8 +108,6 @@ async def explain_mode(
             for _ in range(EXPLAIN_RUNS)
         ]
         after = await plan_counts(conn)
-    finally:
-        await conn.execute(f"DEALLOCATE {STATEMENT}")
     fastest = min(plans, key=lambda plan: number(plan, "Execution Time"))
     root = cell(fastest, "Plan", dict)
     jit = fastest.get("JIT")
@@ -133,8 +132,9 @@ async def ramp(
 ) -> list[PlanRecord]:
     tables = DBSettings().qualified
     # statement_cache_size=0: DEALLOCATE would otherwise break asyncpg's own cached statements.
-    conn = await asyncpg.connect(statement_cache_size=0)
-    try:
+    async with contextlib.AsyncExitStack() as stack:
+        conn = await asyncpg.connect(statement_cache_size=0)
+        stack.push_async_callback(conn.close)
         if await conn.fetchval("SELECT to_regclass($1)", tables.queue_table) is None:
             raise SystemExit(f"{tables.queue_table} does not exist; run `pgq install` first")
         for setting in ("server_version", "jit", "jit_above_cost"):
@@ -160,8 +160,6 @@ async def ramp(
                     for mode in get_args(PlanMode)
                 ]
             )
-    finally:
-        await conn.close()
     return records
 
 
