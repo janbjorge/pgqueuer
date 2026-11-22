@@ -512,7 +512,7 @@ def run(
         logconfig.LogLevel.INFO.name,
         "--log-level",
         help="Set pgqueuer log level.",
-        parser=lambda x: x.upper(),
+        case_sensitive=False,
     ),
     mode: types.QueueExecutionMode = typer.Option(
         types.QueueExecutionMode.continuous.name,
