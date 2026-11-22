@@ -43,6 +43,9 @@
 - `pgq install`, `pgq upgrade`, `pgq sql install` and `pgq sql upgrade` fall
   back to `PGQUEUER_DURABILITY` and `PGQUEUER_WIDEN_ID` when `--durability` /
   `--widen-id` are not passed; a passed flag still wins (#1089).
+- `pgq run` no longer crashes with `AttributeError: 'str' object has no
+  attribute 'name'` on typer 0.29 with Python 3.14; `--log-level` is now a
+  case-insensitive choice (#1097).
 - Exception tracebacks on the web dashboard wrap long unbroken text instead of
   forcing horizontal scrolling.
 - `AsyncpgPoolDriver` no longer raises on exit when its listener connection has
