@@ -25,7 +25,10 @@ is bound, and the text and argument list emerge as one pair. A
 statement renders only the fragments its configuration needs, and one
 configuration always renders identical text. "Not configured" is
 expressed as absence, never as a sentinel value, and the composer
-never rewrites fragment text.
+never rewrites fragment text. The dequeue's `batch_size` is the one
+exception to binding: a validated positive integer written as a
+literal, so the plan PostgreSQL caches for the prepared statement can
+see its `LIMIT`.
 
 Adoption is incremental and has not started yet: dequeue migrates
 first, the remaining builders follow when next touched, and a

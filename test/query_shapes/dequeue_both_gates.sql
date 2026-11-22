@@ -2,8 +2,8 @@ WITH
 -- Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.
 params AS (
     SELECT
-        UNNEST($2::text[]) AS entrypoint,
-        UNNEST($5::bigint[]) AS concurrency_limit
+        UNNEST($1::text[]) AS entrypoint,
+        UNNEST($4::bigint[]) AS concurrency_limit
 ),
 
 -- Per-entrypoint count of picked jobs (global, all workers).
@@ -11,7 +11,7 @@ picked AS (
     SELECT entrypoint, COUNT(*) AS total
     FROM pgqueuer
     WHERE queue_manager_id IS NOT NULL
-      AND entrypoint = ANY($2)
+      AND entrypoint = ANY($1)
     GROUP BY entrypoint
 ),
 
@@ -33,10 +33,10 @@ available AS (
 worker_load AS (
     SELECT
         COUNT(*) AS total,
-        GREATEST(LEAST($1, $6 - COUNT(*)), 0) AS headroom
+        GREATEST(LEAST(10, $5 - COUNT(*)), 0) AS headroom
     FROM pgqueuer
-    WHERE queue_manager_id = $3
-      AND entrypoint = ANY($2)
+    WHERE queue_manager_id = $2
+      AND entrypoint = ANY($1)
 ),
 
 -- Claims for entrypoints without a limit; lock straight down the backlog.
@@ -50,7 +50,7 @@ unlimited_claims AS (
           AND candidate.status = 'queued'
           AND candidate.execute_after <= NOW()
         ORDER BY candidate.priority DESC, candidate.id ASC
-        LIMIT $1
+        LIMIT 10
         FOR UPDATE SKIP LOCKED
     ) job
     WHERE available.remaining IS NULL
@@ -63,13 +63,18 @@ limited_claims AS (
     CROSS JOIN LATERAL (
         SELECT locked.id, locked.priority
         FROM (
-            SELECT candidate.id
-            FROM pgqueuer candidate
-            WHERE candidate.entrypoint = available.entrypoint
-              AND candidate.status = 'queued'
-              AND candidate.execute_after <= NOW()
-            ORDER BY candidate.priority DESC, candidate.id ASC
-            LIMIT LEAST($1, available.remaining)
+            SELECT batched.id
+            FROM (
+                SELECT candidate.id, candidate.priority
+                FROM pgqueuer candidate
+                WHERE candidate.entrypoint = available.entrypoint
+                  AND candidate.status = 'queued'
+                  AND candidate.execute_after <= NOW()
+                ORDER BY candidate.priority DESC, candidate.id ASC
+                LIMIT 10
+            ) batched
+            ORDER BY batched.priority DESC, batched.id ASC
+            LIMIT LEAST(10, available.remaining)
         ) capped
         CROSS JOIN LATERAL (
             SELECT target.id, target.priority
@@ -80,7 +85,7 @@ limited_claims AS (
             FOR UPDATE OF target SKIP LOCKED
         ) locked
         ORDER BY locked.priority DESC, locked.id ASC
-        LIMIT LEAST($1, available.remaining)
+        LIMIT LEAST(10, available.remaining)
     ) job
     WHERE available.remaining IS NOT NULL
 ),
@@ -93,9 +98,9 @@ next_queued AS (
         UNION ALL
         SELECT id, priority, entrypoint FROM limited_claims
     ) job
-    WHERE (SELECT total FROM worker_load) < $6
+    WHERE (SELECT total FROM worker_load) < $5
     ORDER BY job.priority DESC, job.id ASC
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Stale picked jobs whose heartbeat timed out.
@@ -103,13 +108,13 @@ next_stale AS (
     SELECT stale.id, stale.priority, stale.entrypoint
     FROM pgqueuer stale
     WHERE stale.status = 'picked'
-      AND stale.entrypoint = ANY($2)
-      AND stale.heartbeat < NOW() - $4::interval
+      AND stale.entrypoint = ANY($1)
+      AND stale.heartbeat < NOW() - $3::interval
       AND stale.execute_after <= NOW()
-      AND (SELECT total FROM worker_load) < $6
+      AND (SELECT total FROM worker_load) < $5
     ORDER BY stale.priority DESC, stale.id ASC
     FOR UPDATE SKIP LOCKED
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Merge both sets into one priority order so stale competes with fresh.
@@ -136,7 +141,7 @@ free_slots AS (
     CROSS JOIN LATERAL GENERATE_SERIES(
         0,
         params.concurrency_limit - available.remaining
-            + LEAST($1, available.remaining) - 1
+            + LEAST(10, available.remaining) - 1
     ) AS slots(slot)
     WHERE available.remaining IS NOT NULL
       AND NOT EXISTS (
@@ -171,7 +176,7 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $3,
+        queue_manager_id = $2,
         slot = CASE WHEN eligible.fresh THEN slot_assignments.slot ELSE job.slot END
     FROM eligible
     LEFT JOIN slot_assignments ON slot_assignments.id = eligible.id

@@ -441,3 +441,26 @@ async def test_dequeue_assigns_capacity_slots(apgdriver: Driver) -> None:
     assert {job.slot for job in fetch} == set(range(limit))
     assert len(loose) == n_loose
     assert all(job.slot is None for job in loose)
+
+
+async def test_limited_dequeue_claims_top_priority_jobs_within_remaining(apgdriver: Driver) -> None:
+    """With fewer free slots than batch_size, the highest-priority, lowest-id jobs are claimed."""
+    q = Queries(apgdriver)
+
+    async def dequeue(batch_size: int) -> list[Job]:
+        return await q.dequeue(
+            batch_size=batch_size,
+            entrypoints={FETCH: EntrypointExecutionParameter(3)},
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
+            global_concurrency_limit=None,
+            heartbeat_timeout=timedelta(minutes=10),
+        )
+
+    await q.enqueue(["fetch"], [None], [0])
+    assert len(await dequeue(batch_size=1)) == 1
+
+    priorities = [0, 5, 1, 5, 5, 3]
+    ids = await q.enqueue(["fetch"] * len(priorities), [None] * len(priorities), priorities)
+
+    claimed = await dequeue(batch_size=10)
+    assert {job.id for job in claimed} == {ids[1], ids[3]}

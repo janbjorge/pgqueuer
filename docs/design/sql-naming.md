@@ -98,7 +98,10 @@ separated only by `search_path`.
 
 ## Invariants
 
-- No runtime value is interpolated into SQL text.
+- No runtime value is interpolated into SQL text, except the dequeue's
+  `batch_size`: a validated positive integer rendered as a literal,
+  because a bound `LIMIT` hides its value from the plan PostgreSQL
+  caches for a prepared statement.
 - The declaration and the catalog meet bare; qualification happens only
   when rendering.
 

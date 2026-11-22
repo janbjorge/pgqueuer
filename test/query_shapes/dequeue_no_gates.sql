@@ -1,7 +1,7 @@
 WITH
 -- No entrypoint carries a concurrency limit; all are available.
 available AS (
-    SELECT UNNEST($2::text[]) AS entrypoint
+    SELECT UNNEST($1::text[]) AS entrypoint
 ),
 
 -- New queued jobs; LATERAL hits the (entrypoint, priority, id) index.
@@ -15,11 +15,11 @@ next_queued AS (
           AND candidate.status = 'queued'
           AND candidate.execute_after <= NOW()
         ORDER BY candidate.priority DESC, candidate.id ASC
-        LIMIT $1
+        LIMIT 10
         FOR UPDATE SKIP LOCKED
     ) job
     ORDER BY job.priority DESC, job.id ASC
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Stale picked jobs whose heartbeat timed out.
@@ -27,12 +27,12 @@ next_stale AS (
     SELECT stale.id, stale.priority
     FROM pgqueuer stale
     WHERE stale.status = 'picked'
-      AND stale.entrypoint = ANY($2)
-      AND stale.heartbeat < NOW() - $4::interval
+      AND stale.entrypoint = ANY($1)
+      AND stale.heartbeat < NOW() - $3::interval
       AND stale.execute_after <= NOW()
     ORDER BY stale.priority DESC, stale.id ASC
     FOR UPDATE SKIP LOCKED
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Merge both sets into one priority order so stale competes with fresh.
@@ -43,7 +43,7 @@ eligible AS (
         SELECT id, priority FROM next_stale
     ) combined
     ORDER BY priority DESC, id ASC
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Claim every eligible job in one atomic UPDATE.
@@ -52,7 +52,7 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $3
+        queue_manager_id = $2
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
 ),
