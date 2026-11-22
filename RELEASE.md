@@ -12,6 +12,30 @@
 
 ---
 
+## v2.1.1
+
+### Changed
+
+- A failed listener health check is now logged as an error. With
+  `shutdown_on_listener_failure` off, the default, the worker used to keep
+  running with no log line: no NOTIFY wake-ups, no job cancellations, only
+  polling every `dequeue_timeout` (#1025). It still keeps running; restart it,
+  or pass `shutdown_on_listener_failure=True` to make it exit.
+
+### Fixed
+
+- Drain mode stops as soon as its last job ends. Since #1092 it could miss the
+  NOTIFY from that job's end and sit out the whole `dequeue_timeout`, 30 s by
+  default, before exiting.
+- With a per-entrypoint `concurrency_limit`, the dequeue's estimated cost no
+  longer grows with the number of queued rows. A large backlog pushed it past
+  `jit_above_cost`, and PostgreSQL then JIT-compiled the statement on every
+  poll. The batch size is now written into the statement as an integer
+  literal, so the plan PostgreSQL caches for the prepared dequeue sees it
+  too (#1071).
+
+---
+
 ## v2.1.0
 
 ### Changed
@@ -34,17 +58,9 @@
   there), and `traceback` is a JSON object rather than a JSON string (#1094).
   `queue_stats` and `throughput_summary` fold pending log rows into statistics,
   so they need write access; the docs no longer call every tool read-only.
-- A failed listener health check is now logged as an error. With
-  `shutdown_on_listener_failure` off, the default, the worker used to keep
-  running with no log line: no NOTIFY wake-ups, no job cancellations, only
-  polling every `dequeue_timeout` (#1025). It still keeps running; restart it,
-  or pass `shutdown_on_listener_failure=True` to make it exit.
 
 ### Fixed
 
-- Drain mode stops as soon as its last job ends. Since #1092 it could miss the
-  NOTIFY from that job's end and sit out the whole `dequeue_timeout`, 30 s by
-  default, before exiting.
 - A worker at `max_concurrent_tasks`, or whose entrypoints are all at their
   `concurrency_limit`, no longer re-polls the database every 100 ms. Each
   NOTIFY costs one dequeue instead of one per queued event (#1087).
@@ -64,12 +80,6 @@
   after a plain `shutdown.set()` it raised it instead of returning. The driver
   now skips `reset()` for a connection that is closed or already back in the
   pool, and logs a warning when the connection is lost during `reset()`.
-- With a per-entrypoint `concurrency_limit`, the dequeue's estimated cost no
-  longer grows with the number of queued rows. A large backlog pushed it past
-  `jit_above_cost`, and PostgreSQL then JIT-compiled the statement on every
-  poll. The batch size is now written into the statement as an integer
-  literal, so the plan PostgreSQL caches for the prepared dequeue sees it
-  too (#1071).
 
 ---
 
