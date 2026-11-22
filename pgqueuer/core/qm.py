@@ -119,9 +119,18 @@ class QueueManager:
         self,
         interval: timedelta = timedelta(seconds=10),
     ) -> None:
-        """Probe listener health every *interval*; raise on timeout via ``listener_healthy``."""
+        """Probe listener health every *interval*; log and re-raise the first failure."""
         while not self.shutdown.is_set():
-            await self.listener_healthy(timeout=interval)
+            try:
+                await self.listener_healthy(timeout=interval)
+            except Exception:
+                # Without shutdown_on_listener_failure nothing reads this task's exception.
+                logconfig.logger.exception(
+                    "Listener health check failed: NOTIFY wake-ups and job cancellations "
+                    "no longer reach this worker. Unless shutdown_on_listener_failure is set, "
+                    "it keeps running and only polls every dequeue timeout: restart it."
+                )
+                raise
             with suppress(TimeoutError):
                 async with asyncio.timeout(interval.total_seconds()):
                     await self.shutdown.wait()
