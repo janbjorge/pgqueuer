@@ -34,6 +34,11 @@
   there), and `traceback` is a JSON object rather than a JSON string (#1094).
   `queue_stats` and `throughput_summary` fold pending log rows into statistics,
   so they need write access; the docs no longer call every tool read-only.
+- A failed listener health check is now logged as an error. With
+  `shutdown_on_listener_failure` off, the default, the worker used to keep
+  running with no log line: no NOTIFY wake-ups, no job cancellations, only
+  polling every `dequeue_timeout` (#1025). It still keeps running; restart it,
+  or pass `shutdown_on_listener_failure=True` to make it exit.
 
 ### Fixed
 

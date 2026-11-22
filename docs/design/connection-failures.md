@@ -20,7 +20,7 @@ supervisor                                                         reruns the fa
       │  ├─ job task (per job)                                     waited for
       │  │  ├─ heartbeats, buffered  ─► update_heartbeat           logged, kept
       │  │  └─ results, buffered     ─► log_jobs                   at exit: 5 tries, then kept
-      │  ├─ health check, 10 s       ─► notify                     ends run (opt-in)
+      │  ├─ health check, 10 s       ─► notify                     logged, ends run (opt-in)
       │  └─ log aggregation          ─► aggregate_logs             swallowed
       └─ SchedulerManager.run
          ├─ loop, cron + 1 s         ─► fetch_schedule             raises, run ends
@@ -89,7 +89,9 @@ that `notifies()` holds.
 
 The asyncpg pool hides the failure. `AsyncpgPoolDriver` keeps its LISTEN
 connection out of the pool, and that connection dies without an error. Queries
-move to fresh pool connections, so nothing raises and nothing restarts. The
+move to fresh pool connections, so the run does not raise and nothing restarts.
+The health check times out and logs an error. Without
+`shutdown_on_listener_failure` that log line is the only sign. The
 [performance guide](../guides/performance-tuning.md#notify-channel-and-polling-fallback)
 already advises a direct connection for the queue manager, and #951 deprecates
 the pool drivers.

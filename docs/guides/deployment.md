@@ -180,10 +180,10 @@ starting again with a new connection:
 - `--restart-on-failure`, or a process supervisor, starts the worker again. With `pgq run`
   the factory runs again, so it opens a new connection.
 
-Without `--shutdown-on-listener-failure`, a dead connection is only noticed at the worker's
-next query, which can be up to `--dequeue-timeout` (30 s) away. With an asyncpg pool, a dead
-LISTEN connection is never noticed: the worker keeps running, but only picks up jobs by polling
-every `--dequeue-timeout`.
+Without `--shutdown-on-listener-failure`, a failed health check only logs an error. A dead
+connection ends the worker at its next query, which can be up to `--dequeue-timeout` (30 s)
+away. With an asyncpg pool, a dead LISTEN connection never ends the worker: it keeps running,
+but only picks up jobs by polling every `--dequeue-timeout`.
 
 Jobs running when the connection drops still finish. If their status write fails, the
 ends stay on `QueueManager.unwritten_job_logs` until the next `run`. `pgq run
