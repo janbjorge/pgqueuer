@@ -415,7 +415,8 @@ class QueueManager:
 
         ``mode=drain`` exits once the queue is empty and in-flight tasks finish.
         ``max_concurrent_tasks`` is a hard cap on this worker's picked jobs,
-        enforced by the dequeue query. Per-entrypoint concurrency limits are
+        enforced by the dequeue query. It defaults to ``max(100, 2 * batch_size)``;
+        pass ``0`` for unlimited. Per-entrypoint concurrency limits are
         likewise enforced in SQL, so batches keep their full size regardless
         of the tightest registered limit.
         ``heartbeat_timeout`` is the staleness threshold for re-picking a job;
@@ -428,8 +429,11 @@ class QueueManager:
         self.unwritten_job_logs = []
         await self.verify_structure()
 
-        # 0 has always meant unlimited; keep unlimited as None all the way to
-        # the dequeue query so it composes without the worker-budget CTEs.
+        # Unset gets a finite budget so one worker cannot claim a whole backlog (#1090).
+        # 0 is the explicit opt-in to unlimited, kept as None all the way to the
+        # dequeue query so it composes without the worker-budget CTEs.
+        if max_concurrent_tasks is None:
+            max_concurrent_tasks = max(100, 2 * batch_size)
         max_concurrent_tasks = max_concurrent_tasks or None
 
         if max_concurrent_tasks is not None and max_concurrent_tasks < 2 * batch_size:

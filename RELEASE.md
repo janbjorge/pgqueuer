@@ -12,10 +12,37 @@
 
 ---
 
-## v2.0.1
+## v2.1.0
+
+### Changed
+
+- `max_concurrent_tasks` has a finite default: `max(100, 2 * batch_size)` in
+  `QueueManager.run`, `PgQueuer.run` and `pgq run --max-concurrent-tasks`.
+  Unset used to mean unlimited, so one worker claimed a whole backlog, left
+  nothing for the rest of the fleet, and stranded every claimed job until
+  `heartbeat_timeout` if it died (#1090). A worker that ran more jobs at once
+  now runs at most 100; pass a higher value, or `0` for the old unlimited
+  behavior.
+- `QueueRepositoryPort` gains `next_stale_eta(entrypoints, *, queue_manager_id,
+  heartbeat_timeout)` and a `concurrency_limits` keyword on
+  `eligible_queued_work`. A custom repository passed to `QueueManager` must add
+  both (#1092).
+- An idle worker wakes about every `heartbeat_timeout / 2` while other workers
+  run jobs of its entrypoints, instead of once per `dequeue_timeout`, so a dead
+  worker's job is re-picked once its heartbeat goes stale (#1092).
+- MCP `failed_jobs` no longer returns the log row `id` (`job_id` is still
+  there), and `traceback` is a JSON object rather than a JSON string (#1094).
+  `queue_stats` and `throughput_summary` fold pending log rows into statistics,
+  so they need write access; the docs no longer call every tool read-only.
 
 ### Fixed
 
+- A worker at `max_concurrent_tasks`, or whose entrypoints are all at their
+  `concurrency_limit`, no longer re-polls the database every 100 ms. Each
+  NOTIFY costs one dequeue instead of one per queued event (#1087).
+- `pgq install`, `pgq upgrade`, `pgq sql install` and `pgq sql upgrade` fall
+  back to `PGQUEUER_DURABILITY` and `PGQUEUER_WIDEN_ID` when `--durability` /
+  `--widen-id` are not passed; a passed flag still wins (#1089).
 - Exception tracebacks on the web dashboard wrap long unbroken text instead of
   forcing horizontal scrolling.
 - `AsyncpgPoolDriver` no longer raises on exit when its listener connection has

@@ -14,6 +14,7 @@ await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))
 |-----------|---------|--------|
 | `batch_size` | `10` | Jobs fetched per dequeue round-trip |
 | `dequeue_timeout` | `30 s` | How long to wait for new NOTIFY before polling |
+| `max_concurrent_tasks` | `max(100, 2 × batch_size)` | Most jobs one worker holds at once; `0` is unlimited |
 | `log_aggregation_interval` | `30 s` | How often to roll `pgqueuer_log` into `pgqueuer_statistics`; skipped on ticks where the worker logged no jobs, `0` disables (aggregate on read) |
 
 **Tuning guidance:**
@@ -39,7 +40,10 @@ async def resize_image(job: Job) -> None:
 `concurrency_limit` is enforced **globally at the database level** across every worker; set
 `concurrency_limit=4` and at most 4 such jobs run across your entire fleet. Use it when tasks
 share a scarce external resource (e.g., an API with rate limits). `max_concurrent_tasks`, by
-contrast, is a per-process safety ceiling on total asyncio tasks.
+contrast, is a per-process safety ceiling on total asyncio tasks. Its default keeps one worker
+from claiming a whole backlog, so a fleet shares it and a crashed worker strands a bounded number
+of jobs until their heartbeats go stale. Raise it for many concurrent I/O-bound jobs per worker;
+`0` removes the ceiling.
 
 ## Connection pooling
 
