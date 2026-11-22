@@ -405,7 +405,7 @@ Start a `QueueManager` to process jobs.
 | `--restart-on-failure` | bool | False | Restart the manager automatically after failures |
 | `--log-level` | str | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `--mode` | str | continuous | `continuous` or `drain` |
-| `--max-concurrent-tasks` | int | None | Cap total concurrent tasks (None = unlimited). Must be at least twice `--batch-size` |
+| `--max-concurrent-tasks` | int | max(100, 2 × `--batch-size`) | Most jobs this runner holds at once (0 = unlimited). Must be at least twice `--batch-size` |
 | `--shutdown-on-listener-failure` | bool | False | Shut down if the LISTEN channel health check fails |
 
 ```bash
