@@ -42,6 +42,9 @@
 
 ### Fixed
 
+- Drain mode stops as soon as its last job ends. Since #1092 it could miss the
+  NOTIFY from that job's end and sit out the whole `dequeue_timeout`, 30 s by
+  default, before exiting.
 - A worker at `max_concurrent_tasks`, or whose entrypoints are all at their
   `concurrency_limit`, no longer re-polls the database every 100 ms. Each
   NOTIFY costs one dequeue instead of one per queued event (#1087).
