@@ -61,6 +61,12 @@
   after a plain `shutdown.set()` it raised it instead of returning. The driver
   now skips `reset()` for a connection that is closed or already back in the
   pool, and logs a warning when the connection is lost during `reset()`.
+- With a per-entrypoint `concurrency_limit`, the dequeue's estimated cost no
+  longer grows with the number of queued rows. A large backlog pushed it past
+  `jit_above_cost`, and PostgreSQL then JIT-compiled the statement on every
+  poll. The batch size is now written into the statement as an integer
+  literal, so the plan PostgreSQL caches for the prepared dequeue sees it
+  too (#1071).
 
 ---
 

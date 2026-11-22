@@ -1,17 +1,17 @@
 WITH
 -- No entrypoint carries a concurrency limit; all are available.
 available AS (
-    SELECT UNNEST($2::text[]) AS entrypoint
+    SELECT UNNEST($1::text[]) AS entrypoint
 ),
 
 -- This worker's picked jobs, and how many more this batch may claim.
 worker_load AS (
     SELECT
         COUNT(*) AS total,
-        GREATEST(LEAST($1, $5 - COUNT(*)), 0) AS headroom
+        GREATEST(LEAST(10, $4 - COUNT(*)), 0) AS headroom
     FROM pgqueuer
-    WHERE queue_manager_id = $3
-      AND entrypoint = ANY($2)
+    WHERE queue_manager_id = $2
+      AND entrypoint = ANY($1)
 ),
 
 -- New queued jobs; LATERAL hits the (entrypoint, priority, id) index.
@@ -25,12 +25,12 @@ next_queued AS (
           AND candidate.status = 'queued'
           AND candidate.execute_after <= NOW()
         ORDER BY candidate.priority DESC, candidate.id ASC
-        LIMIT $1
+        LIMIT 10
         FOR UPDATE SKIP LOCKED
     ) job
-    WHERE (SELECT total FROM worker_load) < $5
+    WHERE (SELECT total FROM worker_load) < $4
     ORDER BY job.priority DESC, job.id ASC
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Stale picked jobs whose heartbeat timed out.
@@ -38,13 +38,13 @@ next_stale AS (
     SELECT stale.id, stale.priority
     FROM pgqueuer stale
     WHERE stale.status = 'picked'
-      AND stale.entrypoint = ANY($2)
-      AND stale.heartbeat < NOW() - $4::interval
+      AND stale.entrypoint = ANY($1)
+      AND stale.heartbeat < NOW() - $3::interval
       AND stale.execute_after <= NOW()
-      AND (SELECT total FROM worker_load) < $5
+      AND (SELECT total FROM worker_load) < $4
     ORDER BY stale.priority DESC, stale.id ASC
     FOR UPDATE SKIP LOCKED
-    LIMIT $1
+    LIMIT 10
 ),
 
 -- Merge both sets into one priority order so stale competes with fresh.
@@ -64,7 +64,7 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $3
+        queue_manager_id = $2
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
 ),

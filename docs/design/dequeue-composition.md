@@ -36,8 +36,10 @@ a sub-model of the [system design](README.md).
 
 The two gate predicates (is any entrypoint limit configured, is a
 worker budget configured) select one of four shapes. The rendered text
-depends only on the shape and the installation's table names; every
-runtime value travels as a bound argument.
+depends only on the shape, the batch size and the installation's table
+names. The batch size is a literal, so the plan PostgreSQL caches for
+the prepared statement can see its `LIMIT`; every other runtime value
+travels as a bound argument.
 
 ## Shapes
 
@@ -55,7 +57,7 @@ runtime value travels as a bound argument.
 | Composer      | Service      | Assembles a statement from fragments; couples each value to its placeholder as it is bound |
 | Composed query| Value Object | Immutable pairing of rendered text and arguments   |
 | Query builder | Service      | Derives the gate predicates and composes the shape |
-| Gate shape    | Value Object | The pair of gate predicates; selects the statement |
+| Gate shape    | Value Object | The gate predicates and the batch size; selects the statement |
 
 The composer and builder live in `pgqueuer/adapters/persistence/`.
 
@@ -63,8 +65,8 @@ The composer and builder live in `pgqueuer/adapters/persistence/`.
 
 - "Unlimited" is expressed as absence at every boundary, never as a
   sentinel value.
-- One gate configuration always renders identical text; arguments are
-  bound fresh on every claim and never shared between claims.
+- One gate configuration and batch size always render identical text;
+  arguments are bound fresh on every claim and never shared between claims.
 - The stale-job re-pick skips the entrypoint gate on purpose:
   re-picking transfers ownership of an already-counted job, and gating
   it would deadlock recovery.

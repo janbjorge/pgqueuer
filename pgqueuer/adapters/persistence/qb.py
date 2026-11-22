@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Generator
 from datetime import timedelta
-from typing import assert_never
+from typing import NamedTuple, assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
@@ -206,12 +206,18 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 );"""
 
 
+class DequeueShape(NamedTuple):
+    capacity_gated: bool
+    budget_gated: bool
+    batch_size: int
+
+
 @dataclasses.dataclass
 class QueryQueueBuilder:
     settings: DBSettings
-    # Rendered dequeue SQL per (capacity-gated, budget-gated) shape. The bind
-    # order is fixed per shape, so cached text pairs with freshly bound args.
-    dequeue_sql_cache: dict[tuple[bool, bool], str] = dataclasses.field(default_factory=dict)
+    # Rendered dequeue SQL per shape. The bind order is fixed per shape, so
+    # cached text pairs with freshly bound args.
+    dequeue_sql_cache: dict[DequeueShape, str] = dataclasses.field(default_factory=dict)
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -242,18 +248,25 @@ class QueryQueueBuilder:
         composer pairs the SQL with its argument tuple, so parameter numbering
         never drifts between query shapes.
 
-        The rendered text is cached per gate shape because dequeue rebuilds
-        its query every busy-loop iteration; values are re-bound on every
-        call, so cached SQL never pins or shares argument objects.
+        The rendered text is cached per gate shape and batch size because
+        dequeue rebuilds its query every busy-loop iteration; values are
+        re-bound on every call, so cached SQL never pins or shares argument
+        objects.
         """
         if len(entrypoints) != len(concurrency_limits):
             raise ValueError("entrypoints and concurrency_limits must be the same length")
+        # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
+        rendered: object = batch_size
+        if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
+            raise ValueError("batch_size must be a positive integer")
 
         capacity_gated = any(limit > 0 for limit in concurrency_limits)
         budget_gated = global_concurrency_limit is not None
 
         composer = SqlComposer()
-        batch = composer.bind(batch_size)
+        # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
+        # statement cannot see a bound LIMIT and costs the whole backlog for it.
+        batch = str(batch_size)
         eps = composer.bind(list(entrypoints))
         queue_manager = composer.bind(queue_manager_id)
         heartbeat = composer.bind(heartbeat_timeout)
@@ -265,7 +278,7 @@ class QueryQueueBuilder:
         if budget_gated:
             global_limit = composer.bind(global_concurrency_limit)
 
-        shape = (capacity_gated, budget_gated)
+        shape = DequeueShape(capacity_gated, budget_gated, batch_size)
         if (cached_sql := self.dequeue_sql_cache.get(shape)) is not None:
             return ComposedQuery(sql=cached_sql, args=tuple(composer.values))
 
@@ -370,18 +383,25 @@ class QueryQueueBuilder:
             # where SKIP LOCKED slides down the backlog and past the cap (#761).
             composer.cte(
                 "limited_claims",
+                # The planner cannot evaluate the LEAST cap and costs a share of the whole
+                # backlog for it; the constant LIMIT beneath bounds the estimate by the batch.
                 f"""
                     SELECT job.id, job.priority, available.entrypoint
                     FROM available
                     CROSS JOIN LATERAL (
                         SELECT locked.id, locked.priority
                         FROM (
-                            SELECT candidate.id
-                            FROM {queue_table} candidate
-                            WHERE candidate.entrypoint = available.entrypoint
-                              AND candidate.status = 'queued'
-                              AND {self.due("candidate")}
-                            ORDER BY candidate.priority DESC, candidate.id ASC
+                            SELECT batched.id
+                            FROM (
+                                SELECT candidate.id, candidate.priority
+                                FROM {queue_table} candidate
+                                WHERE candidate.entrypoint = available.entrypoint
+                                  AND candidate.status = 'queued'
+                                  AND {self.due("candidate")}
+                                ORDER BY candidate.priority DESC, candidate.id ASC
+                                LIMIT {batch}
+                            ) batched
+                            ORDER BY batched.priority DESC, batched.id ASC
                             LIMIT LEAST({batch}, available.remaining)
                         ) capped
                         CROSS JOIN LATERAL (

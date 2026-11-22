@@ -142,19 +142,19 @@ next_queued AS (        -- fresh work
     SELECT q.id FROM pgqueuer q
     WHERE q.status='queued' AND q.execute_after <= NOW()
     ORDER BY q.priority DESC, q.id ASC
-    FOR UPDATE SKIP LOCKED LIMIT $1
+    FOR UPDATE SKIP LOCKED LIMIT $batch_size
 ),
 next_stale AS (         -- jobs from a crashed worker
     SELECT q.id FROM pgqueuer q
     WHERE q.status='picked' AND q.heartbeat < NOW() - $4::interval
     ORDER BY q.priority DESC, q.id ASC
-    FOR UPDATE SKIP LOCKED LIMIT $1
+    FOR UPDATE SKIP LOCKED LIMIT $batch_size
 ),
 eligible AS (           -- merge, cap to batch size
     SELECT id FROM (
         SELECT id, 0 AS src FROM next_queued
         UNION ALL SELECT id, 1 AS src FROM next_stale
-    ) c ORDER BY src, id LIMIT $1
+    ) c ORDER BY src, id LIMIT $batch_size
 ),
 claimed AS (            -- atomic claim
     UPDATE pgqueuer SET status='picked', updated=NOW(), heartbeat=NOW(),
@@ -172,7 +172,8 @@ SELECT * FROM claimed ORDER BY priority DESC, id ASC;
 - **Stale recovery, not stuck jobs.** A crashed worker drops its locks but leaves
   a `picked` row; the `heartbeat` timeout, not the lock, lets `next_stale`
   reclaim it. See [Heartbeat Monitoring](../guides/heartbeat.md).
-- **`LIMIT $1` is `batch_size`**: also the bound on rows locked. See
+- **`LIMIT $batch_size`** is written into the SQL as an integer literal, so
+  the plan PostgreSQL caches can see it. It is also the bound on rows locked. See
   [Performance Tuning](../guides/performance-tuning.md).
 
 ---

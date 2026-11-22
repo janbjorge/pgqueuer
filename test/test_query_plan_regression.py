@@ -103,8 +103,8 @@ def _scan_summary(nodes: list[dict[str, Any]]) -> list[tuple[object, ...]]:
     ]
 
 
-# Every dequeue shape: capacity-gated shapes render `LIMIT LEAST($n, remaining)`
-# in the LATERAL, ungated ones a plain `LIMIT $n` — the planner must stay on the
+# Every dequeue shape: capacity-gated shapes render `LIMIT LEAST(batch, remaining)`
+# in the LATERAL, ungated ones a plain `LIMIT batch` — the planner must stay on the
 # partial index for both variants.
 DEQUEUE_SHAPES = [
     pytest.param(0, None, id="no_gates"),
@@ -388,4 +388,89 @@ async def test_throughput_timeseries_range_scans_created(apgdriver: db.Driver) -
     assert blocks < pages // 10, (
         f"throughput_timeseries touched {blocks} buffers; the table has "
         f"{pages} pages. nodes={summary}"
+    )
+
+
+@pytest.mark.parametrize("global_limit", [None, 1000], ids=["entrypoint_gate", "both_gates"])
+async def test_limited_dequeue_cost_is_independent_of_backlog(
+    apgdriver: db.Driver,
+    global_limit: int | None,
+) -> None:
+    """The limited dequeue's estimated cost does not grow with the backlog (#1071).
+
+    A cost that follows the backlog ends above jit_above_cost, and every poll is compiled.
+    """
+    query = queries.Queries(apgdriver).qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=[QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)],
+        concurrency_limits=[1] * BULK_EPS,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    small_backlog = BULK_ROWS // 50
+    costs = dict[int, float]()
+    for rows in (small_backlog, BULK_ROWS):
+        await _bulk_seed(apgdriver, rows, BULK_EPS)
+        nodes = await _plan_nodes(apgdriver, query.sql, *query.args)
+        costs[rows] = nodes[0]["Total Cost"]
+
+    assert costs[BULK_ROWS] <= 2 * costs[small_backlog], (
+        f"dequeue cost grew from {costs[small_backlog]} at {small_backlog} queued rows "
+        f"to {costs[BULK_ROWS]} at {BULK_ROWS}; the estimate is following the backlog"
+    )
+
+
+async def _generic_plan_cost(driver: db.Driver, sql: str, args: tuple[object, ...]) -> float:
+    await driver.execute("SET plan_cache_mode = force_generic_plan")
+    await driver.execute("PREPARE dequeue_1071 AS " + sql)
+    try:
+        # EXPLAIN EXECUTE takes no bind parameters, so the server quotes each arg as a literal.
+        (row,) = await driver.fetch(
+            """
+            SELECT parameter_types::text[] AS types
+            FROM pg_prepared_statements WHERE name = 'dequeue_1071'
+            """
+        )
+        types = row["types"]
+        assert isinstance(types, list)
+        quoted = ", ".join(
+            f"format('%L::%s', ${n}::{kind}, '{kind}')" for n, kind in enumerate(types, 1)
+        )
+        (row,) = await driver.fetch(f"SELECT concat_ws(', ', {quoted}) AS call_args", *args)
+        nodes = await _plan_nodes(driver, f"EXECUTE dequeue_1071({row['call_args']})")
+    finally:
+        await driver.execute("DEALLOCATE dequeue_1071")
+        await driver.execute("RESET plan_cache_mode")
+    cost = nodes[0]["Total Cost"]
+    assert isinstance(cost, float)
+    return cost
+
+
+@pytest.mark.parametrize("global_limit", [None, 1000], ids=["entrypoint_gate", "both_gates"])
+async def test_limited_dequeue_generic_plan_cost_is_independent_of_backlog(
+    apgdriver: db.Driver,
+    global_limit: int | None,
+) -> None:
+    """The prepared dequeue's generic plan does not grow with the backlog (#1071).
+
+    A generic plan cannot see a bound LIMIT, so it loses to the custom plan and every poll re-plans.
+    """
+    query = queries.Queries(apgdriver).qbq.build_dequeue_query(
+        batch_size=BATCH,
+        entrypoints=[QueueEntrypoint(f"ep_{i}") for i in range(BULK_EPS)],
+        concurrency_limits=[1] * BULK_EPS,
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    small_backlog = BULK_ROWS // 50
+    costs = dict[int, float]()
+    for rows in (small_backlog, BULK_ROWS):
+        await _bulk_seed(apgdriver, rows, BULK_EPS)
+        costs[rows] = await _generic_plan_cost(apgdriver, query.sql, query.args)
+
+    assert costs[BULK_ROWS] <= 2 * costs[small_backlog], (
+        f"generic dequeue plan cost grew from {costs[small_backlog]} at {small_backlog} "
+        f"queued rows to {costs[BULK_ROWS]} at {BULK_ROWS}; the plan cannot see the batch limit"
     )

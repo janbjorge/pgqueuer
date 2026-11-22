@@ -15,6 +15,7 @@ import re
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -39,9 +40,10 @@ def compose(
     concurrency_limit: int,
     global_limit: int | None,
     builder: qb.QueryQueueBuilder | None = None,
+    batch_size: Any = 10,
 ) -> ComposedQuery:
     return (builder or pinned_builder()).build_dequeue_query(
-        batch_size=10,
+        batch_size=batch_size,
         entrypoints=[QueueEntrypoint("fetch")],
         concurrency_limits=[concurrency_limit],
         queue_manager_id=QueueManagerId(uuid.UUID(int=0)),
@@ -100,13 +102,29 @@ def test_dequeue_args_are_rebound_every_call() -> None:
     # dequeues.
     builder = pinned_builder()
     first = compose(2, 3, builder)
-    entrypoints = first.args[1]
+    entrypoints = first.args[0]
     assert isinstance(entrypoints, list)
     entrypoints.append("evil")
 
     second = compose(2, 3, builder)
-    assert second.args[1] == ["fetch"]
-    assert second.args[4] == [2]
+    assert second.args[0] == ["fetch"]
+    assert second.args[3] == [2]
+
+
+@pytest.mark.parametrize("batch_size", [0, -1, True])
+def test_dequeue_rejects_batch_size_that_is_not_a_positive_int(batch_size: Any) -> None:
+    # batch_size is rendered into the SQL text, so only a positive int may reach it.
+    with pytest.raises(ValueError, match="positive integer"):
+        compose(2, None, batch_size=batch_size)
+
+
+def test_dequeue_sql_is_cached_per_batch_size() -> None:
+    builder = pinned_builder()
+    ten = compose(2, 3, builder, batch_size=10)
+    eleven = compose(2, 3, builder, batch_size=11)
+    assert ten.sql != eleven.sql
+    assert compose(2, 3, builder, batch_size=10).sql is ten.sql
+    assert compose(2, 3, builder, batch_size=11).sql is eleven.sql
 
 
 def test_dequeue_rejects_mismatched_concurrency_limits() -> None:
