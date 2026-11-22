@@ -509,6 +509,9 @@ class QueueManager:
                     task.add_done_callback(functools.partial(self.forget_job, job.id, context))
                     task_manager.add(task)
 
+                # NOTIFY follows commit, so the checks below already see what drained events signal.
+                while not notice_event_listener.empty():
+                    notice_event_listener.get_nowait()
                 await self._maybe_drain_shutdown(mode, task_manager)
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
@@ -520,9 +523,6 @@ class QueueManager:
                 wake_on_listener_failure = (
                     shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
                 )
-                # NOTIFY follows commit, so the probes below already see what drained events signal.
-                while not notice_event_listener.empty():
-                    notice_event_listener.get_nowait()
                 timeout = await self._effective_dequeue_timeout(
                     dequeue_timeout,
                     max_concurrent_tasks,

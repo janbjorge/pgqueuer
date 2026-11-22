@@ -17,6 +17,7 @@ from unittest.mock import patch
 import asyncpg
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.core.tm import TaskManager
 from pgqueuer.db import AsyncpgDriver, Driver
 from pgqueuer.domain.errors import RetryRequested
 from pgqueuer.models import Job
@@ -24,7 +25,7 @@ from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
-from pgqueuer.types import JobId, OnFailure, QueueEntrypoint, QueueManagerId
+from pgqueuer.types import JobId, OnFailure, QueueEntrypoint, QueueExecutionMode, QueueManagerId
 
 HOUR = timedelta(hours=1)
 # Below pytest's 20 s per-test timeout, so a stall reports as a TimeoutError here.
@@ -214,3 +215,45 @@ async def test_stale_slot_is_recovered(apgdriver: Driver) -> None:
 
 async def test_stale_slot_is_recovered_inmemory() -> None:
     await stale_slot_is_recovered(InMemoryQueries(driver=InMemoryDriver()))
+
+
+async def drain_ends_when_last_job_end_races_the_check(q: RepositoryPort, driver: Driver) -> None:
+    """Drain mode stops once the last job's end is flushed, even if its NOTIFY beats the wait."""
+    qm = QueueManager(q)
+    gate = Gate()
+    qm.entrypoint("ep")(gate.enter)
+    await q.enqueue("ep", None)
+
+    flushed = asyncio.Event()
+
+    def on_notice(payload: str | bytes | bytearray) -> None:
+        text = payload if isinstance(payload, str) else bytes(payload).decode()
+        if "table_changed_event" in text and '"delete"' in text:
+            flushed.set()
+
+    await driver.add_listener(qm.channel, on_notice)
+    check = qm._maybe_drain_shutdown
+    raced = False
+
+    async def racing_check(mode: QueueExecutionMode, task_manager: TaskManager) -> None:
+        nonlocal raced
+        await check(mode, task_manager)
+        if raced or not task_manager.tasks:
+            return
+        raced = True
+        # The check saw the job running; let it end and its flush NOTIFY land before the wait.
+        gate.open()
+        await flushed.wait()
+
+    with patch.object(qm, "_maybe_drain_shutdown", racing_check):
+        async with asyncio.timeout(GUARD):
+            await qm.run(dequeue_timeout=HOUR, mode=QueueExecutionMode.drain)
+
+
+async def test_drain_ends_when_last_job_end_races_the_check(apgdriver: Driver) -> None:
+    await drain_ends_when_last_job_end_races_the_check(Queries(apgdriver), apgdriver)
+
+
+async def test_drain_ends_when_last_job_end_races_the_check_inmemory() -> None:
+    driver = InMemoryDriver()
+    await drain_ends_when_last_job_end_races_the_check(InMemoryQueries(driver=driver), driver)
