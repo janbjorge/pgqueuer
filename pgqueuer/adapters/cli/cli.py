@@ -522,7 +522,7 @@ def run(
     max_concurrent_tasks: int | None = typer.Option(
         None,
         "--max-concurrent-tasks",
-        help="An upper global limit for the current runner.",
+        help="Most jobs this runner holds at once. Default max(100, 2 x batch size); 0: unlimited.",
     ),
     shutdown_on_listener_failure: bool = typer.Option(
         False,

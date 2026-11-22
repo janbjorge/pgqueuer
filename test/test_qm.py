@@ -162,12 +162,21 @@ async def test_drain_mode(
     assert len(jobs) == N
 
 
-@pytest.mark.parametrize("max_concurrent_tasks", (None, 0))
-async def test_run_unlimited_budget_reaches_dequeue_as_none(
+@pytest.mark.parametrize(
+    ("max_concurrent_tasks", "batch_size", "expected"),
+    (
+        (None, 10, 100),
+        (None, 100, 200),
+        (0, 10, None),
+    ),
+)
+async def test_run_budget_reaches_dequeue(
     apgdriver: db.Driver,
     max_concurrent_tasks: int | None,
+    batch_size: int,
+    expected: int | None,
 ) -> None:
-    """run() forwards unlimited max_concurrent_tasks (None or legacy 0) to dequeue as None."""
+    """None gets the default budget, max(100, 2 * batch_size); 0 is unlimited (None)."""
     q = Queries(apgdriver)
     qm = QueueManager(Queries(apgdriver))
     seen = list[int | None]()
@@ -186,10 +195,14 @@ async def test_run_unlimited_budget_reaches_dequeue_as_none(
     await q.enqueue("fetch", None, 0)
 
     async with asyncio.timeout(10):
-        await qm.run(mode=QueueExecutionMode.drain, max_concurrent_tasks=max_concurrent_tasks)
+        await qm.run(
+            mode=QueueExecutionMode.drain,
+            batch_size=batch_size,
+            max_concurrent_tasks=max_concurrent_tasks,
+        )
 
     assert seen
-    assert set(seen) == {None}
+    assert set(seen) == {expected}
 
 
 async def test_periodic_log_aggregation_loops_until_shutdown() -> None:
