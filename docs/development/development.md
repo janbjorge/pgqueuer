@@ -50,6 +50,11 @@ uv run --no-sync pytest
 
 Pass `--no-sync` to `uv run`; otherwise it installs the `dev` group again.
 
+`tools/dequeue_plan.py` truncates the queue, fills it in steps, and `EXPLAIN ANALYZE`s the
+prepared dequeue at each depth: cost, JIT and timing per `plan_cache_mode` and per
+`concurrency_limit` (1, 5 and 50 by default), and the plan a worker gets. Run `pgq install` first. To compare a branch with `main`, run
+`uv run --directory <checkout> python tools/dequeue_plan.py` from both checkouts on one database.
+
 ## Test structure and tips
 
 - Integration tests trigger the PostgreSQL Testcontainer automatically on first database access.
