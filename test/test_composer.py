@@ -12,6 +12,7 @@ from pgqueuer.adapters.persistence.composer import (
     TemplateComposer,
     block,
     render_cte,
+    render_statement,
 )
 
 
@@ -67,24 +68,30 @@ def test_block_measures_the_margin_without_the_elided_line() -> None:
 def test_render_pairs_sql_with_bound_args() -> None:
     composer = SqlComposer()
     limit = composer.bind(10)
-    composer.cte("ready", f"SELECT id FROM jobs LIMIT {limit}")
-    query = composer.render("SELECT * FROM ready")
+    query = composer.render(
+        [Cte("ready", f"SELECT id FROM jobs LIMIT {limit}")], "SELECT * FROM ready"
+    )
     assert query.sql == "WITH\nready AS (\n    SELECT id FROM jobs LIMIT $1\n)\nSELECT * FROM ready"
     assert query.args == (10,)
 
 
 def test_render_normalises_the_final_statement() -> None:
     # The final statement carries optional clauses just like a CTE body does.
-    query = SqlComposer().render("""
+    assert (
+        render_statement(
+            [],
+            """
         SELECT 1
 
         FROM jobs
-    """)
-    assert query.sql == "SELECT 1\nFROM jobs"
+    """,
+        )
+        == "SELECT 1\nFROM jobs"
+    )
 
 
 def test_render_without_fragments_is_the_final_statement() -> None:
-    query = SqlComposer().render("SELECT 1")
+    query = SqlComposer().render([], "SELECT 1")
     assert query.sql == "SELECT 1"
     assert query.args == ()
 
@@ -93,39 +100,31 @@ def test_render_is_repeatable() -> None:
     # render must not consume or mutate composer state.
     composer = SqlComposer()
     composer.bind(1)
-    composer.cte("one", "SELECT 1")
-    assert composer.render("SELECT * FROM one") == composer.render("SELECT * FROM one")
+    ctes = [Cte("one", "SELECT 1")]
+    assert composer.render(ctes, "SELECT * FROM one") == composer.render(ctes, "SELECT * FROM one")
 
 
-def test_ctes_are_chained_in_insertion_order() -> None:
-    composer = SqlComposer()
-    composer.cte("first", "SELECT 1")
-    composer.cte("second", "SELECT 2")
-    query = composer.render("SELECT * FROM second")
-    assert query.sql == (
-        "WITH\nfirst AS (\n    SELECT 1\n),\n\nsecond AS (\n    SELECT 2\n)\nSELECT * FROM second"
-    )
+def test_ctes_are_chained_in_order() -> None:
+    sql = render_statement([Cte("first", "SELECT 1"), Cte("second", "SELECT 2")], "SELECT 1")
+    assert sql == "WITH\nfirst AS (\n    SELECT 1\n),\n\nsecond AS (\n    SELECT 2\n)\nSELECT 1"
 
 
 def test_cte_indents_a_body_written_at_python_indentation() -> None:
-    # The caller writes SQL wherever the surrounding Python sits; the composer
+    # The caller writes SQL wherever the surrounding Python sits; the renderer
     # strips that indentation and applies the one level a CTE body needs.
-    composer = SqlComposer()
-    composer.cte(
+    ready = Cte(
         "ready",
         """
             SELECT id
             FROM jobs
         """,
     )
-    query = composer.render("SELECT * FROM ready")
-    assert query.sql == "WITH\nready AS (\n    SELECT id\n    FROM jobs\n)\nSELECT * FROM ready"
+    assert render_cte(ready) == "ready AS (\n    SELECT id\n    FROM jobs\n)"
 
 
 def test_cte_drops_a_line_left_empty_by_an_inapplicable_clause() -> None:
-    composer = SqlComposer()
     gate = ""
-    composer.cte(
+    ready = Cte(
         "ready",
         f"""
             SELECT id
@@ -133,51 +132,29 @@ def test_cte_drops_a_line_left_empty_by_an_inapplicable_clause() -> None:
             {gate}
         """,
     )
-    query = composer.render("SELECT * FROM ready")
-    assert query.sql == "WITH\nready AS (\n    SELECT id\n    FROM jobs\n)\nSELECT * FROM ready"
+    assert render_cte(ready) == "ready AS (\n    SELECT id\n    FROM jobs\n)"
 
 
 def test_cte_without_comment_has_no_header() -> None:
-    composer = SqlComposer()
-    composer.cte("ready", "SELECT 1")
-    assert composer.render("SELECT * FROM ready").sql.startswith("WITH\nready AS (")
+    assert render_cte(Cte("ready", "SELECT 1")).startswith("ready AS (")
 
 
 def test_cte_comment_renders_as_a_line_comment() -> None:
-    composer = SqlComposer()
-    composer.cte("ready", "SELECT 1", comment="Jobs ready to run.")
-    query = composer.render("SELECT * FROM ready")
-    assert query.sql == (
-        "WITH\n-- Jobs ready to run.\nready AS (\n    SELECT 1\n)\nSELECT * FROM ready"
-    )
+    ready = Cte("ready", "SELECT 1", comment="Jobs ready to run.")
+    assert render_cte(ready) == "-- Jobs ready to run.\nready AS (\n    SELECT 1\n)"
 
 
 def test_cte_rejects_a_multi_line_comment() -> None:
     # A comment orients whoever reads the statement in a Postgres log. Rationale
     # that needs a paragraph belongs in a Python comment, not in the rendered SQL.
-    composer = SqlComposer()
     with pytest.raises(ValueError, match="single line"):
-        composer.cte("ready", "SELECT 1", comment="First line.\nSecond line.")
-
-
-def test_composed_query_is_immutable() -> None:
-    query = ComposedQuery(sql="SELECT 1", args=())
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        query.sql = "SELECT 2"  # type: ignore[misc]
+        Cte("ready", "SELECT 1", comment="First line.\nSecond line.")
 
 
 def test_render_rejects_a_cte_defined_twice() -> None:
     # Shape variants share a CTE name; rendering both would be invalid SQL.
-    composer = SqlComposer()
-    composer.cte("available", "SELECT 1")
-    composer.cte("available", "SELECT 2")
     with pytest.raises(ValueError, match="defined twice"):
-        composer.render("SELECT * FROM available")
-
-
-def test_cte_renders_as_its_definition() -> None:
-    ready = Cte("ready", "SELECT 1", comment="Jobs ready to run.")
-    assert render_cte(ready) == "-- Jobs ready to run.\nready AS (\n    SELECT 1\n)"
+        render_statement([Cte("available", "SELECT 1"), Cte("available", "SELECT 2")], "SELECT 1")
 
 
 def test_template_reads_each_param_from_the_call_args() -> None:
@@ -191,3 +168,9 @@ def test_template_reads_each_param_from_the_call_args() -> None:
     assert template.sql.endswith("SELECT * FROM ready LIMIT $2")
     assert template.bind(Request(limit=5, tags=["a"])).args == (["a"], 5)
     assert template.bind(Request(limit=7, tags=["b"])).args == (["b"], 7)
+
+
+def test_composed_query_is_immutable() -> None:
+    query = ComposedQuery(sql="SELECT 1", args=())
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        query.sql = "SELECT 2"  # type: ignore[misc]

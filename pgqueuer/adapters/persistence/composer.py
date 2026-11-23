@@ -84,23 +84,19 @@ class SqlComposer:
 
         composer = SqlComposer()
         limit = composer.bind(10)
-        composer.cte("ready", f"SELECT id FROM jobs LIMIT {limit}")
-        query = composer.render("SELECT * FROM ready")
+        ready = Cte("ready", f"SELECT id FROM jobs LIMIT {limit}")
+        query = composer.render([ready], "SELECT * FROM ready")
         await driver.fetch(query.sql, *query.args)
     """
 
     values: list[object] = dataclasses.field(init=False, default_factory=list)
-    ctes: list[Cte] = dataclasses.field(init=False, default_factory=list)
 
     def bind(self, value: object) -> str:
         self.values.append(value)
         return f"${len(self.values)}"
 
-    def cte(self, name: str, body: str, *, comment: str = "") -> None:
-        self.ctes.append(Cte(name, body, comment=comment))
-
-    def render(self, final: str) -> ComposedQuery:
-        return ComposedQuery(sql=render_statement(self.ctes, final), args=tuple(self.values))
+    def render(self, ctes: Sequence[Cte], final: str) -> ComposedQuery:
+        return ComposedQuery(sql=render_statement(ctes, final), args=tuple(self.values))
 
 
 @dataclasses.dataclass(frozen=True)

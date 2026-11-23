@@ -462,6 +462,7 @@ class QueryQueueBuilder:
             cap = f"LIMIT {bound_limit}"
 
         return composer.render(
+            [],
             f"""
                 SELECT count, created, entrypoint, priority, status
                 FROM {self.qualified.statistics_table}
