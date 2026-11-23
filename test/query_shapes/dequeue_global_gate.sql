@@ -35,7 +35,7 @@ next_queued AS (
 
 -- Stale picked jobs whose heartbeat timed out.
 next_stale AS (
-    SELECT stale.id, stale.priority
+    SELECT stale.id, stale.priority, stale.entrypoint
     FROM pgqueuer stale
     WHERE stale.status = 'picked'
       AND stale.entrypoint = ANY($1)

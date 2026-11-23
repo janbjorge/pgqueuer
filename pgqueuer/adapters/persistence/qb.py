@@ -452,10 +452,6 @@ class QueryQueueBuilder:
             """
         composer.cte("next_queued", queued_body, comment=queued_comment)
 
-        stale_entrypoint = ""
-        if capacity_gated:
-            stale_entrypoint = ", stale.entrypoint"
-
         # The entrypoint concurrency gate is intentionally omitted here: re-picking a
         # stale job only transfers ownership of a row already counted in `picked`, so
         # net live execution is unchanged. Applying the gate would deadlock recovery
@@ -463,7 +459,7 @@ class QueryQueueBuilder:
         composer.cte(
             "next_stale",
             f"""
-                SELECT stale.id, stale.priority{stale_entrypoint}
+                SELECT stale.id, stale.priority, stale.entrypoint
                 FROM {queue_table} stale
                 WHERE stale.status = 'picked'
                   AND stale.entrypoint = ANY({eps})
