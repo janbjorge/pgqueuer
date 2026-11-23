@@ -55,7 +55,7 @@ leaves open.
     assigns work to named workers.
   - Consequences: workers are homogeneous and stateless; adding a worker
     needs no registration; no fairness guarantee between workers.
-  - Pointers: claim query built in `pgqueuer/adapters/persistence/qb.py`.
+  - Pointers: claim query built in `pgqueuer/adapters/persistence/dequeue.py`.
   - Not covered: the claim query's shape (single-statement CTE is detail).
 
 - [x] **ADR-0003: Notifications signal that something changed, never carry job data**
@@ -90,7 +90,7 @@ leaves open.
     bounded by that threshold rather than being instant.
   - Pointers: heartbeat timeout plumbed through
     `pgqueuer/adapters/cli/supervisor.py` (`runit(..., heartbeat_timeout)`);
-    stale re-pick lives in the claim query (`qb.py`).
+    stale re-pick lives in the claim query (`dequeue.py`).
   - Not covered: intervals, thresholds, batching of heartbeat updates.
 
 - [ ] **ADR-0006: Concurrency limits are enforced globally at claim time, not per process**
@@ -251,8 +251,8 @@ leaves open.
 - [x] **ADR-0024: SQL statements are assembled by the composer**
   - Decision: statements are built from conditional fragments, binds
     auto-numbered, text and arguments emerging as one pair; unconfigured
-    is absence, never a sentinel. Adoption is incremental; dequeue is
-    first.
+    is absence, never a sentinel. Adoption is incremental; dequeue has
+    migrated.
   - Fork: composer vs. hand-numbered text per statement vs. an external
     query builder.
   - Consequences: numbering cannot drift; unused gates render nothing;
