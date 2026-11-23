@@ -216,7 +216,10 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 class QueryQueueBuilder:
     settings: DBSettings
     dequeue_templates: dict[DequeueCacheKey, QueryTemplate[DequeueArgs]] = dataclasses.field(
-        default_factory=dict
+        init=False,
+        repr=False,
+        compare=False,
+        default_factory=dict,
     )
 
     @property

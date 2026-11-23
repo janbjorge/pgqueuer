@@ -27,6 +27,7 @@ class Cte:
 
     name: str
     body: str
+    _: dataclasses.KW_ONLY
     comment: str = ""
 
     def __post_init__(self) -> None:
@@ -88,15 +89,15 @@ class SqlComposer:
         await driver.fetch(query.sql, *query.args)
     """
 
-    values: list[object] = dataclasses.field(default_factory=list)
-    ctes: list[Cte] = dataclasses.field(default_factory=list)
+    values: list[object] = dataclasses.field(init=False, default_factory=list)
+    ctes: list[Cte] = dataclasses.field(init=False, default_factory=list)
 
     def bind(self, value: object) -> str:
         self.values.append(value)
         return f"${len(self.values)}"
 
     def cte(self, name: str, body: str, *, comment: str = "") -> None:
-        self.ctes.append(Cte(name, body, comment))
+        self.ctes.append(Cte(name, body, comment=comment))
 
     def render(self, final: str) -> ComposedQuery:
         return ComposedQuery(sql=render_statement(self.ctes, final), args=tuple(self.values))
@@ -107,7 +108,7 @@ class QueryTemplate(Generic[ArgsT]):
     """Rendered text, and for each ``$N`` in order the reader of its value."""
 
     sql: str
-    readers: tuple[Callable[[ArgsT], object], ...]
+    readers: tuple[Callable[[ArgsT], object], ...] = dataclasses.field(repr=False)
 
     def bind(self, args: ArgsT) -> ComposedQuery:
         return ComposedQuery(sql=self.sql, args=tuple(read(args) for read in self.readers))
@@ -129,7 +130,7 @@ class TemplateComposer(Generic[ArgsT]):
         query = template.bind(Request(limit=10))
     """
 
-    readers: list[Callable[[ArgsT], object]] = dataclasses.field(default_factory=list)
+    readers: list[Callable[[ArgsT], object]] = dataclasses.field(init=False, default_factory=list)
 
     def param(self, read: Callable[[ArgsT], object]) -> str:
         self.readers.append(read)

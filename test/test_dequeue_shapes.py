@@ -96,6 +96,13 @@ def test_dequeue_sql_is_cached_per_shape() -> None:
     assert compose(2, 3, builder).sql is compose(2, 3, builder).sql
 
 
+def test_dequeue_template_cache_is_not_part_of_the_builder_value() -> None:
+    builder = pinned_builder()
+    compose(2, 3, builder)
+    assert builder == pinned_builder()
+    assert "dequeue_templates" not in repr(builder)
+
+
 def test_dequeue_args_are_rebound_every_call() -> None:
     # Cached SQL must never share argument objects between calls: a driver
     # (a public Protocol) that mutates args in place must not poison later

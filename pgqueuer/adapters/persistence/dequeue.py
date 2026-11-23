@@ -24,7 +24,8 @@ def due(alias: str = "") -> str:
     return f"{column} <= NOW()"
 
 
-class DequeueArgs(NamedTuple):
+@dataclasses.dataclass(frozen=True, kw_only=True)
+class DequeueArgs:
     """The values one dequeue call binds."""
 
     entrypoints: list[QueueEntrypoint]
@@ -37,12 +38,6 @@ class DequeueArgs(NamedTuple):
 class DequeueCacheKey(NamedTuple):
     shape: DequeueShape
     batch_size: int
-
-
-class WorkerBudget(NamedTuple):
-    """Placeholder of ``global_concurrency_limit``; only budgeted shapes bind it."""
-
-    limit: str
 
 
 def dequeue_shape(args: DequeueArgs) -> DequeueShape:
@@ -63,38 +58,44 @@ class DequeueSql:
     """The dequeue CTEs: one method per shape, one method per CTE.
 
     A CTE method returns the CTE under the name later bodies use for it. The
-    placeholders every shape needs are fields; the entrypoint limits and the
-    worker budget are bound by the shape methods that use them.
+    placeholders every shape needs are bound on construction; the entrypoint
+    limits and the worker budget are bound by the shape methods that use them.
     """
 
-    composer: TemplateComposer[DequeueArgs]
-    queue_table: str
-    log_table: str
-    # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
-    # statement cannot see a bound LIMIT and costs the whole backlog for it.
-    batch: str
-    entrypoints: str
-    queue_manager: str
-    heartbeat: str
+    qualified: QualifiedNames
+    batch_size: int
+    composer: TemplateComposer[DequeueArgs] = dataclasses.field(
+        init=False,
+        default_factory=TemplateComposer[DequeueArgs],
+    )
+    entrypoints: str = dataclasses.field(init=False)
+    queue_manager: str = dataclasses.field(init=False)
+    heartbeat: str = dataclasses.field(init=False)
 
-    @classmethod
-    def start(cls, qualified: QualifiedNames, batch_size: int) -> DequeueSql:
-        composer = TemplateComposer[DequeueArgs]()
-        return cls(
-            composer=composer,
-            queue_table=qualified.queue_table,
-            log_table=qualified.queue_table_log,
-            batch=str(batch_size),
-            entrypoints=composer.param(lambda args: list(args.entrypoints)),
-            queue_manager=composer.param(lambda args: args.queue_manager_id),
-            heartbeat=composer.param(lambda args: args.heartbeat_timeout),
-        )
+    def __post_init__(self) -> None:
+        self.entrypoints = self.composer.param(lambda args: list(args.entrypoints))
+        self.queue_manager = self.composer.param(lambda args: args.queue_manager_id)
+        self.heartbeat = self.composer.param(lambda args: args.heartbeat_timeout)
+
+    @property
+    def queue_table(self) -> str:
+        return self.qualified.queue_table
+
+    @property
+    def log_table(self) -> str:
+        return self.qualified.queue_table_log
+
+    @property
+    def batch(self) -> str:
+        # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
+        # statement cannot see a bound LIMIT and costs the whole backlog for it.
+        return str(self.batch_size)
 
     def bind_limits(self) -> str:
         return self.composer.param(lambda args: list(args.concurrency_limits))
 
-    def bind_budget(self) -> WorkerBudget:
-        return WorkerBudget(self.composer.param(lambda args: args.global_concurrency_limit))
+    def bind_budget(self) -> str:
+        return self.composer.param(lambda args: args.global_concurrency_limit)
 
     def no_gates(self) -> list[Cte]:
         return [
@@ -155,13 +156,13 @@ class DequeueSql:
         ]
 
     @staticmethod
-    def under_budget(budget: WorkerBudget | None, keyword: Literal["WHERE", "AND"]) -> str:
+    def under_budget(budget: str | None, keyword: Literal["WHERE", "AND"]) -> str:
         """The worker-budget filter line; empty without a budget, so the line drops."""
         if budget is None:
             return ""
-        return f"{keyword} (SELECT total FROM worker_load) < {budget.limit}"
+        return f"{keyword} (SELECT total FROM worker_load) < {budget}"
 
-    def eligible_limit(self, budget: WorkerBudget | None) -> str:
+    def eligible_limit(self, budget: str | None) -> str:
         if budget is None:
             return self.batch
         return "(SELECT headroom FROM worker_load)"
@@ -226,7 +227,7 @@ class DequeueSql:
             comment="Entrypoints with free capacity; remaining caps a single dequeue.",
         )
 
-    def worker_load(self, budget: WorkerBudget) -> Cte:
+    def worker_load(self, budget: str) -> Cte:
         """Columns: total, headroom."""
         # headroom, not the total, is what stops a batch overshooting: the total
         # only says whether a dequeue may start, never how much it may take.
@@ -235,7 +236,7 @@ class DequeueSql:
             f"""
                 SELECT
                     COUNT(*) AS total,
-                    GREATEST(LEAST({self.batch}, {budget.limit} - COUNT(*)), 0) AS headroom
+                    GREATEST(LEAST({self.batch}, {budget} - COUNT(*)), 0) AS headroom
                 FROM {self.queue_table}
                 WHERE queue_manager_id = {self.queue_manager}
                   AND entrypoint = ANY({self.entrypoints})
@@ -308,7 +309,7 @@ class DequeueSql:
             comment="Claims for limited entrypoints; the window is fixed before the lock.",
         )
 
-    def next_queued(self, budget: WorkerBudget | None) -> Cte:
+    def next_queued(self, budget: str | None) -> Cte:
         """Columns: id, priority. Reads available."""
         return Cte(
             "next_queued",
@@ -332,7 +333,7 @@ class DequeueSql:
             comment="New queued jobs; LATERAL hits the (entrypoint, priority, id) index.",
         )
 
-    def next_queued_from_claims(self, budget: WorkerBudget | None) -> Cte:
+    def next_queued_from_claims(self, budget: str | None) -> Cte:
         """Columns: id, priority, entrypoint. Reads unlimited_claims, limited_claims."""
         return Cte(
             "next_queued",
@@ -350,7 +351,7 @@ class DequeueSql:
             comment="Both claim sets merged into one priority order.",
         )
 
-    def next_stale(self, budget: WorkerBudget | None) -> Cte:
+    def next_stale(self, budget: str | None) -> Cte:
         """Columns: id, priority, entrypoint."""
         # The entrypoint concurrency gate is intentionally omitted here: re-picking a
         # stale job only transfers ownership of a row already counted in `picked`, so
@@ -373,7 +374,7 @@ class DequeueSql:
             comment="Stale picked jobs whose heartbeat timed out.",
         )
 
-    def eligible(self, budget: WorkerBudget | None) -> Cte:
+    def eligible(self, budget: str | None) -> Cte:
         """Columns: id. Reads next_queued, next_stale."""
         return Cte(
             "eligible",
@@ -389,7 +390,7 @@ class DequeueSql:
             comment="Merge both sets into one priority order so stale competes with fresh.",
         )
 
-    def eligible_with_slots(self, budget: WorkerBudget | None) -> Cte:
+    def eligible_with_slots(self, budget: str | None) -> Cte:
         """Columns: id, priority, entrypoint, fresh. Reads next_queued, next_stale."""
         # A stale re-pick keeps the slot it already holds; only fresh claims need one.
         return Cte(
@@ -515,7 +516,7 @@ class DequeueSql:
 
 
 def render_dequeue(qualified: QualifiedNames, key: DequeueCacheKey) -> QueryTemplate[DequeueArgs]:
-    sql = DequeueSql.start(qualified, key.batch_size)
+    sql = DequeueSql(qualified, key.batch_size)
     shape = key.shape
     if shape == "no_gates":
         ctes = sql.no_gates()
