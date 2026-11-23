@@ -3,10 +3,16 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Generator
 from datetime import timedelta
-from typing import NamedTuple, assert_never
+from typing import assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
+from pgqueuer.adapters.persistence.dequeue import (
+    DequeueArgs,
+    DequeueCacheKey,
+    DequeueShape,
+    dequeue_shape,
+)
 from pgqueuer.domain.schema.queue import dedupe_predicate
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import (
@@ -206,18 +212,12 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 );"""
 
 
-class DequeueShape(NamedTuple):
-    capacity_gated: bool
-    budget_gated: bool
-    batch_size: int
-
-
 @dataclasses.dataclass
 class QueryQueueBuilder:
     settings: DBSettings
     # Rendered dequeue SQL per shape. The bind order is fixed per shape, so
     # cached text pairs with freshly bound args.
-    dequeue_sql_cache: dict[DequeueShape, str] = dataclasses.field(default_factory=dict)
+    dequeue_sql_cache: dict[DequeueCacheKey, str] = dataclasses.field(default_factory=dict)
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -229,7 +229,7 @@ class QueryQueueBuilder:
         column = f"{alias}.execute_after" if alias else "execute_after"
         return f"{column} <= NOW()"
 
-    def build_dequeue_query(  # noqa: PLR0912, PLR0915 - one SQL builder for all gate combinations
+    def build_dequeue_query(  # noqa: PLR0915 - one SQL builder for all gate combinations
         self,
         *,
         batch_size: int,
@@ -253,15 +253,18 @@ class QueryQueueBuilder:
         re-bound on every call, so cached SQL never pins or shares argument
         objects.
         """
-        if len(entrypoints) != len(concurrency_limits):
-            raise ValueError("entrypoints and concurrency_limits must be the same length")
-        # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
-        rendered: object = batch_size
-        if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
-            raise ValueError("batch_size must be a positive integer")
-
-        capacity_gated = any(limit > 0 for limit in concurrency_limits)
-        budget_gated = global_concurrency_limit is not None
+        shape = dequeue_shape(
+            DequeueArgs(
+                batch_size=batch_size,
+                entrypoints=entrypoints,
+                concurrency_limits=concurrency_limits,
+                queue_manager_id=queue_manager_id,
+                global_concurrency_limit=global_concurrency_limit,
+                heartbeat_timeout=heartbeat_timeout,
+            )
+        )
+        capacity_gated = shape in (DequeueShape.entrypoint_gate, DequeueShape.both_gates)
+        budget_gated = shape in (DequeueShape.global_gate, DequeueShape.both_gates)
 
         composer = SqlComposer()
         # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
@@ -278,8 +281,8 @@ class QueryQueueBuilder:
         if budget_gated:
             global_limit = composer.bind(global_concurrency_limit)
 
-        shape = DequeueShape(capacity_gated, budget_gated, batch_size)
-        if (cached_sql := self.dequeue_sql_cache.get(shape)) is not None:
+        key = DequeueCacheKey(shape, batch_size)
+        if (cached_sql := self.dequeue_sql_cache.get(key)) is not None:
             return ComposedQuery(sql=cached_sql, args=tuple(composer.values))
 
         queue_table = self.qualified.queue_table
@@ -592,7 +595,7 @@ class QueryQueueBuilder:
             comment="Record the pick in the log table.",
         )
         query = composer.render("SELECT * FROM claimed ORDER BY priority DESC, id ASC;")
-        self.dequeue_sql_cache[shape] = query.sql
+        self.dequeue_sql_cache[key] = query.sql
         return query
 
     def build_has_queued_work(self) -> str:

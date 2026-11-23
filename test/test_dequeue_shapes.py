@@ -22,6 +22,7 @@ import pytest
 from pgqueuer import db, queries
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.composer import ComposedQuery
+from pgqueuer.adapters.persistence.dequeue import DequeueArgs, DequeueShape, dequeue_shape
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
@@ -57,16 +58,41 @@ def update_snapshots() -> bool:
 
 
 @pytest.mark.parametrize(
-    ("snapshot", "concurrency_limit", "global_limit"),
+    ("concurrency_limits", "global_limit", "expected"),
     [
-        ("dequeue_no_gates.sql", 0, None),
-        ("dequeue_entrypoint_gate.sql", 2, None),
-        ("dequeue_global_gate.sql", 0, 3),
-        ("dequeue_both_gates.sql", 2, 3),
+        ([0], None, DequeueShape.no_gates),
+        ([0, 2], None, DequeueShape.entrypoint_gate),
+        ([0], 3, DequeueShape.global_gate),
+        ([2], 3, DequeueShape.both_gates),
+    ],
+)
+def test_dequeue_shape_follows_the_configured_gates(
+    concurrency_limits: list[int],
+    global_limit: int | None,
+    expected: DequeueShape,
+) -> None:
+    args = DequeueArgs(
+        batch_size=10,
+        entrypoints=[QueueEntrypoint(f"ep{i}") for i in range(len(concurrency_limits))],
+        concurrency_limits=concurrency_limits,
+        queue_manager_id=QueueManagerId(uuid.UUID(int=0)),
+        global_concurrency_limit=global_limit,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert dequeue_shape(args) is expected
+
+
+@pytest.mark.parametrize(
+    ("shape", "concurrency_limit", "global_limit"),
+    [
+        (DequeueShape.no_gates, 0, None),
+        (DequeueShape.entrypoint_gate, 2, None),
+        (DequeueShape.global_gate, 0, 3),
+        (DequeueShape.both_gates, 2, 3),
     ],
 )
 def test_dequeue_sql_matches_snapshot(
-    snapshot: str,
+    shape: DequeueShape,
     concurrency_limit: int,
     global_limit: int | None,
 ) -> None:
@@ -75,7 +101,7 @@ def test_dequeue_sql_matches_snapshot(
     placeholders = {int(n) for n in re.findall(r"\$(\d+)", query.sql)}
     assert placeholders == set(range(1, len(query.args) + 1))
 
-    path = SNAPSHOT_DIR / snapshot
+    path = SNAPSHOT_DIR / f"dequeue_{shape.value}.sql"
     expected = query.sql + "\n"
     if update_snapshots():
         path.write_text(expected)
