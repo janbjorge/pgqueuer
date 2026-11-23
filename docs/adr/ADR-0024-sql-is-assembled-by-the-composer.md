@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (adoption is incremental; dequeue migrates first)
+Accepted (adoption is incremental; dequeue has migrated)
 
 ## Context
 
@@ -30,9 +30,9 @@ exception to binding: a validated positive integer written as a
 literal, so the plan PostgreSQL caches for the prepared statement can
 see its `LIMIT`.
 
-Adoption is incremental and has not started yet: dequeue migrates
-first, the remaining builders follow when next touched, and a
-statement that gains a conditional fragment migrates at that moment.
+Adoption is incremental: dequeue migrated first, the remaining
+builders follow when next touched, and a statement that gains a
+conditional fragment migrates at that moment.
 Static, argument-free DDL migrates last, if ever.
 
 ## Consequences

@@ -14,13 +14,13 @@ a sub-model of the [system design](README.md).
 └───────┬───────┘
         │
         ▼
-┌───────────────┐  derives the gate shape from what is configured
-│ Query builder │  and picks the fragments that shape needs
+┌───────────────┐
+│ Dequeue SQL   │ picks the shape, lists its CTEs
 └───────┬───────┘
-        │ fragments and values, in a fixed order
+        │
         ▼
-┌───────────────┐  couples each value to its placeholder as it is
-│   Composer    │  bound; chains the fragments into one statement
+┌───────────────┐
+│ Query template│ cached per shape and batch size
 └───────┬───────┘
         │
         ▼
@@ -50,16 +50,24 @@ travels as a bound argument.
 | Global gate     | off               | on            |
 | Both gates      | on                | on            |
 
+`dequeue_shape` picks the shape. Each shape is one method on `DequeueSql`
+listing its CTEs in `WITH` order; each CTE is one method. Snapshots live
+under `test/query_shapes/`.
+
 ## Components
 
-| Component     | Type         | Description                                        |
-|---------------|--------------|----------------------------------------------------|
-| Composer      | Service      | Assembles a statement from fragments; couples each value to its placeholder as it is bound |
-| Composed query| Value Object | Immutable pairing of rendered text and arguments   |
-| Query builder | Service      | Derives the gate predicates and composes the shape |
-| Gate shape    | Value Object | The gate predicates and the batch size; selects the statement |
+| Component         | Type         | Description                                   |
+|-------------------|--------------|-----------------------------------------------|
+| Template composer | Service      | Numbers placeholders, records each one's reader |
+| Query template    | Value Object | Rendered text and its readers                 |
+| CTE               | Value Object | Name, body and one-line log comment           |
+| Composed query    | Value Object | Rendered text paired with its arguments       |
+| Dequeue args      | Value Object | One call's values, validated on construction  |
+| Dequeue shape     | Value Object | Which gates the statement renders             |
+| Dequeue SQL       | Service      | One method per shape and per CTE              |
 
-The composer and builder live in `pgqueuer/adapters/persistence/`.
+Code: `pgqueuer/adapters/persistence/composer.py` and `dequeue.py`. The
+builder caches one template per shape and batch size.
 
 ## Invariants
 
@@ -67,6 +75,9 @@ The composer and builder live in `pgqueuer/adapters/persistence/`.
   sentinel value.
 - One gate configuration and batch size always render identical text;
   arguments are bound fresh on every claim and never shared between claims.
+- Each placeholder carries its own reader, so a cached template never
+  depends on bind order.
+- Rendering rejects a CTE name defined twice.
 - The stale-job re-pick skips the entrypoint gate on purpose:
   re-picking transfers ownership of an already-counted job, and gating
   it would deadlock recovery.
