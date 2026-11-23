@@ -72,6 +72,7 @@ def test_dequeue_shape_follows_the_configured_gates(
     expected: DequeueShape,
 ) -> None:
     args = DequeueArgs(
+        batch_size=10,
         entrypoints=[QueueEntrypoint(f"ep{i}") for i in range(len(concurrency_limits))],
         concurrency_limits=concurrency_limits,
         queue_manager_id=QueueManagerId(uuid.UUID(int=0)),

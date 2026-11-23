@@ -10,8 +10,9 @@ from pgqueuer.adapters.persistence.composer import ComposedQuery, QueryTemplate,
 from pgqueuer.adapters.persistence.dequeue import (
     DequeueArgs,
     DequeueCacheKey,
-    compose_dequeue,
+    dequeue_shape,
     due,
+    render_dequeue,
 )
 from pgqueuer.domain.schema.queue import dedupe_predicate
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
@@ -236,15 +237,23 @@ class QueryQueueBuilder:
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> ComposedQuery:
-        """Compose the dequeue statement; see :func:`dequeue.compose_dequeue`."""
+        """Bind the call to the dequeue statement of the gates it needs.
+
+        The statement is rendered once per shape and batch size, because dequeue
+        runs every busy-loop iteration; the arguments are read fresh on every call.
+        """
         args = DequeueArgs(
+            batch_size=batch_size,
             entrypoints=entrypoints,
             concurrency_limits=concurrency_limits,
             queue_manager_id=queue_manager_id,
             global_concurrency_limit=global_concurrency_limit,
             heartbeat_timeout=heartbeat_timeout,
         )
-        return compose_dequeue(self.qualified, self.dequeue_templates, batch_size, args)
+        key = DequeueCacheKey(dequeue_shape(args), batch_size)
+        if key not in self.dequeue_templates:
+            self.dequeue_templates[key] = render_dequeue(self.qualified, key)
+        return self.dequeue_templates[key].bind(args)
 
     def build_has_queued_work(self) -> str:
         return f"""
@@ -453,13 +462,14 @@ class QueryQueueBuilder:
             cap = f"LIMIT {bound_limit}"
 
         return composer.render(
+            [],
             f"""
                 SELECT count, created, entrypoint, priority, status
                 FROM {self.qualified.statistics_table}
                 {window}
                 ORDER BY id DESC
                 {cap}
-            """
+            """,
         )
 
     def build_update_heartbeat_query(self) -> str:

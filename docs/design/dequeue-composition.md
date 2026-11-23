@@ -125,15 +125,15 @@ generic plans (#1099).
 | Query template     | Value Object | Rendered text and one reader per placeholder; `bind(args)` yields a composed query |
 | CTE                | Value Object | Name, SQL body and single-line log comment         |
 | Composed query     | Value Object | Immutable pairing of rendered text and arguments   |
-| Dequeue args       | Value Object | The values one dequeue call binds                  |
+| Dequeue args       | Value Object | The values one dequeue call renders and binds; validated on construction |
 | Dequeue shape      | Value Object | Enum of the four shapes, chosen by `dequeue_shape`; a value names its snapshot |
 | Dequeue SQL        | Service      | One method per shape, one method per CTE           |
 
 The composer lives in `pgqueuer/adapters/persistence/composer.py`, the
 dequeue statement in `pgqueuer/adapters/persistence/dequeue.py`.
-`QueryQueueBuilder.build_dequeue_query` delegates to `compose_dequeue`,
-which renders a template once per shape and batch size and binds it on
-every call.
+`QueryQueueBuilder.build_dequeue_query` renders a template once per shape
+and batch size with `render_dequeue`, caches it on the builder, and binds
+it on every call.
 
 ## Invariants
 

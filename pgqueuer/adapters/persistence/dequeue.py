@@ -7,12 +7,7 @@ from datetime import timedelta
 from enum import Enum
 from typing import Literal, NamedTuple, assert_never
 
-from pgqueuer.adapters.persistence.composer import (
-    ComposedQuery,
-    Cte,
-    QueryTemplate,
-    TemplateComposer,
-)
+from pgqueuer.adapters.persistence.composer import Cte, QueryTemplate, TemplateComposer
 from pgqueuer.domain.settings import QualifiedNames
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
@@ -34,13 +29,22 @@ def due(alias: str = "") -> str:
 
 @dataclasses.dataclass(frozen=True, kw_only=True)
 class DequeueArgs:
-    """The values one dequeue call binds."""
+    """The values one dequeue call renders and binds."""
 
+    batch_size: int
     entrypoints: list[QueueEntrypoint]
     concurrency_limits: list[int]
     queue_manager_id: QueueManagerId
     global_concurrency_limit: int | None
     heartbeat_timeout: timedelta
+
+    def __post_init__(self) -> None:
+        if len(self.entrypoints) != len(self.concurrency_limits):
+            raise ValueError("entrypoints and concurrency_limits must be the same length")
+        # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
+        rendered: object = self.batch_size
+        if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
+            raise ValueError("batch_size must be a positive integer")
 
 
 class DequeueCacheKey(NamedTuple):
@@ -81,7 +85,7 @@ class DequeueSql:
     heartbeat: str = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
-        self.entrypoints = self.composer.param(lambda args: list(args.entrypoints))
+        self.entrypoints = self.composer.param(lambda args: args.entrypoints)
         self.queue_manager = self.composer.param(lambda args: args.queue_manager_id)
         self.heartbeat = self.composer.param(lambda args: args.heartbeat_timeout)
 
@@ -90,17 +94,13 @@ class DequeueSql:
         return self.qualified.queue_table
 
     @property
-    def log_table(self) -> str:
-        return self.qualified.queue_table_log
-
-    @property
     def batch(self) -> str:
         # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
         # statement cannot see a bound LIMIT and costs the whole backlog for it.
         return str(self.batch_size)
 
     def bind_limits(self) -> str:
-        return self.composer.param(lambda args: list(args.concurrency_limits))
+        return self.composer.param(lambda args: args.concurrency_limits)
 
     def bind_budget(self) -> str:
         return self.composer.param(lambda args: args.global_concurrency_limit)
@@ -516,7 +516,7 @@ class DequeueSql:
         return Cte(
             "log_pick",
             f"""
-                INSERT INTO {self.log_table} (job_id, status, entrypoint, priority)
+                INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)
                 SELECT id, status, entrypoint, priority FROM claimed
             """,
             comment="Record the pick in the log table.",
@@ -537,29 +537,3 @@ def render_dequeue(qualified: QualifiedNames, key: DequeueCacheKey) -> QueryTemp
     else:
         assert_never(shape)
     return sql.composer.render(ctes, "SELECT * FROM claimed ORDER BY priority DESC, id ASC;")
-
-
-def compose_dequeue(
-    qualified: QualifiedNames,
-    cache: dict[DequeueCacheKey, QueryTemplate[DequeueArgs]],
-    batch_size: int,
-    args: DequeueArgs,
-) -> ComposedQuery:
-    """Bind ``args`` to the dequeue statement of the gates they need.
-
-    The statement is rendered once per shape and batch size, because dequeue
-    runs every busy-loop iteration; ``args`` are read fresh on every call.
-    """
-    if len(args.entrypoints) != len(args.concurrency_limits):
-        raise ValueError("entrypoints and concurrency_limits must be the same length")
-    # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
-    rendered: object = batch_size
-    if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
-        raise ValueError("batch_size must be a positive integer")
-
-    key = DequeueCacheKey(dequeue_shape(args), batch_size)
-    template = cache.get(key)
-    if template is None:
-        template = render_dequeue(qualified, key)
-        cache[key] = template
-    return template.bind(args)
