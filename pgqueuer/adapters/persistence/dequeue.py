@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import timedelta
-from typing import Literal, NamedTuple, TypeAlias, assert_never
+from enum import Enum
+from typing import Literal, NamedTuple, assert_never
 
 from pgqueuer.adapters.persistence.composer import (
     ComposedQuery,
@@ -15,7 +16,14 @@ from pgqueuer.adapters.persistence.composer import (
 from pgqueuer.domain.settings import QualifiedNames
 from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
 
-DequeueShape: TypeAlias = Literal["no_gates", "entrypoint_gate", "global_gate", "both_gates"]
+
+class DequeueShape(Enum):
+    """The concurrency gates a dequeue statement renders."""
+
+    no_gates = "no_gates"
+    entrypoint_gate = "entrypoint_gate"
+    global_gate = "global_gate"
+    both_gates = "both_gates"
 
 
 def due(alias: str = "") -> str:
@@ -45,12 +53,12 @@ def dequeue_shape(args: DequeueArgs) -> DequeueShape:
     entrypoint_gated = any(limit > 0 for limit in args.concurrency_limits)
     budget_gated = args.global_concurrency_limit is not None
     if entrypoint_gated and budget_gated:
-        return "both_gates"
+        return DequeueShape.both_gates
     if entrypoint_gated:
-        return "entrypoint_gate"
+        return DequeueShape.entrypoint_gate
     if budget_gated:
-        return "global_gate"
-    return "no_gates"
+        return DequeueShape.global_gate
+    return DequeueShape.no_gates
 
 
 @dataclasses.dataclass
@@ -518,13 +526,13 @@ class DequeueSql:
 def render_dequeue(qualified: QualifiedNames, key: DequeueCacheKey) -> QueryTemplate[DequeueArgs]:
     sql = DequeueSql(qualified, key.batch_size)
     shape = key.shape
-    if shape == "no_gates":
+    if shape is DequeueShape.no_gates:
         ctes = sql.no_gates()
-    elif shape == "entrypoint_gate":
+    elif shape is DequeueShape.entrypoint_gate:
         ctes = sql.entrypoint_gate()
-    elif shape == "global_gate":
+    elif shape is DequeueShape.global_gate:
         ctes = sql.global_gate()
-    elif shape == "both_gates":
+    elif shape is DequeueShape.both_gates:
         ctes = sql.both_gates()
     else:
         assert_never(shape)

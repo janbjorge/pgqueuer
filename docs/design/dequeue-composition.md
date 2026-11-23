@@ -126,7 +126,7 @@ generic plans (#1099).
 | CTE                | Value Object | Name, SQL body and single-line log comment         |
 | Composed query     | Value Object | Immutable pairing of rendered text and arguments   |
 | Dequeue args       | Value Object | The values one dequeue call binds                  |
-| Dequeue shape      | Value Object | `Literal` of the four shapes, chosen by `dequeue_shape` |
+| Dequeue shape      | Value Object | Enum of the four shapes, chosen by `dequeue_shape`; a value names its snapshot |
 | Dequeue SQL        | Service      | One method per shape, one method per CTE           |
 
 The composer lives in `pgqueuer/adapters/persistence/composer.py`, the
