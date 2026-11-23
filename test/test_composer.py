@@ -4,7 +4,13 @@ import dataclasses
 
 import pytest
 
-from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
+from pgqueuer.adapters.persistence.composer import (
+    ComposedQuery,
+    Cte,
+    SqlComposer,
+    block,
+    render_cte,
+)
 
 
 def test_bind_numbers_placeholders_in_order() -> None:
@@ -16,7 +22,7 @@ def test_bind_numbers_placeholders_in_order() -> None:
 
 
 def test_block_dedents_to_the_left_margin() -> None:
-    assert SqlComposer.block("\n    SELECT 1\n    FROM jobs\n") == "SELECT 1\nFROM jobs"
+    assert block("\n    SELECT 1\n    FROM jobs\n") == "SELECT 1\nFROM jobs"
 
 
 def test_block_keeps_indentation_relative_within_the_block() -> None:
@@ -25,7 +31,7 @@ def test_block_keeps_indentation_relative_within_the_block() -> None:
             SELECT id FROM jobs
         ) inner_jobs
     """
-    assert SqlComposer.block(nested) == "SELECT id FROM (\n    SELECT id FROM jobs\n) inner_jobs"
+    assert block(nested) == "SELECT id FROM (\n    SELECT id FROM jobs\n) inner_jobs"
 
 
 def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
@@ -33,7 +39,7 @@ def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
     # When it renders empty the line must go with it, rather than leaving a
     # blank line in the middle of the statement.
     for gate in ("WHERE priority > 0", ""):
-        rendered = SqlComposer.block(f"""
+        rendered = block(f"""
             SELECT id
             FROM jobs
             {gate}
@@ -41,14 +47,14 @@ def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
         """)
         assert "\n\n" not in rendered
         assert rendered.splitlines()[-1] == "ORDER BY id"
-    assert SqlComposer.block("\n    SELECT id\n    \n    FROM jobs\n") == "SELECT id\nFROM jobs"
+    assert block("\n    SELECT id\n    \n    FROM jobs\n") == "SELECT id\nFROM jobs"
 
 
 def test_block_measures_the_margin_without_the_elided_line() -> None:
     # The whitespace left where a clause was elided is shorter than the block's
     # own indentation; dedent must ignore it instead of measuring the margin
     # against it and under-indenting every other line.
-    assert SqlComposer.block("\n        SELECT 1\n  \n        FROM jobs\n") == "SELECT 1\nFROM jobs"
+    assert block("\n        SELECT 1\n  \n        FROM jobs\n") == "SELECT 1\nFROM jobs"
 
 
 def test_render_pairs_sql_with_bound_args() -> None:
@@ -151,3 +157,17 @@ def test_composed_query_is_immutable() -> None:
     query = ComposedQuery(sql="SELECT 1", args=())
     with pytest.raises(dataclasses.FrozenInstanceError):
         query.sql = "SELECT 2"  # type: ignore[misc]
+
+
+def test_render_rejects_a_cte_defined_twice() -> None:
+    # Shape variants share a CTE name; rendering both would be invalid SQL.
+    composer = SqlComposer()
+    composer.cte("available", "SELECT 1")
+    composer.cte("available", "SELECT 2")
+    with pytest.raises(ValueError, match="defined twice"):
+        composer.render("SELECT * FROM available")
+
+
+def test_cte_renders_as_its_definition() -> None:
+    ready = Cte("ready", "SELECT 1", comment="Jobs ready to run.")
+    assert render_cte(ready) == "-- Jobs ready to run.\nready AS (\n    SELECT 1\n)"

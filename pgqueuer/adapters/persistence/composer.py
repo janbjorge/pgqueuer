@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import textwrap
+from collections.abc import Sequence
 
 
 @dataclasses.dataclass(frozen=True)
@@ -10,6 +11,53 @@ class ComposedQuery:
 
     sql: str
     args: tuple[object, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class Cte:
+    """A named CTE body, written as one SQL block.
+
+    A comment must be a single line: it orients whoever reads the statement
+    in a Postgres log, while the reasoning behind a clause belongs in a Python
+    comment next to the code that decides it.
+    """
+
+    name: str
+    body: str
+    _: dataclasses.KW_ONLY
+    comment: str = ""
+
+    def __post_init__(self) -> None:
+        if "\n" in self.comment:
+            raise ValueError("A CTE comment must be a single line")
+
+
+def block(sql: str) -> str:
+    """Dedent a SQL block and drop the lines an inapplicable clause left empty."""
+    # dedent ignores whitespace-only lines when measuring the common prefix, so
+    # the line an elided clause leaves behind cannot drag the whole block left.
+    lines = textwrap.dedent(sql).splitlines()
+    return "\n".join(line for line in lines if line.strip())
+
+
+def render_cte(cte: Cte) -> str:
+    definition = f"{cte.name} AS (\n{textwrap.indent(block(cte.body), '    ')}\n)"
+    if cte.comment:
+        return f"-- {cte.comment}\n{definition}"
+    return definition
+
+
+def render_statement(ctes: Sequence[Cte], final: str) -> str:
+    """Chain ``ctes`` into one WITH clause ahead of ``final``."""
+    defined: set[str] = set()
+    for cte in ctes:
+        if cte.name in defined:
+            raise ValueError(f"CTE {cte.name!r} is defined twice")
+        defined.add(cte.name)
+    if not ctes:
+        return block(final)
+    with_clause = ",\n\n".join(render_cte(cte) for cte in ctes)
+    return f"WITH\n{with_clause}\n{block(final)}"
 
 
 @dataclasses.dataclass
@@ -38,35 +86,15 @@ class SqlComposer:
         await driver.fetch(query.sql, *query.args)
     """
 
-    values: list[object] = dataclasses.field(default_factory=list)
-    fragments: list[str] = dataclasses.field(default_factory=list)
+    values: list[object] = dataclasses.field(init=False, default_factory=list)
+    ctes: list[Cte] = dataclasses.field(init=False, default_factory=list)
 
     def bind(self, value: object) -> str:
         self.values.append(value)
         return f"${len(self.values)}"
 
-    @staticmethod
-    def block(sql: str) -> str:
-        """Dedent a SQL block and drop the lines an inapplicable clause left empty."""
-        # dedent ignores whitespace-only lines when measuring the common prefix, so
-        # the line an elided clause leaves behind cannot drag the whole block left.
-        lines = textwrap.dedent(sql).splitlines()
-        return "\n".join(line for line in lines if line.strip())
-
     def cte(self, name: str, body: str, *, comment: str = "") -> None:
-        """Append a named CTE built from one SQL block.
-
-        A comment must be a single line: it orients whoever reads the
-        statement in a Postgres log, while the reasoning behind a clause
-        belongs in a Python comment next to the code that decides it.
-        """
-        if "\n" in comment:
-            raise ValueError("A CTE comment must be a single line")
-
-        header = f"-- {comment}\n" if comment else ""
-        indented = textwrap.indent(self.block(body), "    ")
-        self.fragments.append(f"{header}{name} AS (\n{indented}\n)")
+        self.ctes.append(Cte(name, body, comment=comment))
 
     def render(self, final: str) -> ComposedQuery:
-        with_clause = "WITH\n" + ",\n\n".join(self.fragments) + "\n" if self.fragments else ""
-        return ComposedQuery(sql=f"{with_clause}{self.block(final)}", args=tuple(self.values))
+        return ComposedQuery(sql=render_statement(self.ctes, final), args=tuple(self.values))
