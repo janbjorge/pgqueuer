@@ -14,13 +14,13 @@ a sub-model of the [system design](README.md).
 └───────┬───────┘
         │
         ▼
-┌───────────────┐  derives the gate shape from what is configured
-│ Query builder │  and picks the fragments that shape needs
+┌───────────────┐  dequeue_shape picks the shape from what is
+│ Dequeue SQL   │  configured; the shape method lists its CTEs
 └───────┬───────┘
-        │ fragments and values, in a fixed order
+        │ CTEs, and one reader per placeholder
         ▼
-┌───────────────┐  couples each value to its placeholder as it is
-│   Composer    │  bound; chains the fragments into one statement
+┌───────────────┐  rendered once per shape and batch size,
+│ Query template│  cached, bound to the call's arguments
 └───────┬───────┘
         │
         ▼
@@ -50,10 +50,14 @@ travels as a bound argument.
 | Global gate     | off               | on            | `dequeue_global_gate.sql`     |
 | Both gates      | on                | on            | `dequeue_both_gates.sql`      |
 
-Each shape is one method on `DequeueFragments` (`no_gates`,
-`entrypoint_gate`, `global_gate`, `both_gates`) that reads as the
-statement's data flow: every CTE is a method that takes the CTEs it
-reads as arguments. Snapshots live under `test/query_shapes/`.
+`dequeue_shape` is the one place the shape is decided. Each shape is
+one method on `DequeueSql` (`no_gates`, `entrypoint_gate`,
+`global_gate`, `both_gates`) that lists its CTEs in `WITH` order. Each
+CTE is one method; a CTE with two forms has two methods
+(`available` and `available_with_capacity`) that render under the same
+name. Bodies name the CTEs they read as plain SQL, and the docstring
+records the columns a CTE returns and the CTEs it reads. Snapshots
+live under `test/query_shapes/`.
 
 ### Data flow
 
@@ -89,17 +93,19 @@ its budget, and `eligible` takes at most `worker_load.headroom` rows.
 |--------------------|----------|-----------------|-------------|------------|
 | `params`           |          | ✓               |             | ✓          |
 | `picked`           |          | ✓               |             | ✓          |
-| `available`        | all      | gated           | all         | gated      |
+| `available`        | `available` | `available_with_capacity` | `available` | `available_with_capacity` |
 | `worker_load`      |          |                 | ✓           | ✓          |
 | `unlimited_claims` |          | ✓               |             | ✓          |
 | `limited_claims`   |          | ✓               |             | ✓          |
-| `next_queued`      | scan     | merged          | scan        | merged     |
-| `next_stale`       | ✓        | + entrypoint    | ✓           | + entrypoint |
-| `eligible`         | plain    | slotted         | plain       | slotted    |
+| `next_queued`      | `next_queued` | `next_queued_from_claims` | `next_queued` | `next_queued_from_claims` |
+| `next_stale`       | ✓        | ✓               | ✓           | ✓          |
+| `eligible`         | `eligible` | `eligible_with_slots` | `eligible` | `eligible_with_slots` |
 | `free_slots`       |          | ✓               |             | ✓          |
 | `slot_assignments` |          | ✓               |             | ✓          |
-| `claimed`          | plain    | slotted         | plain       | slotted    |
+| `claimed`          | `claimed` | `claimed_with_slots` | `claimed` | `claimed_with_slots` |
 | `log_pick`         | ✓        | ✓               | ✓           | ✓          |
+
+Where a cell names a method, that method renders the CTE in that shape.
 
 ### Why `limited_claims` is nested three deep
 
@@ -115,16 +121,19 @@ generic plans (#1099).
 
 | Component          | Type         | Description                                        |
 |--------------------|--------------|----------------------------------------------------|
-| Composer           | Service      | Couples each value to its placeholder as it is bound; chains CTEs into one statement |
-| CTE                | Value Object | Name, body and log comment; formats as its name inside a later body |
+| Template composer  | Service      | Numbers each placeholder and records how to read its value from a call's arguments |
+| Query template     | Value Object | Rendered text and one reader per placeholder; `bind(args)` yields a composed query |
+| CTE                | Value Object | Name, SQL body and single-line log comment         |
 | Composed query     | Value Object | Immutable pairing of rendered text and arguments   |
-| Dequeue binds      | Value Object | Every placeholder of one dequeue, bound in one fixed order; an unconfigured gate is `None` |
-| Dequeue fragments  | Service      | One method per CTE, one method per shape           |
-| Gate shape         | Value Object | The gate predicates and the batch size; keys the rendered-text cache |
+| Dequeue args       | Value Object | The values one dequeue call binds                  |
+| Dequeue shape      | Value Object | `Literal` of the four shapes, chosen by `dequeue_shape` |
+| Dequeue SQL        | Service      | One method per shape, one method per CTE           |
 
 The composer lives in `pgqueuer/adapters/persistence/composer.py`, the
 dequeue statement in `pgqueuer/adapters/persistence/dequeue.py`.
-`QueryQueueBuilder.build_dequeue_query` delegates to `compose_dequeue`.
+`QueryQueueBuilder.build_dequeue_query` delegates to `compose_dequeue`,
+which renders a template once per shape and batch size and binds it on
+every call.
 
 ## Invariants
 
@@ -132,12 +141,10 @@ dequeue statement in `pgqueuer/adapters/persistence/dequeue.py`.
   sentinel value.
 - One gate configuration and batch size always render identical text;
   arguments are bound fresh on every claim and never shared between claims.
-- Values are bound before the cache lookup, in the one order
-  `DequeueBinds.bind` fixes, so cached text and fresh arguments agree
-  on every `$N`.
-- A CTE name is defined once per statement; shape variants of one CTE
-  (`all_available` and `gated_available`) share the name, and the
-  composer rejects a second definition.
+- A cached template pairs with fresh arguments because each placeholder
+  carries its own reader; nothing depends on the order values are bound.
+- A CTE name is defined once per statement; rendering rejects a second
+  definition, so two forms of one CTE cannot both reach a shape.
 - The stale-job re-pick skips the entrypoint gate on purpose:
   re-picking transfers ownership of an already-counted job, and gating
   it would deadlock recovery.

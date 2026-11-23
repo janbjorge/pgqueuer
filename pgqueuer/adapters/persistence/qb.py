@@ -6,8 +6,13 @@ from datetime import timedelta
 from typing import assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
-from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
-from pgqueuer.adapters.persistence.dequeue import DequeueShape, compose_dequeue, due
+from pgqueuer.adapters.persistence.composer import ComposedQuery, QueryTemplate, SqlComposer
+from pgqueuer.adapters.persistence.dequeue import (
+    DequeueArgs,
+    DequeueCacheKey,
+    compose_dequeue,
+    due,
+)
 from pgqueuer.domain.schema.queue import dedupe_predicate
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import (
@@ -210,9 +215,9 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 @dataclasses.dataclass
 class QueryQueueBuilder:
     settings: DBSettings
-    # Rendered dequeue SQL per shape. The bind order is fixed per shape, so
-    # cached text pairs with freshly bound args.
-    dequeue_sql_cache: dict[DequeueShape, str] = dataclasses.field(default_factory=dict)
+    dequeue_templates: dict[DequeueCacheKey, QueryTemplate[DequeueArgs]] = dataclasses.field(
+        default_factory=dict
+    )
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -229,16 +234,14 @@ class QueryQueueBuilder:
         heartbeat_timeout: timedelta,
     ) -> ComposedQuery:
         """Compose the dequeue statement; see :func:`dequeue.compose_dequeue`."""
-        return compose_dequeue(
-            self.qualified,
-            self.dequeue_sql_cache,
-            batch_size=batch_size,
+        args = DequeueArgs(
             entrypoints=entrypoints,
             concurrency_limits=concurrency_limits,
             queue_manager_id=queue_manager_id,
             global_concurrency_limit=global_concurrency_limit,
             heartbeat_timeout=heartbeat_timeout,
         )
+        return compose_dequeue(self.qualified, self.dequeue_templates, batch_size, args)
 
     def build_has_queued_work(self) -> str:
         return f"""

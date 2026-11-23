@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import NamedTuple
 
 import pytest
 
-from pgqueuer.adapters.persistence.composer import ComposedQuery, Cte, SqlComposer
+from pgqueuer.adapters.persistence.composer import (
+    ComposedQuery,
+    Cte,
+    SqlComposer,
+    TemplateComposer,
+    block,
+)
+
+
+class Request(NamedTuple):
+    limit: int
+    tags: list[str]
 
 
 def test_bind_numbers_placeholders_in_order() -> None:
@@ -16,7 +28,7 @@ def test_bind_numbers_placeholders_in_order() -> None:
 
 
 def test_block_dedents_to_the_left_margin() -> None:
-    assert SqlComposer.block("\n    SELECT 1\n    FROM jobs\n") == "SELECT 1\nFROM jobs"
+    assert block("\n    SELECT 1\n    FROM jobs\n") == "SELECT 1\nFROM jobs"
 
 
 def test_block_keeps_indentation_relative_within_the_block() -> None:
@@ -25,7 +37,7 @@ def test_block_keeps_indentation_relative_within_the_block() -> None:
             SELECT id FROM jobs
         ) inner_jobs
     """
-    assert SqlComposer.block(nested) == "SELECT id FROM (\n    SELECT id FROM jobs\n) inner_jobs"
+    assert block(nested) == "SELECT id FROM (\n    SELECT id FROM jobs\n) inner_jobs"
 
 
 def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
@@ -33,7 +45,7 @@ def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
     # When it renders empty the line must go with it, rather than leaving a
     # blank line in the middle of the statement.
     for gate in ("WHERE priority > 0", ""):
-        rendered = SqlComposer.block(f"""
+        rendered = block(f"""
             SELECT id
             FROM jobs
             {gate}
@@ -41,14 +53,14 @@ def test_block_drops_the_line_an_elided_clause_leaves_behind() -> None:
         """)
         assert "\n\n" not in rendered
         assert rendered.splitlines()[-1] == "ORDER BY id"
-    assert SqlComposer.block("\n    SELECT id\n    \n    FROM jobs\n") == "SELECT id\nFROM jobs"
+    assert block("\n    SELECT id\n    \n    FROM jobs\n") == "SELECT id\nFROM jobs"
 
 
 def test_block_measures_the_margin_without_the_elided_line() -> None:
     # The whitespace left where a clause was elided is shorter than the block's
     # own indentation; dedent must ignore it instead of measuring the margin
     # against it and under-indenting every other line.
-    assert SqlComposer.block("\n        SELECT 1\n  \n        FROM jobs\n") == "SELECT 1\nFROM jobs"
+    assert block("\n        SELECT 1\n  \n        FROM jobs\n") == "SELECT 1\nFROM jobs"
 
 
 def test_render_pairs_sql_with_bound_args() -> None:
@@ -147,25 +159,26 @@ def test_cte_rejects_a_multi_line_comment() -> None:
         composer.cte("ready", "SELECT 1", comment="First line.\nSecond line.")
 
 
-def test_cte_formats_as_its_name() -> None:
+def test_render_rejects_a_cte_defined_twice() -> None:
+    # Shape variants share a CTE name; rendering both would be invalid SQL.
     composer = SqlComposer()
-    ready = composer.cte("ready", "SELECT id FROM jobs")
-    composer.add(Cte("picked", f"SELECT id FROM {ready}"))
-    query = composer.render("SELECT * FROM picked")
-    assert "picked AS (\n    SELECT id FROM ready\n)" in query.sql
+    composer.cte("available", "SELECT 1")
+    composer.cte("available", "SELECT 2")
+    with pytest.raises(ValueError, match="defined twice"):
+        composer.render("SELECT * FROM available")
 
 
-def test_cte_value_rejects_a_multi_line_comment() -> None:
-    with pytest.raises(ValueError, match="single line"):
-        Cte("ready", "SELECT 1", comment="First line.\nSecond line.")
-
-
-def test_add_rejects_a_duplicate_name() -> None:
-    # Shape variants share a CTE name; adding both would render invalid SQL.
-    composer = SqlComposer()
-    composer.add(Cte("available", "SELECT 1"))
-    with pytest.raises(ValueError, match="already defined"):
-        composer.add(Cte("available", "SELECT 2"))
+def test_template_reads_each_param_from_the_call_args() -> None:
+    composer = TemplateComposer[Request]()
+    tags = composer.param(lambda request: request.tags)
+    limit = composer.param(lambda request: request.limit)
+    template = composer.render(
+        [Cte("ready", f"SELECT id FROM jobs WHERE tag = ANY({tags})")],
+        f"SELECT * FROM ready LIMIT {limit}",
+    )
+    assert template.sql.endswith("SELECT * FROM ready LIMIT $2")
+    assert template.bind(Request(limit=5, tags=["a"])).args == (["a"], 5)
+    assert template.bind(Request(limit=7, tags=["b"])).args == (["b"], 7)
 
 
 def test_composed_query_is_immutable() -> None:
