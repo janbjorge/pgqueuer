@@ -41,9 +41,8 @@ class DequeueArgs:
     def __post_init__(self) -> None:
         if len(self.entrypoints) != len(self.concurrency_limits):
             raise ValueError("entrypoints and concurrency_limits must be the same length")
-        # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
-        rendered: object = self.batch_size
-        if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
+        # batch_size is rendered into the SQL text, where a bool would render as True.
+        if isinstance(self.batch_size, bool) or self.batch_size < 1:
             raise ValueError("batch_size must be a positive integer")
 
 
