@@ -12,6 +12,29 @@ class ComposedQuery:
     args: tuple[object, ...]
 
 
+@dataclasses.dataclass(frozen=True)
+class Cte:
+    """A named CTE body that formats as its name.
+
+    A later body references it as ``f"FROM {available}"``, so the CTEs a body
+    reads are Python values passed to it rather than names retyped as text.
+    A comment must be a single line: it orients whoever reads the statement
+    in a Postgres log, while the reasoning behind a clause belongs in a Python
+    comment next to the code that decides it.
+    """
+
+    name: str
+    body: str
+    comment: str = ""
+
+    def __post_init__(self) -> None:
+        if "\n" in self.comment:
+            raise ValueError("A CTE comment must be a single line")
+
+    def __str__(self) -> str:
+        return self.name
+
+
 @dataclasses.dataclass
 class SqlComposer:
     """Assemble one WITH-chained statement from conditional fragments.
@@ -40,6 +63,7 @@ class SqlComposer:
 
     values: list[object] = dataclasses.field(default_factory=list)
     fragments: list[str] = dataclasses.field(default_factory=list)
+    names: set[str] = dataclasses.field(default_factory=set)
 
     def bind(self, value: object) -> str:
         self.values.append(value)
@@ -53,19 +77,18 @@ class SqlComposer:
         lines = textwrap.dedent(sql).splitlines()
         return "\n".join(line for line in lines if line.strip())
 
-    def cte(self, name: str, body: str, *, comment: str = "") -> None:
-        """Append a named CTE built from one SQL block.
+    def cte(self, name: str, body: str, *, comment: str = "") -> Cte:
+        """Append a named CTE built from one SQL block."""
+        return self.add(Cte(name, body, comment))
 
-        A comment must be a single line: it orients whoever reads the
-        statement in a Postgres log, while the reasoning behind a clause
-        belongs in a Python comment next to the code that decides it.
-        """
-        if "\n" in comment:
-            raise ValueError("A CTE comment must be a single line")
-
-        header = f"-- {comment}\n" if comment else ""
-        indented = textwrap.indent(self.block(body), "    ")
-        self.fragments.append(f"{header}{name} AS (\n{indented}\n)")
+    def add(self, cte: Cte) -> Cte:
+        if cte.name in self.names:
+            raise ValueError(f"CTE {cte.name!r} is already defined")
+        self.names.add(cte.name)
+        header = f"-- {cte.comment}\n" if cte.comment else ""
+        indented = textwrap.indent(self.block(cte.body), "    ")
+        self.fragments.append(f"{header}{cte.name} AS (\n{indented}\n)")
+        return cte
 
     def render(self, final: str) -> ComposedQuery:
         with_clause = "WITH\n" + ",\n\n".join(self.fragments) + "\n" if self.fragments else ""

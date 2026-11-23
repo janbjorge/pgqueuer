@@ -3,10 +3,11 @@ from __future__ import annotations
 import dataclasses
 from collections.abc import Generator
 from datetime import timedelta
-from typing import NamedTuple, assert_never
+from typing import assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
+from pgqueuer.adapters.persistence.dequeue import DequeueShape, compose_dequeue, due
 from pgqueuer.domain.schema.queue import dedupe_predicate
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY
 from pgqueuer.domain.settings import (
@@ -206,12 +207,6 @@ ALTER TABLE {self.qualified.statistics_table} RESET (
 );"""
 
 
-class DequeueShape(NamedTuple):
-    capacity_gated: bool
-    budget_gated: bool
-    batch_size: int
-
-
 @dataclasses.dataclass
 class QueryQueueBuilder:
     settings: DBSettings
@@ -223,13 +218,7 @@ class QueryQueueBuilder:
     def qualified(self) -> QualifiedNames:
         return self.settings.qualified
 
-    @staticmethod
-    def due(alias: str = "") -> str:
-        """The one predicate for a job whose ``execute_after`` has been reached."""
-        column = f"{alias}.execute_after" if alias else "execute_after"
-        return f"{column} <= NOW()"
-
-    def build_dequeue_query(  # noqa: PLR0912, PLR0915 - one SQL builder for all gate combinations
+    def build_dequeue_query(
         self,
         *,
         batch_size: int,
@@ -239,365 +228,17 @@ class QueryQueueBuilder:
         global_concurrency_limit: int | None,
         heartbeat_timeout: timedelta,
     ) -> ComposedQuery:
-        """Compose the dequeue statement for the concurrency gates actually in use.
-
-        Gate CTEs are selected from the runtime values: entrypoint capacity
-        machinery only when some ``concurrency_limits`` entry is positive, the
-        per-worker budget only when ``global_concurrency_limit`` is set. A
-        dequeue with no limits configured renders a plain pick-and-claim. The
-        composer pairs the SQL with its argument tuple, so parameter numbering
-        never drifts between query shapes.
-
-        The rendered text is cached per gate shape and batch size because
-        dequeue rebuilds its query every busy-loop iteration; values are
-        re-bound on every call, so cached SQL never pins or shares argument
-        objects.
-        """
-        if len(entrypoints) != len(concurrency_limits):
-            raise ValueError("entrypoints and concurrency_limits must be the same length")
-        # batch_size is rendered into the SQL text, so the annotation alone is not trusted.
-        rendered: object = batch_size
-        if not (isinstance(rendered, int) and not isinstance(rendered, bool) and rendered > 0):
-            raise ValueError("batch_size must be a positive integer")
-
-        capacity_gated = any(limit > 0 for limit in concurrency_limits)
-        budget_gated = global_concurrency_limit is not None
-
-        composer = SqlComposer()
-        # A literal, not a bind: the generic plan PostgreSQL caches for a prepared
-        # statement cannot see a bound LIMIT and costs the whole backlog for it.
-        batch = str(batch_size)
-        eps = composer.bind(list(entrypoints))
-        queue_manager = composer.bind(queue_manager_id)
-        heartbeat = composer.bind(heartbeat_timeout)
-        limits = ""
-        if capacity_gated:
-            limits = composer.bind(list(concurrency_limits))
-
-        global_limit = ""
-        if budget_gated:
-            global_limit = composer.bind(global_concurrency_limit)
-
-        shape = DequeueShape(capacity_gated, budget_gated, batch_size)
-        if (cached_sql := self.dequeue_sql_cache.get(shape)) is not None:
-            return ComposedQuery(sql=cached_sql, args=tuple(composer.values))
-
-        queue_table = self.qualified.queue_table
-
-        if capacity_gated:
-            # The limit comes from the dequeuing worker's own registration, so the
-            # fleet has to agree on it. Workers declaring different limits for one
-            # entrypoint is unsupported; the highest one wins.
-            composer.cte(
-                "params",
-                f"""
-                    SELECT
-                        UNNEST({eps}::text[]) AS entrypoint,
-                        UNNEST({limits}::bigint[]) AS concurrency_limit
-                """,
-                comment="Unpack per-entrypoint parameters; concurrency_limit 0 means unlimited.",
-            )
-            composer.cte(
-                "picked",
-                f"""
-                    SELECT entrypoint, COUNT(*) AS total
-                    FROM {queue_table}
-                    WHERE queue_manager_id IS NOT NULL
-                      AND entrypoint = ANY({eps})
-                    GROUP BY entrypoint
-                """,
-                comment="Per-entrypoint count of picked jobs (global, all workers).",
-            )
-            # Applying the gate here rather than per row keeps a saturated entrypoint
-            # from scanning its queued backlog at all. remaining is NULL for unlimited
-            # entrypoints; otherwise it caps how many rows one dequeue may pick, so a
-            # single statement cannot exceed the entrypoint's concurrency_limit.
-            composer.cte(
-                "available",
-                """
-                    SELECT
-                        params.entrypoint,
-                        CASE
-                            WHEN params.concurrency_limit <= 0 THEN NULL
-                            ELSE params.concurrency_limit - COALESCE(picked.total, 0)
-                        END AS remaining
-                    FROM params
-                    LEFT JOIN picked ON picked.entrypoint = params.entrypoint
-                    WHERE params.concurrency_limit <= 0
-                       OR COALESCE(picked.total, 0) < params.concurrency_limit
-                """,
-                comment="Entrypoints with free capacity; remaining caps a single dequeue.",
-            )
-        else:
-            composer.cte(
-                "available",
-                f"SELECT UNNEST({eps}::text[]) AS entrypoint",
-                comment="No entrypoint carries a concurrency limit; all are available.",
-            )
-
-        # Both gate lines drop out of their block when the budget is unlimited.
-        budget_where = ""
-        budget_and = ""
-        eligible_limit = batch
-        if budget_gated:
-            # headroom, not the total, is what stops a batch overshooting: the total
-            # only says whether a dequeue may start, never how much it may take.
-            composer.cte(
-                "worker_load",
-                f"""
-                    SELECT
-                        COUNT(*) AS total,
-                        GREATEST(LEAST({batch}, {global_limit} - COUNT(*)), 0) AS headroom
-                    FROM {queue_table}
-                    WHERE queue_manager_id = {queue_manager}
-                      AND entrypoint = ANY({eps})
-                """,
-                comment="This worker's picked jobs, and how many more this batch may claim.",
-            )
-            under_budget = f"(SELECT total FROM worker_load) < {global_limit}"
-            budget_where = f"WHERE {under_budget}"
-            budget_and = f"AND {under_budget}"
-            eligible_limit = "(SELECT headroom FROM worker_load)"
-
-        if capacity_gated:
-            composer.cte(
-                "unlimited_claims",
-                f"""
-                    SELECT job.id, job.priority, available.entrypoint
-                    FROM available
-                    CROSS JOIN LATERAL (
-                        SELECT candidate.id, candidate.priority
-                        FROM {queue_table} candidate
-                        WHERE candidate.entrypoint = available.entrypoint
-                          AND candidate.status = 'queued'
-                          AND {self.due("candidate")}
-                        ORDER BY candidate.priority DESC, candidate.id ASC
-                        LIMIT {batch}
-                        FOR UPDATE SKIP LOCKED
-                    ) job
-                    WHERE available.remaining IS NULL
-                """,
-                comment="Claims for entrypoints without a limit; lock straight down the backlog.",
-            )
-            # Windowing before the lock keeps the lock node out from under a LIMIT,
-            # where SKIP LOCKED slides down the backlog and past the cap (#761).
-            composer.cte(
-                "limited_claims",
-                # The planner cannot evaluate the LEAST cap and costs a share of the whole
-                # backlog for it; the constant LIMIT beneath bounds the estimate by the batch.
-                f"""
-                    SELECT job.id, job.priority, available.entrypoint
-                    FROM available
-                    CROSS JOIN LATERAL (
-                        SELECT locked.id, locked.priority
-                        FROM (
-                            SELECT batched.id
-                            FROM (
-                                SELECT candidate.id, candidate.priority
-                                FROM {queue_table} candidate
-                                WHERE candidate.entrypoint = available.entrypoint
-                                  AND candidate.status = 'queued'
-                                  AND {self.due("candidate")}
-                                ORDER BY candidate.priority DESC, candidate.id ASC
-                                LIMIT {batch}
-                            ) batched
-                            ORDER BY batched.priority DESC, batched.id ASC
-                            LIMIT LEAST({batch}, available.remaining)
-                        ) capped
-                        CROSS JOIN LATERAL (
-                            SELECT target.id, target.priority
-                            FROM {queue_table} target
-                            WHERE target.id = capped.id
-                              AND target.status = 'queued'
-                              AND {self.due("target")}
-                            FOR UPDATE OF target SKIP LOCKED
-                        ) locked
-                        ORDER BY locked.priority DESC, locked.id ASC
-                        LIMIT LEAST({batch}, available.remaining)
-                    ) job
-                    WHERE available.remaining IS NOT NULL
-                """,
-                comment="Claims for limited entrypoints; the window is fixed before the lock.",
-            )
-            queued_comment = "Both claim sets merged into one priority order."
-            queued_body = f"""
-                SELECT job.id, job.priority, job.entrypoint
-                FROM (
-                    SELECT id, priority, entrypoint FROM unlimited_claims
-                    UNION ALL
-                    SELECT id, priority, entrypoint FROM limited_claims
-                ) job
-                {budget_where}
-                ORDER BY job.priority DESC, job.id ASC
-                LIMIT {batch}
-            """
-        else:
-            queued_comment = "New queued jobs; LATERAL hits the (entrypoint, priority, id) index."
-            queued_body = f"""
-                SELECT job.id, job.priority
-                FROM available
-                CROSS JOIN LATERAL (
-                    SELECT candidate.id, candidate.priority
-                    FROM {queue_table} candidate
-                    WHERE candidate.entrypoint = available.entrypoint
-                      AND candidate.status = 'queued'
-                      AND {self.due("candidate")}
-                    ORDER BY candidate.priority DESC, candidate.id ASC
-                    LIMIT {batch}
-                    FOR UPDATE SKIP LOCKED
-                ) job
-                {budget_where}
-                ORDER BY job.priority DESC, job.id ASC
-                LIMIT {batch}
-            """
-        composer.cte("next_queued", queued_body, comment=queued_comment)
-
-        stale_entrypoint = ""
-        if capacity_gated:
-            stale_entrypoint = ", stale.entrypoint"
-
-        # The entrypoint concurrency gate is intentionally omitted here: re-picking a
-        # stale job only transfers ownership of a row already counted in `picked`, so
-        # net live execution is unchanged. Applying the gate would deadlock recovery
-        # once leaked rows fill the slot.
-        composer.cte(
-            "next_stale",
-            f"""
-                SELECT stale.id, stale.priority{stale_entrypoint}
-                FROM {queue_table} stale
-                WHERE stale.status = 'picked'
-                  AND stale.entrypoint = ANY({eps})
-                  AND stale.heartbeat < NOW() - {heartbeat}::interval
-                  AND {self.due("stale")}
-                  {budget_and}
-                ORDER BY stale.priority DESC, stale.id ASC
-                FOR UPDATE SKIP LOCKED
-                LIMIT {batch}
-            """,
-            comment="Stale picked jobs whose heartbeat timed out.",
+        """Compose the dequeue statement; see :func:`dequeue.compose_dequeue`."""
+        return compose_dequeue(
+            self.qualified,
+            self.dequeue_sql_cache,
+            batch_size=batch_size,
+            entrypoints=entrypoints,
+            concurrency_limits=concurrency_limits,
+            queue_manager_id=queue_manager_id,
+            global_concurrency_limit=global_concurrency_limit,
+            heartbeat_timeout=heartbeat_timeout,
         )
-
-        if capacity_gated:
-            # A stale re-pick keeps the slot it already holds; only fresh claims need one.
-            eligible_body = f"""
-                SELECT id, priority, entrypoint, fresh FROM (
-                    SELECT id, priority, entrypoint, TRUE AS fresh FROM next_queued
-                    UNION ALL
-                    SELECT id, priority, entrypoint, FALSE AS fresh FROM next_stale
-                ) combined
-                ORDER BY priority DESC, id ASC
-                LIMIT {eligible_limit}
-            """
-        else:
-            eligible_body = f"""
-                SELECT id FROM (
-                    SELECT id, priority FROM next_queued
-                    UNION ALL
-                    SELECT id, priority FROM next_stale
-                ) combined
-                ORDER BY priority DESC, id ASC
-                LIMIT {eligible_limit}
-            """
-        composer.cte(
-            "eligible",
-            eligible_body,
-            comment="Merge both sets into one priority order so stale competes with fresh.",
-        )
-
-        if capacity_gated:
-            # The partial unique index on (entrypoint, slot) enforces the limit across
-            # snapshots: a uniqueness check sees uncommitted tuples, so the loser of a
-            # slot race fails with 23505 and retries rather than overshooting (#761).
-            # Generating held+batch seats finds the lowest free ones a dequeue can use:
-            # at most `held` seats inside that range are taken.
-            composer.cte(
-                "free_slots",
-                f"""
-                    SELECT
-                        available.entrypoint,
-                        slots.slot,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY available.entrypoint ORDER BY slots.slot
-                        ) AS slot_rank
-                    FROM available
-                    JOIN params ON params.entrypoint = available.entrypoint
-                    CROSS JOIN LATERAL GENERATE_SERIES(
-                        0,
-                        params.concurrency_limit - available.remaining
-                            + LEAST({batch}, available.remaining) - 1
-                    ) AS slots(slot)
-                    WHERE available.remaining IS NOT NULL
-                      AND NOT EXISTS (
-                          SELECT FROM {queue_table} holder
-                          WHERE holder.entrypoint = available.entrypoint
-                            AND holder.status = 'picked'
-                            AND holder.slot = slots.slot
-                      )
-                """,
-                comment="Free capacity slots, ranked; only as many seats as one dequeue uses.",
-            )
-            composer.cte(
-                "slot_assignments",
-                """
-                    SELECT ranked.id, free_slots.slot
-                    FROM (
-                        SELECT
-                            id,
-                            entrypoint,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY entrypoint ORDER BY priority DESC, id ASC
-                            ) AS slot_rank
-                        FROM eligible
-                        WHERE fresh
-                    ) ranked
-                    JOIN free_slots
-                        ON free_slots.entrypoint = ranked.entrypoint
-                        AND free_slots.slot_rank = ranked.slot_rank
-                """,
-                comment="Pair each fresh claim with a free slot by rank; unpaired ones drop.",
-            )
-            claim_body = f"""
-                UPDATE {queue_table} job
-                SET status = 'picked',
-                    updated   = NOW(),
-                    heartbeat = NOW(),
-                    queue_manager_id = {queue_manager},
-                    slot = CASE WHEN eligible.fresh THEN slot_assignments.slot ELSE job.slot END
-                FROM eligible
-                LEFT JOIN slot_assignments ON slot_assignments.id = eligible.id
-                LEFT JOIN params ON params.entrypoint = eligible.entrypoint
-                WHERE job.id = eligible.id
-                  AND (NOT eligible.fresh
-                       OR params.concurrency_limit <= 0
-                       OR slot_assignments.slot IS NOT NULL)
-                RETURNING job.*
-            """
-        else:
-            claim_body = f"""
-                UPDATE {queue_table}
-                SET status = 'picked',
-                    updated   = NOW(),
-                    heartbeat = NOW(),
-                    queue_manager_id = {queue_manager}
-                WHERE id IN (SELECT id FROM eligible)
-                RETURNING *
-            """
-        composer.cte(
-            "claimed",
-            claim_body,
-            comment="Claim every eligible job in one atomic UPDATE.",
-        )
-        composer.cte(
-            "log_pick",
-            f"""
-                INSERT INTO {self.qualified.queue_table_log} (job_id, status, entrypoint, priority)
-                SELECT id, status, entrypoint, priority FROM claimed
-            """,
-            comment="Record the pick in the log table.",
-        )
-        query = composer.render("SELECT * FROM claimed ORDER BY priority DESC, id ASC;")
-        self.dequeue_sql_cache[shape] = query.sql
-        return query
 
     def build_has_queued_work(self) -> str:
         return f"""
@@ -633,7 +274,7 @@ class QueryQueueBuilder:
                 FROM {queue_table} q
                 WHERE q.entrypoint = params.entrypoint
                   AND q.status = 'queued'
-                  AND {self.due("q")}
+                  AND {due("q")}
               )
             LIMIT 1
         ) sub
@@ -1004,7 +645,7 @@ class QueryQueueBuilder:
         return f"""SELECT execute_after - NOW() AS eta
         FROM {self.qualified.queue_table}
         WHERE status = 'queued'
-          AND NOT ({self.due()})
+          AND NOT ({due()})
           AND entrypoint = ANY($1)
         ORDER BY execute_after
         LIMIT 1

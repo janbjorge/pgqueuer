@@ -4,7 +4,7 @@ import dataclasses
 
 import pytest
 
-from pgqueuer.adapters.persistence.composer import ComposedQuery, SqlComposer
+from pgqueuer.adapters.persistence.composer import ComposedQuery, Cte, SqlComposer
 
 
 def test_bind_numbers_placeholders_in_order() -> None:
@@ -145,6 +145,27 @@ def test_cte_rejects_a_multi_line_comment() -> None:
     composer = SqlComposer()
     with pytest.raises(ValueError, match="single line"):
         composer.cte("ready", "SELECT 1", comment="First line.\nSecond line.")
+
+
+def test_cte_formats_as_its_name() -> None:
+    composer = SqlComposer()
+    ready = composer.cte("ready", "SELECT id FROM jobs")
+    composer.add(Cte("picked", f"SELECT id FROM {ready}"))
+    query = composer.render("SELECT * FROM picked")
+    assert "picked AS (\n    SELECT id FROM ready\n)" in query.sql
+
+
+def test_cte_value_rejects_a_multi_line_comment() -> None:
+    with pytest.raises(ValueError, match="single line"):
+        Cte("ready", "SELECT 1", comment="First line.\nSecond line.")
+
+
+def test_add_rejects_a_duplicate_name() -> None:
+    # Shape variants share a CTE name; adding both would render invalid SQL.
+    composer = SqlComposer()
+    composer.add(Cte("available", "SELECT 1"))
+    with pytest.raises(ValueError, match="already defined"):
+        composer.add(Cte("available", "SELECT 2"))
 
 
 def test_composed_query_is_immutable() -> None:

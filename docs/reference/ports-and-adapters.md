@@ -171,6 +171,8 @@ pgqueuer/
     persistence/
       queries.py              # Queries class (implements all repository ports)
       qb.py                   # SQL query builders
+      dequeue.py              # Dequeue statement, one fragment per CTE
+      composer.py             # SqlComposer: binds, CTEs, rendering
       query_helpers.py        # Parameter normalization
     inmemory/
       driver.py               # InMemoryDriver
