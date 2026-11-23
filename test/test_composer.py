@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from typing import NamedTuple
 
 import pytest
 
@@ -8,9 +9,15 @@ from pgqueuer.adapters.persistence.composer import (
     ComposedQuery,
     Cte,
     SqlComposer,
+    TemplateComposer,
     block,
     render_cte,
 )
+
+
+class Request(NamedTuple):
+    limit: int
+    tags: list[str]
 
 
 def test_bind_numbers_placeholders_in_order() -> None:
@@ -171,3 +178,16 @@ def test_render_rejects_a_cte_defined_twice() -> None:
 def test_cte_renders_as_its_definition() -> None:
     ready = Cte("ready", "SELECT 1", comment="Jobs ready to run.")
     assert render_cte(ready) == "-- Jobs ready to run.\nready AS (\n    SELECT 1\n)"
+
+
+def test_template_reads_each_param_from_the_call_args() -> None:
+    composer = TemplateComposer[Request]()
+    tags = composer.param(lambda request: request.tags)
+    limit = composer.param(lambda request: request.limit)
+    template = composer.render(
+        [Cte("ready", f"SELECT id FROM jobs WHERE tag = ANY({tags})")],
+        f"SELECT * FROM ready LIMIT {limit}",
+    )
+    assert template.sql.endswith("SELECT * FROM ready LIMIT $2")
+    assert template.bind(Request(limit=5, tags=["a"])).args == (["a"], 5)
+    assert template.bind(Request(limit=7, tags=["b"])).args == (["b"], 7)
