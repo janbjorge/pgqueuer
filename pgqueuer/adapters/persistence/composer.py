@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import dataclasses
 import textwrap
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from typing import Generic, TypeVar
+
+ArgsT = TypeVar("ArgsT")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -98,3 +101,40 @@ class SqlComposer:
 
     def render(self, final: str) -> ComposedQuery:
         return ComposedQuery(sql=render_statement(self.ctes, final), args=tuple(self.values))
+
+
+@dataclasses.dataclass(frozen=True)
+class QueryTemplate(Generic[ArgsT]):
+    """Rendered text, and for each ``$N`` in order the reader of its value."""
+
+    sql: str
+    readers: tuple[Callable[[ArgsT], object], ...] = dataclasses.field(repr=False)
+
+    def bind(self, args: ArgsT) -> ComposedQuery:
+        return ComposedQuery(sql=self.sql, args=tuple(read(args) for read in self.readers))
+
+
+@dataclasses.dataclass
+class TemplateComposer(Generic[ArgsT]):
+    """Compose a statement once, to be bound to fresh arguments on every call.
+
+    ``param`` takes how to read the value from a call's arguments instead of
+    the value itself, so a cached template stays correct however its
+    placeholders were numbered.
+
+    Usage example::
+
+        composer = TemplateComposer[Request]()
+        limit = composer.param(lambda request: request.limit)
+        template = composer.render([], f"SELECT id FROM jobs LIMIT {limit}")
+        query = template.bind(Request(limit=10))
+    """
+
+    readers: list[Callable[[ArgsT], object]] = dataclasses.field(init=False, default_factory=list)
+
+    def param(self, read: Callable[[ArgsT], object]) -> str:
+        self.readers.append(read)
+        return f"${len(self.readers)}"
+
+    def render(self, ctes: Sequence[Cte], final: str) -> QueryTemplate[ArgsT]:
+        return QueryTemplate(sql=render_statement(ctes, final), readers=tuple(self.readers))
