@@ -1,10 +1,10 @@
-# mypy: disable-error-code="attr-defined, call-arg, unused-ignore"
-"""A job whose worker dies mid-run is taken over at most ``max_recoveries`` times (#1116).
+"""A job whose worker dies mid-run is bounded by ``max_attempts`` (#1116).
 
-A dead worker leaves its row ``picked`` with a heartbeat that stops moving. ``crash``
-reproduces that state without a process: dequeue under a fresh manager id, then
-backdate the heartbeat past any timeout. Every wait here is an event or drain
-mode; GUARD fires only on a stall.
+Taking over a dead worker's job counts as an attempt, next to retries. A dead worker
+leaves its row ``picked`` with a heartbeat that stops moving. ``crash`` reproduces
+that state without a process: dequeue under a fresh manager id, then backdate the
+heartbeat past any timeout. Every wait here is an event or drain mode; GUARD fires
+only on a stall.
 """
 
 from __future__ import annotations
@@ -34,10 +34,6 @@ from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
-
-pytestmark = pytest.mark.xfail(
-    reason="#1116: takeovers are neither counted nor bounded", strict=True
-)
 
 HOUR = timedelta(hours=1)
 # Below pytest's 20 s per-test timeout, so a stall reports as a TimeoutError here.
@@ -97,23 +93,22 @@ async def log_for(q: RepositoryPort, job_id: JobId, status: str) -> Log:
     return log
 
 
-# Repository: the takeover counter.
+# Repository: a takeover counts as an attempt.
 
 
-async def test_fresh_pick_has_no_recoveries(harness: Harness) -> None:
+async def test_fresh_pick_has_no_attempts(harness: Harness) -> None:
     await harness.q.enqueue("ep", None)
     (job,) = await harness.dequeue_as(QueueManagerId(uuid.uuid4()))
-    assert job.recoveries == 0
+    assert job.attempts == 0
 
 
-async def test_each_takeover_counts_one_recovery(harness: Harness) -> None:
-    """Each re-pick of a stale row adds one recovery; attempts only counts retries."""
+async def test_each_takeover_counts_one_attempt(harness: Harness) -> None:
     await harness.q.enqueue("ep", None)
     seen = [await harness.crash() for _ in range(4)]
-    assert [(job.recoveries, job.attempts) for job in seen] == [(0, 0), (1, 0), (2, 0), (3, 0)]
+    assert [job.attempts for job in seen] == [0, 1, 2, 3]
 
 
-async def test_repick_by_its_own_manager_is_not_a_recovery(harness: Harness) -> None:
+async def test_repick_by_its_own_manager_is_not_an_attempt(harness: Harness) -> None:
     """A late heartbeat lets a live worker re-pick its own running job; that is no takeover."""
     await harness.q.enqueue("ep", None)
     owner = QueueManagerId(uuid.uuid4())
@@ -123,23 +118,22 @@ async def test_repick_by_its_own_manager_is_not_a_recovery(harness: Harness) -> 
     (again,) = await harness.dequeue_as(owner)
 
     assert again.id == first.id
-    assert again.recoveries == 0
+    assert again.attempts == 0
 
 
-async def test_retry_keeps_recoveries(harness: Harness) -> None:
-    """A RetryRequested re-queue does not wipe the takeovers a job has already caused."""
+async def test_retry_after_takeover_counts_both(harness: Harness) -> None:
     await harness.q.enqueue("ep", None)
     await harness.crash()
     (owner,) = await harness.dequeue_as(QueueManagerId(uuid.uuid4()))
-    assert owner.recoveries == 1
+    assert owner.attempts == 1
 
     await harness.q.retry_job(owner, timedelta(0), None)
     (retried,) = await harness.dequeue_as(QueueManagerId(uuid.uuid4()))
 
-    assert (retried.recoveries, retried.attempts) == (1, 1)
+    assert retried.attempts == 2
 
 
-async def test_requeue_of_held_job_resets_recoveries(harness: Harness) -> None:
+async def test_requeue_of_held_job_resets_attempts(harness: Harness) -> None:
     """An operator requeue is a fresh start, or a job held for its takeovers is abandoned unrun."""
     await harness.q.enqueue("ep", None)
     await harness.crash()
@@ -149,18 +143,18 @@ async def test_requeue_of_held_job_resets_recoveries(harness: Harness) -> None:
     await harness.q.requeue_jobs([owner.id])
     (requeued,) = await harness.dequeue_as(QueueManagerId(uuid.uuid4()))
 
-    assert (requeued.recoveries, requeued.attempts) == (0, 0)
+    assert requeued.attempts == 0
 
 
 # QueueManager: the per-entrypoint bound.
 
 
-async def drain(q: RepositoryPort, max_recoveries: int | None, on_failure: OnFailure) -> list[Job]:
+async def drain(q: RepositoryPort, max_attempts: int | None, on_failure: OnFailure) -> list[Job]:
     """Run one worker in drain mode and return the jobs its handler was called with."""
     qm = QueueManager(q)
     ran: list[Job] = []
 
-    @qm.entrypoint("ep", max_recoveries=max_recoveries, on_failure=on_failure)
+    @qm.entrypoint("ep", max_attempts=max_attempts, on_failure=on_failure)
     async def ep(job: Job) -> None:
         ran.append(job)
 
@@ -170,40 +164,41 @@ async def drain(q: RepositoryPort, max_recoveries: int | None, on_failure: OnFai
 
 
 @pytest.mark.parametrize(
-    ("crashes", "max_recoveries"),
+    ("crashes", "max_attempts"),
     [(0, 0), (1, 1), (2, 2), (3, None)],
     ids=["fresh-limit-0", "at-limit-1", "at-limit-2", "unlimited"],
 )
 async def test_job_within_its_limit_runs(
-    harness: Harness, crashes: int, max_recoveries: int | None
+    harness: Harness, crashes: int, max_attempts: int | None
 ) -> None:
     """The handler runs, and sees how many takeovers led to this run."""
     (job_id,) = await harness.q.enqueue("ep", None)
     for _ in range(crashes):
         await harness.crash()
 
-    ran = await drain(harness.q, max_recoveries, "delete")
+    ran = await drain(harness.q, max_attempts, "delete")
 
-    assert [(job.id, job.recoveries) for job in ran] == [(job_id, crashes)]
+    assert [(job.id, job.attempts) for job in ran] == [(job_id, crashes)]
     await log_for(harness.q, job_id, "successful")
 
 
-@pytest.mark.parametrize(("crashes", "max_recoveries"), [(1, 0), (2, 1), (4, 2)])
+@pytest.mark.parametrize(("crashes", "max_attempts"), [(1, 0), (2, 1), (4, 2)])
 async def test_job_past_its_limit_is_abandoned(
-    harness: Harness, crashes: int, max_recoveries: int
+    harness: Harness, crashes: int, max_attempts: int
 ) -> None:
     """The issue's crash loop: a job past its limit is not run again and ends as exception."""
     (job_id,) = await harness.q.enqueue("ep", None)
     for _ in range(crashes):
         await harness.crash()
 
-    ran = await drain(harness.q, max_recoveries, "delete")
+    ran = await drain(harness.q, max_attempts, "delete")
 
     assert ran == []
     assert await harness.q.queue_size() == []
     traceback = (await log_for(harness.q, job_id, "exception")).traceback
     assert traceback is not None
-    assert f"abandoned after {crashes} takeovers" in traceback.exception_message
+    assert traceback.exception_type == "MaxAttemptsExceededError"
+    assert f"abandoned after {crashes} attempts" in traceback.exception_message
 
 
 async def test_abandoned_job_is_held_with_on_failure_hold(harness: Harness) -> None:
@@ -215,14 +210,14 @@ async def test_abandoned_job_is_held_with_on_failure_hold(harness: Harness) -> N
 
     assert ran == []
     (held,) = await harness.q.list_failed_jobs()
-    assert (held.id, held.status, held.recoveries) == (job_id, "failed", 2)
+    assert (held.id, held.status, held.attempts) == (job_id, "failed", 2)
     traceback = (await log_for(harness.q, job_id, "failed")).traceback
     assert traceback is not None
-    assert "abandoned after 2 takeovers" in traceback.exception_message
+    assert "abandoned after 2 attempts" in traceback.exception_message
 
 
 async def test_requeued_abandoned_job_runs_again(harness: Harness) -> None:
-    """An operator requeue gives a held job its full takeover budget back."""
+    """An operator requeue gives a held job its full budget back."""
     (job_id,) = await harness.q.enqueue("ep", None)
     await harness.crash()
     await harness.crash()
@@ -231,29 +226,29 @@ async def test_requeued_abandoned_job_runs_again(harness: Harness) -> None:
     await harness.q.requeue_jobs([job_id])
     ran = await drain(harness.q, 1, "hold")
 
-    assert [(job.id, job.recoveries) for job in ran] == [(job_id, 0)]
+    assert [(job.id, job.attempts) for job in ran] == [(job_id, 0)]
 
 
 # Registration.
 
 
-@pytest.mark.parametrize("max_recoveries", [-1, 1.5, "3"])
-def test_entrypoint_rejects_invalid_max_recoveries(max_recoveries: object) -> None:
+@pytest.mark.parametrize("max_attempts", [-1, 1.5, "3", True])
+def test_entrypoint_rejects_invalid_max_attempts(max_attempts: object) -> None:
     qm = QueueManager(InMemoryQueries(driver=InMemoryDriver()))
-    with pytest.raises(ValueError, match="max_recoveries"):
-        qm.entrypoint("ep", max_recoveries=max_recoveries)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="max_attempts"):
+        qm.entrypoint("ep", max_attempts=max_attempts)  # type: ignore[arg-type]
 
 
-def test_pgqueuer_entrypoint_forwards_max_recoveries() -> None:
+def test_pgqueuer_entrypoint_forwards_max_attempts() -> None:
     pgq = PgQueuer.in_memory()
 
-    @pgq.entrypoint("ep", max_recoveries=3)
+    @pgq.entrypoint("ep", max_attempts=3)
     async def ep(job: Job) -> None: ...
 
-    assert pgq.qm.entrypoint_registry[QueueEntrypoint("ep")].parameters.max_recoveries == 3
+    assert pgq.qm.entrypoint_registry[QueueEntrypoint("ep")].parameters.max_attempts == 3
 
 
-# The issue's reproduction: the author's worker script and loop, with max_recoveries set.
+# The issue's reproduction: the author's worker script and loop, with max_attempts set.
 
 POISON_WORKER = textwrap.dedent(
     """
@@ -272,7 +267,7 @@ POISON_WORKER = textwrap.dedent(
     async def worker() -> None:
         qm = QueueManager(Queries(AsyncpgDriver(await asyncpg.connect(sys.argv[1]))))
 
-        @qm.entrypoint("poison", max_recoveries=2)
+        @qm.entrypoint("poison", max_attempts=2)
         async def poison(job: Job) -> None:
             os._exit(137)  # Stands in for an OOM kill or a segfault caused by this job.
 
@@ -284,12 +279,12 @@ POISON_WORKER = textwrap.dedent(
 )
 
 
-async def test_issue_reproduction_poison_job_stops_after_max_recoveries(
+async def test_issue_reproduction_poison_job_stops_after_max_attempts(
     dsn: str, apgdriver: AsyncpgDriver
 ) -> None:
     """The issue's script: four workers in turn, each picks the poison job and is killed.
 
-    On 2.1.0 all four die and the job stays picked. With max_recoveries=2 the first
+    On 2.1.0 all four die and the job stays picked. With max_attempts=2 the first
     three die (fresh pick, takeovers 1 and 2) and the fourth abandons it and exits.
     Instead of the issue's sleep past heartbeat_timeout, the heartbeat is backdated.
     """
@@ -314,4 +309,4 @@ async def test_issue_reproduction_poison_job_stops_after_max_recoveries(
     assert await q.queue_size() == []
     traceback = (await log_for(q, job_id, "exception")).traceback
     assert traceback is not None
-    assert "abandoned after 3 takeovers" in traceback.exception_message
+    assert "abandoned after 3 attempts" in traceback.exception_message

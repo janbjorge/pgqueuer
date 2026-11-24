@@ -190,8 +190,20 @@ key, for when the same work has become more urgent:
 ## Poison jobs
 
 A "poison job" is one that consistently causes worker crashes or hangs without updating its
-heartbeat. PgQueuer does not include a built-in dead-letter queue, but you can detect and
-handle poison jobs with a query:
+heartbeat. Each takeover of a stale job adds one to its `attempts`, like a retry does. Set
+`max_attempts` on the entrypoint to stop the crash loop:
+
+```python
+@pgq.entrypoint("render", max_attempts=3, on_failure="hold")
+async def render(job: Job) -> None: ...
+```
+
+A job whose `attempts` exceeds `max_attempts` is not run again. It ends as `exception`, or
+as `failed` with `on_failure="hold"`, with a `MaxAttemptsExceededError` traceback reading
+"abandoned after N attempts". A requeue resets `attempts` to 0. The default, `None`, keeps
+recovering without a limit.
+
+To find jobs that are stalled right now, query for stale heartbeats:
 
 ```sql
 -- Jobs stuck in 'picked' with a long-stale heartbeat (indicative of repeated crashes/hangs)

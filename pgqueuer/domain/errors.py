@@ -58,6 +58,10 @@ class DuplicateJobError(PgqException):
         self.dedupe_key = dedupe_key
 
 
+class MaxAttemptsExceededError(PgqException):
+    """Recorded when a job is abandoned unrun because it has used up its attempts."""
+
+
 class FailingListenerError(PgqException):
     """Raised when a listener fails to process a job."""
 

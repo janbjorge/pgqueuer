@@ -198,6 +198,7 @@ class QueueManager:
         concurrency_limit: int = 0,
         accepts_context: bool | None = None,
         on_failure: types.OnFailure = "delete",
+        max_attempts: int | None = None,
         executor_factory: Callable[
             [executors.EntrypointExecutorParameters],
             executors.AbstractEntrypointExecutor,
@@ -214,6 +215,11 @@ class QueueManager:
 
         ``on_failure='delete'`` (default) removes a terminally-failed job;
         ``'hold'`` parks it with status ``'failed'`` for manual re-queue.
+
+        ``max_attempts=None`` (default) is unbounded. Otherwise a job whose
+        ``attempts`` exceeds it is not run but ends as a failure per ``on_failure``.
+        ``attempts`` counts retries and takeovers of a dead worker's job, so this
+        stops a job that kills its worker from crashing every worker in turn.
         """
         if types.QueueEntrypoint(name) in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
@@ -229,6 +235,13 @@ class QueueManager:
 
         if on_failure not in get_args(types.OnFailure):
             raise ValueError(f"on_failure must be one of {get_args(types.OnFailure)}.")
+
+        if max_attempts is not None:
+            # type() not isinstance(): bool is an int subclass.
+            is_int = type(max_attempts) is int
+            is_non_negative = is_int and max_attempts >= 0
+            if not is_non_negative:
+                raise ValueError("max_attempts must be a non-negative int or None.")
 
         executor_factory = executor_factory or executors.EntrypointExecutor
 
@@ -246,6 +259,7 @@ class QueueManager:
                         concurrency_limit=concurrency_limit,
                         accepts_context=resolved_context,
                         on_failure=on_failure,
+                        max_attempts=max_attempts,
                     )
                 ),
             )
@@ -592,7 +606,7 @@ class QueueManager:
         """Persist a requested retry until the write succeeds.
 
         Failures keep the job picked and heartbeating. Shutdown leaves the row
-        picked so stale recovery runs the handler again, with ``attempts`` unchanged.
+        picked so stale recovery runs the handler again; that takeover adds the attempt.
         """
         pause = timedelta(milliseconds=50)
         cap = timedelta(seconds=1)
@@ -630,6 +644,15 @@ class QueueManager:
         )
 
         executor = self.entrypoint_registry[job.entrypoint]
+
+        # Checked before running: a job that kills its worker never reaches an except clause.
+        if (limit := executor.parameters.max_attempts) is not None and job.attempts > limit:
+            exc = errors.MaxAttemptsExceededError(
+                f"Job {job.id} abandoned after {job.attempts} attempts (max_attempts={limit})"
+            )
+            await self.log_failure(job, executor, exc, jbuff)
+            self.jobs_logged += 1
+            return
 
         active_tracer = self.tracer or tracing.TRACER.tracer
         trace_context = active_tracer.trace_process(job) if active_tracer else nullcontext()

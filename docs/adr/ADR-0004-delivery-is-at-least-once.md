@@ -39,10 +39,10 @@ requirement wherever job execution is described.
 - Idempotency becomes the user's problem, and a non-idempotent
   entrypoint fails in ways that only show up when a crash or timeout
   triggers re-delivery.
-- A crash re-delivery is indistinguishable from a first delivery. The
-  job's `attempts` counter tracks explicit database retries;
-  re-picking a stale job does not touch it, so the duplicate run
-  carries no marker.
+- A crash re-delivery runs the job from the start. Since #1116 a
+  takeover of a stale job adds one to `attempts`, as a database retry
+  does, so the handler sees a non-zero count and `max_attempts` on the
+  entrypoint can bound a crash loop.
 - The documentation has to repeat the idempotency requirement loudly,
   because nothing in the API forces it.
 

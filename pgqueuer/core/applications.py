@@ -225,6 +225,7 @@ class PgQueuer:
         concurrency_limit: int = 0,
         accepts_context: bool | None = None,
         on_failure: OnFailure = "delete",
+        max_attempts: int | None = None,
         executor_factory: Callable[
             [EntrypointExecutorParameters],
             AbstractEntrypointExecutor,
@@ -236,6 +237,7 @@ class PgQueuer:
             concurrency_limit=concurrency_limit,
             accepts_context=accepts_context,
             on_failure=on_failure,
+            max_attempts=max_attempts,
             executor_factory=executor_factory,
         )
 

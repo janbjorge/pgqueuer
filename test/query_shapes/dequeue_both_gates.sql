@@ -176,6 +176,10 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
+        -- Taking over another manager's stale row counts as a failed attempt.
+        attempts  = job.attempts + CASE WHEN job.status = 'picked'
+            AND job.queue_manager_id IS DISTINCT FROM $2
+            THEN 1 ELSE 0 END,
         queue_manager_id = $2,
         slot = CASE WHEN eligible.fresh THEN slot_assignments.slot ELSE job.slot END
     FROM eligible

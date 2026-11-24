@@ -64,6 +64,7 @@ class EntrypointExecutorParameters:
     func: Entrypoint
     accepts_context: bool = False
     on_failure: types.OnFailure = "delete"
+    max_attempts: int | None = None
 
 
 @dataclasses.dataclass

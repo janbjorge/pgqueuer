@@ -64,6 +64,10 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
+        -- Taking over another manager's stale row counts as a failed attempt.
+        attempts  = attempts + CASE WHEN status = 'picked'
+            AND queue_manager_id IS DISTINCT FROM $2
+            THEN 1 ELSE 0 END,
         queue_manager_id = $2
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
