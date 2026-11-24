@@ -1,10 +1,9 @@
 """A worker's first listener health probe must not race its own LISTEN (#1118).
 
-``run`` starts the health-check task before it awaits ``add_listener``, so the first
-probe's NOTIFY goes out as soon as ``add_listener`` yields. PostgreSQL drops a NOTIFY
-sent before the LISTEN commits, and the probe times out on a healthy listener. On a
-pool with no idle connection this happens about one start in ten. ``LateListen``
-makes it deterministic: it holds LISTEN until a NOTIFY has gone out, or GATE passes.
+PostgreSQL drops a NOTIFY sent before the LISTEN commits, so a probe sent while
+``add_listener`` is still running times out on a healthy listener. On a pool with no
+idle connection that race was lost about one start in ten. ``LateListen`` makes it
+deterministic: it holds LISTEN until a NOTIFY has gone out, or GATE passes.
 """
 
 from __future__ import annotations
@@ -28,11 +27,7 @@ from pgqueuer.ports.driver import NotifyCallback
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
 
-pytestmark = pytest.mark.xfail(
-    reason="#1118: the first health probe is sent before LISTEN is in place", strict=True
-)
-
-# Long enough for a premature NOTIFY to go out first; after the fix only startup pays it.
+# Long enough for a premature NOTIFY to go out first; a correct startup just waits it out.
 GATE = timedelta(milliseconds=500)
 # Stands in for the 10 s default, so a lost probe fails within the test timeout.
 PROBE = timedelta(seconds=1)
@@ -149,3 +144,21 @@ async def test_healthy_worker_survives_startup(worker: Worker) -> None:
 
     worker.qm.shutdown.set()
     await asyncio.wait_for(run, 10)
+
+
+@pytest.mark.parametrize("worker", ["inmemory"], indirect=True)
+async def test_rerun_waits_for_listen_again(worker: Worker) -> None:
+    """A second run() of the same manager does not reuse the first run's LISTEN signal."""
+    for _ in range(2):
+        worker.late.order.clear()
+        worker.late.notified.clear()
+        worker.first_probe_done.clear()
+        # As the supervisor does per cycle: a fresh event, since the last run set the old one.
+        worker.qm.shutdown = asyncio.Event()
+
+        run = asyncio.create_task(worker.qm.run(dequeue_timeout=timedelta(seconds=30)))
+        await asyncio.wait_for(worker.first_probe_done.wait(), (GATE + 3 * PROBE).total_seconds())
+        worker.qm.shutdown.set()
+        await asyncio.wait_for(run, 10)
+
+        assert worker.late.order[:2] == ["listen", "notify"]
