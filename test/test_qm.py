@@ -499,3 +499,15 @@ async def test_drain_shutdown_skips_while_tasks_are_in_flight(
     finally:
         blocker.set()
         await task_manager.gather_tasks()
+
+
+async def test_run_removes_its_listener(queries: InMemoryQueries) -> None:
+    """Each run() removes its listener when it stops (#1122).
+
+    Thus, the listeners on one driver do not increase from one run to the next.
+    """
+    qm = QueueManager(queries)
+    for _ in range(2):
+        qm.shutdown = asyncio.Event()
+        await qm.run(mode=QueueExecutionMode.drain)
+    assert queries.driver._listeners[qm.channel] == []

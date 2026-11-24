@@ -11,7 +11,7 @@ from typing import assert_never
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
-from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.driver import Driver, NotifyCallback
 
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
@@ -71,8 +71,12 @@ async def initialize_notice_event_listener(
     connection: Driver,
     channel: types.Channel,
     event_handler: Callable[[models.AnyEvent], None],
-) -> None:
-    """Add a listener on *channel* and funnel parsed events to *event_handler*."""
+) -> NotifyCallback:
+    """Add a listener on *channel* and funnel parsed events to *event_handler*.
+
+    Returns the callback that this function adds. Use it with ``remove_listener``
+    to remove the listener.
+    """
 
     def _process_payload(payload: str | bytes | bytearray) -> None:
         try:
@@ -91,6 +95,7 @@ async def initialize_notice_event_listener(
             )
 
     await connection.add_listener(channel, _process_payload)
+    return _process_payload
 
 
 def wait_for_notice_event(
