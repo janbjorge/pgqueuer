@@ -43,11 +43,7 @@ async def test_notify_watcher_survives_callback_exception(dsn: str) -> None:
 
 
 async def test_listener_does_not_hold_the_connection(dsn: str) -> None:
-    """A query does not wait for the NOTIFY watcher (#1121).
-
-    The test also makes sure that a NOTIFY arrives when the connection is idle,
-    and when the connection runs a query.
-    """
+    """Queries do not wait for the watcher, and notifications still arrive (#1121)."""
     channel = "test_lock"
     received: asyncio.Queue[str] = asyncio.Queue()
 

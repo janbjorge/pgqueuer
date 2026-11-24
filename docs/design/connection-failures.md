@@ -45,8 +45,7 @@ A run ends at the first "raises, run ends", so how fast a drop is noticed
 depends on when each loop next wakes. The main loop wakes on a NOTIFY or after
 `dequeue_timeout`. The scheduler wakes at the next cron time plus 1 s, or every
 second when no schedules are registered. psycopg is faster than both: its
-watcher waits inside `notifies()`, so it fails at once and takes the next query
-with it. With `shutdown_on_listener_failure`, a failed health check also wakes
+watcher waits on the socket, so it fails as soon as the connection drops. With `shutdown_on_listener_failure`, a failed health check also wakes
 the main loop and ends the run, which bounds detection at about 20 s: up to
 10 s until the next probe, plus its 10 s timeout.
 

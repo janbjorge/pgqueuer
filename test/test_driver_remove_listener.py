@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 
 import pytest
@@ -82,7 +82,7 @@ class Notify:
 
 @dataclass
 class FakePgConn:
-    """Keeps NOTIFY messages like libpq does. A socket pair gives a real file descriptor."""
+    """libpq stand-in; the socket pair gives the watcher a real fd to wait on."""
 
     error: BaseException | None = None
     pending: list[Notify] = field(default_factory=list)
@@ -127,14 +127,19 @@ class FakePsycopgConnection:
         self.handlers.remove(handler)
 
     def send(self, note: Notify) -> None:
-        """Make a NOTIFY arrive on the socket, like the server does."""
         self.pgconn.pending.append(note)
         self.pgconn.sockets[1].send(b"x")
 
 
-async def test_psycopg_remove_listener_stops_watcher() -> None:
+@pytest.fixture
+def connection() -> Iterator[FakePsycopgConnection]:
+    fake = FakePsycopgConnection()
+    with fake.pgconn.sockets[0], fake.pgconn.sockets[1]:
+        yield fake
+
+
+async def test_psycopg_remove_listener_stops_watcher(connection: FakePsycopgConnection) -> None:
     """remove_listener cancels the watcher and UNLISTENs once nothing listens (#886)."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     received: list[str | bytes | bytearray] = []
     await driver.add_listener("ch", received.append)
@@ -169,9 +174,10 @@ async def test_asyncpg_pool_keeps_listener_until_last_exit() -> None:
     assert pool.released == 1
 
 
-async def test_psycopg_delivers_each_notify_to_its_channel() -> None:
+async def test_psycopg_delivers_each_notify_to_its_channel(
+    connection: FakePsycopgConnection,
+) -> None:
     """Every NOTIFY reaches the callbacks of its own channel, and only those (#894)."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     on_a: list[str | bytes | bytearray] = []
     on_b: list[str | bytes | bytearray] = []
@@ -186,9 +192,10 @@ async def test_psycopg_delivers_each_notify_to_its_channel() -> None:
     assert on_b == ["2", "4"]
 
 
-async def test_psycopg_remove_listener_keeps_other_channels() -> None:
+async def test_psycopg_remove_listener_keeps_other_channels(
+    connection: FakePsycopgConnection,
+) -> None:
     """Removing one channel's listener leaves other channels receiving."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     on_b: list[str | bytes | bytearray] = []
     await driver.add_listener("a", print)
@@ -202,9 +209,8 @@ async def test_psycopg_remove_listener_keeps_other_channels() -> None:
     assert connection.executed == ['LISTEN "a"', 'LISTEN "b"', 'UNLISTEN "a"']
 
 
-async def test_psycopg_keeps_listening_until_last_exit() -> None:
+async def test_psycopg_keeps_listening_until_last_exit(connection: FakePsycopgConnection) -> None:
     """A nested exit does not stop the shared watcher (#895)."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     received: list[str | bytes | bytearray] = []
 
@@ -218,9 +224,8 @@ async def test_psycopg_keeps_listening_until_last_exit() -> None:
     assert received == ["a"]
 
 
-async def test_psycopg_driver_can_be_entered_again() -> None:
+async def test_psycopg_driver_can_be_entered_again(connection: FakePsycopgConnection) -> None:
     """After the last exit, entering again starts listening afresh (#895)."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     first: list[str | bytes | bytearray] = []
     second: list[str | bytes | bytearray] = []
@@ -236,9 +241,8 @@ async def test_psycopg_driver_can_be_entered_again() -> None:
     assert second == ["a"]
 
 
-async def test_psycopg_last_exit_stops_watcher() -> None:
+async def test_psycopg_last_exit_stops_watcher(connection: FakePsycopgConnection) -> None:
     """The last exit stops the notify watcher and removes the notify handler."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     async with driver:
         await driver.add_listener("ch", lambda _: None)
@@ -252,9 +256,9 @@ async def test_psycopg_last_exit_stops_watcher() -> None:
     assert not connection.handlers
 
 
-async def test_psycopg_aexit_swallows_watcher_error() -> None:
+async def test_psycopg_aexit_swallows_watcher_error(connection: FakePsycopgConnection) -> None:
     """A failed watcher does not raise from the last exit."""
-    connection = FakePsycopgConnection(pgconn=FakePgConn(error=RuntimeError("read failed")))
+    connection.pgconn.error = RuntimeError("read failed")
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     async with driver:
         await driver.add_listener("ch", lambda _: None)
@@ -268,9 +272,8 @@ async def test_psycopg_aexit_swallows_watcher_error() -> None:
     assert not driver._tasks
 
 
-async def test_psycopg_two_channels_share_one_watcher() -> None:
+async def test_psycopg_two_channels_share_one_watcher(connection: FakePsycopgConnection) -> None:
     """One connection has one watcher; extra LISTENs reuse it."""
-    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     ignored: list[str | bytes | bytearray] = []
     await driver.add_listener("a", ignored.append)

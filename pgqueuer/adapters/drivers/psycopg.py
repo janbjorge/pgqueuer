@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from typing import TYPE_CHECKING, Self
 
 from pgqueuer.core import logconfig
@@ -22,11 +23,10 @@ class PsycopgDriver(Driver):
     ``dict_row`` row factory to accept PostgreSQL-native ``$1, $2`` placeholders
     directly and return results as dictionaries without manual construction.
 
-    A psycopg notify handler gives each NOTIFY to the callbacks of its channel.
-    psycopg calls the handler for each NOTIFY that it reads, also during a query.
-    When the connection is idle, a watcher task waits until the socket is readable.
-    The watcher does not hold the connection lock while it waits. Thus, queries
-    do not wait for the watcher.
+    Notifications go through a psycopg notify handler, which also fires for
+    notifications read during a query. While the connection is idle, a watcher
+    task waits for the socket to turn readable and takes the connection lock
+    only to read what arrived, so queries never queue behind it.
 
     The driver does not close the provided connection; callers should
     close it manually or manage it with an async context manager.
@@ -96,15 +96,14 @@ class PsycopgDriver(Driver):
         self._listeners[channel].append(callback)
 
         if self._watcher is None:
-            self._connection.add_notify_handler(self._dispatch)
+            self._connection.add_notify_handler(self.dispatch)
             self._watcher = asyncio.create_task(
                 self.watch_notifies(), name="notify_psycopg_watcher"
             )
             self._tasks.add(self._watcher)
             self._watcher.add_done_callback(self._tasks.discard)
 
-    def _dispatch(self, note: psycopg.Notify) -> None:
-        """Give the NOTIFY to each callback of its channel."""
+    def dispatch(self, note: psycopg.Notify) -> None:
         for callback in list(self._listeners.get(note.channel, [])):
             try:
                 callback(note.payload)
@@ -115,31 +114,23 @@ class PsycopgDriver(Driver):
                 )
 
     async def watch_notifies(self) -> None:
-        """Read the NOTIFY messages that arrive when the connection is idle.
-
-        The watcher waits on a copy of the socket. psycopg waits on the socket
-        itself, and asyncio keeps only one reader for each file descriptor.
-        """
+        """Read notifications that arrive while the connection is idle."""
         loop = asyncio.get_running_loop()
         pgconn = self._connection.pgconn
-        fd = os.dup(pgconn.socket)
-        try:
+        # asyncio allows one reader per fd and psycopg owns the original, so wait on a dup.
+        with socket.socket(fileno=os.dup(pgconn.socket)) as sock:
             while True:
                 readable = loop.create_future()
-                loop.add_reader(fd, readable.set_result, None)
+                loop.add_reader(sock, readable.set_result, None)
                 try:
                     await readable
                 finally:
-                    # Remove the reader. A socket that stays readable must not wake the loop again.
-                    loop.remove_reader(fd)
-                # A query can hold the lock. That query then reads the data itself.
+                    loop.remove_reader(sock)
                 async with self._connection.lock:
                     pgconn.consume_input()
                     while note := pgconn.notifies():
-                        if pgconn.notify_handler is not None:
+                        if pgconn.notify_handler:
                             pgconn.notify_handler(note)
-        finally:
-            os.close(fd)
 
     async def remove_listener(
         self,
@@ -157,14 +148,13 @@ class PsycopgDriver(Driver):
 
         del self._listeners[channel]
         if not self._listeners:
-            await self._stop_watcher()
+            await self.stop_watcher()
         await self._connection.execute(sql.SQL("UNLISTEN {}").format(sql.Identifier(channel)))
 
-    async def _stop_watcher(self) -> None:
-        """Stop the watcher and remove the notify handler."""
+    async def stop_watcher(self) -> None:
         if self._watcher is None:
             return
-        self._connection.remove_notify_handler(self._dispatch)
+        self._connection.remove_notify_handler(self.dispatch)
         await cancel_and_wait(self._watcher)
         self._watcher = None
 
@@ -180,7 +170,7 @@ class PsycopgDriver(Driver):
         if self._entered > 0:
             return
         self.shutdown.set()
-        await self._stop_watcher()
+        await self.stop_watcher()
         # Start afresh on the next enter: add_listener then LISTENs and starts a new watcher.
         self._listeners.clear()
 
