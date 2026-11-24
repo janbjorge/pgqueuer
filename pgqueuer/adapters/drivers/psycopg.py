@@ -21,10 +21,6 @@ class PsycopgDriver(Driver):
     ``dict_row`` row factory to accept PostgreSQL-native ``$1, $2`` placeholders
     directly and return results as dictionaries without manual construction.
 
-    Notifications use the ``notifies()`` generator. It holds the connection lock
-    while it waits, so the watcher waits in short slices and queries get the lock
-    in between.
-
     The driver does not close the provided connection; callers should
     close it manually or manage it with an async context manager.
     """
