@@ -84,6 +84,9 @@ driver = PsycopgDriver(conn)
   `psycopg[binary]` (prebuilt wheels) or `psycopg[c]` (builds against your local libpq).
   Check which one is active with `python -c "import psycopg; print(psycopg.pq.__impl__)"`.
   It should print `binary` or `c`, not `python`.
+- **Expect a little extra latency.** psycopg delivers notifications through `notifies()`,
+  which holds the connection lock while it waits. The listener waits in 50 ms slices, so a
+  query on the same connection can wait up to 50 ms. If that matters, use `AsyncpgDriver`.
 
 !!! note "Windows event loop"
     psycopg's async driver is not compatible with Python's default

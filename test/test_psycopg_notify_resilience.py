@@ -43,7 +43,7 @@ async def test_notify_watcher_survives_callback_exception(dsn: str) -> None:
 
 
 async def test_listener_does_not_hold_the_connection(dsn: str) -> None:
-    """Queries do not wait for the watcher, and notifications still arrive (#1121)."""
+    """A query waits at most one watcher slice, and notifications still arrive (#1121)."""
     channel = "test_lock"
     received: asyncio.Queue[str] = asyncio.Queue()
 
