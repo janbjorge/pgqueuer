@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Callable
-from contextlib import suppress
+import socket
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import pytest
@@ -81,36 +81,55 @@ class Notify:
 
 
 @dataclass
+class FakePgConn:
+    """Keeps NOTIFY messages like libpq does. A socket pair gives a real file descriptor."""
+
+    error: BaseException | None = None
+    pending: list[Notify] = field(default_factory=list)
+    notify_handler: Callable[[Notify], None] | None = None
+    sockets: tuple[socket.socket, socket.socket] = field(default_factory=socket.socketpair)
+
+    @property
+    def socket(self) -> int:
+        return self.sockets[0].fileno()
+
+    def consume_input(self) -> None:
+        if self.error is not None:
+            raise self.error
+        self.sockets[0].recv(4096)
+
+    def notifies(self) -> Notify | None:
+        return self.pending.pop(0) if self.pending else None
+
+
+@dataclass
 class FakePsycopgConnection:
     autocommit: bool = True
     executed: list[str] = field(default_factory=list)
-    notes: asyncio.Queue[Notify] = field(default_factory=asyncio.Queue)
+    pgconn: FakePgConn = field(default_factory=FakePgConn)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    handlers: list[Callable[[Notify], None]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.pgconn.notify_handler = self.dispatch
+
+    def dispatch(self, note: Notify) -> None:
+        for handler in self.handlers:
+            handler(note)
 
     async def execute(self, query: str | sql.Composable) -> None:
         self.executed.append(query.as_string() if isinstance(query, sql.Composable) else query)
 
-    async def notifies(self, *, timeout: float, stop_after: int) -> AsyncGenerator[Notify, None]:
-        with suppress(TimeoutError):
-            yield await asyncio.wait_for(self.notes.get(), timeout)
+    def add_notify_handler(self, handler: Callable[[Notify], None]) -> None:
+        self.handlers.append(handler)
 
+    def remove_notify_handler(self, handler: Callable[[Notify], None]) -> None:
+        self.handlers.remove(handler)
 
-@dataclass
-class GatedPsycopgConnection(FakePsycopgConnection):
-    """Blocks in notifies() until *gate* is set so tests control watcher progress."""
-
-    started: asyncio.Event = field(default_factory=asyncio.Event)
-    gate: asyncio.Event = field(default_factory=asyncio.Event)
-    error: BaseException | None = None
-
-    async def notifies(self, *, timeout: float, stop_after: int) -> AsyncGenerator[Notify, None]:
-        del timeout, stop_after
-        self.started.set()
-        await self.gate.wait()
-        if self.error is not None:
-            raise self.error
-        empty: tuple[Notify, ...] = ()
-        for note in empty:
-            yield note
+    def send(self, note: Notify) -> None:
+        """Make a NOTIFY arrive on the socket, like the server does."""
+        self.pgconn.pending.append(note)
+        self.pgconn.sockets[1].send(b"x")
 
 
 async def test_psycopg_remove_listener_stops_watcher() -> None:
@@ -120,10 +139,10 @@ async def test_psycopg_remove_listener_stops_watcher() -> None:
     received: list[str | bytes | bytearray] = []
     await driver.add_listener("ch", received.append)
 
-    await connection.notes.put(Notify("ch", "a"))
+    connection.send(Notify("ch", "a"))
     await asyncio.sleep(0.05)
     await driver.remove_listener("ch", received.append)
-    await connection.notes.put(Notify("ch", "b"))
+    connection.send(Notify("ch", "b"))
     await asyncio.sleep(0.05)
 
     assert isinstance(driver, ListenerRemover)
@@ -160,7 +179,7 @@ async def test_psycopg_delivers_each_notify_to_its_channel() -> None:
     await driver.add_listener("b", on_b.append)
 
     for note in (Notify("a", "1"), Notify("b", "2"), Notify("a", "3"), Notify("b", "4")):
-        await connection.notes.put(note)
+        connection.send(note)
     await asyncio.sleep(0.1)
 
     assert on_a == ["1", "3"]
@@ -176,7 +195,7 @@ async def test_psycopg_remove_listener_keeps_other_channels() -> None:
     await driver.add_listener("b", on_b.append)
 
     await driver.remove_listener("a", print)
-    await connection.notes.put(Notify("b", "1"))
+    connection.send(Notify("b", "1"))
     await asyncio.sleep(0.05)
 
     assert on_b == ["1"]
@@ -193,7 +212,7 @@ async def test_psycopg_keeps_listening_until_last_exit() -> None:
         await driver.add_listener("ch", received.append)
         async with driver:
             pass
-        await connection.notes.put(Notify("ch", "a"))
+        connection.send(Notify("ch", "a"))
         await asyncio.sleep(0.05)
 
     assert received == ["a"]
@@ -210,38 +229,38 @@ async def test_psycopg_driver_can_be_entered_again() -> None:
         await driver.add_listener("ch", first.append)
     async with driver:
         await driver.add_listener("ch", second.append)
-        await connection.notes.put(Notify("ch", "a"))
+        connection.send(Notify("ch", "a"))
         await asyncio.sleep(0.05)
 
     assert first == []
     assert second == ["a"]
 
 
-async def test_psycopg_last_exit_waits_for_watcher() -> None:
-    """The last exit waits until the notify watcher finishes."""
-    connection = GatedPsycopgConnection()
+async def test_psycopg_last_exit_stops_watcher() -> None:
+    """The last exit stops the notify watcher and removes the notify handler."""
+    connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     async with driver:
         await driver.add_listener("ch", lambda _: None)
-        await connection.started.wait()
+        await asyncio.sleep(0.05)
         watcher = driver._watcher
         assert watcher is not None
         assert not watcher.done()
-        connection.gate.set()
 
     assert watcher.done()
     assert not driver._tasks
+    assert not connection.handlers
 
 
-async def test_psycopg_aexit_swallows_notifies_error() -> None:
-    """A failed notifies() watcher does not raise from the last exit."""
-    connection = GatedPsycopgConnection(error=RuntimeError("notifies failed"))
+async def test_psycopg_aexit_swallows_watcher_error() -> None:
+    """A failed watcher does not raise from the last exit."""
+    connection = FakePsycopgConnection(pgconn=FakePgConn(error=RuntimeError("read failed")))
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     async with driver:
         await driver.add_listener("ch", lambda _: None)
-        await connection.started.wait()
         watcher = driver._watcher
-        connection.gate.set()
+        connection.send(Notify("ch", "a"))
+        await asyncio.sleep(0.05)
 
     assert watcher is not None
     assert watcher.done()
@@ -250,7 +269,7 @@ async def test_psycopg_aexit_swallows_notifies_error() -> None:
 
 
 async def test_psycopg_two_channels_share_one_watcher() -> None:
-    """One connection has one notifies() reader; extra LISTENs reuse it."""
+    """One connection has one watcher; extra LISTENs reuse it."""
     connection = FakePsycopgConnection()
     driver = PsycopgDriver(connection)  # type: ignore[arg-type]
     ignored: list[str | bytes | bytearray] = []
