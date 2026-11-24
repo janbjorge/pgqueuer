@@ -12,6 +12,7 @@ from pgqueuer.core import logconfig
 from pgqueuer.domain.errors import FailingListenerError
 from pgqueuer.domain.models import HealthCheckEvent, utc_now
 from pgqueuer.domain.types import HealthCheckId
+from pgqueuer.ports.driver import NotifyCallback
 from pgqueuer.qm import QueueManager
 
 
@@ -111,3 +112,32 @@ async def test_failed_periodic_health_check_is_logged(
     assert "listener health check failed" in record.getMessage().lower()
     assert record.exc_info is not None
     assert record.exc_info[0] is FailingListenerError
+
+
+async def test_first_probe_waits_for_listen(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The first probe goes out only after LISTEN, on every run (#1118)."""
+    driver = InMemoryDriver()
+    order: list[str] = []
+    add_listener, notify = driver.add_listener, driver.notify
+
+    async def late_add_listener(channel: str, callback: NotifyCallback) -> None:
+        await asyncio.sleep(0.1)  # a pool waiting for a free connection
+        await add_listener(channel, callback)
+        order.append("listen")
+
+    async def recording_notify(channel: str, payload: str) -> None:
+        order.append("notify")
+        await notify(channel, payload)
+
+    monkeypatch.setattr(driver, "add_listener", late_add_listener)
+    monkeypatch.setattr(driver, "notify", recording_notify)
+    qm = QueueManager(InMemoryQueries(driver=driver))
+
+    for _ in range(2):
+        order.clear()
+        qm.shutdown = asyncio.Event()
+        run = asyncio.create_task(qm.run())
+        await asyncio.sleep(0.3)
+        qm.shutdown.set()
+        await run
+        assert order[:2] == ["listen", "notify"]

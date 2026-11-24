@@ -42,6 +42,11 @@ class QueueManager:
         init=False,
         default_factory=asyncio.Event,
     )
+    # Set once run() has its LISTEN in place; a probe sent before it would go unheard.
+    listening: asyncio.Event = dataclasses.field(
+        init=False,
+        default_factory=asyncio.Event,
+    )
 
     # Per entrypoint
     entrypoint_registry: dict[types.QueueEntrypoint, executors.AbstractEntrypointExecutor] = (
@@ -120,6 +125,7 @@ class QueueManager:
         interval: timedelta = timedelta(seconds=10),
     ) -> None:
         """Probe listener health every *interval*; log and re-raise the first failure."""
+        await self.listening.wait()
         while not self.shutdown.is_set():
             try:
                 await self.listener_healthy(timeout=interval)
@@ -436,6 +442,7 @@ class QueueManager:
         """
         # Drop the previous run's ends before anything here can raise.
         self.unwritten_job_logs = []
+        self.listening.clear()
         await self.verify_structure()
 
         # Unset gets a finite budget so one worker cannot claim a whole backlog (#1090).
@@ -492,6 +499,7 @@ class QueueManager:
                     pending_health_check=self.pending_health_check,
                 ),
             )
+            self.listening.set()
 
             while not self.shutdown.is_set():
                 async for job in self.fetch_jobs(
