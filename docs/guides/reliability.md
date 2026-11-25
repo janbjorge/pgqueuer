@@ -241,8 +241,8 @@ await pgq.run(log_aggregation_interval=timedelta(seconds=30))
 - The task runs on every worker, but a Postgres advisory lock lets only one worker
   aggregate at a time, so counts are never doubled.
 - Pass `timedelta(0)` to disable the background task. Aggregation then happens only
-  on-demand, the first time statistics are read (CLI `pgq dashboard`, Prometheus metrics,
-  or the MCP server).
+  on-demand, the first time statistics are read (CLI `pgq dashboard` or `pgq throughput`,
+  or Prometheus metrics).
 - Aggregation never deletes log rows; it flags them `aggregated = TRUE`. Log retention is
   still your responsibility (see the note above).
 

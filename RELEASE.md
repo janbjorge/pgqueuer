@@ -25,6 +25,12 @@
 - `pgq schedules --json` and `pgq dashboard --json`. The dashboard prints
   once with `--json`; it rejects `--interval`.
 
+### Removed
+
+- **Breaking:** the MCP server, `pgqueuer.adapters.mcp` and the `pgqueuer[mcp]`
+  extra. Every tool has a `pgq` command with `--json`; see
+  [Migrating from the MCP server](docs/reference/cli.md#migrating-from-the-mcp-server).
+
 ### Changed
 
 - A failed listener health check is now logged as an error. With
@@ -35,6 +41,9 @@
 
 ### Fixed
 
+- The `web` extra installs `python-multipart`. The dashboard's requeue and
+  cancel forms need it, and `pip install pgqueuer[web]` alone did not install
+  it, so those actions failed.
 - Drain mode stops as soon as its last job ends. Since #1092 it could miss the
   NOTIFY from that job's end and sit out the whole `dequeue_timeout`, 30 s by
   default, before exiting.
@@ -65,10 +74,6 @@
 - An idle worker wakes about every `heartbeat_timeout / 2` while other workers
   run jobs of its entrypoints, instead of once per `dequeue_timeout`, so a dead
   worker's job is re-picked once its heartbeat goes stale (#1092).
-- MCP `failed_jobs` no longer returns the log row `id` (`job_id` is still
-  there), and `traceback` is a JSON object rather than a JSON string (#1094).
-  `queue_stats` and `throughput_summary` fold pending log rows into statistics,
-  so they need write access; the docs no longer call every tool read-only.
 
 ### Fixed
 
@@ -112,8 +117,8 @@
 
 ### Changed
 
-- `Queries`, `SyncQueries`, `InMemoryQueries`, `PgQueuer`, `create_web_app` and
-  `create_mcp_server` read their default `DBSettings` from the `PGQUEUER_*` env
+- `Queries`, `SyncQueries`, `InMemoryQueries`, `PgQueuer` and `create_web_app`
+  read their default `DBSettings` from the `PGQUEUER_*` env
   vars when they are built. v1.6 read them once per process and kept that
   value. Building `DBSettings()` takes a few hundred microseconds, so if you
   create queries per request, build the settings once and pass them in.
@@ -379,8 +384,6 @@
 - `enqueue()` rejects one value next to a list of entrypoints, which v1.4.0
   accepted: `enqueue(["a", "b"], None, [0, 0])` now raises `ValueError` for
   `payload`. Pass one value per job, e.g. `[None, None]`.
-- MCP `stale_jobs` and `queue_age` return numeric fields as JSON numbers, not
-  strings, on PostgreSQL 14+.
 - `InsightsService.stale_jobs(threshold=timedelta(0))` returns every picked
   job. Previously a zero threshold fell back to the 5-minute default.
 - Workers flush queued heartbeats every eighth of `heartbeat_timeout`, not
@@ -419,9 +422,6 @@
 - `QueryBuilderEnvironment.build_upgrade_queries()`. Use
   `Queries.plan_upgrade()` / `apply_upgrade()`, or `pgq sql upgrade` for the
   script.
-- MCP server: the `Tail`, `TimePeriod`, `StaleThreshold`, `Limit` and `Offset`
-  type aliases, and `PgQueuerDatabase.settings` / `.qbs`. Tool schemas are
-  unchanged.
 
 ## v1.4.0
 
@@ -757,14 +757,6 @@
   gets `ctx.resources`, like `Context.resources` for job handlers. Previously
   the only way was a closure over `pgq.resources`. Handlers without
   `accepts_context` still take just the schedule.
-- **Read-only MCP server.** `pip install pgqueuer[mcp]`, then
-  `python -m pgqueuer.adapters.mcp`. Eleven tools: `queue_size`,
-  `queue_table_info`, `queue_stats`, `throughput_summary`, `failed_jobs`,
-  `queue_log`, `schedules`, `stale_jobs`, `active_workers`, `queue_age`,
-  `schema_info`. Connects with the libpq variables or
-  `create_mcp_server(dsn="postgresql://...")`. Works with Claude Desktop,
-  Claude Code, Cursor and other MCP clients; see the
-  [MCP Server docs](docs/integrations/mcp-server.md).
 
 ### Bug fixes
 

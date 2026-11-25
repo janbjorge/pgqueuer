@@ -34,7 +34,7 @@ participants:
   record. The scaling unit is the process; run more of them for more
   throughput.
 - The **operator** is a human. They install and upgrade the schema, start
-  workers, and observe via CLI, dashboard, or MCP server.
+  workers, and observe via CLI or dashboard.
 
 ## Architecture
 
@@ -43,7 +43,7 @@ participants:
 │  Producer  │                              │  Operator  │
 │ (app code) │                              │  (human)   │
 └─────┬──────┘                              └─────┬──────┘
-      │ SQL: enqueue,                             │ CLI / dashboard / MCP:
+      │ SQL: enqueue,                             │ CLI / dashboard:
       │ schedule, cancel                          │ install, upgrade, observe
       ▼                                           ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -89,7 +89,7 @@ Steps:
 1. Install schema (`pgq install`), choosing durability and namespace.
 2. Start one or more worker processes (`pgq run <factory>`).
 3. Observe queue depth, throughput, failures, and worker liveness via
-   dashboard, MCP, Prometheus, or CLI.
+   dashboard, Prometheus, or CLI.
 4. Upgrade schema on library upgrades (`pgq upgrade`).
 
 ### UC2: Process jobs (subfunction level)
@@ -270,4 +270,4 @@ summary here:
   [SQL naming model](sql-naming.md), upgrades in the
   [schema upgrade model](schema-upgrade.md)).
 - Observability model: the log/statistics pipeline, dashboard, metrics,
-  and the MCP read surface.
+  and the CLI read commands.

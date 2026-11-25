@@ -50,7 +50,6 @@ PgQueuer supports two PostgreSQL drivers. Choose the one that fits your stack:
     | `logfire` | [Logfire](https://logfire.pydantic.dev/) distributed tracing |
     | `sentry` | [Sentry](https://sentry.io/) distributed tracing |
     | `opentelemetry` | [OpenTelemetry](../integrations/tracing.md) distributed tracing |
-    | `mcp` | [MCP server](../integrations/mcp-server.md) for AI agent access |
     | `fastapi` | FastAPI Prometheus metrics router |
 
     Install multiple extras at once:
@@ -118,7 +117,7 @@ The drivers read the standard PostgreSQL environment variables:
 
 ### Pool and connection tuning
 
-When the `pgq` CLI and the MCP server open their own connection, they read
+When the `pgq` CLI opens its own connection, it reads
 `PGQUEUER_*` variables. Passing your own factory (`pgq --factory`) skips
 this path entirely and hands connection control back to your code. The
 opt-in factories in `pgqueuer.adapters.connections` read the same variables

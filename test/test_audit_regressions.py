@@ -15,11 +15,9 @@ from typing import cast
 
 import asyncpg
 import pytest
-from mcp.shared.memory import create_connected_server_and_client_session
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.inmemory.jobs import job_status_rank
-from pgqueuer.adapters.mcp.server import create_mcp_server
 from pgqueuer.core.buffers import JobLogEntry
 from pgqueuer.core.insights import sparkline_buckets
 from pgqueuer.core.qm import QueueManager
@@ -61,24 +59,6 @@ async def test_queue_manager_keeps_job_ends_it_could_not_write() -> None:
 
     assert [(job.id, status) for job, status, _ in qm.unwritten_job_logs] == [
         (job_id, "successful")
-    ]
-
-
-async def test_mcp_throughput_summary_counts_logs_not_yet_aggregated(
-    dsn: str, apgdriver: AsyncpgDriver
-) -> None:
-    """The MCP tool sees the same totals as Queries.throughput_summary."""
-    await Queries(apgdriver).enqueue("tp", None)
-
-    server = create_mcp_server(dsn=dsn)
-    async with create_connected_server_and_client_session(server, raise_exceptions=True) as client:
-        result = await client.call_tool("throughput_summary", {})
-    assert not result.isError, result.content
-    assert result.structuredContent is not None
-    rows = result.structuredContent["result"]
-
-    assert [(r["entrypoint"], r["status"], int(r["total_count"])) for r in rows] == [
-        ("tp", "queued", 1)
     ]
 
 

@@ -43,8 +43,10 @@ commands, examples, and configuration live at
 - Deployment and performance:
   <https://janbjorge.github.io/pgqueuer/guides/deployment/> and
   <https://janbjorge.github.io/pgqueuer/guides/performance-tuning/>
-- Monitoring a live queue from an agent:
-  <https://janbjorge.github.io/pgqueuer/integrations/mcp-server/>
+- Monitoring a live queue from an agent: the `pgq` inspection commands
+  (`size`, `throughput`, `log`, `jobs`, `stale`, `workers`, `backlog`,
+  `tables`, `schedules`), each with `--json`:
+  <https://janbjorge.github.io/pgqueuer/reference/cli/>
 
 ## Troubleshooting route
 
