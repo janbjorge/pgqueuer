@@ -11,6 +11,7 @@ import pytest
 import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.adapters.inmemory.jobs import ReadyLane
 from pgqueuer.domain.errors import DuplicateJobError
 from pgqueuer.domain.models import CronExpressionEntrypoint
 from pgqueuer.domain.types import (
@@ -522,6 +523,75 @@ async def test_cancelled_deferred_job_not_delivered_when_due(queries: InMemoryQu
             heartbeat_timeout=timedelta(seconds=30),
         )
     assert jobs == []
+
+
+def dead_entries(lane: ReadyLane) -> int:
+    return sum(not lane.pending(entry) for entry in lane.jobs)
+
+
+async def test_cancelled_jobs_leave_the_ready_lane(queries: InMemoryQueries) -> None:
+    """Dead entries behind a busy higher priority must not pin cancelled rows."""
+    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
+    qm_id = QueueManagerId(uuid.uuid4())
+    heartbeat = timedelta(seconds=30)
+    cancelled = await queries.enqueue(["ep"] * 1000, [b"x" * 64] * 1000, [0] * 1000)
+    await queries.mark_job_as_cancelled(cancelled)
+
+    for _ in range(50):
+        await queries.enqueue("ep", b"now", priority=10)
+        (job,) = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=heartbeat)
+        assert job.payload == b"now"
+        await queries.log_jobs([(job, "successful", None)])
+
+    lane = queries.job_table.ready[QueueEntrypoint("ep")]
+    assert len(lane.jobs) < 64
+    gone = set(cancelled)
+    assert not any(entry.row.id in gone for entry in lane.jobs)
+    assert await queries.queue_size() == []
+
+
+async def test_priority_updates_do_not_grow_the_ready_lane(queries: InMemoryQueries) -> None:
+    (job_id,) = await queries.enqueue("ep", b"x", priority=0, dedupe_key="k")
+    for priority in range(1, 201):
+        await queries.enqueue("ep", None, priority, dedupe_key="k", on_conflict="update_priority")
+
+    lane = queries.job_table.ready[QueueEntrypoint("ep")]
+    assert len(lane.jobs) < 64
+    assert lane.dead == dead_entries(lane)
+
+    jobs = await queries.dequeue(
+        10,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    assert [(job.id, job.priority) for job in jobs] == [(job_id, 200)]
+
+
+async def test_ready_lane_rebuild_keeps_live_and_deferred_jobs(queries: InMemoryQueries) -> None:
+    """A rebuild drops dead entries only; order and deferred work survive."""
+    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
+    qm_id = QueueManagerId(uuid.uuid4())
+    heartbeat = timedelta(seconds=30)
+    (deferred,) = await queries.enqueue("ep", b"later", 3, execute_after=timedelta(hours=1))
+    priorities = [index % 5 for index in range(20)]
+    ids = await queries.enqueue(["ep"] * 20, [b"now"] * 20, priorities)
+    await queries.mark_job_as_cancelled(ids[::2])
+    kept = dict(zip(ids[1::2], priorities[1::2], strict=True))
+
+    lane = queries.job_table.ready[QueueEntrypoint("ep")]
+    assert lane.dead == dead_entries(lane)
+
+    jobs = await queries.dequeue(100, params, qm_id, None, heartbeat_timeout=heartbeat)
+    assert [job.id for job in jobs] == sorted(kept, key=lambda job_id: (-kept[job_id], job_id))
+    assert lane.dead == dead_entries(lane)
+    await queries.log_jobs([(job, "successful", None) for job in jobs])
+
+    with time_machine.travel(datetime.now(UTC) + timedelta(hours=2)):
+        jobs = await queries.dequeue(100, params, qm_id, None, heartbeat_timeout=heartbeat)
+    assert [job.id for job in jobs] == [deferred]
+    assert lane.dead == dead_entries(lane)
 
 
 async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(

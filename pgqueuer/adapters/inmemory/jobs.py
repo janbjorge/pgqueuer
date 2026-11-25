@@ -117,10 +117,16 @@ class ReadyLane:
 
     A cursor walks past jobs already picked, so a drain reads the next
     batch instead of the rows taken earlier.
+
+    An entry whose row was picked, cancelled or re-added stays in the list
+    until the cursor passes it. ``dead`` counts such entries, and the lane is
+    rebuilt once they outnumber the live ones, so a lane that never drains
+    past its lower priorities does not keep every dead row and payload.
     """
 
     jobs: list[Queued] = dataclasses.field(default_factory=list)
     head: int = 0
+    dead: int = 0
 
     def add(self, row: JobRow) -> None:
         row.ready_token += 1
@@ -153,17 +159,34 @@ class ReadyLane:
             chosen.append(entry.row)
         # A deferred row at the cursor must not pin finished rows behind it.
         if index - self.head > len(chosen) and index - self.head > 32:
-            self.jobs = [entry for entry in self.jobs[self.head :] if self.pending(entry)]
-            self.head = 0
+            self.rebuild()
         return chosen
+
+    def retire(self, row: JobRow) -> None:
+        """Take the row's live entry out of play; rebuild when dead entries dominate.
+
+        Each code path that removes a live entry must call this method. Otherwise
+        the count of dead entries is too low, and the lane keeps dead rows again.
+        """
+        row.ready_token += 1
+        self.dead += 1
+        if self.dead * 2 > len(self.jobs):
+            self.rebuild()
 
     def pending(self, entry: Queued) -> bool:
         return entry.token == entry.row.ready_token and entry.row.status == "queued"
 
     def compact(self) -> None:
         if self.head and self.head * 2 >= len(self.jobs):
+            # Everything behind the cursor is dead: the cursor only passes such entries.
             del self.jobs[: self.head]
+            self.dead -= self.head
             self.head = 0
+
+    def rebuild(self) -> None:
+        self.jobs = [entry for entry in self.jobs[self.head :] if self.pending(entry)]
+        self.head = 0
+        self.dead = 0
 
 
 @dataclasses.dataclass
@@ -284,7 +307,9 @@ class JobTable:
         if normed.priority[index] > job.priority:
             job.priority = normed.priority[index]
             if job.status == "queued":
-                self.lane(job.entrypoint).add(job)
+                lane = self.lane(job.entrypoint)
+                lane.retire(job)
+                lane.add(job)
         return InsertOutcome(JobId(job.id), None)
 
     def append_job(
@@ -404,7 +429,7 @@ class JobTable:
                 self.picked_by_manager[queue_manager_id] = (
                     self.picked_by_manager.get(queue_manager_id, 0) + 1
                 )
-                row.ready_token += 1
+                self.lane(row.entrypoint).retire(row)
                 self.picked[row.id] = row
             row.status = "picked"
             row.queue_manager_id = queue_manager_id
@@ -503,7 +528,9 @@ class JobTable:
                 continue
             self.rows.pop(row.id)
             self.release(row)
-            row.ready_token += 1
+            # A failed row left its lane when it was picked; a queued row leaves it now.
+            if row.status == "queued":
+                self.lane(row.entrypoint).retire(row)
             self.dedupe.forget(row.id)
             removed.append(row)
         return removed
