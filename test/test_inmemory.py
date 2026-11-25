@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import random
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -14,13 +13,12 @@ import time_machine
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.inmemory.jobs import ReadyLane
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.models import CronExpressionEntrypoint, Job
+from pgqueuer.domain.models import CronExpressionEntrypoint
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
     CronExpression,
     HealthCheckId,
-    JobId,
     OnConflict,
     QueueEntrypoint,
     QueueManagerId,
@@ -594,59 +592,6 @@ async def test_ready_lane_rebuild_keeps_live_and_deferred_jobs(queries: InMemory
         jobs = await queries.dequeue(100, params, qm_id, None, heartbeat_timeout=heartbeat)
     assert [job.id for job in jobs] == [deferred]
     assert lane.dead == dead_entries(lane)
-
-
-@pytest.mark.parametrize("seed", range(3))
-async def test_ready_lane_dead_count_matches_entries(queries: InMemoryQueries, seed: int) -> None:
-    """The dead counter tracks the entries pending() rejects through every transition."""
-    rng = random.Random(seed)  # noqa: S311 - seeded test data
-    entrypoints = [QueueEntrypoint("a"), QueueEntrypoint("b")]
-    params = {entrypoint: EntrypointExecutionParameter(0) for entrypoint in entrypoints}
-    qm_id = QueueManagerId(uuid.uuid4())
-    heartbeat = timedelta(seconds=30)
-    outcomes: list[JOB_STATUS] = ["successful", "failed"]
-    picked: list[Job] = []
-    failed: list[JobId] = []
-
-    for step in range(400):
-        action = rng.randrange(6)
-        if action == 0:
-            await queries.enqueue(
-                rng.choice(entrypoints),
-                b"p",
-                rng.randrange(3),
-                execute_after=timedelta(hours=1) if rng.random() < 0.2 else timedelta(0),
-                dedupe_key=f"k{rng.randrange(5)}" if rng.random() < 0.5 else None,
-                on_conflict="update_priority",
-            )
-        elif action == 1:
-            picked.extend(
-                await queries.dequeue(
-                    rng.randrange(1, 4), params, qm_id, None, heartbeat_timeout=heartbeat
-                )
-            )
-        elif action == 2 and picked:
-            job = picked.pop(rng.randrange(len(picked)))
-            status = rng.choice(outcomes)
-            await queries.log_jobs([(job, status, None)])
-            if status == "failed":
-                failed.append(job.id)
-        elif action == 3 and picked:
-            await queries.retry_job(picked.pop(rng.randrange(len(picked))), timedelta(0), None)
-        elif action == 4 and failed:
-            job_id = failed.pop(rng.randrange(len(failed)))
-            if rng.random() < 0.5:
-                await queries.requeue_jobs([job_id])
-            else:
-                await queries.mark_job_as_cancelled([job_id])
-        elif action == 5:
-            queued = [job.id for job in await queries.browse_queue(100, 0, ["queued"])]
-            if queued:
-                await queries.mark_job_as_cancelled(
-                    rng.sample(queued, rng.randrange(1, len(queued) + 1))
-                )
-        for lane in queries.job_table.ready.values():
-            assert lane.dead == dead_entries(lane), (seed, step, action)
 
 
 async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(

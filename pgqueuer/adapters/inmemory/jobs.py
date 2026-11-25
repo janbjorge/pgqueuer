@@ -163,7 +163,11 @@ class ReadyLane:
         return chosen
 
     def retire(self, row: JobRow) -> None:
-        """Take the row's live entry out of play; rebuild when dead entries dominate."""
+        """Take the row's live entry out of play; rebuild when dead entries dominate.
+
+        Each code path that removes a live entry must call this method. Otherwise
+        the count of dead entries is too low, and the lane keeps dead rows again.
+        """
         row.ready_token += 1
         self.dead += 1
         if self.dead * 2 > len(self.jobs):
