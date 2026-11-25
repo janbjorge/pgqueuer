@@ -5,6 +5,7 @@ import pytest
 from pgqueuer.adapters.persistence.schema_inspect import inspect
 from pgqueuer.core.qm import QueueManager
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.errors import PgqException
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.queries import Queries
 from test.helpers import collapse, declared_schema, queries_for
@@ -85,3 +86,11 @@ async def test_a_table_owning_no_sequence_is_inspected(apgdriver: AsyncpgDriver)
 
     assert await queries.schema_is_installed()
     assert (await queries.plan_upgrade()).statements == ()
+
+
+@pytest.mark.xfail(strict=True, reason="#1135")
+async def test_queue_table_outside_current_schema_stops_inspect(apgdriver: AsyncpgDriver) -> None:
+    """The install check stops when search_path resolves the queue table to a later schema."""
+    await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
+    with pytest.raises(PgqException, match="resolves to the schema public"):
+        await Queries(apgdriver).schema_is_installed()
