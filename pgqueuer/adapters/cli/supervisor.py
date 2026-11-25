@@ -36,6 +36,8 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
 
     def set_shutdown(signum: int) -> None:
         logconfig.logger.info("Signal %d received, shutting down.", signum)
+        # The default action handles the next signal, so a second signal stops the process.
+        loop.remove_signal_handler(signum)
         shutdown.set()
 
     loop = asyncio.get_event_loop()

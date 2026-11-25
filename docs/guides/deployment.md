@@ -202,6 +202,8 @@ idempotent.
    running jobs to completion, so bound the wait via your orchestrator (see below).
 3. Exit cleanly.
 
+A second signal stops the process at once. Jobs that still run do not finish.
+
 Container orchestrators (Kubernetes, Fly.io, ECS) send `SIGTERM` before `SIGKILL`, so
 in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enough.
 

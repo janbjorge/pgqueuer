@@ -638,7 +638,6 @@ async def test_fallback_when_add_signal_handler_is_missing(
     assert "not supported on this platform" in caplog.text.lower()
 
 
-@pytest.mark.xfail(strict=True, reason="#1133")
 async def test_second_sigint_raises_keyboard_interrupt() -> None:
     """The first SIGINT sets shutdown. The second SIGINT raises KeyboardInterrupt (#1133)."""
     shutdown = asyncio.Event()
