@@ -26,8 +26,8 @@ IdentifierPrefix: TypeAlias = Annotated[
 # Rendered both as an unquoted identifier (folds to lowercase) and as a nspname
 # string literal (does not fold); normalize so both agree.
 SchemaName: TypeAlias = Annotated[str, StringConstraints(pattern=rf"^{_IDENT}$", to_lower=True)]
-# A dotted chain stays allowed (the legacy "schema.table" form), but each part
-# must itself be a plain identifier.
+# Dots pass the pattern only so DBSettings can reject a schema-qualified name
+# with a message that points at db_schema (#1134).
 ObjectName: TypeAlias = Annotated[
     str, StringConstraints(pattern=rf"^{_IDENT}(\.{_IDENT})*$", to_lower=True)
 ]
@@ -224,18 +224,15 @@ class DBSettings(BaseSettings):
     widen_id: bool = Field(default=True, validation_alias=name_env_alias("widen_id"))
 
     @model_validator(mode="after")
-    def reject_dotted_names_with_db_schema(self) -> DBSettings:
-        """A pre-qualified name plus db_schema would render ``schema.a.b``; refuse the mix."""
-        if not self.db_schema:
-            return self
-        # Derived from QualifiedNames so a new schema-scoped object cannot
-        # silently skip this check.
-        for field in dataclasses.fields(QualifiedNames):
-            name: str = getattr(self, field.name)
+    def reject_schema_qualified_names(self) -> DBSettings:
+        """Reject ``schema.name``: DDL and catalog lookups need bare names (#1134)."""
+        # From QualifiedNames so a new schema-scoped object cannot skip this check.
+        for field in (*(f.name for f in dataclasses.fields(QualifiedNames)), "trigger"):
+            name: str = getattr(self, field)
             if "." in name:
                 raise ValueError(
-                    f"object name {name!r} already contains a schema qualifier; "
-                    "drop the dot or unset db_schema/PGQUEUER_SCHEMA"
+                    f"{field} {name!r} contains a schema qualifier; "
+                    "set db_schema / PGQUEUER_SCHEMA and use the bare name"
                 )
         return self
 
