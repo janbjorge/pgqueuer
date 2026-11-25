@@ -275,6 +275,25 @@ class TestBasicAuth:
             assert (await client.get("/")).status_code == 401
             assert (await client.get("/", auth=("admin", "wrong"))).status_code == 401
             assert (await client.get("/", auth=("admin", "hunter2"))).status_code == 200
+            healthz = await client.get("/healthz")
+            assert healthz.status_code == 200
+            assert healthz.json() == {"status": "ok"}
+
+    async def test_create_web_app_healthz_open_when_auth_enabled(
+        self, monkeypatch: pytest.MonkeyPatch, queries: InMemoryQueries
+    ) -> None:
+        from pgqueuer.adapters.web.app import create_web_app
+
+        monkeypatch.setenv(USER_ENV, "admin")
+        monkeypatch.setenv(PASSWORD_ENV, "hunter2")
+        app = create_web_app()
+        app.state.pgq_queries = queries
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            assert (await client.get("/")).status_code == 401
+            healthz = await client.get("/healthz")
+            assert healthz.status_code == 200
+            assert healthz.json() == {"status": "ok"}
 
 
 class TestCreateWebApp:
