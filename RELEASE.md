@@ -41,6 +41,9 @@
 
 ### Fixed
 
+- `DBSettings` rejects a schema-qualified name such as `myschema.pgqueuer` and
+  points to `db_schema`. Such names never worked: install failed and workers
+  refused to start (#1134).
 - The `web` extra installs `python-multipart`. The dashboard's requeue and
   cancel forms need it, and `pip install pgqueuer[web]` alone did not install
   it, so those actions failed.

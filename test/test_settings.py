@@ -135,13 +135,6 @@ def test_qualified_is_cached() -> None:
     assert settings.qualified is settings.qualified
 
 
-def test_dotted_name_conflicts_with_db_schema() -> None:
-    """Dotted names stay allowed standalone (legacy DIY hack) but not with db_schema."""
-    assert DBSettings(queue_table="myschema.pgqueuer").queue_table == "myschema.pgqueuer"
-    with pytest.raises(ValidationError, match="schema qualifier"):
-        DBSettings(queue_table="myschema.pgqueuer", db_schema="other")
-
-
 def test_qualified_names_omit_channel_and_trigger() -> None:
     """Channel (database-global) and trigger (per-table) must never be schema-qualified."""
     fields = {f.name for f in dataclasses.fields(QualifiedNames)}
@@ -284,7 +277,7 @@ def test_managers_share_one_queries(make: Callable[[], PgQueuer]) -> None:
 
 # Before #945 only prefix and db_schema were validated, so a name like
 # "evil; CREATE TABLE x; --" reached the SQL string verbatim. Object names must
-# be identifiers or dotted identifier chains; the channel, which goes into SQL
+# be plain identifiers; the channel, which goes into SQL
 # as a string literal, may also hold dots and dashes.
 
 OBJECT_NAME_FIELDS = [
@@ -321,8 +314,13 @@ def test_default_names_are_valid() -> None:
     DBSettings(prefix="acme_")
 
 
-def test_dotted_object_name_still_accepted() -> None:
-    assert DBSettings(queue_table="myschema.pgqueuer").queue_table == "myschema.pgqueuer"
+# trigger sits outside QualifiedNames, so it needs its own case.
+@pytest.mark.parametrize("field", ["queue_table", "trigger"])
+def test_dotted_object_name_rejected(field: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Dotted names never installed or started a worker; point at db_schema (#1134)."""
+    monkeypatch.setenv(f"PGQUEUER_{field.upper()}", "myschema.pgqueuer")
+    with pytest.raises(ValidationError, match=r"schema qualifier.*db_schema"):
+        DBSettings()
 
 
 def test_channel_keeps_dots_and_dashes() -> None:
