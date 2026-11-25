@@ -418,7 +418,7 @@ class JobTable:
             if row.status == "picked":
                 previous = row.queue_manager_id
                 if previous != queue_manager_id:
-                    row.attempts += 1  # Taking over a stale row counts as a failed attempt.
+                    row.attempts += 1  # A takeover of a stale row counts as a failed attempt.
                 if previous is not None and previous != queue_manager_id:
                     self.picked_by_manager[previous] -= 1
                     self.picked_by_manager[queue_manager_id] = (

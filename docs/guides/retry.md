@@ -18,7 +18,7 @@ are preserved across retries.
 
 If that write fails, the worker keeps the job `picked` and heartbeating and retries
 the write until it succeeds. Shutting the manager down first leaves the row
-`picked`. Stale recovery runs the handler again, and `attempts` is unchanged.
+`picked`. Stale recovery runs the handler again and adds one to `attempts`.
 
 Because the job row is **updated** (not deleted), the same `job.id` is stable across all
 retry attempts. This makes it straightforward to trace the full retry graph by querying the
@@ -62,8 +62,9 @@ holds any other exception, the job fails as usual.
 
 ## Reading the attempt counter
 
-The `job.attempts` field tells you how many previous attempts have been made. On the first
-execution it is `0`, after one retry it is `1`, and so on:
+The `job.attempts` field tells you how many previous attempts have been made. A takeover
+of a stale job after a worker crash also adds one. On the first execution it is `0`, after
+one retry it is `1`, and so on:
 
 ```python
 @pgq.entrypoint("resilient_task")
@@ -118,7 +119,7 @@ the executor only converts non-retry exceptions.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `max_attempts` | `int` | `5` | Maximum retries before the exception becomes terminal |
+| `max_attempts` | `int` | `5` | Maximum retries before the exception becomes terminal. A takeover of a stale job also uses one retry. |
 | `initial_delay` | `timedelta` | `1s` | Delay before the first retry |
 | `max_delay` | `timedelta` | `5m` | Cap on exponential backoff |
 | `backoff_multiplier` | `float` | `2.0` | Multiplier applied to delay after each attempt |

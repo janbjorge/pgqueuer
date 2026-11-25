@@ -216,10 +216,10 @@ class QueueManager:
         ``on_failure='delete'`` (default) removes a terminally-failed job;
         ``'hold'`` parks it with status ``'failed'`` for manual re-queue.
 
-        ``max_attempts=None`` (default) is unbounded. Otherwise a job whose
-        ``attempts`` exceeds it is not run but ends as a failure per ``on_failure``.
-        ``attempts`` counts retries and takeovers of a dead worker's job, so this
-        stops a job that kills its worker from crashing every worker in turn.
+        ``max_attempts=None`` (default) sets no limit. When ``attempts`` is more than
+        ``max_attempts``, the job does not run and ends as a failure per ``on_failure``.
+        ``attempts`` counts retries and takeovers of a stale job. This stops a job
+        that kills each worker that takes it.
         """
         if types.QueueEntrypoint(name) in self.entrypoint_registry:
             raise RuntimeError(f"{name} already in registry, name must be unique.")
@@ -606,7 +606,7 @@ class QueueManager:
         """Persist a requested retry until the write succeeds.
 
         Failures keep the job picked and heartbeating. Shutdown leaves the row
-        picked so stale recovery runs the handler again; that takeover adds the attempt.
+        picked. Stale recovery then runs the handler again and adds one to ``attempts``.
         """
         pause = timedelta(milliseconds=50)
         cap = timedelta(seconds=1)
@@ -645,7 +645,7 @@ class QueueManager:
 
         executor = self.entrypoint_registry[job.entrypoint]
 
-        # Checked before running: a job that kills its worker never reaches an except clause.
+        # Check before the handler runs: a job that kills its worker never reaches an except clause.
         if (limit := executor.parameters.max_attempts) is not None and job.attempts > limit:
             exc = errors.MaxAttemptsExceededError(
                 f"Job {job.id} abandoned after {job.attempts} attempts (max_attempts={limit})"

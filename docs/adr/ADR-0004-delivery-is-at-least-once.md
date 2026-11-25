@@ -41,8 +41,8 @@ requirement wherever job execution is described.
   triggers re-delivery.
 - A crash re-delivery runs the job from the start. Since #1116 a
   takeover of a stale job adds one to `attempts`, as a database retry
-  does, so the handler sees a non-zero count and `max_attempts` on the
-  entrypoint can bound a crash loop.
+  does. The handler sees a non-zero count, and `max_attempts` on the
+  entrypoint can stop a crash loop.
 - The documentation has to repeat the idempotency requirement loudly,
   because nothing in the API forces it.
 

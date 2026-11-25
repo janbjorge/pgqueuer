@@ -59,7 +59,7 @@ class DuplicateJobError(PgqException):
 
 
 class MaxAttemptsExceededError(PgqException):
-    """Recorded when a job is abandoned unrun because it has used up its attempts."""
+    """PgQueuer records this error when it abandons a job that has no attempts left."""
 
 
 class FailingListenerError(PgqException):

@@ -198,10 +198,10 @@ heartbeat. Each takeover of a stale job adds one to its `attempts`, like a retry
 async def render(job: Job) -> None: ...
 ```
 
-A job whose `attempts` exceeds `max_attempts` is not run again. It ends as `exception`, or
-as `failed` with `on_failure="hold"`, with a `MaxAttemptsExceededError` traceback reading
-"abandoned after N attempts". A requeue resets `attempts` to 0. The default, `None`, keeps
-recovering without a limit.
+PgQueuer does not run a job again when its `attempts` is more than `max_attempts`. The job
+ends as `exception`, or as `failed` with `on_failure="hold"`. Its `MaxAttemptsExceededError`
+traceback says "abandoned after N attempts". A requeue resets `attempts` to 0. The default,
+`None`, sets no limit.
 
 To find jobs that are stalled right now, query for stale heartbeats:
 

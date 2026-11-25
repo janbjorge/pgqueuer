@@ -480,7 +480,7 @@ class DequeueSql:
                 SET status = 'picked',
                     updated   = NOW(),
                     heartbeat = NOW(),
-                    -- Taking over another manager's stale row counts as a failed attempt.
+                    -- A takeover of a stale row of another manager counts as a failed attempt.
                     attempts  = attempts + CASE WHEN status = 'picked'
                         AND queue_manager_id IS DISTINCT FROM {self.queue_manager}
                         THEN 1 ELSE 0 END,
@@ -500,7 +500,7 @@ class DequeueSql:
                 SET status = 'picked',
                     updated   = NOW(),
                     heartbeat = NOW(),
-                    -- Taking over another manager's stale row counts as a failed attempt.
+                    -- A takeover of a stale row of another manager counts as a failed attempt.
                     attempts  = job.attempts + CASE WHEN job.status = 'picked'
                         AND job.queue_manager_id IS DISTINCT FROM {self.queue_manager}
                         THEN 1 ELSE 0 END,

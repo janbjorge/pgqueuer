@@ -79,7 +79,7 @@ async def sync_inventory(job: Job) -> None:
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `max_attempts` | `5` | Maximum retries before the exception becomes terminal |
+| `max_attempts` | `5` | Maximum retries before the exception becomes terminal. A takeover of a stale job also uses one retry. |
 | `initial_delay` | `1s` | Delay before the first retry |
 | `max_delay` | `5m` | Cap on exponential backoff |
 | `backoff_multiplier` | `2.0` | Multiplier applied to delay after each attempt |
