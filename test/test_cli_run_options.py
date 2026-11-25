@@ -29,7 +29,6 @@ def test_run_passes_enums_not_strings(monkeypatch: pytest.MonkeyPatch, flag: lis
     assert isinstance(seen["mode"], types.QueueExecutionMode)
 
 
-@pytest.mark.xfail(strict=True, reason="#1126")
 def test_pg_dsn_option_does_not_read_pgdsn(monkeypatch: pytest.MonkeyPatch) -> None:
     """The --pg-dsn option does not read PGDSN (#1126)."""
     monkeypatch.setenv("PGDSN", "postgresql://example/libpq")

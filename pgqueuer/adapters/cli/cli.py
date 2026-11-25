@@ -115,11 +115,11 @@ def main(
         "",
         help=(
             "PostgreSQL connection string (DSN). "
-            "When omitted, PGQUEUER_DSN and standard libpq env vars "
-            "(PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT) are used. "
+            "If you do not give a DSN, PgQueuer uses PGQUEUER_DSN, then PGDSN. "
+            "Then it uses the standard libpq env vars "
+            "(PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT). "
             "Use --schema/PGQUEUER_SCHEMA to target a Postgres schema."
         ),
-        envvar="PGDSN",
     ),
     factory_fn_ref: str | None = typer.Option(
         None,

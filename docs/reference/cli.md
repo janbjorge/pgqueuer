@@ -732,7 +732,7 @@ All commands accept the following connection options:
 
 | Flag | Env Variable | Description |
 |------|-------------|-------------|
-| `--pg-dsn` | `PGDSN` | Full PostgreSQL connection string (DSN) |
+| `--pg-dsn` | `PGQUEUER_DSN`, then `PGDSN` | Full PostgreSQL connection string (DSN) |
 | `--prefix` | `PGQUEUER_PREFIX` | Prefix for PgQueuer database objects |
 | `--schema` | `PGQUEUER_SCHEMA` | Postgres schema holding all PgQueuer objects |
 
