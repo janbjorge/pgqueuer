@@ -59,6 +59,13 @@ async def test_takeover_adds_one_to_attempts(queries: RepositoryPort) -> None:
     assert [(await crash(queries)).attempts for _ in range(3)] == [0, 1, 2]
 
 
+async def test_repick_by_its_own_manager_is_not_an_attempt(queries: RepositoryPort) -> None:
+    await queries.enqueue("ep", None)
+    owner = QueueManagerId(uuid.uuid4())
+    await stop_heartbeat(queries, (await pick(queries, owner)).id)
+    assert (await pick(queries, owner)).attempts == 0
+
+
 async def test_max_attempts_ends_the_job(queries: RepositoryPort) -> None:
     await queries.enqueue("ep", None)
     await crash(queries)
