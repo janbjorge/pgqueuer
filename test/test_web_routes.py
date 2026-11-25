@@ -252,7 +252,6 @@ class TestActions:
         )
         assert response.status_code == 204
 
-    @pytest.mark.xfail(strict=True, reason="#1128")
     async def test_foreign_origin_post_forbidden(
         self, client: httpx.AsyncClient, queries: InMemoryQueries
     ) -> None:
