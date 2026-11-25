@@ -1196,3 +1196,24 @@ async def test_driver_execute_raises(driver: InMemoryDriver) -> None:
 def test_driver_shutdown_event(driver: InMemoryDriver) -> None:
     assert isinstance(driver.shutdown, asyncio.Event)
     assert not driver.shutdown.is_set()
+
+
+async def test_cancel_of_held_failed_job_keeps_newer_dedupe_key(
+    queries: InMemoryQueries,
+) -> None:
+    # A failed job keeps its key but leaves the index, so a newer job may own
+    # the key; cancelling the old one must not free the newer job's key.
+    (old_id,) = await queries.enqueue("ep", None, dedupe_key="k")
+    (job,) = await queries.dequeue(
+        1,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    await queries.log_jobs([(job, "failed", None)])
+    await queries.enqueue("ep", None, dedupe_key="k")
+    await queries.mark_job_as_cancelled([old_id])
+
+    with pytest.raises(DuplicateJobError):
+        await queries.enqueue("ep", None, dedupe_key="k")

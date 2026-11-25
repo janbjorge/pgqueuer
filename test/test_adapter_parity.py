@@ -339,6 +339,27 @@ async def test_requeue_keeps_dedupe_key(apgdriver: AsyncpgDriver) -> None:
     assert await run(memory) == await run(postgres)
 
 
+async def test_cancel_of_held_failed_job_matches(apgdriver: AsyncpgDriver) -> None:
+    memory, postgres = pair(apgdriver)
+
+    async def run(q: Repository) -> tuple[str, list[tuple[str, int]]]:
+        old = as_id(await q.enqueue("ep", b"a", dedupe_key="k"))
+        (job,) = await q.dequeue(1, EP, OWNER, None, TIMEOUT)
+        await q.log_jobs([(job, "failed", None)])
+        await q.enqueue("ep", b"b", dedupe_key="k")
+        await q.mark_job_as_cancelled([old])
+        try:
+            await q.enqueue("ep", b"c", dedupe_key="k")
+        except DuplicateJobError:
+            outcome = "duplicate"
+        else:
+            outcome = "accepted"
+        size = [(row.status, row.count) for row in await q.queue_size()]
+        return outcome, sorted(size)
+
+    assert await run(memory) == await run(postgres)
+
+
 async def test_requeue_conflict_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 

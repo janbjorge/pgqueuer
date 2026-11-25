@@ -188,7 +188,9 @@ class DedupeIndex:
 
     def forget(self, job_id: int) -> None:
         key = self.key_by_job.pop(job_id, None)
-        if key is not None:
+        # A held failed job keeps its key while a newer job may own it in the
+        # index; only the owner's removal frees the key, as in PostgreSQL.
+        if key is not None and self.index.get(key) == job_id:
             self.index.pop(key, None)
 
     def unindex(self, job_id: int) -> None:
