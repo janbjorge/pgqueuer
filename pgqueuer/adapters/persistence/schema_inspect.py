@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.adapters.persistence.schema_plan import rebuild_name
+from pgqueuer.domain.errors import PgqException
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.schema.model import (
     Column,
@@ -87,6 +88,15 @@ class CatalogQueries:
 
     def namespace(self) -> str:
         return "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1) AS present"
+
+    def resolved_elsewhere(self) -> str:
+        """Schema of the table that a bare name resolves to, when it is not current_schema()."""
+        return """
+        SELECT ns.nspname AS found
+        FROM pg_class tbl
+        JOIN pg_namespace ns ON ns.oid = tbl.relnamespace
+        WHERE tbl.oid = to_regclass($1) AND ns.nspname <> current_schema()
+        """
 
     def columns(self) -> str:
         return f"""
@@ -230,6 +240,15 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
 
     if settings.db_schema is not None and not await namespace_present(driver, queries):
         return Schema((), (), (), (), (), namespace_exists=False)
+
+    if settings.db_schema is None and (
+        rows := await driver.fetch(queries.resolved_elsewhere(), settings.queue_table)
+    ):
+        found = cell(rows[0], "found", str)
+        raise PgqException(
+            f"The queue table {settings.queue_table} resolves to the schema {found}, "
+            f"not to current_schema(). Set db_schema to {found}, or change search_path."
+        )
 
     columns = await rows_of(driver, ColumnRow, queries.columns(), table_names)
     indexes = await rows_of(driver, IndexRow, queries.indexes(), table_names)
