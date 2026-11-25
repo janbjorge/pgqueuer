@@ -21,8 +21,8 @@ except ImportError as e:
 
 from typing import Annotated
 
+from pgqueuer.adapters.payload import render_payload
 from pgqueuer.adapters.web.deps import get_broadcaster, get_insights, get_management
-from pgqueuer.adapters.web.payload import render_payload
 from pgqueuer.adapters.web.sse import Broadcaster
 from pgqueuer.core.insights import (
     DEFAULT_STALE_THRESHOLD,

@@ -17,6 +17,7 @@ from mcp.server.session import ServerSession
 
 from pgqueuer.adapters.connections import create_asyncpg_pool
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgPoolDriver
+from pgqueuer.adapters.payload import render_payload
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain.settings import ConnectionSettings, DBSettings
@@ -38,6 +39,13 @@ class PgQueuerDatabase:
 
 
 Ctx = Context[ServerSession, PgQueuerDatabase, object]
+
+MAX_LIMIT = 1000
+
+
+def _limit(limit: int) -> int:
+    """Keep a tool's row limit in 1..MAX_LIMIT."""
+    return max(1, min(limit, MAX_LIMIT))
 
 
 def _parse_interval(period: str | None) -> timedelta | None:
@@ -113,11 +121,12 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
           - status:           'queued' or 'picked' (jobs leave the table on completion)
           - entrypoint:       job handler name
           - dedupe_key:       optional deduplication key (null if not set)
-          - payload:          job payload as bytes (null if not set)
+          - payload:          job payload as text: JSON or UTF-8 as-is, other bytes
+                              as a hex preview (null if not set)
           - headers:          JSONB tracing/metadata headers (null if not set)
 
         Parameters:
-          - limit:  max rows to return (default 100)
+          - limit:  max rows to return (default 100, clamped to 1-1000)
           - offset: skip this many rows first (default 0, for pagination)
 
         Note: Only jobs currently in the queue are shown. Completed, failed,
@@ -126,7 +135,15 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         """
         d = _db(ctx)
         # Raw rows, not models.Job, which has no dedupe_key.
-        return await d.fetch(d.qbq.build_browse_queue_query(), limit, offset, None, None)
+        rows = await d.fetch(
+            d.qbq.build_browse_queue_query(), _limit(limit), max(0, offset), None, None
+        )
+        for row in rows:
+            # bytes are not JSON-serializable when they are not valid UTF-8.
+            payload = row["payload"]
+            if isinstance(payload, bytes):
+                row["payload"] = render_payload(payload).text
+        return rows
 
     @mcp.tool()
     async def queue_stats(
@@ -154,13 +171,13 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         Parameters:
           - period: ISO-8601 duration to look back (e.g. 'PT1H' for the last hour).
                     If omitted, returns all available history.
-          - limit:  max rows to return, most recent first (default 50).
+          - limit:  max rows to return, most recent first (default 50, max 1000).
 
         Example use cases:
           - "How many jobs succeeded in the last hour?" -> period='PT1H'
           - "Show me the last 200 stats entries" -> limit=200
         """
-        stats = await _db(ctx).queries.log_statistics(limit, _parse_interval(period))
+        stats = await _db(ctx).queries.log_statistics(_limit(limit), _parse_interval(period))
         return [s.model_dump() for s in stats]
 
     @mcp.tool()
@@ -220,14 +237,14 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
           - aggregated: whether this entry has been rolled up into statistics
 
         Parameters:
-          - limit: max rows to return (default 50)
+          - limit: max rows to return (default 50, max 1000)
 
         Tip: If you see many failures for one entrypoint, check the traceback
         field for the root cause. Common patterns include connection errors
         (downstream service down), serialization errors (bad payload), or
         business logic exceptions.
         """
-        return [log.model_dump() for log in await _db(ctx).insights.exception_logs(limit)]
+        return [log.model_dump() for log in await _db(ctx).insights.exception_logs(_limit(limit))]
 
     @mcp.tool()
     async def queue_log(
@@ -253,14 +270,14 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
           - aggregated: whether this entry has been rolled into the statistics table
 
         Parameters:
-          - limit: max rows to return (default 100)
+          - limit: max rows to return (default 100, max 1000)
 
         Note: This log can grow large. Use a reasonable limit. For failure
         investigation specifically, prefer the failed_jobs tool which filters
         to exceptions only.
         """
         d = _db(ctx)
-        return await d.fetch(d.qbq.build_queue_log_query(), limit)
+        return await d.fetch(d.qbq.build_queue_log_query(), _limit(limit))
 
     @mcp.tool()
     async def schedules(ctx: Ctx) -> list[dict[str, object]]:
@@ -321,14 +338,14 @@ def _register_tools(mcp: FastMCP[PgQueuerDatabase]) -> None:
         Parameters:
           - threshold: ISO-8601 duration defining staleness (default 'PT5M' = 5 min).
                        Jobs with heartbeat older than NOW() - threshold are returned.
-          - limit:     max rows to return (default 50)
+          - limit:     max rows to return (default 50, max 1000)
 
         Example: To find jobs stuck for over 30 minutes, use threshold='PT30M'.
 
         If you see stale jobs, cross-reference the queue_manager_id with
         active_workers to check if that worker is still alive.
         """
-        jobs = await _db(ctx).insights.stale_jobs(_parse_interval(threshold), limit)
+        jobs = await _db(ctx).insights.stale_jobs(_parse_interval(threshold), _limit(limit))
         return [j.model_dump() for j in jobs]
 
     @mcp.tool()

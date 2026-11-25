@@ -11,8 +11,8 @@ import pytest_asyncio
 from fastapi import Depends, FastAPI
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
+from pgqueuer.adapters.payload import render_payload
 from pgqueuer.adapters.web.auth import PASSWORD_ENV, USER_ENV, create_basic_auth_dependency
-from pgqueuer.adapters.web.payload import render_payload
 from pgqueuer.adapters.web.routes import (
     PAGE_SIZE,
     ChartSlot,

@@ -47,10 +47,12 @@ async def seed(driver: AsyncpgDriver) -> None:
     )
 
 
-async def call(dsn: str, tool: str) -> list[dict[str, object]]:
+async def call(
+    dsn: str, tool: str, args: dict[str, object] | None = None
+) -> list[dict[str, object]]:
     server = create_mcp_server(dsn=dsn)
     async with create_connected_server_and_client_session(server, raise_exceptions=True) as client:
-        result = await client.call_tool(tool, {})
+        result = await client.call_tool(tool, args or {})
     assert not result.isError, result.content
     assert result.structuredContent is not None
     rows = result.structuredContent["result"]
@@ -147,3 +149,25 @@ class TestMcpToolOutput:
         assert rows, f"{tool} returned no rows; seed() must cover it"
         for row in rows:
             assert set(row) == self.fields[tool]
+
+
+async def test_queue_table_info_renders_non_utf8_payload(
+    dsn: str, apgdriver: AsyncpgDriver
+) -> None:
+    await Queries(apgdriver).enqueue("ep", b"\xff")
+
+    rows = await call(dsn, "queue_table_info")
+
+    assert [r["payload"] for r in rows] == ["ff"]
+
+
+@pytest.mark.parametrize(
+    "tool", ["queue_table_info", "queue_stats", "failed_jobs", "queue_log", "stale_jobs"]
+)
+@pytest.mark.parametrize("limit", [-1, 0, 10_000_000])
+async def test_limit_is_clamped(tool: str, limit: int, dsn: str, apgdriver: AsyncpgDriver) -> None:
+    await seed(apgdriver)
+
+    rows = await call(dsn, tool, {"limit": limit})
+
+    assert 1 <= len(rows) <= 1000
