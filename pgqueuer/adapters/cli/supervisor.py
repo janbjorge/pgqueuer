@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext, suppress
 from datetime import timedelta
 from typing import Protocol, TypeAlias, runtime_checkable
 
@@ -31,8 +31,9 @@ def setup_shutdown_handlers(manager: object, shutdown: asyncio.Event) -> Manager
     return manager
 
 
-def setup_signal_handlers(shutdown: asyncio.Event) -> None:
-    """Set *shutdown* on SIGINT/SIGTERM; silently skip on platforms without async signal support."""
+@contextmanager
+def setup_signal_handlers(shutdown: asyncio.Event) -> Iterator[None]:
+    """Set *shutdown* on SIGINT/SIGTERM until exit. Do nothing where async signals fail."""
 
     def set_shutdown(signum: int) -> None:
         logconfig.logger.info("Signal %d received, shutting down.", signum)
@@ -41,14 +42,18 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
         shutdown.set()
 
     loop = asyncio.get_event_loop()
-    try:
-        loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
-        loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
-    except NotImplementedError:
-        logconfig.logger.warning(
-            "Async signal handlers are not supported on this platform; "
-            "KeyboardInterrupt will still stop the worker."
-        )
+    with ExitStack() as handlers:
+        try:
+            loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
+            handlers.callback(loop.remove_signal_handler, signal.SIGINT)
+            loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
+            handlers.callback(loop.remove_signal_handler, signal.SIGTERM)
+        except NotImplementedError:
+            logconfig.logger.warning(
+                "Async signal handlers are not supported on this platform; "
+                "KeyboardInterrupt will still stop the worker."
+            )
+        yield
 
 
 async def forward_shutdown(source: asyncio.Event, target: asyncio.Event) -> None:
@@ -101,7 +106,6 @@ async def runit(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
     heartbeat_timeout: timedelta = timedelta(seconds=30),
-    handle_signals: bool = True,
 ) -> None:
     """Supervise a manager lifecycle; optionally restart after *restart_delay* on failure.
 
@@ -114,9 +118,6 @@ async def runit(
     """
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
-
-    if handle_signals:
-        setup_signal_handlers(shutdown)
 
     unwritten = UnwrittenJobLogs()
     while not shutdown.is_set():
@@ -176,19 +177,21 @@ async def run(
 
         asyncio.run(pgqueuer.run("myapp:create_pgqueuer"))
     """
-    await runit(
-        factories.load_factory(factory) if isinstance(factory, str) else factory,
-        dequeue_timeout=dequeue_timeout,
-        batch_size=batch_size,
-        restart_delay=restart_delay if restart_on_failure else timedelta(0),
-        restart_on_failure=restart_on_failure,
-        shutdown=shutdown or asyncio.Event(),
-        mode=mode,
-        max_concurrent_tasks=max_concurrent_tasks,
-        shutdown_on_listener_failure=shutdown_on_listener_failure,
-        heartbeat_timeout=heartbeat_timeout,
-        handle_signals=shutdown is None,
-    )
+    owns_signals = shutdown is None
+    shutdown = asyncio.Event() if shutdown is None else shutdown
+    with setup_signal_handlers(shutdown) if owns_signals else nullcontext():
+        await runit(
+            factories.load_factory(factory) if isinstance(factory, str) else factory,
+            dequeue_timeout=dequeue_timeout,
+            batch_size=batch_size,
+            restart_delay=restart_delay if restart_on_failure else timedelta(0),
+            restart_on_failure=restart_on_failure,
+            shutdown=shutdown,
+            mode=mode,
+            max_concurrent_tasks=max_concurrent_tasks,
+            shutdown_on_listener_failure=shutdown_on_listener_failure,
+            heartbeat_timeout=heartbeat_timeout,
+        )
 
 
 async def run_manager(

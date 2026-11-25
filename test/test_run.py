@@ -4,7 +4,7 @@ import asyncio
 import signal
 import sys
 from collections.abc import AsyncGenerator, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 
 import pytest
@@ -38,9 +38,6 @@ async def test_run_drains_a_job_from_factory(target: str | Callable[[], object])
         pgqueuer.run(target, mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(0.1)),
         timeout=5,
     )
-    loop = asyncio.get_running_loop()
-    loop.remove_signal_handler(signal.SIGINT)
-    loop.remove_signal_handler(signal.SIGTERM)
 
     assert len(handled) == 1
 
@@ -50,19 +47,28 @@ async def test_run_stops_on_caller_shutdown_without_signal_handlers() -> None:
     shutdown = asyncio.Event()
     run = asyncio.create_task(pgqueuer.run(factory, shutdown=shutdown))
     await asyncio.sleep(0.2)
+    installed = asyncio.get_running_loop().remove_signal_handler(signal.SIGINT)
     shutdown.set()
     await asyncio.wait_for(run, timeout=5)
 
-    assert not asyncio.get_running_loop().remove_signal_handler(signal.SIGINT)
+    assert not installed
 
 
 async def test_run_installs_signal_handlers_by_default() -> None:
     """Without a shutdown event, run() owns SIGINT/SIGTERM like `pgq run`."""
-    await asyncio.wait_for(
-        pgqueuer.run(factory, mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(0.1)),
-        timeout=5,
-    )
+    run = asyncio.create_task(pgqueuer.run(factory, dequeue_timeout=timedelta(0.1)))
+    await asyncio.sleep(0.2)
     loop = asyncio.get_running_loop()
+    installed = [loop.remove_signal_handler(signum) for signum in (signal.SIGINT, signal.SIGTERM)]
+    run.cancel()
+    with suppress(asyncio.CancelledError):
+        await run
 
-    assert loop.remove_signal_handler(signal.SIGINT)
-    assert loop.remove_signal_handler(signal.SIGTERM)
+    assert installed == [True, True]
+
+
+async def test_run_removes_signal_handlers_on_return() -> None:
+    """run() removes its SIGINT/SIGTERM handlers when it returns (#1133)."""
+    await pgqueuer.run(factory, mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(0.1))
+
+    assert asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM) is False
