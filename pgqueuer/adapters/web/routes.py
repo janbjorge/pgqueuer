@@ -4,6 +4,7 @@ import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     from fastapi import APIRouter, Depends, HTTPException, Request, Response, params
@@ -212,9 +213,14 @@ def create_templates() -> Jinja2Templates:
 
 
 def verify_same_origin(request: Request) -> None:
-    """Reject cross-site POSTs when the browser sends Sec-Fetch-Site."""
+    """Return 403 for a cross-site POST. Check Sec-Fetch-Site, else Origin, else Referer."""
     site = request.headers.get("sec-fetch-site")
-    if site is not None and site not in ("same-origin", "none"):
+    source = request.headers.get("origin") or request.headers.get("referer")
+    if site is None:
+        cross_site = source is not None and urlsplit(source).netloc != request.url.netloc
+    else:
+        cross_site = site not in ("same-origin", "none")
+    if cross_site:
         raise HTTPException(status_code=403, detail="cross-site request rejected")
 
 
