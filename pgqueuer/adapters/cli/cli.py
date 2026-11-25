@@ -6,7 +6,7 @@ import functools
 import json
 import os
 import sys
-from collections.abc import AsyncGenerator, Callable, Coroutine
+from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -180,6 +180,30 @@ def tablefmt() -> str:
 def local_time(value: datetime) -> str:
     """Terminal-local time with its offset, whatever zone the driver returned."""
     return value.astimezone().isoformat(sep=" ", timespec="seconds")
+
+
+def job_json(job: models.Job) -> dict[str, object]:
+    """A job for --json output; payloads are arbitrary bytes, so only their size is kept."""
+    return job.model_dump(mode="json", exclude={"payload"}) | {
+        "payload_bytes": len(job.payload) if job.payload else 0
+    }
+
+
+def print_report(
+    items: Sequence[T],
+    as_json: bool,
+    empty: str,
+    headers: list[str],
+    row: Callable[[T], list[object]],
+    json_item: Callable[[T], object] | None = None,
+) -> None:
+    """Print *items* as a JSON array, or as a table with *empty* in place of no rows."""
+    if as_json:
+        print(to_json([json_item(i) for i in items] if json_item else items).decode())
+    elif not items:
+        print(empty)
+    else:
+        print(tabulate([row(i) for i in items], headers=headers, tablefmt=tablefmt()))
 
 
 async def display_stats(log_stats: list[models.LogStatistics]) -> None:
@@ -415,12 +439,22 @@ def dashboard(
         "-n",
         "--limit",
     ),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the statistics once as a JSON array on stdout. Not with --interval.",
+    ),
 ) -> None:
+    if as_json and interval is not None:
+        raise typer.BadParameter("--json prints once; drop --interval.")
     interval_td = timedelta(seconds=interval) if interval is not None else None
 
     async def run() -> None:
         async with yield_queries(ctx) as q:
-            await fetch_and_display(q, interval_td, limit)
+            if as_json:
+                print(to_json(await q.log_statistics(limit)).decode())
+            else:
+                await fetch_and_display(q, interval_td, limit)
 
     asyncio_run(run())
 
@@ -564,6 +598,9 @@ def schedules(
         "--remove",
         help="Remove schedules by ID or name.",
     ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Print the schedules as a JSON array on stdout."
+    ),
 ) -> None:
     async def run_async() -> None:
         async with yield_queries(ctx) as q:
@@ -571,7 +608,11 @@ def schedules(
                 schedule_ids = {types.ScheduleId(int(x)) for x in remove if x.isdigit()}
                 schedule_names = {types.CronEntrypoint(x) for x in remove if not x.isdigit()}
                 await q.delete_schedule(schedule_ids, schedule_names)
-            await display_schedule(await q.peek_schedule())
+            current = await q.peek_schedule()
+            if as_json:
+                print(to_json(current).decode())
+            else:
+                await display_schedule(current)
 
     asyncio_run(run_async())
 
@@ -638,15 +679,7 @@ def failed(
         async with yield_queries(ctx) as q:
             jobs = await q.list_failed_jobs(limit=limit)
             if as_json:
-                print(
-                    json.dumps(
-                        [
-                            j.model_dump(mode="json", exclude={"payload"})
-                            | {"payload_bytes": len(j.payload) if j.payload else 0}
-                            for j in jobs
-                        ]
-                    )
-                )
+                print(json.dumps([job_json(j) for j in jobs]))
                 return
             if not jobs:
                 print("No failed jobs.")
@@ -816,6 +849,159 @@ def backlog(
                     tablefmt=tablefmt(),
                 )
             )
+
+    asyncio_run(run())
+
+
+@app.command(help="Count jobs in the queue table per entrypoint, status and priority.")
+def size(
+    ctx: Context,
+    as_json: bool = typer.Option(
+        False, "--json", help="Print one object per group as a JSON array on stdout."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx) as q:
+            sizes = await InsightsService(q).queue_size()
+        print_report(
+            sizes,
+            as_json,
+            "No jobs in the queue.",
+            ["Entrypoint", "Status", "Priority", "Count"],
+            lambda s: [s.entrypoint, s.status, s.priority, s.count],
+        )
+
+    asyncio_run(run())
+
+
+@app.command(help="Total jobs per entrypoint and status, from the statistics table.")
+def throughput(
+    ctx: Context,
+    period: float | None = typer.Option(
+        None,
+        "-p",
+        "--period",
+        help="Only count the last this many seconds. Default: all history.",
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Print one object per entrypoint and status as a JSON array."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx) as q:
+            totals = await q.throughput_summary(
+                None if period is None else timedelta(seconds=period)
+            )
+        print_report(
+            totals,
+            as_json,
+            "No processed jobs.",
+            ["Entrypoint", "Status", "Total"],
+            lambda t: [t.entrypoint, t.status, t.total_count],
+        )
+
+    asyncio_run(run())
+
+
+@app.command(help="Show the most recent job status changes from the log table.")
+def log(
+    ctx: Context,
+    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of entries to display."),
+    exceptions: bool = typer.Option(
+        False, "--exceptions", help="Only show entries with status 'exception'."
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Print the entries as a JSON array on stdout."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx) as q:
+            if exceptions:
+                entries = await InsightsService(q).exception_logs(limit)
+            else:
+                rows = await q.driver.fetch(q.qbq.build_queue_log_query(), limit)
+                entries = [models.Log.model_validate(r) for r in rows]
+        print_report(
+            entries,
+            as_json,
+            "No log entries.",
+            ["Created", "Job ID", "Entrypoint", "Status", "Priority", "Error"],
+            lambda e: [
+                local_time(e.created),
+                e.job_id,
+                e.entrypoint,
+                e.status,
+                e.priority,
+                f"{e.traceback.exception_type}: {e.traceback.exception_message}"
+                if e.traceback
+                else "",
+            ],
+        )
+
+    asyncio_run(run())
+
+
+@app.command(help="List jobs in the queue table, highest priority first.")
+def jobs(
+    ctx: Context,
+    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
+    offset: int = typer.Option(0, "--offset", help="Skip this many jobs first."),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the jobs as a JSON array on stdout. Payloads are reported by size only.",
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx) as q:
+            rows = await InsightsService(q).browse_queue(limit, offset)
+        print_report(
+            rows,
+            as_json,
+            "No jobs in the queue.",
+            [
+                "ID",
+                "Entrypoint",
+                "Status",
+                "Priority",
+                "Attempts",
+                "Created",
+                "Execute after",
+                "Payload bytes",
+            ],
+            lambda j: [
+                j.id,
+                j.entrypoint,
+                j.status,
+                j.priority,
+                j.attempts,
+                local_time(j.created),
+                local_time(j.execute_after),
+                len(j.payload) if j.payload else 0,
+            ],
+            json_item=job_json,
+        )
+
+    asyncio_run(run())
+
+
+@app.command(help="Show each PgQueuer table's persistence, estimated rows and size.")
+def tables(
+    ctx: Context,
+    as_json: bool = typer.Option(
+        False, "--json", help="Print one object per table as a JSON array on stdout."
+    ),
+) -> None:
+    async def run() -> None:
+        async with yield_queries(ctx) as q:
+            infos = await InsightsService(q).schema_info()
+        print_report(
+            infos,
+            as_json,
+            "No PgQueuer tables found.",
+            ["Table", "Persistence", "Estimated rows", "Total size"],
+            lambda t: [t.table_name, t.persistence, t.estimated_rows, t.total_size],
+        )
 
     asyncio_run(run())
 

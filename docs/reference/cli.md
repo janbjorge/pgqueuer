@@ -242,12 +242,18 @@ Display a live dashboard showing job statistics.
 
 - `-i`, `--interval <seconds>`: Refresh interval. If not set, updates once and exits.
 - `-n`, `--limit <number>`: Number of most recent log entries to display (default: `25`).
+- `--json`: Print the statistics once as a JSON array on stdout and exit. Cannot be
+  combined with `--interval`.
+
+Like [`pgq throughput`](#throughput), it first folds pending log rows into the
+statistics table, so it needs write access to the log and statistics tables.
 
 The table format can be controlled via the `PGQUEUER_TABLEFMT` environment
 variable (legacy spelling `TABLEFMT` still works; default: `pretty`).
 
 ```bash
 pgq dashboard --interval 10 --limit 25
+pgq dashboard --json
 ```
 
 ---
@@ -271,9 +277,16 @@ pgq listen --channel my_custom_channel
 
 Manage schedules. Display all schedules or remove specific ones by ID or name.
 
+**Options:**
+
+- `-r` / `--remove <id or name>`: Remove a schedule. Repeat to remove several.
+- `--json`: Print the schedules as a JSON array on stdout instead of a table.
+  With `--remove`, the array holds the schedules that remain.
+
 ```bash
 pgq schedules
 pgq schedules --remove fetch_db
+pgq schedules --json
 ```
 
 ---
@@ -387,6 +400,122 @@ pgq backlog --json
 Output: entrypoint, queued count, oldest creation time, and the oldest and
 average age in seconds, sorted by entrypoint. No queued jobs prints `[]` with
 `--json` and exits `0`.
+
+---
+
+### `size`
+
+Count the jobs in the queue table, grouped by entrypoint, status, and priority.
+Finished jobs have left the queue table, so only `queued`, `picked`, and held
+`failed` jobs appear.
+
+**Options:**
+
+- `--json`: Print one object per group as a JSON array on stdout instead of a
+  table.
+
+```bash
+pgq size
+pgq size --json
+```
+
+Output: entrypoint, status, priority, and count. An empty queue prints `[]`
+with `--json` and exits `0`.
+
+---
+
+### `throughput`
+
+Total jobs per entrypoint and status, read from the statistics table. Pending
+log rows are folded into the statistics table first, so the command needs
+write access to the log and statistics tables.
+
+**Options:**
+
+- `-p` / `--period <seconds>`: Only count the last this many seconds. Default:
+  all history.
+- `--json`: Print one object per entrypoint and status as a JSON array on
+  stdout instead of a table.
+
+```bash
+pgq throughput
+pgq throughput --period 3600
+pgq throughput --json
+```
+
+Output: entrypoint, status, and total count. Compare `successful` with
+`exception` to see an entrypoint's failure ratio. No statistics prints `[]`
+with `--json` and exits `0`.
+
+---
+
+### `log`
+
+Show the most recent job status changes from the log table, newest first. Each
+row is one transition: `queued`, `picked`, `successful`, `exception`,
+`canceled`, `deleted`, or `failed`.
+
+**Options:**
+
+- `-n` / `--limit <number>` *(default: 25)*: Maximum number of entries to display.
+- `--exceptions`: Only show entries with status `exception`.
+- `--json`: Print the entries as a JSON array on stdout instead of a table.
+
+```bash
+pgq log
+pgq log --exceptions -n 10
+pgq log --exceptions --json
+```
+
+Output: time, job ID, entrypoint, status, priority, and, for exceptions, the
+exception type and message. With `--json`, `traceback` holds the full record:
+`exception_type`, `exception_message`, `traceback`, `timestamp`, and
+`additional_context`. No entries prints `[]` with `--json` and exits `0`.
+
+---
+
+### `jobs`
+
+List the jobs in the queue table, highest priority first, then by ID.
+
+**Options:**
+
+- `-n` / `--limit <number>` *(default: 25)*: Maximum number of jobs to display.
+- `--offset <number>` *(default: 0)*: Skip this many jobs first, to page through
+  a large queue.
+- `--json`: Print the jobs as a JSON array on stdout instead of a table.
+
+```bash
+pgq jobs
+pgq jobs -n 50 --offset 50
+pgq jobs --json
+```
+
+Output: job ID, entrypoint, status, priority, attempts, creation time,
+`execute_after`, and payload size. With `--json`, each element carries the
+job's fields with ISO-8601 timestamps, and the payload is replaced by
+`payload_bytes`, as in [`pgq failed`](#failed). No jobs prints `[]` and exits
+`0`.
+
+---
+
+### `tables`
+
+Show each PgQueuer table's persistence (`LOGGED` or `UNLOGGED`), estimated row
+count, and total size on disk. The row count comes from `pg_class` and is only
+as fresh as the last `ANALYZE`.
+
+**Options:**
+
+- `--json`: Print one object per table as a JSON array on stdout instead of a
+  table.
+
+```bash
+pgq tables
+pgq tables --json
+```
+
+To check that the schema is installed and current, use [`pgq verify`](#verify).
 
 ---
 

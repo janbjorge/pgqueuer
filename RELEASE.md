@@ -12,7 +12,18 @@
 
 ---
 
-## v2.1.1
+## v2.2.0
+
+### Added
+
+- Read-only CLI commands for queue inspection, each with `--json` for scripts
+  and agents: `pgq size` (job counts per entrypoint, status and priority),
+  `pgq throughput` (totals per status, optional `--period`), `pgq log`
+  (recent status changes; `--exceptions` for failures with their error),
+  `pgq jobs` (browse the queue table with `--limit`/`--offset`) and
+  `pgq tables` (persistence, row estimate and size per table).
+- `pgq schedules --json` and `pgq dashboard --json`. The dashboard prints
+  once with `--json`; it rejects `--interval`.
 
 ### Changed
 
