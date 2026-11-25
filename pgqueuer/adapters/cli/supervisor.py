@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import signal
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext, suppress
+from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from datetime import timedelta
 from typing import Protocol, TypeAlias, runtime_checkable
 
@@ -42,17 +42,22 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> Iterator[None]:
         shutdown.set()
 
     loop = asyncio.get_event_loop()
-    with ExitStack() as handlers:
-        try:
-            for signum in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(signum, set_shutdown, signum)
-                handlers.callback(loop.remove_signal_handler, signum)
-        except NotImplementedError:
-            logconfig.logger.warning(
-                "Async signal handlers are not supported on this platform; "
-                "KeyboardInterrupt will still stop the worker."
-            )
+    try:
+        loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
+        loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
+    except NotImplementedError:
+        logconfig.logger.warning(
+            "Async signal handlers are not supported on this platform; "
+            "KeyboardInterrupt will still stop the worker."
+        )
         yield
+        return
+
+    try:
+        yield
+    finally:
+        loop.remove_signal_handler(signal.SIGINT)
+        loop.remove_signal_handler(signal.SIGTERM)
 
 
 async def forward_shutdown(source: asyncio.Event, target: asyncio.Event) -> None:
