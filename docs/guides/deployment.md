@@ -43,6 +43,8 @@ import pgqueuer
 asyncio.run(pgqueuer.run("myapp:main", batch_size=20))
 ```
 
+When `pgqueuer.run` returns, it removes its SIGINT and SIGTERM handlers.
+
 Inside an application that already handles signals, pass your own `shutdown` event.
 `pgqueuer.run` then leaves SIGINT and SIGTERM alone and stops when the event is set:
 

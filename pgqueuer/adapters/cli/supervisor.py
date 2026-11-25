@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager, suppress
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import ExitStack, asynccontextmanager, contextmanager, nullcontext, suppress
 from datetime import timedelta
 from typing import Protocol, TypeAlias, runtime_checkable
 
@@ -31,8 +31,9 @@ def setup_shutdown_handlers(manager: object, shutdown: asyncio.Event) -> Manager
     return manager
 
 
-def setup_signal_handlers(shutdown: asyncio.Event) -> None:
-    """Set *shutdown* on SIGINT/SIGTERM; silently skip on platforms without async signal support."""
+@contextmanager
+def setup_signal_handlers(shutdown: asyncio.Event) -> Iterator[None]:
+    """Set *shutdown* on SIGINT/SIGTERM until exit. Do nothing where async signals fail."""
 
     def set_shutdown(signum: int) -> None:
         logconfig.logger.info("Signal %d received, shutting down.", signum)
@@ -41,14 +42,18 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> None:
         shutdown.set()
 
     loop = asyncio.get_event_loop()
-    try:
-        loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
-        loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
-    except NotImplementedError:
-        logconfig.logger.warning(
-            "Async signal handlers are not supported on this platform; "
-            "KeyboardInterrupt will still stop the worker."
-        )
+    with ExitStack() as handlers:
+        try:
+            loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
+            handlers.callback(loop.remove_signal_handler, signal.SIGINT)
+            loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
+            handlers.callback(loop.remove_signal_handler, signal.SIGTERM)
+        except NotImplementedError:
+            logconfig.logger.warning(
+                "Async signal handlers are not supported on this platform; "
+                "KeyboardInterrupt will still stop the worker."
+            )
+        yield
 
 
 async def forward_shutdown(source: asyncio.Event, target: asyncio.Event) -> None:
@@ -115,43 +120,41 @@ async def runit(
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
 
-    if handle_signals:
-        setup_signal_handlers(shutdown)
+    with setup_signal_handlers(shutdown) if handle_signals else nullcontext():
+        unwritten = UnwrittenJobLogs()
+        while not shutdown.is_set():
+            cycle_shutdown = asyncio.Event()
+            forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
+            failed = False
+            try:
+                async with factories.validate_factory_result(factory()) as entered:
+                    manager = setup_shutdown_handlers(entered, cycle_shutdown)
+                    async with unwritten.around(manager):
+                        await run_manager(
+                            manager,
+                            dequeue_timeout,
+                            batch_size,
+                            mode,
+                            max_concurrent_tasks,
+                            shutdown_on_listener_failure,
+                            heartbeat_timeout,
+                        )
+            except Exception as exc:
+                if not restart_on_failure:
+                    raise
+                failed = True
+                logconfig.logger.exception(
+                    "Error during instance execution.",
+                    exc_info=exc,
+                )
+            finally:
+                await tm.cancel_and_wait(forward_task)
 
-    unwritten = UnwrittenJobLogs()
-    while not shutdown.is_set():
-        cycle_shutdown = asyncio.Event()
-        forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
-        failed = False
-        try:
-            async with factories.validate_factory_result(factory()) as entered:
-                manager = setup_shutdown_handlers(entered, cycle_shutdown)
-                async with unwritten.around(manager):
-                    await run_manager(
-                        manager,
-                        dequeue_timeout,
-                        batch_size,
-                        mode,
-                        max_concurrent_tasks,
-                        shutdown_on_listener_failure,
-                        heartbeat_timeout,
-                    )
-        except Exception as exc:
-            if not restart_on_failure:
-                raise
-            failed = True
-            logconfig.logger.exception(
-                "Error during instance execution.",
-                exc_info=exc,
-            )
-        finally:
-            await tm.cancel_and_wait(forward_task)
+            # Clean completion (drain / signal) ends the supervisor; only failures restart.
+            if shutdown.is_set() or not failed:
+                break
 
-        # Clean completion (drain / signal) ends the supervisor; only failures restart.
-        if shutdown.is_set() or not failed:
-            break
-
-        await await_shutdown_or_timeout(shutdown, restart_delay)
+            await await_shutdown_or_timeout(shutdown, restart_delay)
 
 
 async def run(

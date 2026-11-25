@@ -92,10 +92,9 @@ async def test_setup_signal_handlers(
         mock_loop = MagicMock()
         mock_get_event_loop.return_value = mock_loop
 
-        supervisor.setup_signal_handlers(shutdown_event)
-
-        mock_loop.add_signal_handler.assert_any_call(signal.SIGINT, ANY, signal.SIGINT)
-        mock_loop.add_signal_handler.assert_any_call(signal.SIGTERM, ANY, signal.SIGTERM)
+        with supervisor.setup_signal_handlers(shutdown_event):
+            mock_loop.add_signal_handler.assert_any_call(signal.SIGINT, ANY, signal.SIGINT)
+            mock_loop.add_signal_handler.assert_any_call(signal.SIGTERM, ANY, signal.SIGTERM)
 
 
 async def test_runit_normal_operation(
@@ -634,15 +633,15 @@ async def test_fallback_when_add_signal_handler_is_missing(
 
     caplog.set_level(logging.WARNING)
 
-    supervisor.setup_signal_handlers(asyncio.Event())
-    assert "not supported on this platform" in caplog.text.lower()
+    with supervisor.setup_signal_handlers(asyncio.Event()):
+        assert "not supported on this platform" in caplog.text.lower()
 
 
 async def test_second_sigint_raises_keyboard_interrupt() -> None:
     """The first SIGINT sets shutdown. The second SIGINT raises KeyboardInterrupt (#1133)."""
     shutdown = asyncio.Event()
-    supervisor.setup_signal_handlers(shutdown)
-    os.kill(os.getpid(), signal.SIGINT)
-    await asyncio.wait_for(shutdown.wait(), timeout=1)
-    with pytest.raises(KeyboardInterrupt):
+    with supervisor.setup_signal_handlers(shutdown):
         os.kill(os.getpid(), signal.SIGINT)
+        await asyncio.wait_for(shutdown.wait(), timeout=1)
+        with pytest.raises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGINT)
