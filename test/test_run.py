@@ -66,3 +66,11 @@ async def test_run_installs_signal_handlers_by_default() -> None:
 
     assert loop.remove_signal_handler(signal.SIGINT)
     assert loop.remove_signal_handler(signal.SIGTERM)
+
+
+@pytest.mark.xfail(strict=True, reason="#1133")
+async def test_run_removes_signal_handlers_on_return() -> None:
+    """run() removes its SIGINT/SIGTERM handlers when it returns (#1133)."""
+    await pgqueuer.run(factory, mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(0.1))
+
+    assert asyncio.get_running_loop().remove_signal_handler(signal.SIGTERM) is False
