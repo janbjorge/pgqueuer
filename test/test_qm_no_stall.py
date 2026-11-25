@@ -257,3 +257,26 @@ async def test_drain_ends_when_last_job_end_races_the_check(apgdriver: Driver) -
 async def test_drain_ends_when_last_job_end_races_the_check_inmemory() -> None:
     driver = InMemoryDriver()
     await drain_ends_when_last_job_end_races_the_check(InMemoryQueries(driver=driver), driver)
+
+
+async def worker_holds_one_job(q: RepositoryPort) -> None:
+    """With max_concurrent_tasks=1 the second job stays queued until the first ends (#1150)."""
+    qm = QueueManager(q)
+    gate = Gate()
+    qm.entrypoint("ep")(gate.enter)
+    await q.enqueue(["ep"] * 2, [None] * 2, [0] * 2)
+
+    async with asyncio.timeout(GUARD), worker(qm, gate, batch_size=1, max_concurrent_tasks=1):
+        await gate.started.get()
+        picked = sum(x.count for x in await q.queue_size() if x.status == "picked")
+        assert picked == 1
+        gate.finish.release()
+        await gate.started.get()
+
+
+async def test_worker_holds_one_job(apgdriver: Driver) -> None:
+    await worker_holds_one_job(Queries(apgdriver))
+
+
+async def test_worker_holds_one_job_inmemory() -> None:
+    await worker_holds_one_job(InMemoryQueries(driver=InMemoryDriver()))
