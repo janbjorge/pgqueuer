@@ -41,6 +41,9 @@
 
 ### Fixed
 
+- The `web` extra installs `python-multipart`. The dashboard's requeue and
+  cancel forms need it, and `pip install pgqueuer[web]` alone did not install
+  it, so those actions failed.
 - Drain mode stops as soon as its last job ends. Since #1092 it could miss the
   NOTIFY from that job's end and sit out the whole `dequeue_timeout`, 30 s by
   default, before exiting.

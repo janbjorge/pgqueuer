@@ -74,7 +74,7 @@ opentelemetry = [
     "opentelemetry-semantic-conventions>=0.41b0",
 ]
 fastapi = ["fastapi>=0.100.0"]
-web = ["fastapi>=0.115.0", "jinja2>=3.1", "uvicorn>=0.30"]
+web = ["fastapi>=0.115.0", "jinja2>=3.1", "python-multipart>=0.0.18", "uvicorn>=0.30"]
 
 [dependency-groups]
 test = [
