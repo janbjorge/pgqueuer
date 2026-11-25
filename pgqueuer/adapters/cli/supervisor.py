@@ -44,10 +44,9 @@ def setup_signal_handlers(shutdown: asyncio.Event) -> Iterator[None]:
     loop = asyncio.get_event_loop()
     with ExitStack() as handlers:
         try:
-            loop.add_signal_handler(signal.SIGINT, set_shutdown, signal.SIGINT)
-            handlers.callback(loop.remove_signal_handler, signal.SIGINT)
-            loop.add_signal_handler(signal.SIGTERM, set_shutdown, signal.SIGTERM)
-            handlers.callback(loop.remove_signal_handler, signal.SIGTERM)
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(signum, set_shutdown, signum)
+                handlers.callback(loop.remove_signal_handler, signum)
         except NotImplementedError:
             logconfig.logger.warning(
                 "Async signal handlers are not supported on this platform; "
@@ -106,7 +105,6 @@ async def runit(
     max_concurrent_tasks: int | None,
     shutdown_on_listener_failure: bool,
     heartbeat_timeout: timedelta = timedelta(seconds=30),
-    handle_signals: bool = True,
 ) -> None:
     """Supervise a manager lifecycle; optionally restart after *restart_delay* on failure.
 
@@ -120,41 +118,40 @@ async def runit(
     if restart_delay < timedelta(0):
         raise ValueError(f"'restart_delay' must be >= 0. Got {restart_delay!r}")
 
-    with setup_signal_handlers(shutdown) if handle_signals else nullcontext():
-        unwritten = UnwrittenJobLogs()
-        while not shutdown.is_set():
-            cycle_shutdown = asyncio.Event()
-            forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
-            failed = False
-            try:
-                async with factories.validate_factory_result(factory()) as entered:
-                    manager = setup_shutdown_handlers(entered, cycle_shutdown)
-                    async with unwritten.around(manager):
-                        await run_manager(
-                            manager,
-                            dequeue_timeout,
-                            batch_size,
-                            mode,
-                            max_concurrent_tasks,
-                            shutdown_on_listener_failure,
-                            heartbeat_timeout,
-                        )
-            except Exception as exc:
-                if not restart_on_failure:
-                    raise
-                failed = True
-                logconfig.logger.exception(
-                    "Error during instance execution.",
-                    exc_info=exc,
-                )
-            finally:
-                await tm.cancel_and_wait(forward_task)
+    unwritten = UnwrittenJobLogs()
+    while not shutdown.is_set():
+        cycle_shutdown = asyncio.Event()
+        forward_task = asyncio.create_task(forward_shutdown(shutdown, cycle_shutdown))
+        failed = False
+        try:
+            async with factories.validate_factory_result(factory()) as entered:
+                manager = setup_shutdown_handlers(entered, cycle_shutdown)
+                async with unwritten.around(manager):
+                    await run_manager(
+                        manager,
+                        dequeue_timeout,
+                        batch_size,
+                        mode,
+                        max_concurrent_tasks,
+                        shutdown_on_listener_failure,
+                        heartbeat_timeout,
+                    )
+        except Exception as exc:
+            if not restart_on_failure:
+                raise
+            failed = True
+            logconfig.logger.exception(
+                "Error during instance execution.",
+                exc_info=exc,
+            )
+        finally:
+            await tm.cancel_and_wait(forward_task)
 
-            # Clean completion (drain / signal) ends the supervisor; only failures restart.
-            if shutdown.is_set() or not failed:
-                break
+        # Clean completion (drain / signal) ends the supervisor; only failures restart.
+        if shutdown.is_set() or not failed:
+            break
 
-            await await_shutdown_or_timeout(shutdown, restart_delay)
+        await await_shutdown_or_timeout(shutdown, restart_delay)
 
 
 async def run(
@@ -179,19 +176,21 @@ async def run(
 
         asyncio.run(pgqueuer.run("myapp:create_pgqueuer"))
     """
-    await runit(
-        factories.load_factory(factory) if isinstance(factory, str) else factory,
-        dequeue_timeout=dequeue_timeout,
-        batch_size=batch_size,
-        restart_delay=restart_delay if restart_on_failure else timedelta(0),
-        restart_on_failure=restart_on_failure,
-        shutdown=shutdown or asyncio.Event(),
-        mode=mode,
-        max_concurrent_tasks=max_concurrent_tasks,
-        shutdown_on_listener_failure=shutdown_on_listener_failure,
-        heartbeat_timeout=heartbeat_timeout,
-        handle_signals=shutdown is None,
-    )
+    owns_signals = shutdown is None
+    shutdown = asyncio.Event() if shutdown is None else shutdown
+    with setup_signal_handlers(shutdown) if owns_signals else nullcontext():
+        await runit(
+            factories.load_factory(factory) if isinstance(factory, str) else factory,
+            dequeue_timeout=dequeue_timeout,
+            batch_size=batch_size,
+            restart_delay=restart_delay if restart_on_failure else timedelta(0),
+            restart_on_failure=restart_on_failure,
+            shutdown=shutdown,
+            mode=mode,
+            max_concurrent_tasks=max_concurrent_tasks,
+            shutdown_on_listener_failure=shutdown_on_listener_failure,
+            heartbeat_timeout=heartbeat_timeout,
+        )
 
 
 async def run_manager(
