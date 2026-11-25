@@ -257,7 +257,8 @@ The database drivers read standard PostgreSQL environment variables:
 PgQueuer reads the `PGQUEUER_*` variables once per process, on first use, so set
 them before the process starts.
 
-Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database:
+Use `PGQUEUER_PREFIX` to run multiple isolated PgQueuer instances in the same database.
+`pgq install` and `pgq upgrade` stop with an error when an object name is longer than 63 bytes.
 
 ```bash
 PGQUEUER_PREFIX=billing pgq install

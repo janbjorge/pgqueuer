@@ -65,7 +65,6 @@ def test_the_status_enum_is_named_bare_wherever_it_appears() -> None:
     assert not any(settings.qualified.queue_status_type in text for text in written)
 
 
-@pytest.mark.xfail(strict=True, reason="#1134")
 def test_long_prefix_is_rejected() -> None:
     """A prefix that makes an object name longer than 63 bytes causes an error."""
     with pytest.raises(ValueError, match="63 bytes"):
