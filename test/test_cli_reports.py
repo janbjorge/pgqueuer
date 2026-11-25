@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 from pgqueuer import db, queries
 from pgqueuer.adapters.cli.cli import app
 from pgqueuer.adapters.persistence.qb import DBSettings
+from pgqueuer.domain import models, types
 from test.helpers import env_from_dsn
 
 
@@ -25,6 +26,10 @@ from test.helpers import env_from_dsn
         ("stale", "No stale jobs."),
         ("workers", "No workers are holding picked jobs."),
         ("backlog", "No queued jobs."),
+        ("size", "No jobs in the queue."),
+        ("throughput", "No processed jobs."),
+        ("log", "No log entries."),
+        ("jobs", "No jobs in the queue."),
     ],
 )
 def test_cli_report_empty(dsn: str, command: str, empty_message: str) -> None:
@@ -120,6 +125,120 @@ def test_cli_backlog_json_counts_queued_per_entrypoint(
     assert row["oldest_age_seconds"] >= 3600
 
 
+def test_cli_size_json_counts_per_entrypoint_and_status(dsn: str, pgdriver: db.SyncDriver) -> None:
+    q = queries.SyncQueries(pgdriver)
+    q.enqueue("a", None)
+    q.enqueue("a", None)
+    (picked_id,) = q.enqueue("b", None)
+    pgdriver.fetch(
+        f"UPDATE {DBSettings().queue_table} SET status = 'picked' WHERE id = {picked_id} "
+        "RETURNING id"
+    )
+
+    result = CliRunner().invoke(app, ["size", "--json"], env=env_from_dsn(dsn))
+
+    assert result.exit_code == 0, result.output
+    rows = sorted((r["entrypoint"], r["status"], r["count"]) for r in json.loads(result.stdout))
+    assert rows == [("a", "queued", 2), ("b", "picked", 1)]
+
+
+def test_cli_throughput_json_totals_per_status(dsn: str, pgdriver: db.SyncDriver) -> None:
+    env = env_from_dsn(dsn)
+    queries.SyncQueries(pgdriver).enqueue("tp", None)
+
+    for period in ([], ["--period", "3600"]):
+        result = CliRunner().invoke(app, ["throughput", "--json", *period], env=env)
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout) == [
+            {"entrypoint": "tp", "status": "queued", "total_count": 1}
+        ]
+
+
+def test_cli_log_json_lists_entries_and_filters_exceptions(
+    dsn: str, pgdriver: db.SyncDriver
+) -> None:
+    env = env_from_dsn(dsn)
+    (job_id,) = queries.SyncQueries(pgdriver).enqueue("ep", None)
+    record = models.TracebackRecord.from_exception(ValueError("boom"), types.JobId(job_id))
+    pgdriver.fetch(
+        f"INSERT INTO {DBSettings().queue_table_log} "
+        "(job_id, status, priority, entrypoint, traceback) VALUES "
+        f"({job_id}, 'exception', 0, 'ep', "
+        f"'{record.model_dump_json().replace(chr(39), chr(39) * 2)}') RETURNING id"
+    )
+
+    every = CliRunner().invoke(app, ["log", "--json"], env=env)
+    assert every.exit_code == 0, every.output
+    assert sorted(e["status"] for e in json.loads(every.stdout)) == ["exception", "queued"]
+
+    failures = CliRunner().invoke(app, ["log", "--exceptions", "--json"], env=env)
+    assert failures.exit_code == 0, failures.output
+    (entry,) = json.loads(failures.stdout)
+    assert entry["job_id"] == job_id
+    assert entry["traceback"]["exception_type"] == "ValueError"
+
+    text = CliRunner().invoke(app, ["log", "--exceptions"], env=env)
+    assert text.exit_code == 0, text.output
+    assert "ValueError: boom" in text.stdout
+
+
+def test_cli_jobs_json_pages_and_reports_payload_size(dsn: str, pgdriver: db.SyncDriver) -> None:
+    env = env_from_dsn(dsn)
+    q = queries.SyncQueries(pgdriver)
+    (first,) = q.enqueue("ep", b"\x80\xff\x00")
+    (second,) = q.enqueue("ep", None)
+
+    result = CliRunner().invoke(app, ["jobs", "--json", "-n", "1", "--offset", "1"], env=env)
+    assert result.exit_code == 0, result.output
+    (job,) = json.loads(result.stdout)
+    assert job["id"] == second
+    assert job["payload_bytes"] == 0
+
+    result = CliRunner().invoke(app, ["jobs", "--json", "-n", "1"], env=env)
+    (job,) = json.loads(result.stdout)
+    assert job["id"] == first
+    assert job["payload_bytes"] == 3
+    assert "payload" not in job
+
+
+def test_cli_tables_json_lists_the_installed_tables(dsn: str) -> None:
+    result = CliRunner().invoke(app, ["tables", "--json"], env=env_from_dsn(dsn))
+
+    assert result.exit_code == 0, result.output
+    names = {t["table_name"] for t in json.loads(result.stdout)}
+    settings = DBSettings()
+    assert {settings.queue_table, settings.queue_table_log} <= names
+
+
+def test_cli_schedules_json(dsn: str, pgdriver: db.SyncDriver) -> None:
+    env = env_from_dsn(dsn)
+    empty = CliRunner().invoke(app, ["schedules", "--json"], env=env)
+    assert empty.exit_code == 0, empty.output
+    assert json.loads(empty.stdout) == []
+
+    pgdriver.fetch(
+        f"INSERT INTO {DBSettings().schedules_table} (expression, next_run, entrypoint) "
+        "VALUES ('* * * * *', NOW(), 'tick') RETURNING id"
+    )
+    result = CliRunner().invoke(app, ["schedules", "--json"], env=env)
+    assert result.exit_code == 0, result.output
+    (schedule,) = json.loads(result.stdout)
+    assert (schedule["entrypoint"], schedule["expression"]) == ("tick", "* * * * *")
+
+
+def test_cli_dashboard_json_prints_statistics_once(dsn: str, pgdriver: db.SyncDriver) -> None:
+    env = env_from_dsn(dsn)
+    queries.SyncQueries(pgdriver).enqueue("ep", None)
+
+    result = CliRunner().invoke(app, ["dashboard", "--json"], env=env)
+    assert result.exit_code == 0, result.output
+    (row,) = json.loads(result.stdout)
+    assert (row["entrypoint"], row["status"], row["count"]) == ("ep", "queued", 1)
+
+    rejected = CliRunner().invoke(app, ["dashboard", "--json", "--interval", "1"], env=env)
+    assert rejected.exit_code == 2
+
+
 @asynccontextmanager
 async def psycopg_queries() -> AsyncGenerator[queries.Queries, None]:
     """``--factory`` target: the CLI on psycopg, connected from the PG* env vars."""
@@ -159,8 +278,8 @@ def seed_report_rows(pgdriver: db.SyncDriver) -> None:
 
 @pytest.mark.parametrize(
     "command",
-    [["failed"], ["stale", "--threshold", "0"], ["workers"], ["backlog"]],
-    ids=["failed", "stale", "workers", "backlog"],
+    [["failed"], ["stale", "--threshold", "0"], ["workers"], ["backlog"], ["jobs"]],
+    ids=["failed", "stale", "workers", "backlog", "jobs"],
 )
 @pytest.mark.parametrize(
     "factory",
