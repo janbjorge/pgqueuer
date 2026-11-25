@@ -453,8 +453,8 @@ class QueueManager:
             max_concurrent_tasks = max(100, 2 * batch_size)
         max_concurrent_tasks = max_concurrent_tasks or None
 
-        if max_concurrent_tasks is not None and max_concurrent_tasks < 2 * batch_size:
-            raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
+        if max_concurrent_tasks is not None and max_concurrent_tasks < batch_size:
+            raise RuntimeError("max_concurrent_tasks must be at least the batch size.")
 
         async with (
             buffers.JobStatusLogBuffer(

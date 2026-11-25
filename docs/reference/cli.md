@@ -534,11 +534,11 @@ Start a `QueueManager` to process jobs.
 | `--restart-on-failure` | bool | False | Restart the manager automatically after failures |
 | `--log-level` | str | INFO | Logging level (DEBUG, INFO, WARNING, ERROR) |
 | `--mode` | str | continuous | `continuous` or `drain` |
-| `--max-concurrent-tasks` | int | max(100, 2 × `--batch-size`) | Most jobs this runner holds at once (0 = unlimited). Must be at least twice `--batch-size` |
+| `--max-concurrent-tasks` | int | max(100, 2 × `--batch-size`) | Most jobs this runner holds at once (0 = unlimited). Must be at least `--batch-size` |
 | `--shutdown-on-listener-failure` | bool | False | Shut down if the LISTEN channel health check fails |
 
 ```bash
-# Run with a limit of 20 concurrent tasks (at least twice --batch-size)
+# Run with a limit of 20 concurrent tasks (at least --batch-size)
 pgq run my_module:my_factory --max-concurrent-tasks 20
 
 # Drain mode: process all queued jobs then exit

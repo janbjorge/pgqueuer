@@ -21,7 +21,8 @@ await pgq.run(batch_size=25, dequeue_timeout=timedelta(seconds=10))
 - Increase `batch_size` when jobs are short-lived (< 1 s) and you see many dequeue round-trips
   per second in your query logs.
 - Decrease it when jobs are long-running and you want finer concurrency control.
-- `max_concurrent_tasks` must be at least `2 × batch_size`; PgQueuer enforces this.
+- `max_concurrent_tasks` must be at least `batch_size`; PgQueuer enforces this. Set both to `1`
+  to run one job at a time per worker.
 
 ## Concurrency limits
 

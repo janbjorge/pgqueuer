@@ -481,19 +481,19 @@ async def test_run_manager_invalid_manager() -> None:
         )
 
 
-async def test_run_max_concurrent_tasks_twice_batch_size(
+async def test_run_max_concurrent_tasks_below_batch_size(
     queue_manager: QueueManager,
 ) -> None:
     with pytest.raises(
         RuntimeError,
-        match=r"max_concurrent_tasks must be at least twice the batch size",
+        match=r"max_concurrent_tasks must be at least the batch size",
     ):
         await supervisor.run_manager(
             queue_manager,
             dequeue_timeout=timedelta(seconds=1),
             batch_size=10,
             mode=QueueExecutionMode.continuous,
-            max_concurrent_tasks=10,
+            max_concurrent_tasks=9,
             shutdown_on_listener_failure=False,
         )
 

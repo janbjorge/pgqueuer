@@ -33,6 +33,9 @@
 
 ### Changed
 
+- `max_concurrent_tasks` must now be at least `batch_size`, not twice
+  `batch_size`. `batch_size=1, max_concurrent_tasks=1` runs one job at a time
+  per worker (#1150).
 - A failed listener health check is now logged as an error. With
   `shutdown_on_listener_failure` off, the default, the worker used to keep
   running with no log line: no NOTIFY wake-ups, no job cancellations, only
