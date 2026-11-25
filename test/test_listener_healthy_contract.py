@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Iterator
 from datetime import timedelta
+from functools import partial
 
 import pytest
 
@@ -112,6 +113,48 @@ async def test_failed_periodic_health_check_is_logged(
     assert "listener health check failed" in record.getMessage().lower()
     assert record.exc_info is not None
     assert record.exc_info[0] is FailingListenerError
+
+
+async def test_periodic_health_check_recovers_after_dropped_probes(
+    monkeypatch: pytest.MonkeyPatch,
+    error_records: ErrorRecords,
+) -> None:
+    queries = InMemoryQueries(InMemoryDriver())
+    qm = QueueManager(queries)
+    notify = queries.notify_health_check
+    probe = qm.listener_healthy
+    recovered = asyncio.Event()
+    missed = 0
+
+    async def drop_first_two_probes(health_check_event_id: HealthCheckId) -> None:
+        nonlocal missed
+        if missed < 2:
+            missed += 1
+            return
+        await notify(health_check_event_id)
+
+    async def record_recovery(timeout: timedelta) -> HealthCheckEvent:
+        result = await probe(timeout=timeout)
+        recovered.set()
+        return result
+
+    monkeypatch.setattr(queries, "notify_health_check", drop_first_two_probes)
+    monkeypatch.setattr(qm, "listener_healthy", record_recovery)
+    monkeypatch.setattr(
+        qm,
+        "_run_periodic_health_check",
+        partial(qm._run_periodic_health_check, interval=timedelta(milliseconds=10)),
+    )
+
+    run = asyncio.create_task(qm.run())
+    try:
+        await asyncio.wait_for(recovered.wait(), timeout=1)
+    finally:
+        qm.shutdown.set()
+        await run
+
+    assert missed == 2
+    assert len(error_records.records) == 1
 
 
 async def test_first_probe_waits_for_listen(monkeypatch: pytest.MonkeyPatch) -> None:

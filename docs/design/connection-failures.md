@@ -91,7 +91,8 @@ The asyncpg pool hides the failure. `AsyncpgPoolDriver` keeps its LISTEN
 connection out of the pool, and that connection dies without an error. Queries
 move to fresh pool connections, so the run does not raise and nothing restarts.
 The health check times out and logs an error. Without
-`shutdown_on_listener_failure` that log line is the only sign. The
+`shutdown_on_listener_failure` the worker keeps probing and logs once per outage,
+but does not reconnect the listener on its own. The
 [performance guide](../guides/performance-tuning.md#notify-channel-and-polling-fallback)
 already advises a direct connection for the queue manager, and #951 deprecates
 the pool drivers.

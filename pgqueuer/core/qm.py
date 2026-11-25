@@ -124,20 +124,26 @@ class QueueManager:
     async def _run_periodic_health_check(
         self,
         interval: timedelta = timedelta(seconds=10),
+        *,
+        stop_on_failure: bool,
     ) -> None:
-        """Probe listener health every *interval*; log and re-raise the first failure."""
+        """Probe listener health and log the first failure in each outage."""
         await self.listening.wait()
+        probe_failed = False
         while not self.shutdown.is_set():
             try:
                 await self.listener_healthy(timeout=interval)
             except Exception:
-                # Without shutdown_on_listener_failure nothing reads this task's exception.
-                logconfig.logger.exception(
-                    "Listener health check failed: NOTIFY wake-ups and job cancellations "
-                    "no longer reach this worker. Unless shutdown_on_listener_failure is set, "
-                    "it keeps running and only polls every dequeue timeout: restart it."
-                )
-                raise
+                if not probe_failed:
+                    logconfig.logger.exception(
+                        "Listener health check failed: NOTIFY wake-ups and job cancellations "
+                        "may not reach this worker."
+                    )
+                if stop_on_failure:
+                    raise
+                probe_failed = True
+            else:
+                probe_failed = False
             with suppress(TimeoutError):
                 async with asyncio.timeout(interval.total_seconds()):
                     await self.shutdown.wait()
@@ -456,6 +462,9 @@ class QueueManager:
         if max_concurrent_tasks is not None and max_concurrent_tasks < 2 * batch_size:
             raise RuntimeError("max_concurrent_tasks must be at least twice the batch size.")
 
+        stop_on_listener_failure = (
+            shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
+        )
         async with (
             buffers.JobStatusLogBuffer(
                 max_size=batch_size,
@@ -479,7 +488,9 @@ class QueueManager:
             # Listed after the driver so they are cancelled before it closes;
             # a failing loop body must not leak tasks probing a closing driver.
             tm.cancel_on_exit(
-                asyncio.create_task(self._run_periodic_health_check())
+                asyncio.create_task(
+                    self._run_periodic_health_check(stop_on_failure=stop_on_listener_failure)
+                )
             ) as periodic_health_check_task,
             (
                 tm.cancel_on_exit(
@@ -532,12 +543,6 @@ class QueueManager:
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
 
-                # A failed health check ends the wait at once, not at the next
-                # dequeue_timeout. Only when it shuts us down: a finished task
-                # would otherwise wake every wait and spin the loop.
-                wake_on_listener_failure = (
-                    shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
-                )
                 timeout = await self._effective_dequeue_timeout(
                     dequeue_timeout,
                     max_concurrent_tasks,
@@ -548,7 +553,8 @@ class QueueManager:
                     listeners.wait_for_notice_event(notice_event_listener, timeout)
                 ) as event_task:
                     wake_on: set[asyncio.Task[object]] = {shutdown_task, event_task}
-                    if wake_on_listener_failure:
+                    # Fail-fast workers do not wait out dequeue_timeout on a failed probe.
+                    if stop_on_listener_failure:
                         wake_on.add(periodic_health_check_task)
                     await asyncio.wait(wake_on, return_when=asyncio.FIRST_COMPLETED)
 
