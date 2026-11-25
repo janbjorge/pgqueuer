@@ -88,7 +88,6 @@ async def test_a_table_owning_no_sequence_is_inspected(apgdriver: AsyncpgDriver)
     assert (await queries.plan_upgrade()).statements == ()
 
 
-@pytest.mark.xfail(strict=True, reason="#1135")
 async def test_queue_table_outside_current_schema_stops_inspect(apgdriver: AsyncpgDriver) -> None:
     """The install check stops when search_path resolves the queue table to a later schema."""
     await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
