@@ -170,13 +170,12 @@ That is the whole setup: PostgreSQL and your application code.
     table for human review. Inspect with `pgq failed`, fix the upstream
     issue, and re-queue with `pgq requeue <id>`.
 
--   **MCP Server**
+-   **Inspect from the CLI**
 
     ---
 
-    Optional MCP server with 11 inspection tools: queue size, throughput,
-    failures, stale jobs, schedules, schema. Works with Claude, Cursor,
-    and any MCP client.
+    `pgq size`, `throughput`, `log`, `jobs`, `stale`, `workers`, `backlog`
+    and `tables` show queue state. Add `--json` for scripts and agents.
 
 </div>
 

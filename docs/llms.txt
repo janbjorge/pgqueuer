@@ -26,7 +26,6 @@ can enqueue jobs through psycopg. Applications own payload serialization and pas
 - [Web dashboard](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/web-dashboard.md): Queue and worker operations
 - [Prometheus metrics](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/prometheus.md): Metrics endpoint and FastAPI router
 - [Distributed tracing](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/tracing.md): Logfire, Sentry, and OpenTelemetry
-- [MCP server](https://raw.githubusercontent.com/janbjorge/pgqueuer/main/docs/integrations/mcp-server.md): Queue inspection tools for agents
 
 ## Reference
 

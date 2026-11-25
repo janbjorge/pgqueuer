@@ -119,7 +119,6 @@ nav:
       - In-Memory Adapter: reference/in-memory.md
   - Integrations:
       - Web Dashboard: integrations/web-dashboard.md
-      - MCP Server: integrations/mcp-server.md
       - Prometheus Metrics: integrations/prometheus.md
       - Distributed Tracing: integrations/tracing.md
       - PostgREST: integrations/postgrest.md

@@ -1,7 +1,7 @@
 """Presentation-agnostic queue insights and management services.
 
 These services are the single reusable API for queue introspection and job
-actions. Frontends (web dashboard, MCP server, CLI, Prometheus exporters)
+actions. Frontends (web dashboard, CLI, Prometheus exporters)
 consume them instead of talking to SQL or ``Queries`` directly.
 """
 

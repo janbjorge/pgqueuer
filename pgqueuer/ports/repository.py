@@ -193,7 +193,7 @@ class QueueRepositoryPort(Protocol):
 
 
 class InsightsRepositoryPort(Protocol):
-    """Read-only queue introspection consumed by presentation layers (web, MCP, CLI)."""
+    """Read-only queue introspection consumed by presentation layers (web, CLI)."""
 
     async def queue_size(self) -> list[models.QueueStatistics]: ...
 

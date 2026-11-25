@@ -667,6 +667,39 @@ See `examples/consumer.py` in the repository for a working example.
 
 ---
 
+## Migrating from the MCP server
+
+PgQueuer 2.2 removes the MCP server (`python -m pgqueuer.adapters.mcp`) and
+the `pgqueuer[mcp]` extra. Agents and scripts call the `pgq` commands below
+instead. Each takes `--json` and prints a JSON array on stdout. Remove the
+`pgqueuer` entry from your MCP client configuration.
+
+| MCP tool | `pgq` command |
+|----------|---------------|
+| `queue_size` | [`pgq size --json`](#size) |
+| `queue_stats` | [`pgq dashboard --json`](#dashboard) |
+| `throughput_summary` | [`pgq throughput --json`](#throughput) |
+| `failed_jobs` | [`pgq log --exceptions --json`](#log) |
+| `queue_log` | [`pgq log --json`](#log) |
+| `queue_table_info` | [`pgq jobs --json`](#jobs) |
+| `schema_info` | [`pgq tables --json`](#tables) |
+| `schedules` | [`pgq schedules --json`](#schedules) |
+| `stale_jobs` | [`pgq stale --json`](#stale) |
+| `active_workers` | [`pgq workers --json`](#workers) |
+| `queue_age` | [`pgq backlog --json`](#backlog) |
+
+Differences from the MCP tools:
+
+- Time arguments are seconds, not ISO-8601 durations: `pgq throughput --period 3600`
+  replaces `period="PT1H"`, and `pgq stale --threshold 1800` replaces
+  `threshold="PT30M"`.
+- `pgq jobs --json` reports the payload as `payload_bytes`, its size, not the
+  bytes.
+- `pgq dashboard --json` has no period filter. Use `pgq throughput --period`
+  for totals over a window.
+
+---
+
 ## Exit codes
 
 Scripts and agents should branch on the exit code, not on output text. The

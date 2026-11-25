@@ -382,8 +382,6 @@ Remove any imports of `build_notify_query` from
 - `on_failure="hold"` to park failed jobs instead of deleting them; see
   [Holding Failed Jobs](../guides/hold-failed-jobs.md). Pairs with `pgq failed`
   and `pgq requeue`.
-- MCP server for read-only queue introspection; see
-  [MCP Server](../integrations/mcp-server.md).
 - `ScheduleContext` gives scheduled tasks access to the same shared `resources`
   mapping as queue handlers.
 
