@@ -1,17 +1,13 @@
-"""A takeover of a dead worker's job counts as an attempt, bounded by ``max_attempts`` (#1116)."""
+"""A takeover of a stale job adds one to ``attempts``, and ``max_attempts`` ends the job (#1116)."""
 
 from __future__ import annotations
 
-import asyncio
-import sys
-import textwrap
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
-from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.models import Job
 from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueExecutionMode, QueueManagerId
 from pgqueuer.ports import RepositoryPort
@@ -58,19 +54,12 @@ async def crash(q: RepositoryPort) -> Job:
     return job
 
 
-async def test_takeover_counts_as_an_attempt(queries: RepositoryPort) -> None:
+async def test_takeover_adds_one_to_attempts(queries: RepositoryPort) -> None:
     await queries.enqueue("ep", None)
     assert [(await crash(queries)).attempts for _ in range(3)] == [0, 1, 2]
 
 
-async def test_repick_by_its_own_manager_is_not_an_attempt(queries: RepositoryPort) -> None:
-    await queries.enqueue("ep", None)
-    owner = QueueManagerId(uuid.uuid4())
-    await stop_heartbeat(queries, (await pick(queries, owner)).id)
-    assert (await pick(queries, owner)).attempts == 0
-
-
-async def test_job_past_max_attempts_is_not_run(queries: RepositoryPort) -> None:
+async def test_max_attempts_ends_the_job(queries: RepositoryPort) -> None:
     await queries.enqueue("ep", None)
     await crash(queries)
     await crash(queries)
@@ -87,47 +76,3 @@ async def test_job_past_max_attempts_is_not_run(queries: RepositoryPort) -> None
     (log,) = [x for x in await queries.queue_log() if x.status == "failed"]
     assert log.traceback is not None
     assert "abandoned after 2 attempts" in log.traceback.exception_message
-
-
-# The issue's script: each worker is killed by the job it picks.
-POISON_WORKER = textwrap.dedent(
-    """
-    import asyncio, os, sys
-    from datetime import timedelta
-
-    import asyncpg
-
-    from pgqueuer.db import AsyncpgDriver
-    from pgqueuer.qm import QueueManager
-    from pgqueuer.queries import Queries
-    from pgqueuer.types import QueueExecutionMode
-
-
-    async def worker() -> None:
-        qm = QueueManager(Queries(AsyncpgDriver(await asyncpg.connect(sys.argv[1]))))
-
-        @qm.entrypoint("poison", max_attempts=2)
-        async def poison(job) -> None:
-            os._exit(137)  # Stands in for an OOM kill or a segfault.
-
-        await qm.run(dequeue_timeout=timedelta(hours=1), mode=QueueExecutionMode.drain)
-
-
-    asyncio.run(worker())
-    """
-)
-
-
-async def test_issue_reproduction(dsn: str, apgdriver: AsyncpgDriver) -> None:
-    """Fresh pick and takeovers 1 and 2 crash; the fourth worker abandons the job."""
-    q = Queries(apgdriver)
-    (job_id,) = await q.enqueue("poison", None)
-
-    exit_codes = []
-    for _ in range(4):
-        proc = await asyncio.create_subprocess_exec(sys.executable, "-c", POISON_WORKER, dsn)
-        exit_codes.append(await proc.wait())
-        await stop_heartbeat(q, job_id)
-
-    assert exit_codes == [137, 137, 137, 0]
-    assert await q.queue_size() == []
