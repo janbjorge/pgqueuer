@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from pgqueuer.adapters.cli import cli, supervisor
@@ -26,3 +27,10 @@ def test_run_passes_enums_not_strings(monkeypatch: pytest.MonkeyPatch, flag: lis
     assert result.exit_code == 0, result.output
     assert isinstance(seen["level"], logconfig.LogLevel)
     assert isinstance(seen["mode"], types.QueueExecutionMode)
+
+
+def test_pg_dsn_option_does_not_read_pgdsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The --pg-dsn option does not read PGDSN (#1126)."""
+    monkeypatch.setenv("PGDSN", "postgresql://example/libpq")
+    ctx = typer.main.get_command(cli.app).make_context("pgq", ["install"])
+    assert not ctx.params["pg_dsn"]
