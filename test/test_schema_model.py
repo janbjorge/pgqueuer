@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pgqueuer.domain.schema import model
 from pgqueuer.domain.schema.declaration import retired, target
 from pgqueuer.domain.settings import DBSettings
@@ -61,6 +63,12 @@ def test_the_status_enum_is_named_bare_wherever_it_appears() -> None:
     ]
     assert any(settings.queue_status_type in text for text in written)
     assert not any(settings.qualified.queue_status_type in text for text in written)
+
+
+def test_long_prefix_is_rejected() -> None:
+    """A prefix that makes an object name longer than 63 bytes causes an error."""
+    with pytest.raises(ValueError, match="63 bytes"):
+        target(DBSettings(prefix="a" * 40))
 
 
 def test_retired_names_are_not_in_target() -> None:

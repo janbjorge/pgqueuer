@@ -30,7 +30,7 @@ def target(settings: DBSettings) -> Schema:
         *queue_log_indexes(settings),
         *statistics_indexes(settings),
     )
-    return Schema(
+    schema = Schema(
         enums=(
             EnumType(
                 name=TypeName(settings.queue_status_type),
@@ -42,6 +42,22 @@ def target(settings: DBSettings) -> Schema:
         functions=(notify_function(settings),),
         triggers=(notify_trigger(settings),),
     )
+    # PostgreSQL truncates names longer than 63 bytes. Install and upgrade then use incorrect names.
+    names = (
+        settings.channel,
+        *(enum.name for enum in schema.enums),
+        *(table.name for table in schema.tables),
+        *(index.name for index in schema.indexes),
+        *(function.name for function in schema.functions),
+        *(trigger.name for trigger in schema.triggers),
+    )
+    for name in names:
+        if len(name.encode()) > 63:
+            raise ValueError(
+                f"Object name {name!r} is longer than 63 bytes. PostgreSQL truncates it. "
+                "Use a shorter prefix or name."
+            )
+    return schema
 
 
 def retired(settings: DBSettings) -> Retired:
