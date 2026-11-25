@@ -252,6 +252,17 @@ class TestActions:
         )
         assert response.status_code == 204
 
+    async def test_foreign_origin_post_forbidden(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        """A POST from a foreign Origin without Sec-Fetch-Site receives 403 (#1128)."""
+        (job_id,) = await queries.enqueue("ep", None)
+        response = await client.post(
+            f"/jobs/{job_id}/cancel",
+            headers={"origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
+
 
 class TestBasicAuth:
     def test_no_env_means_no_dependency(self, monkeypatch: pytest.MonkeyPatch) -> None:
