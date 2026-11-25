@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -635,3 +636,13 @@ async def test_fallback_when_add_signal_handler_is_missing(
 
     supervisor.setup_signal_handlers(asyncio.Event())
     assert "not supported on this platform" in caplog.text.lower()
+
+
+async def test_second_sigint_raises_keyboard_interrupt() -> None:
+    """The first SIGINT sets shutdown. The second SIGINT raises KeyboardInterrupt (#1133)."""
+    shutdown = asyncio.Event()
+    supervisor.setup_signal_handlers(shutdown)
+    os.kill(os.getpid(), signal.SIGINT)
+    await asyncio.wait_for(shutdown.wait(), timeout=1)
+    with pytest.raises(KeyboardInterrupt):
+        os.kill(os.getpid(), signal.SIGINT)
