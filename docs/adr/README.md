@@ -28,6 +28,7 @@ Conventions:
 - [ADR-0016: Schema upgrades are computed from the live database](ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
 - [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
 - [ADR-0025: The schema contract is a declared manifest](ADR-0025-the-schema-contract-is-a-declared-manifest.md)
+- [ADR-0026: The code that makes a connection controls its lifecycle](ADR-0026-connection-creator-controls-its-lifecycle.md)
 
 ## Backlog
 
