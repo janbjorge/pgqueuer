@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from datetime import timedelta
-from typing import assert_never
+from typing import ClassVar, assert_never
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.composer import ComposedQuery, QueryTemplate, SqlComposer
@@ -46,6 +46,22 @@ class QueryBuilderEnvironment:
     """DDL/utility query builder bound to a :class:`DBSettings`."""
 
     settings: DBSettings
+
+    QUEUE_AUTOVACUUM: ClassVar[Mapping[str, str]] = {
+        "autovacuum_vacuum_scale_factor": "0.01",
+        "autovacuum_vacuum_threshold": "1000",
+        "autovacuum_analyze_scale_factor": "0.02",
+        "autovacuum_analyze_threshold": "500",
+        "autovacuum_vacuum_cost_limit": "10000",
+        "autovacuum_vacuum_cost_delay": "0",
+        "fillfactor": "70",
+    }
+    LOG_AUTOVACUUM: ClassVar[Mapping[str, str]] = {
+        "autovacuum_vacuum_scale_factor": "0.95",
+        "autovacuum_vacuum_threshold": "1000000",
+        "autovacuum_analyze_scale_factor": "0.05",
+        "autovacuum_analyze_threshold": "10000",
+    }
 
     @property
     def qualified(self) -> QualifiedNames:
@@ -137,80 +153,36 @@ class QueryBuilderEnvironment:
     ) -> Generator[str, None, None]:
         """ALTER statements for *durability*, or the configured level when None."""
         config = (self.settings.durability if durability is None else durability).config
-        yield f"""ALTER TABLE {self.qualified.queue_table} SET {"LOGGED" if config.queue_table == "" else "UNLOGGED"};"""  # noqa: E501
-        yield f"""ALTER TABLE {self.qualified.queue_table_log} SET {"LOGGED" if config.queue_log_table == "" else "UNLOGGED"};"""  # noqa: E501
-        yield f"""ALTER TABLE {self.qualified.statistics_table} SET {"LOGGED" if config.statistics_table == "" else "UNLOGGED"};"""  # noqa: E501
-        yield f"""ALTER TABLE {self.qualified.schedules_table} SET {"LOGGED" if config.schedules_table == "" else "UNLOGGED"};"""  # noqa: E501
+        policies = {
+            self.qualified.queue_table: config.queue_table,
+            self.qualified.queue_table_log: config.queue_log_table,
+            self.qualified.statistics_table: config.statistics_table,
+            self.qualified.schedules_table: config.schedules_table,
+        }
+        for table, policy in policies.items():
+            yield f"ALTER TABLE {table} SET {'LOGGED' if policy == '' else 'UNLOGGED'};"
+
+    def autovacuum_settings(self) -> dict[str, Mapping[str, str]]:
+        return {
+            self.qualified.queue_table: self.QUEUE_AUTOVACUUM,
+            self.qualified.schedules_table: self.QUEUE_AUTOVACUUM,
+            self.qualified.queue_table_log: self.LOG_AUTOVACUUM,
+            self.qualified.statistics_table: self.LOG_AUTOVACUUM,
+        }
 
     def build_optimize_autovacuum_query(self) -> str:
-        return f"""ALTER TABLE {self.qualified.queue_table} SET (
-    autovacuum_vacuum_scale_factor   = 0.01,
-    autovacuum_vacuum_threshold      = 1000,
-    autovacuum_analyze_scale_factor  = 0.02,
-    autovacuum_analyze_threshold     = 500,
-    autovacuum_vacuum_cost_limit     = 10000,
-    autovacuum_vacuum_cost_delay     = 0,
-    fillfactor                       = 70
-);
-
-ALTER TABLE {self.qualified.schedules_table} SET (
-autovacuum_vacuum_scale_factor   = 0.01,
-autovacuum_vacuum_threshold      = 1000,
-autovacuum_analyze_scale_factor  = 0.02,
-autovacuum_analyze_threshold     = 500,
-autovacuum_vacuum_cost_limit     = 10000,
-autovacuum_vacuum_cost_delay     = 0,
-fillfactor                       = 70
-);
-
-ALTER TABLE {self.qualified.queue_table_log} SET (
-    autovacuum_vacuum_scale_factor   = 0.95,
-    autovacuum_vacuum_threshold      = 1000000,
-    autovacuum_analyze_scale_factor  = 0.05,
-    autovacuum_analyze_threshold     = 10000
-);
-
-ALTER TABLE {self.qualified.statistics_table} SET (
-    autovacuum_vacuum_scale_factor   = 0.95,
-    autovacuum_vacuum_threshold      = 1000000,
-    autovacuum_analyze_scale_factor  = 0.05,
-    autovacuum_analyze_threshold     = 10000
-);"""
+        statements = []
+        for table, block in self.autovacuum_settings().items():
+            params = ",\n".join(f"    {param:<32} = {value}" for param, value in block.items())
+            statements.append(f"ALTER TABLE {table} SET (\n{params}\n);")
+        return "\n\n".join(statements)
 
     def build_optimize_autovacuum_rollback_query(self) -> str:
-        return f"""ALTER TABLE {self.qualified.queue_table} RESET (
-    autovacuum_vacuum_scale_factor,
-    autovacuum_vacuum_threshold,
-    autovacuum_analyze_scale_factor,
-    autovacuum_analyze_threshold,
-    autovacuum_vacuum_cost_limit,
-    autovacuum_vacuum_cost_delay,
-    fillfactor
-);
-
-ALTER TABLE {self.qualified.schedules_table} RESET (
-autovacuum_vacuum_scale_factor,
-autovacuum_vacuum_threshold,
-autovacuum_analyze_scale_factor,
-autovacuum_analyze_threshold,
-autovacuum_vacuum_cost_limit,
-autovacuum_vacuum_cost_delay,
-fillfactor
-);
-
-ALTER TABLE {self.qualified.queue_table_log} RESET (
-    autovacuum_vacuum_scale_factor,
-    autovacuum_vacuum_threshold,
-    autovacuum_analyze_scale_factor,
-    autovacuum_analyze_threshold
-);
-
-ALTER TABLE {self.qualified.statistics_table} RESET (
-    autovacuum_vacuum_scale_factor,
-    autovacuum_vacuum_threshold,
-    autovacuum_analyze_scale_factor,
-    autovacuum_analyze_threshold
-);"""
+        statements = []
+        for table, block in self.autovacuum_settings().items():
+            params = ",\n".join(f"    {param}" for param in block)
+            statements.append(f"ALTER TABLE {table} RESET (\n{params}\n);")
+        return "\n\n".join(statements)
 
 
 @dataclasses.dataclass
