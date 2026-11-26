@@ -183,6 +183,28 @@ def test_cli_upgrade_reports_drift_without_a_traceback(dsn: str) -> None:
     assert result.stdout.strip() == ""
 
 
+def test_cli_verify_names_a_missing_column(dsn: str) -> None:
+    table = DBSettings().queue_table
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f"ALTER TABLE {table} DROP COLUMN headers".encode())
+
+    result = CliRunner().invoke(app, ["verify", "--expect", "present"], env=env_from_dsn(dsn))
+
+    assert result.exit_code == 1
+    assert f"missing column '{table}.headers'" in result.stdout
+
+
+def test_cli_verify_warns_on_a_missing_non_unique_index(dsn: str) -> None:
+    name = f"{DBSettings().queue_table}_ep_ea_idx"
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(f"DROP INDEX {name}".encode())
+
+    result = CliRunner().invoke(app, ["verify", "--expect", "present"], env=env_from_dsn(dsn))
+
+    assert result.exit_code == 0, result.stdout
+    assert f"warning: missing index '{name}'" in result.stdout
+
+
 @pytest.mark.parametrize("flag", ["--durability", "-d"])
 def test_cli_upgrade_rejects_a_durability_flag(flag: str) -> None:
     result = CliRunner().invoke(app, ["upgrade", flag, "volatile"])

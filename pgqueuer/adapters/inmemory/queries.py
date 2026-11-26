@@ -84,6 +84,9 @@ class InMemoryQueries:
     async def upgrade(self) -> None:
         pass
 
+    async def verify_schema(self) -> None:
+        pass
+
     async def uninstall(self) -> None:
         self.job_table.clear(None)
         self.logs.wipe()

@@ -115,14 +115,20 @@ naming the column and both types; alter it by hand and re-run.
 
 ### `verify`
 
-Ensure PgQueuer tables, triggers, and functions exist (or are absent).
+Ensure PgQueuer database objects exist (or are absent).
 
 **Options:**
 
 - `--expect` *(required)*: `present` or `absent`.
 
-Prints a message for each missing or unexpected object. Exits with code `1` if any
-mismatches are found; `0` otherwise.
+With `present`, checks every table, column, index and enum label the schema
+declares, plus the notify function and trigger, by name. It runs the same check
+a worker runs at startup. Each missing object is printed. A missing non-unique
+index only slows queries: it prints as a `warning:` line and does not change
+the exit code. With `absent`, checks the tables, the function and the trigger.
+
+Exits with code `1` if an object a worker needs is missing (`present`) or any
+object is found (`absent`); `0` otherwise.
 
 ```bash
 pgq verify --expect present
@@ -515,8 +521,8 @@ pgq tables
 pgq tables --json
 ```
 
-To check that the PgQueuer tables, the notify function and the trigger exist, use
-[`pgq verify`](#verify). It does not check that the schema is current.
+To check that every declared PgQueuer object exists, use
+[`pgq verify`](#verify). It checks names only, not that the schema is current.
 
 ---
 
@@ -715,7 +721,8 @@ text output of commands is meant for humans and may change between releases.
 Code `1` is returned for:
 
 - `install`: PgQueuer is already installed in the target schema.
-- `verify`: at least one object is missing (`--expect present`) or unexpected
+- `verify`: an object a worker needs is missing (`--expect present`; a
+  missing non-unique index only warns) or an object is unexpected
   (`--expect absent`).
 - `upgrade`: the live schema has drifted from what this release can upgrade.
 - `queue`: a duplicate `--dedupe-key` with `--on-conflict raise`.

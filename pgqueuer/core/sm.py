@@ -12,6 +12,7 @@ from pgqueuer.core import executors, logconfig, tm
 from pgqueuer.domain import models, types
 from pgqueuer.domain.types import ScheduleId
 from pgqueuer.ports import RepositoryPort
+from pgqueuer.ports.repository import SchemaVerifier
 
 
 @dataclasses.dataclass
@@ -89,13 +90,14 @@ class SchedulerManager:
 
     async def run(self) -> None:
         """Poll for due schedules and dispatch them until shutdown."""
-        if not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
+        if isinstance(self.queries, SchemaVerifier):
+            await self.queries.verify_schema()
+        elif not (await self.queries.has_table(self.queries.qbe.settings.schedules_table)):
             raise RuntimeError(
                 f"The {self.queries.qbe.settings.schedules_table} table is missing "
                 "please run 'pgq upgrade'"
             )
-
-        if not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
+        elif not (await self.queries.has_table(self.queries.qbe.settings.queue_table_log)):
             raise RuntimeError(
                 f"The {self.queries.qbe.settings.queue_table_log} table is missing "
                 "please run 'pgq upgrade'"

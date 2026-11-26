@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import timedelta
-from typing import Literal, Protocol, overload
+from typing import Literal, Protocol, overload, runtime_checkable
 
 from pgqueuer.domain import models, types
 from pgqueuer.domain.settings import DBSettings
@@ -319,3 +319,12 @@ class SchemaManagementPort(Protocol):
     async def has_function(self, function: str) -> bool: ...
 
     async def has_trigger(self, trigger: str) -> bool: ...
+
+
+@runtime_checkable
+class SchemaVerifier(Protocol):
+    """Repository that checks the installed schema against its own declaration."""
+
+    async def verify_schema(self) -> None:
+        """Raise RuntimeError naming every missing object a worker cannot run without."""
+        ...

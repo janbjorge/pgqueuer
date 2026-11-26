@@ -326,6 +326,38 @@ def install(
     typer.secho(f"Installed PgQueuer schema (durability={durability.value}).", err=True)
 
 
+async def verify_present(q: queries.Queries) -> int:
+    """Exit code 1 only for objects that stop a worker; a missing speed-only index warns."""
+    found = await q.missing_schema()
+    for entry in found.speed_only:
+        print(f"warning: missing {entry.describe()}, queries run slower without it")
+    for entry in found.blocking:
+        print(f"missing {entry.describe()}")
+    if not found.blocking:
+        print("All required PgQueuer database objects are present.")
+    return 1 if found.blocking else 0
+
+
+async def verify_absent(q: queries.Queries) -> int:
+    settings = q.qbe.settings
+    divergence = [
+        f"unexpected table '{table}'"
+        for table in (
+            settings.queue_table,
+            settings.statistics_table,
+            settings.schedules_table,
+            settings.queue_table_log,
+        )
+        if await q.has_table(table)
+    ]
+    if await q.has_function(settings.function):
+        divergence.append(f"unexpected function '{settings.function}'")
+    if await q.has_trigger(settings.trigger):
+        divergence.append(f"unexpected trigger '{settings.trigger}'")
+    print("\n".join(divergence) if divergence else "No PgQueuer database objects found")
+    return 1 if divergence else 0
+
+
 @app.command(help="Verify PgQueuer database objects.")
 def verify(
     ctx: Context,
@@ -336,40 +368,13 @@ def verify(
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
-            expect_present = expect == VerifyMode.PRESENT
-            divergence = list[str]()
-
-            required_tables = [
-                q.qbe.settings.queue_table,
-                q.qbe.settings.statistics_table,
-                q.qbe.settings.schedules_table,
-                q.qbe.settings.queue_table_log,
-            ]
-
-            for table in required_tables:
-                exists = await q.has_table(table)
-                if expect_present != exists:
-                    state = "missing" if expect_present else "unexpected"
-                    divergence.append(f"{state} table '{table}'")
-
-            func_exists = await q.has_function(q.qbe.settings.function)
-            if expect_present != func_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} function '{q.qbe.settings.function}'")
-
-            trig_exists = await q.has_trigger(q.qbe.settings.trigger)
-            if expect_present != trig_exists:
-                state = "missing" if expect_present else "unexpected"
-                divergence.append(f"{state} trigger '{q.qbe.settings.trigger}'")
-
-            if divergence:
-                print("\n".join(divergence))
-            elif expect == VerifyMode.PRESENT:
-                print("All required PgQueuer database objects are present.")
+            if expect is VerifyMode.PRESENT:
+                code = await verify_present(q)
+            elif expect is VerifyMode.ABSENT:
+                code = await verify_absent(q)
             else:
-                print("No PgQueuer database objects found")
-
-            raise typer.Exit(code=1 if divergence else 0)
+                assert_never(expect)
+            raise typer.Exit(code=code)
 
     asyncio_run(run())
 
