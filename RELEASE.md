@@ -59,6 +59,9 @@
   poll. The batch size is now written into the statement as an integer
   literal, so the plan PostgreSQL caches for the prepared dequeue sees it
   too (#1071).
+- `QueueManager.run()` refuses to start when the notify function or the
+  notify trigger is missing. A worker used to start without them, and
+  enqueues then sent no NOTIFY. `pgq upgrade` recreates both.
 
 ---
 
