@@ -25,6 +25,7 @@ from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver, PsycopgDriver
 from pgqueuer.models import Job
 from pgqueuer.ports import RepositoryPort
+from pgqueuer.ports.tracing import TracingProtocol
 from pgqueuer.queries import Queries
 
 
@@ -185,24 +186,27 @@ class DrainSettings(BaseModel):
 _shared_inmem: RepositoryPort | None = None
 
 
-async def make_queries(driver: DriverEnum, conninfo: str = "") -> RepositoryPort:
+async def make_queries(
+    driver: DriverEnum, tracer: TracingProtocol | None, conninfo: str = ""
+) -> RepositoryPort:
     global _shared_inmem  # noqa: PLW0603 - in-memory store shared by producer and consumer
     match driver:
         case "apg":
-            return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)))
+            return Queries(AsyncpgDriver(await asyncpg.connect(dsn=conninfo)), tracer=tracer)
         case "apgpool":
             pool = await asyncpg.create_pool(dsn=conninfo)
             assert pool is not None
-            return Queries(AsyncpgPoolDriver(pool))
+            return Queries(AsyncpgPoolDriver(pool), tracer=tracer)
         case "psy":
             return Queries(
                 PsycopgDriver(
                     await psycopg.AsyncConnection.connect(conninfo=conninfo, autocommit=True)
-                )
+                ),
+                tracer=tracer,
             )
         case "mem":
             if _shared_inmem is None:
-                _shared_inmem = InMemoryQueries(driver=InMemoryDriver())
+                _shared_inmem = InMemoryQueries(driver=InMemoryDriver(), tracer=tracer)
             return _shared_inmem
     raise NotImplementedError(driver)
 
@@ -259,6 +263,7 @@ class ThroughputStrategy:
     """Replicate the original benchmark measuring throughput."""
 
     settings: ThroughputSettings
+    tracer: TracingProtocol | None
     shutdown: asyncio.Event = dataclass_field(
         default_factory=asyncio.Event,
         init=False,
@@ -276,15 +281,18 @@ class ThroughputStrategy:
         cnt = count()
         tasks = []
         for _ in range(self.settings.enqueue):
-            q = await make_queries(self.settings.driver)
+            q = await make_queries(self.settings.driver, self.tracer)
             p = Producer(self.shutdown, q, self.settings.enqueue_batch_size, cnt)
             tasks.append(p.run())
         await asyncio.gather(*tasks)
 
     async def run_dequeuers(self) -> None:
-        queries = [await make_queries(self.settings.driver) for _ in range(self.settings.dequeue)]
+        queries = [
+            await make_queries(self.settings.driver, self.tracer)
+            for _ in range(self.settings.dequeue)
+        ]
         for q in queries:
-            self.pgqs.append(PgQueuer(q.driver, queries=q))
+            self.pgqs.append(PgQueuer(q.driver, queries=q, tracer=self.tracer))
         with job_progress_bar() as bar:
             tasks = [
                 Consumer(pgq, self.settings.dequeue_batch_size, bar).run() for pgq in self.pgqs
@@ -305,7 +313,7 @@ class ThroughputStrategy:
         loop.add_signal_handler(signal.SIGTERM, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver)
+        queries = await make_queries(self.settings.driver, self.tracer)
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
@@ -334,7 +342,7 @@ class ThroughputStrategy:
             if not task.cancelled() and (exc := task.exception()):
                 raise exc
 
-        qsize = await (await make_queries(self.settings.driver)).queue_size()
+        qsize = await (await make_queries(self.settings.driver, self.tracer)).queue_size()
         return BenchmarkResult(
             created_at=datetime.now(UTC),
             driver=self.settings.driver,
@@ -356,6 +364,7 @@ class DrainStrategy:
     """Benchmark strategy that drains a pre-populated queue."""
 
     settings: DrainSettings
+    tracer: TracingProtocol | None
     pgqs: list[PgQueuer] = dataclass_field(default_factory=list, init=False)
     tqdm_format_dict: dict[str, str] = dataclass_field(default_factory=dict, init=False)
 
@@ -365,7 +374,7 @@ class DrainStrategy:
             loop.add_signal_handler(sig, self.graceful_shutdown)
 
         self.settings.pretty_print()
-        queries = await make_queries(self.settings.driver)
+        queries = await make_queries(self.settings.driver, self.tracer)
         await queries.clear_statistics_log()
         await queries.clear_queue()
 
@@ -380,9 +389,12 @@ class DrainStrategy:
             qm.shutdown.set()
 
     async def run(self) -> BenchmarkResult:
-        queries = [await make_queries(self.settings.driver) for _ in range(self.settings.dequeue)]
+        queries = [
+            await make_queries(self.settings.driver, self.tracer)
+            for _ in range(self.settings.dequeue)
+        ]
         for q in queries:
-            self.pgqs.append(PgQueuer(q.driver, queries=q))
+            self.pgqs.append(PgQueuer(q.driver, queries=q, tracer=self.tracer))
 
         start = datetime.now(UTC)
         with job_progress_bar(total=self.settings.jobs) as bar:
@@ -429,6 +441,31 @@ class BenchmarkRunner:
         result.pretty_print()
 
 
+def tracer_from_env() -> TracingProtocol | None:
+    """Configure Logfire (LOGFIRE=1) and/or Sentry (SENTRY_DSN); Sentry wins when both are set."""
+    tracer: TracingProtocol | None = None
+    if os.environ.get("LOGFIRE", "0") == "1":
+        import logfire  # noqa: PLC0415 - extra
+
+        from pgqueuer.adapters.tracing.logfire import LogfireTracing  # noqa: PLC0415 - extra
+
+        logfire.configure(service_name="pgqueuer")
+        tracer = LogfireTracing()
+
+    if sentry_dsn := os.environ.get("SENTRY_DSN"):
+        import sentry_sdk  # noqa: PLC0415 - extra
+
+        from pgqueuer.adapters.tracing.sentry import SentryTracing  # noqa: PLC0415 - extra
+
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            sample_rate=1,
+            traces_sample_rate=1.0,
+        )
+        tracer = SentryTracing()
+    return tracer
+
+
 @app.command()
 def main(
     driver: DriverEnum = typer.Option(DriverEnum.apg, "-d", "--driver"),
@@ -450,7 +487,7 @@ def main(
             dequeue_batch_size=dequeue_batch_size,
             output_json=output_json,
         )
-        strategy_impl: BenchmarkStrategy = DrainStrategy(drain_settings)
+        strategy_impl: BenchmarkStrategy = DrainStrategy(drain_settings, tracer_from_env())
     else:
         tp_settings = ThroughputSettings(
             driver=driver,
@@ -462,7 +499,7 @@ def main(
             enqueue_batch_size=enqueue_batch_size,
             output_json=output_json,
         )
-        strategy_impl = ThroughputStrategy(tp_settings)
+        strategy_impl = ThroughputStrategy(tp_settings, tracer_from_env())
     runner = BenchmarkRunner(strategy=strategy_impl, output_json=output_json)
     uvloop.run(runner.execute())
 
@@ -471,28 +508,5 @@ if __name__ == "__main__":
     from pgqueuer.core import logconfig as _logconfig
 
     _logconfig.setup_fancy_logger(_logconfig.LogLevel.INFO)
-    if os.environ.get("LOGFIRE", "0") == "1":
-        import logfire
-
-        from pgqueuer.adapters.tracing.logfire import LogfireTracing
-        from pgqueuer.ports.tracing import set_tracing_class
-
-        logfire.configure(service_name="pgqueuer")
-
-        set_tracing_class(LogfireTracing())
-
-    if sentry_dsn := os.environ.get("SENTRY_DSN"):
-        import sentry_sdk
-
-        from pgqueuer.adapters.tracing.sentry import SentryTracing
-        from pgqueuer.ports.tracing import set_tracing_class
-
-        sentry_sdk.init(
-            dsn=sentry_dsn,
-            sample_rate=1,
-            traces_sample_rate=1.0,
-        )
-        set_tracing_class(SentryTracing())
-
     with suppress(KeyboardInterrupt):
         app()

@@ -59,7 +59,7 @@ class PgQueuer:
     # bring one.
     settings: DBSettings | None = None
     # Tracer for the queue manager and the default queries. None uses the global tracer.
-    # Give it to your own ``queries`` instead; PgQueuer raises unless they carry this tracer.
+    # With your own ``queries``, give them the same tracer; PgQueuer raises otherwise.
     tracer: TracingProtocol | None = None
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
@@ -83,7 +83,7 @@ class PgQueuer:
             isinstance(self.queries, TracedRepository) and self.queries.tracer is self.tracer
         )
         if self.tracer is not None and not queries_carry_tracer:
-            raise ValueError("Pass tracer to the queries, not to PgQueuer alongside them.")
+            raise ValueError("Give your queries the same tracer as PgQueuer.")
         self.channel = self.channel or Channel(self.queries.qbe.settings.channel)
         self.qm = QueueManager(
             self.queries,

@@ -20,16 +20,16 @@ You can install multiple extras simultaneously if you need to switch between the
 
 ## Using Logfire
 
-Configure Logfire before running your producers and consumers, then register the tracer
-with PgQueuer:
+Configure Logfire before running your producers and consumers, then pass the tracer
+to PgQueuer:
 
 ```python
 import logfire
+from pgqueuer import PgQueuer
 from pgqueuer.adapters.tracing.logfire import LogfireTracing
-from pgqueuer.ports.tracing import set_tracing_class
 
 logfire.configure()
-set_tracing_class(LogfireTracing())
+pgq = PgQueuer.from_asyncpg_connection(connection, tracer=LogfireTracing())
 ```
 
 With this setup, trace context is added to job headers when you enqueue messages.
@@ -42,18 +42,18 @@ for more details about configuring spans and logging.
 
 ## Using Sentry
 
-Initialise the Sentry SDK with your DSN, then set the tracer class:
+Initialise the Sentry SDK with your DSN, then pass the tracer to PgQueuer:
 
 ```python
 import sentry_sdk
+from pgqueuer import PgQueuer
 from pgqueuer.adapters.tracing.sentry import SentryTracing
-from pgqueuer.ports.tracing import set_tracing_class
 
 sentry_sdk.init(
     dsn="https://<key>@o1.ingest.sentry.io/<project>",
     traces_sample_rate=1.0,
 )
-set_tracing_class(SentryTracing())
+pgq = PgQueuer.from_asyncpg_connection(connection, tracer=SentryTracing())
 ```
 
 Job headers will include Sentry tracing information so that consumer spans are linked to
@@ -63,16 +63,16 @@ for advanced configuration options.
 
 ## Using OpenTelemetry
 
-Configure your `TracerProvider`, then register the tracer with PgQueuer:
+Configure your `TracerProvider`, then pass the tracer to PgQueuer:
 
 ```python
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
+from pgqueuer import PgQueuer
 from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
-from pgqueuer.ports.tracing import set_tracing_class
 
 trace.set_tracer_provider(TracerProvider())
-set_tracing_class(OpenTelemetryTracing())
+pgq = PgQueuer.from_asyncpg_connection(connection, tracer=OpenTelemetryTracing())
 ```
 
 The adapter follows OTel
@@ -81,22 +81,35 @@ The adapter follows OTel
 TraceContext and Baggage propagation through job headers. Compatible with
 Jaeger, Datadog, and any OTel-compatible backend.
 
-## Passing a tracer to PgQueuer
+## Passing a tracer to your own queries
 
-You can give the tracer to `PgQueuer` instead of setting it globally. The
-queue manager and the default queries use it. If you pass your own `queries`,
-give the tracer to the queries. `PgQueuer` raises `ValueError` if you also
-pass it a tracer that the queries do not use.
+`PgQueuer` gives its tracer to the queue manager and to the queries it builds.
+If you build your own `Queries`, give them the tracer, and give `PgQueuer` the
+same one so the queue manager traces job processing. `PgQueuer` raises
+`ValueError` if its tracer is not the tracer of the queries.
 
 ```python
 from pgqueuer import PgQueuer
 from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
+from pgqueuer.queries import Queries
 
-pgq = PgQueuer.from_asyncpg_connection(connection, tracer=OpenTelemetryTracing())
+tracer = OpenTelemetryTracing()
+queries = Queries(driver, tracer=tracer)
+pgq = PgQueuer(driver, queries=queries, tracer=tracer)
 ```
+
+A producer that only enqueues needs just the queries:
+`Queries(driver, tracer=tracer)`.
 
 ## Switching tracers
 
-Only one tracer can be active at a time. Call `set_tracing_class()` from
-`pgqueuer.ports.tracing` with the desired tracer implementation before starting
-producers or consumers.
+Each `PgQueuer` and `Queries` uses the tracer you pass it, so different
+producers and consumers in one process can use different tracers.
+
+## Deprecated: `set_tracing_class()`
+
+`set_tracing_class()` from `pgqueuer.ports.tracing` sets one global tracer for
+the whole process. It is deprecated, emits a `DeprecationWarning`, and will be
+removed in the next major release. It still works until then: a `PgQueuer` or
+`Queries` without a tracer of its own uses the global one. Replace it by
+passing `tracer=` as shown above.
