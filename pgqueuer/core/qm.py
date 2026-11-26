@@ -23,7 +23,7 @@ from pgqueuer.core import (
 from pgqueuer.domain import errors, models, types
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.driver import ListenerRemover
-from pgqueuer.ports.repository import EntrypointExecutionParameter
+from pgqueuer.ports.repository import EntrypointExecutionParameter, SchemaVerifier
 
 
 @dataclasses.dataclass
@@ -283,7 +283,15 @@ class QueueManager:
                 yield job
 
     async def verify_structure(self) -> None:
-        """Assert that required tables, columns, indexes, enums, and triggers exist."""
+        """Assert that required tables, columns, indexes, enums, and triggers exist.
+
+        A repository that verifies its own schema checks every declared object;
+        any other gets the fixed list below.
+        """
+        if isinstance(self.queries, SchemaVerifier):
+            await self.queries.verify_schema()
+            return
+
         for table in (
             self.queries.qbe.settings.queue_table,
             self.queries.qbe.settings.statistics_table,

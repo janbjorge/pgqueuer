@@ -20,7 +20,15 @@ from pgqueuer.adapters.persistence.schema_ddl import (
 )
 from pgqueuer.domain.errors import SchemaDriftError
 from pgqueuer.domain.schema.declaration import retired
-from pgqueuer.domain.schema.model import Column, Index, Plan, Schema, Table
+from pgqueuer.domain.schema.model import (
+    Column,
+    Index,
+    MissingObject,
+    MissingObjects,
+    Plan,
+    Schema,
+    Table,
+)
 from pgqueuer.domain.schema.statistics import unique_count_name
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import IndexName, SqlType
@@ -473,3 +481,58 @@ def advisory_key(settings: DBSettings) -> int:
     process, and two concurrent upgrades must arrive at the same number.
     """
     return zlib.crc32(settings.qualified.queue_table.encode())
+
+
+def missing(live: Schema, declared: Schema) -> MissingObjects:
+    """Declared objects absent from *live*, by name; shape differences are the planner's.
+
+    An absent table or enum stands in for the columns, indexes, trigger or labels it holds.
+    """
+    tables = {table.name: table for table in live.tables}
+    enums = {enum.name: enum for enum in live.enums}
+    blocking = list[MissingObject]()
+    for table in declared.tables:
+        installed = tables.get(table.name)
+        if installed is None:
+            blocking.append(MissingObject("table", table.name))
+            continue
+        present = {column.name for column in installed.columns}
+        blocking += [
+            MissingObject("column", f"{table.name}.{column.name}")
+            for column in table.columns
+            if column.name not in present
+        ]
+    for enum in declared.enums:
+        if (installed_enum := enums.get(enum.name)) is None:
+            blocking.append(MissingObject("enum", enum.name))
+            continue
+        blocking += [
+            MissingObject("enum label", f"{enum.name}.{label}")
+            for label in enum.labels
+            if label not in installed_enum.labels
+        ]
+    live_indexes = {index.name for index in live.indexes}
+    absent_indexes = [
+        index
+        for index in declared.indexes
+        if index.table in tables and index.name not in live_indexes
+    ]
+    blocking += [MissingObject("index", index.name) for index in absent_indexes if index.unique]
+    live_functions = {function.name for function in live.functions}
+    blocking += [
+        MissingObject("function", function.name)
+        for function in declared.functions
+        if function.name not in live_functions
+    ]
+    live_triggers = {trigger.name for trigger in live.triggers}
+    blocking += [
+        MissingObject("trigger", trigger.name)
+        for trigger in declared.triggers
+        if trigger.table in tables and trigger.name not in live_triggers
+    ]
+    return MissingObjects(
+        blocking=tuple(blocking),
+        speed_only=tuple(
+            MissingObject("index", index.name) for index in absent_indexes if not index.unique
+        ),
+    )

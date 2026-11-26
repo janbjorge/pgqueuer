@@ -73,6 +73,15 @@
 - `QueueManager.run()` refuses to start when the notify function or the
   notify trigger is missing. A worker used to start without them, and
   enqueues then sent no NOTIFY. `pgq upgrade` recreates both.
+- `QueueManager`, `SchedulerManager` and `pgq verify --expect present` check
+  every table, column, index and enum label the schema declares, plus the
+  notify function and trigger. They used to check a fixed list: the queue
+  manager missed most indexes, the scheduler checked two tables, and `pgq
+  verify` checked no columns. The error lists every missing object. A missing
+  non-unique index only slows queries, so it is now logged as a warning and
+  does not stop the start or fail `pgq verify`; before, the log table's
+  `job_id_status` index did. Custom repositories keep the old check unless
+  they add `verify_schema()` (see `pgqueuer.ports.repository.SchemaVerifier`).
 
 ---
 

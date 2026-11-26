@@ -16,6 +16,8 @@ from pgqueuer.domain.types import (
 
 ColumnKind = Literal["plain", "serial", "identity"]
 
+SchemaObjectKind = Literal["table", "column", "index", "enum", "enum label", "function", "trigger"]
+
 TIMESTAMP = SqlType("timestamp with time zone")
 
 
@@ -114,6 +116,27 @@ class Plan:
 
     statements: tuple[str, ...] = ()
     notes: tuple[str, ...] = ()
+
+
+class MissingObject(NamedTuple):
+    """A declared object the installed schema lacks, by name."""
+
+    kind: SchemaObjectKind
+    name: str
+
+    def describe(self) -> str:
+        return f"{self.kind} '{self.name}'"
+
+
+@dataclasses.dataclass(frozen=True)
+class MissingObjects:
+    """Declared objects absent from a database, split by what their absence costs.
+
+    ``blocking`` objects break queries; a missing non-unique index only slows them.
+    """
+
+    blocking: tuple[MissingObject, ...] = ()
+    speed_only: tuple[MissingObject, ...] = ()
 
 
 @dataclasses.dataclass(frozen=True)

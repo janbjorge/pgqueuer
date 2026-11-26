@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import logging
+import re
+
 import pytest
 
 from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.adapters.persistence.schema_plan import missing
 from pgqueuer.core.qm import QueueManager
+from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.errors import PgqException
+from pgqueuer.domain.schema.declaration import target
+from pgqueuer.domain.schema.model import MissingObject, MissingObjects, Schema
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.queries import Queries
 from test.helpers import collapse, declared_schema, queries_for
@@ -74,8 +81,79 @@ async def test_mixed_case_names_are_found_after_install(
 async def test_verify_structure_refuses_a_missing_trigger(apgdriver: AsyncpgDriver) -> None:
     settings = DBSettings()
     await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table}")
+    assert (await Queries(apgdriver).plan_upgrade()).statements != ()
     with pytest.raises(RuntimeError, match=settings.trigger):
         await QueueManager(Queries(apgdriver)).verify_structure()
+
+
+async def test_verify_schema_passes_on_a_fresh_install(apgdriver: AsyncpgDriver) -> None:
+    assert await Queries(apgdriver).missing_schema() == MissingObjects()
+    await Queries(apgdriver).verify_schema()
+
+
+@pytest.mark.parametrize(
+    ("ddl", "named"),
+    [
+        pytest.param(
+            "ALTER TABLE {queue} DROP COLUMN headers", "column '{queue}.headers'", id="column"
+        ),
+        pytest.param("DROP TRIGGER {trigger} ON {queue}", "trigger '{trigger}'", id="trigger"),
+        pytest.param(
+            "DROP INDEX {queue}_unique_dedupe_key",
+            "index '{queue}_unique_dedupe_key'",
+            id="unique-index",
+        ),
+    ],
+)
+async def test_verify_schema_names_a_missing_object(
+    apgdriver: AsyncpgDriver,
+    ddl: str,
+    named: str,
+) -> None:
+    settings = DBSettings()
+    names = {"queue": settings.queue_table, "trigger": settings.trigger}
+    await apgdriver.execute(ddl.format(**names))
+    with pytest.raises(RuntimeError, match=re.escape(named.format(**names))):
+        await Queries(apgdriver).verify_schema()
+
+
+async def test_a_missing_non_unique_index_only_warns(
+    apgdriver: AsyncpgDriver,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    index = f"{DBSettings().queue_table}_ep_ea_idx"
+    await apgdriver.execute(f"DROP INDEX {index}")
+    with caplog.at_level(logging.WARNING, logger="pgqueuer"):
+        await QueueManager(Queries(apgdriver)).verify_structure()
+    assert index in caplog.text
+
+
+def test_an_absent_table_stands_in_for_what_it_holds() -> None:
+    declared = target(DBSettings())
+    found = missing(Schema((), (), (), (), ()), declared)
+    assert found.speed_only == ()
+    assert found.blocking == (
+        *(MissingObject("table", table.name) for table in declared.tables),
+        *(MissingObject("enum", enum.name) for enum in declared.enums),
+        *(MissingObject("function", function.name) for function in declared.functions),
+    )
+
+
+async def test_scheduler_refuses_a_missing_trigger(apgdriver: AsyncpgDriver) -> None:
+    settings = DBSettings()
+    await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table}")
+    with pytest.raises(RuntimeError, match=settings.trigger):
+        await SchedulerManager(Queries(apgdriver)).run()
+
+
+async def test_a_narrow_id_column_still_starts(apgdriver: AsyncpgDriver) -> None:
+    """The gate checks presence, so a schema upgrade would still change is accepted."""
+    queries = Queries(apgdriver)
+    await apgdriver.execute(
+        f"ALTER TABLE {queries.qbe.settings.queue_table} ALTER COLUMN id TYPE integer"
+    )
+    await QueueManager(queries).verify_structure()
+    assert (await queries.plan_upgrade()).statements != ()
 
 
 async def test_missing_namespace_is_reported(apgdriver: AsyncpgDriver) -> None:

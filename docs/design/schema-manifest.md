@@ -6,11 +6,12 @@ turns that into a startup decision. The *why* lives in
 Sub-model of the [system design](README.md).
 
 This document describes the target design. Revisions, severity and the
-verdict are not built yet. Today `QueueManager.verify_structure` checks
-hand-listed tables, columns, enum labels, indexes, the function and the
-trigger by name and refuses to start when one is missing,
-`SchedulerManager.run` checks only that the schedules and log tables
-exist, and `pgq verify` checks the tables, the function and the trigger.
+verdict are not built yet. Today `QueueManager.verify_structure`,
+`SchedulerManager.run` and `pgq verify --expect present` check every
+declared table, column, index and enum label, the notify function and the
+notify trigger by name, not by shape. A missing non-unique index only slows
+queries, so it is a warning; anything else missing refuses the start. A
+custom repository without `verify_schema` still gets the old fixed list.
 
 ## Flow
 

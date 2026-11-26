@@ -81,9 +81,9 @@ Some statements must repeat what the declaration owns. Enqueue's `ON
 CONFLICT` restates the dedupe index predicate and reads it from
 `queue.dedupe_predicate`; the statistics bucket fold reads
 `statistics.UNIQUE_COUNT_KEY`. Several places still restate by hand: the
-log aggregation and schedules `ON CONFLICT` targets, the startup checks
-in `QueueManager.verify_structure` and `SchedulerManager.run`, `pgq
-verify`, the slot index name in `Queries.dequeue`, the offline
+log aggregation and schedules `ON CONFLICT` targets, the fallback
+startup checks for custom repositories in `QueueManager.verify_structure`
+and `SchedulerManager.run`, `pgq verify --expect absent`, the slot index name in `Queries.dequeue`, the offline
 `redefined_indexes` list, and the `id` and `status` column names in the
 widening and retype blocks. Renaming an object in the declaration means
 updating each of them.

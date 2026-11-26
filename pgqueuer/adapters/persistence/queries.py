@@ -152,6 +152,29 @@ class Queries:
         live = await schema_inspect.inspect(self.driver, settings)
         return schema_plan.plan(live, target(settings), settings)
 
+    async def missing_schema(self) -> models_schema.MissingObjects:
+        """Declared objects this database lacks, by name; see :meth:`verify_schema`."""
+        live = await schema_inspect.inspect(self.driver, self.qbe.settings)
+        return schema_plan.missing(live, target(self.qbe.settings))
+
+    async def verify_schema(self) -> None:
+        """Raise RuntimeError naming every declared object a worker cannot run without.
+
+        A missing non-unique index only slows queries, so it is logged as a warning.
+        """
+        found = await self.missing_schema()
+        if found.speed_only:
+            logging.getLogger("pgqueuer").warning(
+                "Queries run slower until 'pgq upgrade' creates the missing %s.",
+                ", ".join(entry.describe() for entry in found.speed_only),
+            )
+        if found.blocking:
+            raise RuntimeError(
+                f"The PgQueuer schema is missing "
+                f"{', '.join(entry.describe() for entry in found.blocking)}. "
+                f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+            )
+
     @asynccontextmanager
     async def schema_lock(self) -> AsyncIterator[None]:
         """Serialize upgrades of this installation against each other.
