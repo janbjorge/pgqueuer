@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple, Self
 
-from pgqueuer.core import logconfig
 from pgqueuer.ports.driver import Driver, NotifyCallback
 
 if TYPE_CHECKING:
@@ -119,7 +119,9 @@ async def return_to_pool(
         try:
             await connection.reset()
         except (asyncpg.PostgresConnectionError, asyncpg.InterfaceError, OSError):
-            logconfig.logger.warning("Listener connection lost during reset", exc_info=True)
+            logging.getLogger("pgqueuer").warning(
+                "Listener connection lost during reset", exc_info=True
+            )
     await pool.release(connection)
 
 
