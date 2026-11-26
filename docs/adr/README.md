@@ -19,6 +19,7 @@ Conventions:
 
 ## Index
 
+- [ADR-0000: Record each design decision in one short ADR](ADR-0000-record-each-decision-in-one-short-adr.md)
 - [ADR-0001: Job state lives in PostgreSQL](ADR-0001-job-state-lives-in-postgresql.md)
 - [ADR-0002: Workers claim jobs by row-level lock contention, not assignment](ADR-0002-workers-claim-by-lock-contention.md)
 - [ADR-0003: Notifications signal that something changed, never carry job data](ADR-0003-notifications-signal-not-carry.md)
