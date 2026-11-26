@@ -26,6 +26,7 @@ from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import Channel, OnFailure, QueueExecutionMode
 from pgqueuer.ports import RepositoryPort
 from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.tracing import TracedRepository, TracingProtocol
 
 if TYPE_CHECKING:
     import asyncpg
@@ -57,6 +58,9 @@ class PgQueuer:
     # PGQUEUER_* env vars. Pass settings to your own ``queries`` instead when you
     # bring one.
     settings: DBSettings | None = None
+    # Tracer for the queue manager and the default queries. None uses the global tracer.
+    # Give it to your own ``queries`` instead; PgQueuer raises unless they carry this tracer.
+    tracer: TracingProtocol | None = None
     shutdown: asyncio.Event = dataclasses.field(
         init=False,
         default_factory=asyncio.Event,
@@ -70,14 +74,22 @@ class PgQueuer:
 
     def __post_init__(self) -> None:
         if self.queries is None:
-            self.queries = Queries(self.connection, self.settings or DBSettings())
+            self.queries = Queries(
+                self.connection, self.settings or DBSettings(), tracer=self.tracer
+            )
         elif self.settings is not None and self.settings is not self.queries.qbe.settings:
             raise ValueError("Pass settings to the queries, not to PgQueuer alongside them.")
+        queries_carry_tracer = (
+            isinstance(self.queries, TracedRepository) and self.queries.tracer is self.tracer
+        )
+        if self.tracer is not None and not queries_carry_tracer:
+            raise ValueError("Pass tracer to the queries, not to PgQueuer alongside them.")
         self.channel = self.channel or Channel(self.queries.qbe.settings.channel)
         self.qm = QueueManager(
             self.queries,
             self.channel,
             resources=self.resources,
+            tracer=self.tracer,
         )
         self.sm = SchedulerManager(
             self.queries,
@@ -102,6 +114,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
+        tracer: TracingProtocol | None = None,
     ) -> PgQueuer:
         """Build PgQueuer over an asyncpg connection."""
         return cls._from_driver(
@@ -109,6 +122,7 @@ class PgQueuer:
             channel=channel,
             resources=resources,
             settings=settings,
+            tracer=tracer,
         )
 
     @classmethod
@@ -118,6 +132,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
+        tracer: TracingProtocol | None = None,
     ) -> PgQueuer:
         """Build PgQueuer over an asyncpg pool."""
         return cls._from_driver(
@@ -125,6 +140,7 @@ class PgQueuer:
             channel=channel,
             resources=resources,
             settings=settings,
+            tracer=tracer,
         )
 
     @classmethod
@@ -134,6 +150,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
+        tracer: TracingProtocol | None = None,
     ) -> PgQueuer:
         """Build PgQueuer over a psycopg async connection (must have autocommit=True)."""
         return cls._from_driver(
@@ -141,6 +158,7 @@ class PgQueuer:
             channel=channel,
             resources=resources,
             settings=settings,
+            tracer=tracer,
         )
 
     @classmethod
@@ -150,12 +168,14 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
+        tracer: TracingProtocol | None = None,
     ) -> PgQueuer:
         return cls(
             connection=driver,
             channel=channel or Channel(""),
             resources=resources or {},
             settings=settings,
+            tracer=tracer,
         )
 
     @classmethod
@@ -164,6 +184,7 @@ class PgQueuer:
         channel: Channel | None = None,
         resources: MutableMapping[str, object] | None = None,
         settings: DBSettings | None = None,
+        tracer: TracingProtocol | None = None,
     ) -> PgQueuer:
         """Create a PgQueuer backed entirely by in-memory data structures.
 
@@ -171,12 +192,13 @@ class PgQueuer:
         and short-lived batch-processing containers.
         """
         driver = InMemoryDriver()
-        inmem = InMemoryQueries(driver=driver, settings=settings or DBSettings())
+        inmem = InMemoryQueries(driver=driver, settings=settings or DBSettings(), tracer=tracer)
         return cls(
             connection=driver,
             channel=channel or Channel(""),
             queries=inmem,
             resources=resources or {},
+            tracer=tracer,
         )
 
     async def run(
