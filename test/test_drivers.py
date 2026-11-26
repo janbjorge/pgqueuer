@@ -373,7 +373,7 @@ async def test_a_pool_driver_exits_cleanly_after_its_listener_connection_dies(
         driver = AsyncpgPoolDriver(pool)
         async with driver:
             await driver.add_listener(Channel("ch_dies"), lambda _: None)
-            listener = driver._listener_connection
+            listener = driver.listener.connection
             assert listener is not None
             await pool.execute("SELECT pg_terminate_backend($1)", listener.get_server_pid())
             for _ in range(200):
@@ -382,7 +382,7 @@ async def test_a_pool_driver_exits_cleanly_after_its_listener_connection_dies(
                 await asyncio.sleep(0.01)
             assert _gone(listener)
 
-        assert driver._listener_connection is None
+        assert driver.listener.connection is None
         await _assert_every_slot_free(pool)
 
 
@@ -421,7 +421,7 @@ async def test_a_pool_driver_exits_cleanly_when_its_listener_dies_during_reset(
         try:
             async with driver:
                 await driver.add_listener(Channel("ch_dies_in_reset"), lambda _: None)
-                listener = driver._listener_connection
+                listener = driver.listener.connection
                 assert listener is not None
                 pid = listener.get_server_pid()
                 _SlowReset.slow_pids = frozenset({pid})
@@ -430,7 +430,7 @@ async def test_a_pool_driver_exits_cleanly_when_its_listener_dies_during_reset(
             _SlowReset.slow_pids = frozenset()
         await killer
 
-        assert driver._listener_connection is None
+        assert driver.listener.connection is None
         await _assert_every_slot_free(pool)
 
 
@@ -446,7 +446,7 @@ async def test_a_pool_driver_exit_still_unlistens(
     async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2, reset=reset) as pool:
         async with AsyncpgPoolDriver(pool) as driver:
             await driver.add_listener(Channel("ch_unlisten"), lambda _: None)
-            listener = driver._listener_connection
+            listener = driver.listener.connection
             assert listener is not None
             assert await listener.fetchval("SELECT count(*) FROM pg_listening_channels()") == 1
 
