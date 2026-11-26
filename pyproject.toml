@@ -246,7 +246,8 @@ addopts = "--durations=15 -n 2"
 #   domain  → (nothing)
 #   ports   → domain
 #   core    → domain, ports
-#   adapters → domain, ports, core
+#   driving adapters (cli, web) → domain, ports, core
+#   driven adapters → domain, ports
 #   metrics → domain, ports  (presentation layer, no core or adapter deps)
 #
 # core.applications is the composition root that wires concrete adapters into
@@ -286,6 +287,18 @@ name = "Metrics must not import from adapters or core"
 type = "forbidden"
 source_modules = ["pgqueuer.metrics"]
 forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
+
+[[tool.importlinter.contracts]]
+name = "Driven adapters must not import core"
+type = "forbidden"
+source_modules = [
+    "pgqueuer.adapters.drivers",
+    "pgqueuer.adapters.persistence",
+    "pgqueuer.adapters.inmemory",
+    "pgqueuer.adapters.tracing",
+    "pgqueuer.adapters.connections",
+]
+forbidden_modules = ["pgqueuer.core"]
 
 [[tool.importlinter.contracts]]
 name = "Internal packages must not import root shims"

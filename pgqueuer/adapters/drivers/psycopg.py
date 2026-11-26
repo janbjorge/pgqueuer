@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING, Self
 
-from pgqueuer.core import logconfig
-from pgqueuer.core.tm import cancel_and_wait
 from pgqueuer.ports.driver import Driver, NotifyCallback, SyncDriver
 
 if TYPE_CHECKING:
     import psycopg
+
+
+def discard_outcome(task: asyncio.Task[None]) -> None:
+    """Mark *task*'s exception as retrieved so asyncio does not log it."""
+    if not task.cancelled():
+        task.exception()
 
 
 class PsycopgDriver(Driver):
@@ -107,7 +112,7 @@ class PsycopgDriver(Driver):
                     try:
                         callback(note.payload)
                     except Exception:
-                        logconfig.logger.exception(
+                        logging.getLogger("pgqueuer").exception(
                             "Unhandled error in NOTIFY callback for channel %s",
                             note.channel,
                         )
@@ -128,7 +133,9 @@ class PsycopgDriver(Driver):
 
         del self._listeners[channel]
         if not self._listeners and self._watcher is not None:
-            await cancel_and_wait(self._watcher)
+            self._watcher.add_done_callback(discard_outcome)
+            self._watcher.cancel()
+            await asyncio.wait({self._watcher})
             self._watcher = None
         await self._connection.execute(sql.SQL("UNLISTEN {}").format(sql.Identifier(channel)))
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from datetime import timedelta
@@ -25,7 +26,6 @@ from pgqueuer.adapters.persistence import (
     sqlstate,
 )
 from pgqueuer.adapters.persistence.query_helpers import cell, merge_tracing_headers
-from pgqueuer.core.logconfig import logger
 from pgqueuer.domain import errors, models, types
 from pgqueuer.domain.schema import model as models_schema
 from pgqueuer.domain.schema.declaration import target
@@ -179,7 +179,7 @@ class Queries:
             for statement in computed.statements:
                 await self.driver.execute(statement)
         for note in computed.notes:
-            logger.warning("%s", note)
+            logging.getLogger("pgqueuer").warning("%s", note)
         return computed
 
     async def upgrade(self) -> None:
