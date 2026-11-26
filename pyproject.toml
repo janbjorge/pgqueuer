@@ -249,11 +249,12 @@ addopts = "--durations=15 -n 2"
 #   adapters → domain, ports, core
 #   metrics → domain, ports  (presentation layer, no core or adapter deps)
 #
-# The sole exception is core.applications — the composition root that wires
-# concrete adapters into the core.  All 4 allowed imports are listed below.
+# core.applications is the composition root that wires concrete adapters into
+# the core. Each contract lists the imports it allows in ignore_imports.
 # ---------------------------------------------------------------------------
 [tool.importlinter]
 root_packages = ["pgqueuer"]
+include_external_packages = true
 
 [[tool.importlinter.contracts]]
 name = "Domain must not import from adapters, core, or metrics"
@@ -285,3 +286,66 @@ name = "Metrics must not import from adapters or core"
 type = "forbidden"
 source_modules = ["pgqueuer.metrics"]
 forbidden_modules = ["pgqueuer.adapters", "pgqueuer.core"]
+
+[[tool.importlinter.contracts]]
+name = "Internal packages must not import root shims"
+type = "forbidden"
+source_modules = [
+    "pgqueuer.domain",
+    "pgqueuer.ports",
+    "pgqueuer.core",
+    "pgqueuer.adapters",
+    "pgqueuer.metrics",
+]
+forbidden_modules = [
+    "pgqueuer.applications",
+    "pgqueuer.db",
+    "pgqueuer.errors",
+    "pgqueuer.executors",
+    "pgqueuer.factories",
+    "pgqueuer.models",
+    "pgqueuer.qm",
+    "pgqueuer.queries",
+    "pgqueuer.sm",
+    "pgqueuer.types",
+    "pgqueuer.web",
+]
+
+[[tool.importlinter.contracts]]
+name = "In-memory adapter must not import persistence"
+type = "forbidden"
+source_modules = ["pgqueuer.adapters.inmemory"]
+forbidden_modules = ["pgqueuer.adapters.persistence"]
+ignore_imports = [
+    # The in-memory adapter reuses the pure enqueue and dedupe helpers.
+    "pgqueuer.adapters.inmemory.jobs -> pgqueuer.adapters.persistence.query_helpers",
+    # It raises the same SQLSTATE code as Postgres on a duplicate key.
+    "pgqueuer.adapters.inmemory.jobs -> pgqueuer.adapters.persistence.sqlstate",
+    # SchemaManagementPort requires qbe, so the adapter keeps the query builders.
+    "pgqueuer.adapters.inmemory.queries -> pgqueuer.adapters.persistence.qb",
+    # The in-memory adapter reuses the pure enqueue and tracing helpers.
+    "pgqueuer.adapters.inmemory.queries -> pgqueuer.adapters.persistence.query_helpers",
+]
+
+[[tool.importlinter.contracts]]
+name = "Persistence must not import concrete drivers"
+type = "forbidden"
+source_modules = ["pgqueuer.adapters.persistence"]
+forbidden_modules = ["pgqueuer.adapters.drivers"]
+ignore_imports = [
+    # The Queries.from_* factories wrap a connection in its driver.
+    "pgqueuer.adapters.persistence.queries -> pgqueuer.adapters.drivers.asyncpg",
+    "pgqueuer.adapters.persistence.queries -> pgqueuer.adapters.drivers.psycopg",
+]
+
+[[tool.importlinter.contracts]]
+name = "Domain must not import env or async runtime packages"
+type = "forbidden"
+source_modules = ["pgqueuer.domain"]
+forbidden_modules = ["pydantic_settings", "anyio"]
+ignore_imports = [
+    # DBSettings and ConnectionSettings read their values from the environment.
+    "pgqueuer.domain.settings -> pydantic_settings",
+    # Context carries the anyio.CancelScope that cancels a job.
+    "pgqueuer.domain.models -> anyio",
+]

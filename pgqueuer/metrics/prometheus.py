@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from itertools import groupby
 
-from pgqueuer.models import LogStatistics, QueueStatistics
+from pgqueuer.domain.models import LogStatistics, QueueStatistics
 from pgqueuer.ports.repository import QueueRepositoryPort
 
 
