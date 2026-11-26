@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable, Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import TYPE_CHECKING, TypeVar, assert_never
+from typing import TYPE_CHECKING, Annotated, TypeVar, assert_never
 
 import typer
 from pydantic_core import to_json
@@ -66,6 +66,12 @@ app = typer.Typer(
     add_completion=False,
 )
 app.add_typer(sql_cmd.sql_app, name="sql")
+
+
+Limit = Annotated[int, typer.Option("-n", "--limit", help="Maximum number of rows to display.")]
+JsonFlag = Annotated[
+    bool, typer.Option("--json", help="Print the result as a JSON array on stdout.")
+]
 
 
 class VerifyMode(Enum):
@@ -434,16 +440,8 @@ def dashboard(
         "-i",
         "--interval",
     ),
-    limit: int = typer.Option(
-        25,
-        "-n",
-        "--limit",
-    ),
-    as_json: bool = typer.Option(
-        False,
-        "--json",
-        help="Print the statistics once as a JSON array on stdout. Not with --interval.",
-    ),
+    limit: Limit = 25,
+    as_json: JsonFlag = False,
 ) -> None:
     if as_json and interval is not None:
         raise typer.BadParameter("--json prints once; drop --interval.")
@@ -598,9 +596,7 @@ def schedules(
         "--remove",
         help="Remove schedules by ID or name.",
     ),
-    as_json: bool = typer.Option(
-        False, "--json", help="Print the schedules as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run_async() -> None:
         async with yield_queries(ctx) as q:
@@ -665,15 +661,16 @@ def queue(
     asyncio_run(run_async())
 
 
-@app.command(help="List jobs held with status 'failed' for manual intervention.")
+@app.command(
+    help=(
+        "List jobs held with status 'failed' for manual intervention. "
+        "With --json, payloads are reported by size only."
+    )
+)
 def failed(
     ctx: Context,
-    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
-    as_json: bool = typer.Option(
-        False,
-        "--json",
-        help="Print the jobs as a JSON array on stdout. Payloads are reported by size only.",
-    ),
+    limit: Limit = 25,
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -728,8 +725,8 @@ def stale(
         "--threshold",
         help="Seconds since the last heartbeat before a picked job counts as stale.",
     ),
-    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
-    as_json: bool = typer.Option(False, "--json", help="Print the jobs as a JSON array on stdout."),
+    limit: Limit = 25,
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -770,9 +767,7 @@ def stale(
 @app.command(help="List queue managers currently holding picked jobs.")
 def workers(
     ctx: Context,
-    as_json: bool = typer.Option(
-        False, "--json", help="Print the workers as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -813,9 +808,7 @@ def workers(
 @app.command(help="Show how many jobs wait in 'queued' per entrypoint, and how old they are.")
 def backlog(
     ctx: Context,
-    as_json: bool = typer.Option(
-        False, "--json", help="Print one object per entrypoint as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -856,9 +849,7 @@ def backlog(
 @app.command(help="Count jobs in the queue table per entrypoint, status and priority.")
 def size(
     ctx: Context,
-    as_json: bool = typer.Option(
-        False, "--json", help="Print one object per group as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -883,9 +874,7 @@ def throughput(
         "--period",
         help="Only count the last this many seconds. Default: all history.",
     ),
-    as_json: bool = typer.Option(
-        False, "--json", help="Print one object per entrypoint and status as a JSON array."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -906,13 +895,11 @@ def throughput(
 @app.command(help="Show the most recent job status changes from the log table.")
 def log(
     ctx: Context,
-    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of entries to display."),
+    limit: Limit = 25,
     exceptions: bool = typer.Option(
         False, "--exceptions", help="Only show entries with status 'exception'."
     ),
-    as_json: bool = typer.Option(
-        False, "--json", help="Print the entries as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -941,16 +928,17 @@ def log(
     asyncio_run(run())
 
 
-@app.command(help="List jobs in the queue table, highest priority first.")
+@app.command(
+    help=(
+        "List jobs in the queue table, highest priority first. "
+        "With --json, payloads are reported by size only."
+    )
+)
 def jobs(
     ctx: Context,
-    limit: int = typer.Option(25, "-n", "--limit", help="Maximum number of jobs to display."),
+    limit: Limit = 25,
     offset: int = typer.Option(0, "--offset", help="Skip this many jobs first."),
-    as_json: bool = typer.Option(
-        False,
-        "--json",
-        help="Print the jobs as a JSON array on stdout. Payloads are reported by size only.",
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
@@ -988,9 +976,7 @@ def jobs(
 @app.command(help="Show each PgQueuer table's persistence, estimated rows and size.")
 def tables(
     ctx: Context,
-    as_json: bool = typer.Option(
-        False, "--json", help="Print one object per table as a JSON array on stdout."
-    ),
+    as_json: JsonFlag = False,
 ) -> None:
     async def run() -> None:
         async with yield_queries(ctx) as q:
