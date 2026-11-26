@@ -242,4 +242,4 @@ Phase 3 ──┘
 | Breaking `from pgqueuer import X` | Public-API shims (`pgqueuer.db`, `pgqueuer.queries`, `pgqueuer.qm`, `pgqueuer.sm`, `pgqueuer.executors`, etc.) preserved at the package root |
 | Custom executors using `parameters.connection` etc. | Deprecated with warnings in prior releases; removed in v1.0.0 |
 | Circular imports during restructure | Moved leaf modules first; one module per commit with full test suite |
-| `tracing.TRACER` global removal | Singleton lives in `pgqueuer.ports.tracing`; `set_tracing_class()` replaces direct assignment |
+| `tracing.TRACER` global removal | Singleton lives in `pgqueuer.ports.tracing`; `set_tracing_class()` replaces direct assignment; it is deprecated in favour of `PgQueuer(tracer=...)` and goes in the next major |

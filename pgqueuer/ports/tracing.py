@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Generator
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
@@ -40,5 +41,14 @@ TRACER: Final[TracingConfig] = TracingConfig()
 
 
 def set_tracing_class(tracer: TracingProtocol) -> None:
-    """Install *tracer* as the global tracing implementation."""
+    """Install *tracer* as the global tracing implementation.
+
+    Deprecated: pass ``tracer=`` to ``PgQueuer``, or to your own ``Queries``.
+    Removed in the next major release.
+    """
+    warnings.warn(
+        "set_tracing_class() is deprecated; pass PgQueuer(tracer=...), or tracer= to your Queries.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     TRACER.tracer = tracer

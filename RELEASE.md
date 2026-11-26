@@ -27,7 +27,14 @@
 - `PgQueuer(tracer=...)` and a `tracer` argument on its factory methods.
   The queue manager and the default queries use this tracer, so you do not
   need the global `set_tracing_class()`. With your own `queries`, give the
-  tracer to the queries: `PgQueuer` raises if its tracer is a different one.
+  same tracer to the queries and to `PgQueuer`: `PgQueuer` raises if they differ.
+
+### Deprecated
+
+- `set_tracing_class()`. It now emits a `DeprecationWarning` and still sets
+  the global tracer. Pass `PgQueuer(tracer=...)` instead, or `tracer=` to
+  `Queries` when you build your own queries. It will be removed in the next
+  major release.
 
 ### Removed
 
