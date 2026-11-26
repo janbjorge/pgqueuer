@@ -32,7 +32,7 @@ from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.settings import DBSettings
 from pgqueuer.domain.types import CronEntrypoint, HealthCheckId, QueueEntrypoint, QueueManagerId
 from pgqueuer.ports import tracing
-from pgqueuer.ports.driver import Driver, SyncDriver
+from pgqueuer.ports.driver import Driver, ListenerRemover, NotifyCallback, SyncDriver
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -602,6 +602,13 @@ class Queries:
                 table=self.qbq.settings.queue_table,
             ).model_dump_json(),
         )
+
+    async def add_listener(self, channel: str, callback: NotifyCallback) -> None:
+        await self.driver.add_listener(channel, callback)
+
+    async def remove_listener(self, channel: str, callback: NotifyCallback) -> None:
+        if isinstance(self.driver, ListenerRemover):
+            await self.driver.remove_listener(channel, callback)
 
     async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None:
         """Emit a ``health_check_event`` NOTIFY tagged with ``health_check_event_id``."""

@@ -22,7 +22,6 @@ from pgqueuer.core import (
 )
 from pgqueuer.domain import errors, models, types
 from pgqueuer.ports import RepositoryPort, tracing
-from pgqueuer.ports.driver import ListenerRemover
 from pgqueuer.ports.repository import EntrypointExecutionParameter, SchemaVerifier
 
 
@@ -527,8 +526,9 @@ class QueueManager:
             tm.cancel_on_exit(asyncio.create_task(self.shutdown.wait())) as shutdown_task,
         ):
             notice_event_listener = listeners.PGNoticeEventListener()
+            listener = listeners.listener_for(self.queries)
             callback = await listeners.initialize_notice_event_listener(
-                self.queries.driver,
+                listener,
                 self.channel,
                 listeners.default_event_router(
                     notice_event_queue=notice_event_listener,
@@ -536,10 +536,7 @@ class QueueManager:
                     pending_health_check=self.pending_health_check,
                 ),
             )
-            if isinstance(self.queries.driver, ListenerRemover):
-                listener_cleanup.push_async_callback(
-                    self.queries.driver.remove_listener, self.channel, callback
-                )
+            listener_cleanup.push_async_callback(listener.remove_listener, self.channel, callback)
             self.listening.set()
 
             while not self.shutdown.is_set():

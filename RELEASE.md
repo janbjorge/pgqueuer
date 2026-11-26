@@ -28,6 +28,11 @@
   The queue manager and the default queries use this tracer, so you do not
   need the global `set_tracing_class()`. With your own `queries`, give the
   same tracer to the queries and to `PgQueuer`: `PgQueuer` raises if they differ.
+- `add_listener` and `remove_listener` on `Queries` and `InMemoryQueries`
+  (see `pgqueuer.ports.repository.NotificationListener`). `QueueManager` and
+  `CompletionWatcher` now listen through the repository, not its driver.
+  `CompletionWatcher` uses the driver of its `queries`, not its `driver`
+  argument, when the queries have these methods.
 
 ### Deprecated
 
@@ -35,6 +40,10 @@
   the global tracer. Pass `PgQueuer(tracer=...)` instead, or `tracer=` to
   `Queries` when you build your own queries. It will be removed in the next
   major release.
+- A custom repository without `add_listener` and `remove_listener`. The
+  queue manager and `CompletionWatcher` then listen through
+  `repository.driver` and emit a `DeprecationWarning`. Add the two methods.
+  The next major release removes this fallback.
 
 ### Removed
 

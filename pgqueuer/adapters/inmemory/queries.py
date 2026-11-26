@@ -32,6 +32,7 @@ from pgqueuer.domain.types import (
     SortOrder,
 )
 from pgqueuer.ports import tracing
+from pgqueuer.ports.driver import NotifyCallback
 from pgqueuer.ports.repository import EntrypointExecutionParameter
 from pgqueuer.ports.tracing import TracingProtocol
 
@@ -388,6 +389,12 @@ class InMemoryQueries:
             type="cancellation_event",
         )
         await self.driver.notify(self.settings.channel, event.model_dump_json())
+
+    async def add_listener(self, channel: str, callback: NotifyCallback) -> None:
+        await self.driver.add_listener(channel, callback)
+
+    async def remove_listener(self, channel: str, callback: NotifyCallback) -> None:
+        await self.driver.remove_listener(channel, callback)
 
     async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None:
         event = models.HealthCheckEvent(
