@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator, Callable
 from contextlib import suppress
 from dataclasses import dataclass, field
 
+import asyncpg
 import pytest
 from psycopg import sql
 
@@ -72,6 +73,18 @@ async def test_asyncpg_remove_listener_keeps_other_callbacks(pool: bool) -> None
     assert isinstance(driver, ListenerRemover)
     assert removed == ["a"]
     assert kept == ["a", "b"]
+
+
+async def test_asyncpg_pool_releases_listener_with_last_callback(dsn: str) -> None:
+    """Removing the last callback returns the listener connection to the pool."""
+    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2) as pool:
+        driver = AsyncpgPoolDriver(pool)
+        await driver.add_listener("ch", print)
+        await driver.remove_listener("ch", print)
+        idle = pool.get_idle_size()
+        async with driver:
+            pass
+        assert idle == 2
 
 
 @dataclass
