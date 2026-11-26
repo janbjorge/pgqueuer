@@ -152,7 +152,7 @@ When deprecating dataclass fields, use a module-level `_SENTINEL = object()` def
 
 ### Dependency Injection
 
-`QueueManager` and `SchedulerManager` accept an optional `queries` argument (default=None). When omitted, they auto-create `Queries(self.connection)`. Prefer injecting a mock for tests.
+`QueueManager` and `SchedulerManager` take a required `queries` argument (a `RepositoryPort`) as the first positional parameter. In tests, inject `InMemoryQueries` or a fake.
 
 ## Code Style
 

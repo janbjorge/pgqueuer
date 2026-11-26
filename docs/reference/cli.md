@@ -515,7 +515,8 @@ pgq tables
 pgq tables --json
 ```
 
-To check that the schema is installed and current, use [`pgq verify`](#verify).
+To check that the PgQueuer tables, the notify function and the trigger exist, use
+[`pgq verify`](#verify). It does not check that the schema is current.
 
 ---
 
