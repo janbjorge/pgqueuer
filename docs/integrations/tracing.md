@@ -81,6 +81,20 @@ The adapter follows OTel
 TraceContext and Baggage propagation through job headers. Compatible with
 Jaeger, Datadog, and any OTel-compatible backend.
 
+## Passing a tracer to PgQueuer
+
+You can give the tracer to `PgQueuer` instead of setting it globally. The
+queue manager and the default queries use it. If you pass your own `queries`,
+give the tracer to the queries. `PgQueuer` raises `ValueError` if you also
+pass it a tracer that the queries do not use.
+
+```python
+from pgqueuer import PgQueuer
+from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
+
+pgq = PgQueuer.from_asyncpg_connection(connection, tracer=OpenTelemetryTracing())
+```
+
 ## Switching tracers
 
 Only one tracer can be active at a time. Call `set_tracing_class()` from

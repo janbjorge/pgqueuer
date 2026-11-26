@@ -24,6 +24,10 @@
   `pgq tables` (persistence, row estimate and size per table).
 - `pgq schedules --json` and `pgq dashboard --json`. The dashboard prints
   once with `--json`; it rejects `--interval`.
+- `PgQueuer(tracer=...)` and a `tracer` argument on its factory methods.
+  The queue manager and the default queries use this tracer, so you do not
+  need the global `set_tracing_class()`. With your own `queries`, give the
+  tracer to the queries: `PgQueuer` raises if its tracer is a different one.
 
 ### Removed
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Final, Protocol, runtime_checkable
 
 from pgqueuer.domain.models import Job
 
@@ -20,6 +20,13 @@ class TracingProtocol(Protocol):
     def trace_process(self, job: Job) -> AbstractAsyncContextManager[None]:
         """Wrap consumer processing of *job* in a tracing span."""
         ...
+
+
+@runtime_checkable
+class TracedRepository(Protocol):
+    """Repository that carries its own tracer."""
+
+    tracer: TracingProtocol | None
 
 
 @dataclass
