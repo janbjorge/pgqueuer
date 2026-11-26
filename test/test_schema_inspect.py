@@ -71,6 +71,13 @@ async def test_mixed_case_names_are_found_after_install(
     await QueueManager(queries).verify_structure()
 
 
+async def test_verify_structure_refuses_a_missing_trigger(apgdriver: AsyncpgDriver) -> None:
+    settings = DBSettings()
+    await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table}")
+    with pytest.raises(RuntimeError, match=settings.trigger):
+        await QueueManager(Queries(apgdriver)).verify_structure()
+
+
 async def test_missing_namespace_is_reported(apgdriver: AsyncpgDriver) -> None:
     settings = DBSettings(db_schema="absent_schema")
     schema = await inspect(apgdriver, settings)

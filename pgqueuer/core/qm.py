@@ -341,6 +341,18 @@ class QueueManager:
                     f"Please run 'pgq upgrade' to ensure all schema changes are applied."
                 )
 
+        if not (await self.queries.has_function(self.queries.qbe.settings.function)):
+            raise RuntimeError(
+                f"The required function '{self.queries.qbe.settings.function}' is missing. "
+                f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+            )
+
+        if not (await self.queries.has_trigger(self.queries.qbe.settings.trigger)):
+            raise RuntimeError(
+                f"The required trigger '{self.queries.qbe.settings.trigger}' is missing. "
+                f"Please run 'pgq upgrade' to ensure all schema changes are applied."
+            )
+
     async def _maybe_drain_shutdown(
         self,
         mode: types.QueueExecutionMode,

@@ -7,10 +7,10 @@ Sub-model of the [system design](README.md).
 
 This document describes the target design. Revisions, severity and the
 verdict are not built yet. Today `QueueManager.verify_structure` checks
-hand-listed tables, columns, enum labels and indexes by name and refuses
-to start when one is missing, `SchedulerManager.run` checks only that the
-schedules and log tables exist, and `pgq verify` checks the tables, the
-function and the trigger.
+hand-listed tables, columns, enum labels, indexes, the function and the
+trigger by name and refuses to start when one is missing,
+`SchedulerManager.run` checks only that the schedules and log tables
+exist, and `pgq verify` checks the tables, the function and the trigger.
 
 ## Flow
 
