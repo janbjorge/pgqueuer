@@ -16,7 +16,7 @@ from pgqueuer.domain.types import (
     QueueManagerId,
     SortOrder,
 )
-from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.driver import Driver, NotifyCallback
 
 
 class QueryBuilderEnvironmentPort(Protocol):
@@ -294,6 +294,23 @@ class NotificationPort(Protocol):
     async def notify_job_cancellation(self, ids: list[types.JobId]) -> None: ...
 
     async def notify_health_check(self, health_check_event_id: HealthCheckId) -> None: ...
+
+
+@runtime_checkable
+class NotificationListener(Protocol):
+    """Repository that delivers the NOTIFY payloads on a channel to a callback.
+
+    Separate from ``NotificationPort`` so existing custom repositories still satisfy it.
+    The next major release moves these methods into ``NotificationPort``.
+    """
+
+    async def add_listener(self, channel: str, callback: NotifyCallback) -> None:
+        """Send the NOTIFY payloads on *channel* to *callback*."""
+        ...
+
+    async def remove_listener(self, channel: str, callback: NotifyCallback) -> None:
+        """Stop sending the NOTIFY payloads on *channel* to *callback*."""
+        ...
 
 
 class SchemaManagementPort(Protocol):

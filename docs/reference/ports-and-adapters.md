@@ -85,6 +85,19 @@ class NotificationPort(Protocol):
     async def notify_health_check(self, health_check_event_id) -> None: ...
 ```
 
+**NotificationListener**: LISTEN through the repository. It is separate from
+`NotificationPort`, so a custom repository without it still works. The core then
+listens through `repository.driver` and emits a `DeprecationWarning`. The next
+major release removes this fallback and moves the two methods into
+`NotificationPort`.
+
+```python
+@runtime_checkable
+class NotificationListener(Protocol):
+    async def add_listener(self, channel, callback) -> None: ...
+    async def remove_listener(self, channel, callback) -> None: ...
+```
+
 **SchemaManagementPort**: DDL operations:
 
 ```python

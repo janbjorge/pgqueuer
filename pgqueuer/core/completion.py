@@ -8,10 +8,11 @@ from datetime import timedelta
 from itertools import chain
 from typing import Self
 
-from pgqueuer.core import tm
+from pgqueuer.core import listeners, tm
 from pgqueuer.domain import models, types
 from pgqueuer.ports import RepositoryPort
-from pgqueuer.ports.driver import Driver, ListenerRemover
+from pgqueuer.ports.driver import Driver
+from pgqueuer.ports.repository import NotificationListener
 
 
 @dataclass
@@ -72,11 +73,16 @@ class CompletionWatcher:
         init=False,
         repr=False,
     )
+    # The queries when they can listen; otherwise ``driver`` (deprecated fallback).
+    listener: NotificationListener = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.listener = listeners.listener_for(self.queries, self.driver)
 
     async def __aenter__(self) -> Self:
         if self.refresh_interval is not None:
             self.task_manager.add(asyncio.create_task(self._poll_for_change(self.refresh_interval)))
-        await self.driver.add_listener(self.queries.qbe.settings.channel, self._is_relevant_event)
+        await self.listener.add_listener(self.queries.qbe.settings.channel, self._is_relevant_event)
         self._schedule_refresh_waiters()
         return self
 
@@ -94,10 +100,9 @@ class CompletionWatcher:
             # Set only now: the poll must keep running while a waiter's NOTIFY may be lost.
             self.shutdown.set()
             await self.task_manager.gather_tasks()
-            if isinstance(self.driver, ListenerRemover):
-                await self.driver.remove_listener(
-                    self.queries.qbe.settings.channel, self._is_relevant_event
-                )
+            await self.listener.remove_listener(
+                self.queries.qbe.settings.channel, self._is_relevant_event
+            )
         return False
 
     def wait_for(self, jid: types.JobId) -> asyncio.Future[types.JOB_STATUS]:

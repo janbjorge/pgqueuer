@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import warnings
 from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass
 from datetime import timedelta
@@ -11,7 +12,9 @@ from typing import assert_never
 
 from pgqueuer.core import logconfig
 from pgqueuer.domain import models, types
-from pgqueuer.ports.driver import Driver, NotifyCallback
+from pgqueuer.ports import RepositoryPort
+from pgqueuer.ports.driver import Driver, ListenerRemover, NotifyCallback
+from pgqueuer.ports.repository import NotificationListener
 
 
 class PGNoticeEventListener(asyncio.Queue[models.TableChangedEvent]):
@@ -68,7 +71,7 @@ def default_event_router(
 
 
 async def initialize_notice_event_listener(
-    connection: Driver,
+    connection: Driver | NotificationListener,
     channel: types.Channel,
     event_handler: Callable[[models.AnyEvent], None],
 ) -> NotifyCallback:
@@ -111,3 +114,40 @@ def wait_for_notice_event(
         return None
 
     return asyncio.create_task(suppressed_timeout())
+
+
+@dataclass
+class DriverListener:
+    """Listen through a driver, for a repository without ``NotificationListener``."""
+
+    # shortcut: fallback for old custom repositories; delete it in the next major release.
+    driver: Driver
+
+    async def add_listener(self, channel: str, callback: NotifyCallback) -> None:
+        await self.driver.add_listener(channel, callback)
+
+    async def remove_listener(self, channel: str, callback: NotifyCallback) -> None:
+        if isinstance(self.driver, ListenerRemover):
+            await self.driver.remove_listener(channel, callback)
+
+
+def listener_for(
+    repository: RepositoryPort,
+    driver: Driver | None = None,
+) -> NotificationListener:
+    """Return *repository* when it can listen. Otherwise listen through a driver.
+
+    The fallback uses *driver*, or ``repository.driver`` when *driver* is None,
+    and emits a ``DeprecationWarning``.
+    """
+    if isinstance(repository, NotificationListener):
+        return repository
+    warnings.warn(
+        f"{type(repository).__name__} has no add_listener and remove_listener, so PgQueuer "
+        "listens through its driver. Add the two methods (see "
+        "pgqueuer.ports.repository.NotificationListener). The next major release removes "
+        "this fallback.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return DriverListener(driver if driver is not None else repository.driver)
