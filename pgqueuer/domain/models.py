@@ -317,6 +317,7 @@ class OverviewSnapshot(BaseModel):
     active_workers: int
     oldest_queued_age_seconds: float | None
     exceptions_recent: int
+    failed_recent: int = 0
 
 
 class TracebackRecord(BaseModel):

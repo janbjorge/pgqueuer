@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
@@ -525,6 +526,17 @@ class TestOverviewChart:
         assert response.status_code == 200
         assert '<svg class="tchart"' in response.text
         assert "successful 1" in response.text
+
+    async def test_overview_shows_recent_held_failures(
+        self, client: httpx.AsyncClient, queries: InMemoryQueries
+    ) -> None:
+        await queries.enqueue("ep", None)
+        (job,) = await dequeue_all(queries, "ep")
+        await queries.log_jobs([(job, "failed", None)])
+        response = await client.get("/")
+        card = re.search(r'<div class="card alert">.{0,60}failed \(1h\)', response.text)
+        assert card is not None
+        assert '<span class="value">1</span>' in card.group()
 
     async def test_overview_empty_chart_message(self, client: httpx.AsyncClient) -> None:
         response = await client.get("/")
