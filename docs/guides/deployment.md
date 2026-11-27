@@ -183,8 +183,8 @@ starting again with a new connection:
   the factory runs again, so it opens a new connection.
 
 Without `--shutdown-on-listener-failure`, a failed health check only logs an error. A dead
-connection ends the worker at its next query, which can be up to `--dequeue-timeout` (30 s)
-away. With an asyncpg pool, a dead LISTEN connection never ends the worker: it keeps running,
+connection ends the worker after three failed polls in a row. The first can be up to
+`--dequeue-timeout` (30 s) away. With an asyncpg pool, a dead LISTEN connection never ends the worker: it keeps running,
 but only picks up jobs by polling every `--dequeue-timeout`.
 
 Jobs running when the connection drops still finish. If their status write fails, the

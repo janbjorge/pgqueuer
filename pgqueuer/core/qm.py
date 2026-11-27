@@ -537,7 +537,8 @@ class QueueManager:
             listener_cleanup.push_async_callback(listener.remove_listener, self.channel, callback)
             self.listening.set()
 
-            while not self.shutdown.is_set():
+            async def poll() -> timedelta:
+                """Start the jobs that are ready. Return the wait before the next poll."""
                 async for job in self.fetch_jobs(
                     batch_size, max_concurrent_tasks, heartbeat_timeout
                 ):
@@ -557,6 +558,26 @@ class QueueManager:
                 while not notice_event_listener.empty():
                     notice_event_listener.get_nowait()
                 await self._maybe_drain_shutdown(mode, task_manager)
+                return await self._effective_dequeue_timeout(
+                    dequeue_timeout,
+                    max_concurrent_tasks,
+                    len(task_manager.tasks),
+                    heartbeat_timeout,
+                )
+
+            poll_failures = 0
+            while not self.shutdown.is_set():
+                try:
+                    timeout = await poll()
+                except Exception:
+                    # One failed query is not a dead connection: three in a row end the run.
+                    poll_failures += 1
+                    if poll_failures >= 3:
+                        raise
+                    logconfig.logger.warning("Poll %d/3 failed.", poll_failures, exc_info=True)
+                    timeout = min(dequeue_timeout, timedelta(seconds=poll_failures))
+                else:
+                    poll_failures = 0
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
@@ -566,12 +587,6 @@ class QueueManager:
                 # would otherwise wake every wait and spin the loop.
                 wake_on_listener_failure = (
                     shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
-                )
-                timeout = await self._effective_dequeue_timeout(
-                    dequeue_timeout,
-                    max_concurrent_tasks,
-                    len(task_manager.tasks),
-                    heartbeat_timeout,
                 )
                 async with tm.cancel_on_exit(
                     listeners.wait_for_notice_event(notice_event_listener, timeout)

@@ -422,6 +422,29 @@ async def test_run_failure_leaves_no_pending_lifecycle_tasks(
     assert not leaked
 
 
+async def test_three_failed_polls_in_a_row_end_the_run(queries: InMemoryQueries) -> None:
+    """A failed poll is tried again; the third failure in a row ends the run (#1024)."""
+    qm = QueueManager(queries)
+    dequeue = queries.dequeue
+    fails = [True, False, True, True, False, True, True, True]
+    calls = 0
+
+    async def flaky_dequeue(*args: Any, **kwargs: Any) -> list[Job]:
+        nonlocal calls
+        calls += 1
+        if fails[calls - 1]:
+            raise RuntimeError("boom")
+        return await dequeue(*args, **kwargs)
+
+    queries.dequeue = flaky_dequeue
+
+    with pytest.raises(RuntimeError, match="boom"):
+        async with asyncio.timeout(10):
+            await qm.run(dequeue_timeout=timedelta(seconds=0.01))
+
+    assert calls == len(fails)
+
+
 async def test_shutdown_mid_batch_leaves_no_stranded_picked_jobs(
     queries: InMemoryQueries,
 ) -> None:

@@ -16,7 +16,7 @@ supervisor                                                         reruns the fa
 └─ factory() → PgQueuer                                            new connection per cycle
    └─ PgQueuer.run                                                 first error stops both managers
       ├─ QueueManager.run
-      │  ├─ main loop                ─► dequeue + probes           raises, run ends
+      │  ├─ main loop                ─► dequeue + probes           3 in a row: run ends
       │  ├─ job task (per job)                                     waited for
       │  │  ├─ heartbeats, buffered  ─► update_heartbeat           logged, kept
       │  │  └─ results, buffered     ─► log_jobs                   at exit: 5 tries, then kept
