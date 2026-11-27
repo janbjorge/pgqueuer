@@ -320,12 +320,14 @@ class TracebackRecord(BaseModel):
     @field_validator("exception_message", "traceback", "additional_context", mode="after")
     @classmethod
     def escape_nul(cls, value: object) -> object:
-        """Spell out NUL in strings, including ones nested in dicts, lists, and tuples.
+        """Spell out NUL and lone surrogates in strings, also in nested dicts, lists, and tuples.
 
-        PostgreSQL's jsonb refuses a NUL, so one in a record fails the whole log write.
+        PostgreSQL jsonb does not accept NUL, and UTF-8 cannot encode a lone surrogate.
+        Either one in a record fails the whole log write.
         """
         if isinstance(value, str):
-            return value.replace("\x00", "\\x00")
+            escaped = value.replace("\x00", "\\x00")
+            return escaped.encode("utf-8", "backslashreplace").decode("utf-8")
         if isinstance(value, dict):
             return {cls.escape_nul(key): cls.escape_nul(item) for key, item in value.items()}
         if isinstance(value, (list, tuple)):
