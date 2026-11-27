@@ -124,13 +124,26 @@ class QueueManager:
     async def _run_periodic_health_check(
         self,
         interval: timedelta = timedelta(seconds=10),
+        max_misses: int = 3,
     ) -> None:
-        """Probe listener health every *interval*; log and re-raise the first failure."""
+        """Probe listener health every *interval*; raise after *max_misses* misses in a row."""
         await self.listening.wait()
+        misses = 0
         while not self.shutdown.is_set():
             try:
                 await self.listener_healthy(timeout=interval)
             except Exception:
+                misses += 1
+                if misses < max_misses:
+                    # One late or dropped NOTIFY is not a dead listener; the miss
+                    # already waited *interval*, so probe again right away.
+                    logconfig.logger.warning(
+                        "Listener health probe %d/%d failed; retrying.",
+                        misses,
+                        max_misses,
+                        exc_info=True,
+                    )
+                    continue
                 # Without shutdown_on_listener_failure nothing reads this task's exception.
                 logconfig.logger.exception(
                     "Listener health check failed: NOTIFY wake-ups and job cancellations "
@@ -138,6 +151,7 @@ class QueueManager:
                     "it keeps running and only polls every dequeue timeout: restart it."
                 )
                 raise
+            misses = 0
             with suppress(TimeoutError):
                 async with asyncio.timeout(interval.total_seconds()):
                     await self.shutdown.wait()

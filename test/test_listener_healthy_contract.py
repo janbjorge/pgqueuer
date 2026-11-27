@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Iterator
 from datetime import timedelta
 
@@ -141,3 +142,29 @@ async def test_first_probe_waits_for_listen(monkeypatch: pytest.MonkeyPatch) -> 
         qm.shutdown.set()
         await run
         assert order[:2] == ["listen", "notify"]
+
+
+async def test_one_lost_probe_does_not_end_health_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A single unanswered probe is retried, not treated as a dead listener (#1120)."""
+    qm = QueueManager(InMemoryQueries(InMemoryDriver()))
+    probes = 0
+
+    async def listener_healthy(timeout: timedelta) -> HealthCheckEvent:
+        nonlocal probes
+        probes += 1
+        if probes == 1:
+            raise FailingListenerError  # the first NOTIFY got lost
+        return HealthCheckEvent(
+            channel=qm.channel,
+            sent_at=utc_now(),
+            type="health_check_event",
+            id=HealthCheckId(uuid.uuid4()),
+        )
+
+    monkeypatch.setattr(qm, "listener_healthy", listener_healthy)
+    qm.listening.set()
+    checks = asyncio.create_task(qm._run_periodic_health_check(timedelta(milliseconds=50)))
+    await asyncio.sleep(0.3)
+    qm.shutdown.set()
+    await checks
+    assert probes > 2
