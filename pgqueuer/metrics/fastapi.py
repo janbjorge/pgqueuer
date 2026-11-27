@@ -21,19 +21,24 @@ def create_metrics_router(
 ) -> APIRouter:
     """Create a FastAPI router with a Prometheus metrics endpoint.
 
-    Example:
-        >>> from contextlib import asynccontextmanager
-        >>> from fastapi import FastAPI
-        >>> from pgqueuer.metrics.fastapi import create_metrics_router
-        >>> from pgqueuer.adapters.persistence.queries import Queries
-        >>>
-        >>> @asynccontextmanager
-        >>> async def lifespan(app: FastAPI):
-        ...     app.state.repository = Queries(driver)
-        ...     yield
-        >>>
-        >>> app = FastAPI(lifespan=lifespan)
-        >>> app.include_router(create_metrics_router(app.state.repository))
+    The router keeps *repository*, so call this function after the repository exists.
+
+    Usage example::
+
+        import asyncio
+        import uvicorn
+        from fastapi import FastAPI
+        from pgqueuer import AsyncpgPoolDriver, Queries
+        from pgqueuer.adapters.connections import create_asyncpg_pool
+        from pgqueuer.metrics.fastapi import create_metrics_router
+
+        async def main() -> None:
+            async with create_asyncpg_pool() as pool:
+                app = FastAPI()
+                app.include_router(create_metrics_router(Queries(AsyncpgPoolDriver(pool))))
+                await uvicorn.Server(uvicorn.Config(app)).serve()
+
+        asyncio.run(main())
     """
     router = APIRouter()
 
