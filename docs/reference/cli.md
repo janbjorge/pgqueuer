@@ -40,8 +40,8 @@ pgq uninstall
 ```
 
 Without `--schema`, `uninstall` drops nothing and exits `1` when `search_path`
-resolves the queue table to a schema other than `current_schema()`. Set
-`--schema` to that schema, or change `search_path`.
+resolves the queue table outside `current_schema()`. Set `--schema` to that
+schema, or change `search_path`.
 
 ---
 

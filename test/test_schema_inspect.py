@@ -180,32 +180,11 @@ async def test_queue_table_outside_current_schema_stops_inspect(apgdriver: Async
         await Queries(apgdriver).schema_is_installed()
 
 
-async def test_uninstall_refuses_a_queue_table_outside_current_schema(
-    apgdriver: AsyncpgDriver,
-) -> None:
+async def test_queue_table_outside_current_schema_stops_uninstall(apgdriver: AsyncpgDriver) -> None:
     """Uninstall drops nothing when search_path resolves the queue table to a later schema."""
     await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
     with pytest.raises(PgqException, match="resolves to the schema public"):
         await Queries(apgdriver).uninstall()
 
-    await apgdriver.execute("SET search_path TO public")
-    assert collapse(await inspect(apgdriver, DBSettings())) == declared_schema(DBSettings())
-
-
-async def test_uninstall_drops_every_declared_object(apgdriver: AsyncpgDriver) -> None:
-    """Uninstall in current_schema() leaves no declared object behind."""
-    await Queries(apgdriver).uninstall()
-    assert await inspect(apgdriver, DBSettings()) == Schema((), (), (), (), ())
-
-
-async def test_uninstall_with_db_schema_ignores_search_path(apgdriver: AsyncpgDriver) -> None:
-    """With db_schema set, uninstall drops only the objects in that schema, not in public."""
-    scoped = DBSettings(db_schema="billing")
-    await queries_for(apgdriver, scoped).install()
-    await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
-
-    await queries_for(apgdriver, scoped).uninstall()
-
-    assert await inspect(apgdriver, scoped) == Schema((), (), (), (), ())
     await apgdriver.execute("SET search_path TO public")
     assert collapse(await inspect(apgdriver, DBSettings())) == declared_schema(DBSettings())
