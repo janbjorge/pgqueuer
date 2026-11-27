@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from datetime import timedelta
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.core.applications import PgQueuer
+from pgqueuer.domain.errors import RetryRequested
 from pgqueuer.domain.models import Job
 from pgqueuer.domain.types import QueueEntrypoint, QueueExecutionMode, QueueManagerId
 
@@ -51,6 +53,35 @@ async def test_qm_drain_processes_all_jobs() -> None:
     )
 
     assert len(processed) == n
+
+
+async def test_qm_drain_ends_when_a_job_retries_after_later_jobs_started() -> None:
+    """A drain runs a late retry again, then ends."""
+    pq = PgQueuer.in_memory()
+    ids = await pq.qm.queries.enqueue(["drain_ep"] * 10, [None] * 10, [0] * 10)
+    later_job_started = asyncio.Event()
+    runs: list[tuple[int, int]] = []
+
+    @pq.entrypoint("drain_ep")
+    async def handler(job: Job) -> None:
+        runs.append((job.id, job.attempts))
+        if job.id == ids[2]:
+            later_job_started.set()
+        if job.id == ids[0] and job.attempts == 0:
+            # Retry only after a later batch moved the dequeue cursor past this job.
+            await later_job_started.wait()
+            raise RetryRequested
+
+    async with asyncio.timeout(5):
+        await pq.qm.run(
+            batch_size=2,
+            mode=QueueExecutionMode.drain,
+            max_concurrent_tasks=2,
+            dequeue_timeout=timedelta(seconds=1),
+        )
+
+    assert sorted(runs) == sorted([(ids[0], 1), *((job_id, 0) for job_id in ids)])
+    assert await pq.qm.queries.queue_size() == []
 
 
 # ---------------------------------------------------------------------------
