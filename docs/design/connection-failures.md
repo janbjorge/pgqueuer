@@ -16,7 +16,7 @@ supervisor                                                         reruns the fa
 └─ factory() → PgQueuer                                            new connection per cycle
    └─ PgQueuer.run                                                 first error stops both managers
       ├─ QueueManager.run
-      │  ├─ main loop                ─► dequeue + probes           3 tries, then run ends
+      │  ├─ main loop                ─► dequeue + probes           3 in a row: run ends
       │  ├─ job task (per job)                                     waited for
       │  │  ├─ heartbeats, buffered  ─► update_heartbeat           logged, kept
       │  │  └─ results, buffered     ─► log_jobs                   at exit: 5 tries, then kept
@@ -41,12 +41,10 @@ Nothing reconnects in place. `Queries` and the drivers raise every error to the
 caller. The only exception is asyncpg's pool, which replaces its own query
 connections.
 
-A run ends when the first part in the tree ends it, so how fast a drop is noticed
+A run ends at the first "raises, run ends", so how fast a drop is noticed
 depends on when each loop next wakes. The main loop wakes on a NOTIFY or after
-`dequeue_timeout`. After a failed poll, the main loop tries again after 1 s and
-again after 2 s. The third failed poll in a row ends the run. The scheduler
-wakes at the next cron time plus 1 s, or every second when no schedules are
-registered. psycopg is faster than both: its
+`dequeue_timeout`. The scheduler wakes at the next cron time plus 1 s, or every
+second when no schedules are registered. psycopg is faster than both: its
 watcher waits inside `notifies()`, so it fails at once and takes the next query
 with it. With `shutdown_on_listener_failure`, a failed health check also wakes
 the main loop and ends the run, which bounds detection at about 20 s: up to
@@ -73,9 +71,6 @@ One run on 2026-10-14. The worker's backends were killed with
 
 With restart off, both connection drivers exit with an error, and the pool keeps
 running without NOTIFY.
-
-These numbers come from before the main loop retried a failed poll. A restart
-that a failed poll starts now comes up to 3 s later.
 
 ## Known gaps
 

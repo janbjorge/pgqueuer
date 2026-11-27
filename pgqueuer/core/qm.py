@@ -24,8 +24,6 @@ from pgqueuer.domain import errors, models, types
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter, SchemaVerifier
 
-MAX_POLL_FAILURES = 3
-
 
 @dataclasses.dataclass
 class QueueManager:
@@ -559,8 +557,7 @@ class QueueManager:
                         task.add_done_callback(functools.partial(self.forget_job, job.id, context))
                         task_manager.add(task)
 
-                    # NOTIFY follows commit, so the checks below already see what drained
-                    # events signal.
+                    # NOTIFY follows commit, so the checks below see what drained events signal.
                     while not notice_event_listener.empty():
                         notice_event_listener.get_nowait()
                     await self._maybe_drain_shutdown(mode, task_manager)
@@ -571,25 +568,14 @@ class QueueManager:
                         heartbeat_timeout,
                     )
                 except Exception:
+                    # One failed query is not a dead connection: three in a row end the run.
                     poll_failures += 1
-                    if poll_failures >= MAX_POLL_FAILURES:
-                        # run() raises only after the jobs end, so the log tells the operator now.
-                        logconfig.logger.exception(
-                            "Poll failed %d times in a row. The worker takes no new jobs.",
-                            MAX_POLL_FAILURES,
-                        )
+                    if poll_failures >= 3:
                         raise
-                    # One failed query does not prove a dead connection.
-                    logconfig.logger.warning(
-                        "Poll %d/%d failed. The worker tries again.",
-                        poll_failures,
-                        MAX_POLL_FAILURES,
-                        exc_info=True,
-                    )
-                    timeout = timedelta(seconds=poll_failures)
+                    logconfig.logger.warning("Poll %d/3 failed.", poll_failures, exc_info=True)
+                    timeout = min(dequeue_timeout, timedelta(seconds=poll_failures))
                 else:
                     poll_failures = 0
-                # Outside the try: a listener failure must end the run, not get a retry.
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
