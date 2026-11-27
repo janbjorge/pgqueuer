@@ -716,7 +716,10 @@ def requeue(
         async with yield_queries(ctx) as q:
             typed_ids = [types.JobId(i) for i in ids]
             await q.requeue_jobs(typed_ids)
-            print(f"Re-queued {len(typed_ids)} job(s).")
+            print(
+                f"Sent {len(typed_ids)} job ID(s) to re-queue. "
+                "Only jobs with status 'failed' move to 'queued'."
+            )
 
     asyncio_run(run())
 
