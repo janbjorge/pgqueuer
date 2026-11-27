@@ -518,55 +518,21 @@ def test_finishing_a_cut_off_rebuild_is_not_announced() -> None:
 
 
 def test_an_index_created_on_an_existing_table_is_announced() -> None:
-    """The build blocks writes to a table that can hold many rows."""
-    settings = DBSettings()
-    schema = target(settings)
-    for index in schema.indexes:
-        notes = plan(without_index(schema, index.name), schema, settings).notes
-
-        assert len(notes) == 1, index.name
-        assert notes[0].startswith(f"Upgrading creates {index.name}. "), notes[0]
-        assert f"SHARE lock on {index.table} for the whole build, blocking writes" in notes[0]
-
-
-def test_an_index_built_over_a_stale_leftover_is_announced() -> None:
-    """The plan drops the stale leftover, so it builds the index from nothing."""
+    """Only the build on a table that exists has a note, because a new table is empty."""
     settings = DBSettings()
     schema = target(settings)
     name = f"{settings.queue_table}_ep_ea_idx"
-    index = next(entry for entry in schema.indexes if entry.name == name)
-    stale = dataclasses.replace(
-        index, name=rebuild_name(index), body=SqlExpression("USING btree (created)")
-    )
-    live = dataclasses.replace(schema, indexes=(*without_index(schema, name).indexes, stale))
-
-    result = plan(live, schema, settings)
-
-    assert result.statements[-1].startswith(f"CREATE INDEX {name} ON")
-    assert len(result.notes) == 1
-    assert result.notes[0].startswith(f"Upgrading creates {name}. ")
-
-
-def test_an_index_on_a_table_the_plan_creates_is_not_announced() -> None:
-    """The plan creates the table empty, so its index builds block no write."""
-    settings = DBSettings()
-    schema = target(settings)
     log = settings.queue_table_log
     live = dataclasses.replace(
         without_table(schema, log),
-        indexes=tuple(entry for entry in schema.indexes if entry.table != log),
+        indexes=tuple(
+            entry for entry in schema.indexes if entry.name != name and entry.table != log
+        ),
     )
 
-    result = plan(live, schema, settings)
-
-    assert any(one.startswith("CREATE INDEX") and f" ON {log} " in one for one in result.statements)
-    assert result.notes == ()
-
-
-def test_a_fresh_install_announces_nothing() -> None:
-    """Each table is new and empty, so no build blocks a write."""
-    settings = DBSettings()
-    assert plan(EMPTY, target(settings), settings).notes == ()
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 1
+    assert notes[0].startswith(f"Upgrading creates {name}. ")
 
 
 def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:

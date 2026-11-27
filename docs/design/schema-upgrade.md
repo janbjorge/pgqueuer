@@ -65,8 +65,7 @@ recognised: `integer` to `bigint` for the id, and any type to the status
 enum through `::TEXT`. Both rewrite the table, so whenever one is
 planned a note warns about the `ACCESS EXCLUSIVE` lock. Any other type
 change raises `SchemaDriftError` while planning, before any statement
-runs. An index build holds a `SHARE` lock that blocks writes to its table,
-so each create or rebuild on a table that exists gets a note too.
+runs.
 
 A note is something the upgrade will not do on its own. Retired columns
 hold data, so they get `DROP NOT NULL` and a note, never `DROP COLUMN`.

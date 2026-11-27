@@ -324,8 +324,8 @@ def awaits_rename(index: Index, leftover: Index | None) -> bool:
 def build_notes(live: Schema, declared: Schema) -> list[str]:
     """Warn before an index build: it blocks writes to its table until it finishes.
 
-    A table that this plan creates is empty, so its indexes get no note. A rename
-    that finishes a cut-off rebuild builds nothing, so it gets no note either.
+    A table that this plan creates is empty, so its indexes have no note. A rename
+    that finishes a cut-off rebuild builds nothing, so it has no note either.
     """
     found = {entry.name: entry for entry in live.indexes}
     tables = {entry.name for entry in live.tables}
