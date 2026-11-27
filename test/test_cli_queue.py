@@ -33,6 +33,22 @@ def test_cli_queue_dedupe_key_and_on_conflict(dsn: str, pgdriver: db.SyncDriver)
     assert sum(x.count for x in queries.SyncQueries(pgdriver).queue_size()) == 1
 
 
+def test_cli_requeue_does_not_claim_jobs_it_did_not_move(
+    dsn: str,
+    pgdriver: db.SyncDriver,
+) -> None:
+    """Only failed jobs move, so the output must not claim a re-queue for a queued job."""
+    (job_id,) = queries.SyncQueries(pgdriver).enqueue("ep", None)
+
+    result = CliRunner().invoke(app, ["requeue", str(job_id)], env=env_from_dsn(dsn))
+
+    assert result.exit_code == 0, result.output
+    assert "Re-queued 1 job(s)" not in result.stdout
+    assert result.stdout.strip() == (
+        "Sent 1 job ID(s) to re-queue. Only jobs with status 'failed' move to 'queued'."
+    )
+
+
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
