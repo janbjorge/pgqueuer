@@ -537,36 +537,38 @@ class QueueManager:
             listener_cleanup.push_async_callback(listener.remove_listener, self.channel, callback)
             self.listening.set()
 
+            async def poll() -> timedelta:
+                """Start the jobs that are ready. Return the wait before the next poll."""
+                async for job in self.fetch_jobs(
+                    batch_size, max_concurrent_tasks, heartbeat_timeout
+                ):
+                    # A late heartbeat lets our own dequeue re-pick a job still running here.
+                    if job.id in self.job_context:
+                        continue
+                    context = models.Context(
+                        cancellation=anyio.CancelScope(),
+                        resources=self.resources,
+                    )
+                    self.job_context[job.id] = context
+                    task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
+                    task.add_done_callback(functools.partial(self.forget_job, job.id, context))
+                    task_manager.add(task)
+
+                # NOTIFY follows commit, so the checks below already see what drained events signal.
+                while not notice_event_listener.empty():
+                    notice_event_listener.get_nowait()
+                await self._maybe_drain_shutdown(mode, task_manager)
+                return await self._effective_dequeue_timeout(
+                    dequeue_timeout,
+                    max_concurrent_tasks,
+                    len(task_manager.tasks),
+                    heartbeat_timeout,
+                )
+
             poll_failures = 0
             while not self.shutdown.is_set():
                 try:
-                    async for job in self.fetch_jobs(
-                        batch_size, max_concurrent_tasks, heartbeat_timeout
-                    ):
-                        # A late heartbeat lets our own dequeue re-pick a job still running here.
-                        if job.id in self.job_context:
-                            continue
-                        context = models.Context(
-                            cancellation=anyio.CancelScope(),
-                            resources=self.resources,
-                        )
-                        self.job_context[job.id] = context
-                        task = asyncio.create_task(
-                            self._dispatch(job, jbuff, hbuff, heartbeat_timeout)
-                        )
-                        task.add_done_callback(functools.partial(self.forget_job, job.id, context))
-                        task_manager.add(task)
-
-                    # NOTIFY follows commit, so the checks below see what drained events signal.
-                    while not notice_event_listener.empty():
-                        notice_event_listener.get_nowait()
-                    await self._maybe_drain_shutdown(mode, task_manager)
-                    timeout = await self._effective_dequeue_timeout(
-                        dequeue_timeout,
-                        max_concurrent_tasks,
-                        len(task_manager.tasks),
-                        heartbeat_timeout,
-                    )
+                    timeout = await poll()
                 except Exception:
                     # One failed query is not a dead connection: three in a row end the run.
                     poll_failures += 1
