@@ -283,7 +283,8 @@ def create_web_router(  # noqa: C901, PLR0915 - registers every route
     async def healthz(
         insights: Annotated[InsightsService, Depends(get_insights)],
     ) -> dict[str, str]:
-        await insights.queue_size()
+        # Read one row by primary key: the probe has no auth, so it must not scan the queue.
+        await insights.job(types.JobId(0))
         return {"status": "ok"}
 
     if include_sse:

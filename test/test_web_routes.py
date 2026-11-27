@@ -77,6 +77,22 @@ class TestPages:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
+    async def test_healthz_does_not_scan_the_queue(
+        self,
+        client: httpx.AsyncClient,
+        queries: InMemoryQueries,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The probe has no auth, so it must not scan the whole queue table."""
+
+        async def scan() -> list[models.QueueStatistics]:
+            raise AssertionError("/healthz scanned the whole queue table")
+
+        monkeypatch.setattr(queries, "queue_size", scan)
+        response = await client.get("/healthz")
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
+
     async def test_static_files_served(self, client: httpx.AsyncClient) -> None:
         for filename in ("htmx.min.js", "idiomorph-ext.min.js", "sse.js", "style.css"):
             response = await client.get(f"/static/{filename}")
