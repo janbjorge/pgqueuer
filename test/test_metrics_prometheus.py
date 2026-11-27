@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import httpx
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.types import QueueEntrypoint
 from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
 from pgqueuer.models import LogStatistics, QueueStatistics
 from pgqueuer.ports.repository import QueueRepositoryPort
+from test.helpers import env_from_dsn
 from tools.prometheus.prometheus import create_app, get_queries
 
 
@@ -187,3 +192,54 @@ def test_prometheus_tool_escapes_label_values(monkeypatch: pytest.MonkeyPatch) -
         "acme_pgqueuer_queue_count"
         '{aggregation="sum",entrypoint="report \\"daily\\"",status="queued"} 2'
     )
+
+
+@pytest_asyncio.fixture
+async def prometheus_tool(
+    dsn: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[httpx.AsyncClient, None]:
+    """Serve tools/prometheus. Its lifespan connects to the test database."""
+    for key, value in env_from_dsn(dsn).items():
+        monkeypatch.setenv(key, value)
+    app = create_app()
+    transport = httpx.ASGITransport(app=app)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=transport, base_url="http://testserver") as client,
+    ):
+        yield client
+
+
+async def test_prometheus_tool_health_is_200_with_a_live_connection(
+    prometheus_tool: httpx.AsyncClient,
+) -> None:
+    """The service in tools/prometheus returns 200 on /health while it can query Postgres."""
+    response = await prometheus_tool.get("/health")
+
+    assert response.status_code == 200
+
+
+async def test_prometheus_tool_health_is_503_after_postgres_ends_its_connection(
+    prometheus_tool: httpx.AsyncClient,
+    apgdriver: AsyncpgDriver,
+) -> None:
+    """The service returns 503 on /health after Postgres ends its connection."""
+    assert (await prometheus_tool.get("/health")).status_code == 200
+
+    # The test database is new. Its only other client backend belongs to the service.
+    # The timeout makes Postgres wait until that backend has exited.
+    terminated = await apgdriver.fetch(
+        """
+        SELECT pg_terminate_backend(pid, 5000) AS terminated
+        FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND backend_type = 'client backend'
+        """
+    )
+    assert terminated == [{"terminated": True}]
+
+    # Nothing reconnects. Every probe fails until the service restarts.
+    statuses = [(await prometheus_tool.get("/health")).status_code for _ in range(3)]
+    assert statuses == [503, 503, 503]

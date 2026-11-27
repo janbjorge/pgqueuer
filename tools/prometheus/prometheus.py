@@ -49,7 +49,12 @@ def create_metrics_router() -> APIRouter:
         )
 
     @router.get("/health", response_class=Response)
-    async def health() -> Response:
+    async def health(queries: Annotated[Queries, Depends(get_queries)]) -> Response:
+        try:
+            await queries.driver.execute("SELECT 1")
+        except (asyncpg.PostgresError, asyncpg.InterfaceError):
+            # The service does not reconnect. A liveness probe restarts it on a 503.
+            return Response(status_code=503)
         return Response(status_code=200)
 
     return router
