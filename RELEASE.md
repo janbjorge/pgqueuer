@@ -65,6 +65,19 @@
   running with no log line: no NOTIFY wake-ups, no job cancellations, only
   polling every `dequeue_timeout` (#1025). It still keeps running; restart it,
   or pass `shutdown_on_listener_failure=True` to make it exit.
+- The listener health check reports a dead listener after three probes in a
+  row go unanswered, instead of after the first. One late or dropped NOTIFY
+  used to end the check: with `shutdown_on_listener_failure` off the worker
+  never probed again, and with it on the worker stopped (#1120). A dead
+  listener is now found after about 30 s instead of 10 s.
+- `pgq` reads `PGQUEUER_DSN` before `PGDSN`. `PGDSN` used to win when both
+  were set (#1126); if the two differ in your environment, `pgq` now connects
+  with `PGQUEUER_DSN`.
+- A second SIGINT or SIGTERM stops `pgq run` and `pgqueuer.run()` at once.
+  The first signal still starts a graceful shutdown and waits for the running
+  jobs; a second one used to do nothing, so a blocked job kept the process
+  alive until SIGKILL (#1133). Jobs cut off this way stay `picked` and run
+  again after `heartbeat_timeout`.
 
 ### Fixed
 
@@ -95,6 +108,48 @@
   does not stop the start or fail `pgq verify`; before, the log table's
   `job_id_status` index did. Custom repositories keep the old check unless
   they add `verify_schema()` (see `pgqueuer.ports.repository.SchemaVerifier`).
+- With `shutdown_on_listener_failure=True`, a healthy worker no longer stops
+  about 10 seconds after it starts. Its first health probe could go out before
+  LISTEN was in place, so nothing heard the NOTIFY and the check failed
+  (#1118).
+- `QueueManager.run()` removes its NOTIFY listener when it stops. Each run
+  used to leave its callback behind, so a connection used for several runs
+  collected one dead callback per run (#1122).
+- A query on a listening `PsycopgDriver` connection no longer waits up to 1 s.
+  The NOTIFY watcher held the connection lock for a second at a time; it now
+  waits in 50 ms slices, so a query waits at most one slice (#1121).
+- `AsyncpgPoolDriver.remove_listener` returns the listener connection to the
+  pool with the last listener. The driver used to keep it until its last exit,
+  so a caller that removed its listeners without exiting the driver held one
+  pool connection, and `pool.close()` then waited for it forever.
+- `pgqueuer.run()` removes its SIGINT and SIGTERM handlers when it returns.
+  They used to stay in place, so a later SIGTERM only set an event that nobody
+  read, and the process ran on until SIGKILL (#1133).
+- The web dashboard's `/healthz` answers without credentials when Basic auth
+  is on. It used to return 401, so an orchestrator's liveness probe failed
+  (#1127).
+- The web dashboard rejects a cross-site POST that arrives without a
+  `Sec-Fetch-Site` header. It used to check only that header, so it accepted
+  such a request. It now compares `Origin`, or else `Referer`, with the
+  request's `Host`; a request with none of the three headers still passes, so
+  curl and scripts keep working (#1128). Behind a reverse proxy, pass the
+  original `Host` header through, or such a POST gets 403.
+- An object name longer than 63 bytes raises `ValueError` with the name.
+  PostgreSQL truncates such a name, so a long prefix made `pgq install` and
+  `pgq upgrade` fail (#1134).
+- `pgq install` and `pgq upgrade` stop when the queue table resolves to a
+  schema other than `current_schema()`. With `db_schema` unset and a new
+  schema first in `search_path`, `pgq install` found no tables, created a
+  second queue there, and left the jobs in the old one unread (#1135). A
+  worker and `pgq verify` stop with the same error, where they used to report
+  missing tables. Set `db_schema`, or change `search_path`.
+- In-memory `mark_job_as_cancelled` on a failed job keeps the dedupe key of a
+  newer job, matching PostgreSQL. It released the key, so a later enqueue
+  with that key was accepted as a duplicate (#1130).
+- The in-memory adapter frees cancelled jobs, and jobs re-added at a higher
+  priority, while a higher priority stays busy. Their entries, payload
+  included, used to stay referenced until the dequeue reached them, which
+  never happened while higher-priority work kept arriving (#1131).
 
 ---
 
