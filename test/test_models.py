@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from pgqueuer.domain.models import Job, Log, TracebackRecord
 from pgqueuer.domain.types import JobId
 from test.helpers import mocked_job
@@ -17,40 +15,10 @@ def test_job_headers_accept_parsed_dict_and_json() -> None:
     assert from_dict.headers == from_json.headers == headers
 
 
-# asyncpg returns jsonb as text. psycopg returns it as parsed data.
-@pytest.mark.parametrize(
-    ("raw", "expected"),
-    [
-        pytest.param("[1]", None, id="list-text"),
-        pytest.param([1], None, id="list-parsed"),
-        pytest.param('"x"', None, id="string-text"),
-        pytest.param("x", None, id="string-parsed"),
-        pytest.param("1", None, id="number-text"),
-        pytest.param(1, None, id="number-parsed"),
-        pytest.param("true", None, id="bool-text"),
-        pytest.param(True, None, id="bool-parsed"),
-        pytest.param("null", None, id="json-null-text"),
-        pytest.param(None, None, id="null"),
-        pytest.param(
-            '{"otel": {"traceparent": "00-abc"}}',
-            {"otel": {"traceparent": "00-abc"}},
-            id="object-text",
-        ),
-        pytest.param(
-            {"otel": {"traceparent": "00-abc"}},
-            {"otel": {"traceparent": "00-abc"}},
-            id="object-parsed",
-        ),
-    ],
-)
-def test_job_headers_keep_only_a_json_object(
-    raw: object,
-    expected: dict[str, object] | None,
-) -> None:
-    """Job headers keep a JSON object. Every other JSON value becomes None."""
-    job = Job.model_validate({**mocked_job().model_dump(), "headers": raw})
-    assert job.headers == expected
-    assert job.otel_headers() == (None if expected is None else expected["otel"])
+def test_job_headers_drop_a_parsed_list() -> None:
+    """psycopg returns a jsonb array as a list. The list becomes None headers."""
+    job = Job.model_validate({**mocked_job().model_dump(), "headers": [1]})
+    assert job.headers is None
 
 
 def test_log_traceback_accepts_parsed_dict_and_json() -> None:

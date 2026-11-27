@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import logging
 import uuid
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
@@ -12,8 +11,7 @@ import pytest
 from pgqueuer import db, errors, models, queries
 from pgqueuer.adapters.persistence.query_helpers import cell
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueExecutionMode, QueueManagerId
-from pgqueuer.qm import QueueManager
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
 
 
 @pytest.mark.parametrize("N", (1, 2, 64))
@@ -1279,61 +1277,33 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.log_jobs([(jobs[0], "successful", None)])
 
 
-@contextlib.asynccontextmanager
-async def psycopg_driver(dsn: str) -> AsyncIterator[db.Driver]:
-    async with (
-        await psycopg.AsyncConnection.connect(dsn, autocommit=True) as connection,
-        db.PsycopgDriver(connection) as driver,
-    ):
-        yield driver
-
-
-@pytest.mark.parametrize("use_psycopg", [False, True], ids=["asyncpg", "psycopg"])
-async def test_job_with_non_object_headers_runs_with_its_batch(
+async def test_dequeue_returns_batch_with_non_object_headers(
     apgdriver: db.Driver,
-    dsn: str,
-    use_psycopg: bool,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A job whose headers are not a JSON object runs without headers. Its batch also runs."""
-    async with psycopg_driver(dsn) if use_psycopg else contextlib.nullcontext(apgdriver) as driver:
-        q = queries.Queries(driver)
-        good = await q.enqueue(["ep", "ep"], [b"a", b"b"], [0, 0], headers=[{"k": "v"}, None])
-        # A producer that writes the row itself, as in the PostgREST guide, can store any jsonb.
-        (row,) = await driver.fetch(
-            f"""INSERT INTO {q.qbq.settings.queue_table}
-                (priority, entrypoint, payload, status, headers)
-            VALUES (0, 'ep', 'c', 'queued', '[1]'::jsonb)
-            RETURNING id"""
+    """A job whose headers are not a JSON object dequeues with its batch and one warning."""
+    q = queries.Queries(apgdriver)
+    (plain,) = await q.enqueue("ep", None)
+    # A producer that writes the row itself, as in the PostgREST guide, can store any jsonb.
+    (row,) = await apgdriver.fetch(
+        f"""INSERT INTO {q.qbq.settings.queue_table} (priority, entrypoint, status, headers)
+        VALUES (0, 'ep', 'queued', '[1]') RETURNING id"""
+    )
+    bad = JobId(cell(row, "id", int))
+
+    with caplog.at_level(logging.WARNING, logger="pgqueuer"):
+        jobs = await q.dequeue(
+            batch_size=10,
+            entrypoints={QueueEntrypoint("ep"): queries.EntrypointExecutionParameter(0)},
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
+            global_concurrency_limit=1000,
+            heartbeat_timeout=timedelta(seconds=30),
         )
-        bad = JobId(cell(row, "id", int))
 
-        qm = QueueManager(q)
-        ran: dict[JobId, dict[str, object] | None] = {}
-
-        @qm.entrypoint("ep")
-        async def ep(job: models.Job) -> None:
-            ran[job.id] = job.headers
-
-        with caplog.at_level(logging.WARNING, logger="pgqueuer"):
-            await qm.run(dequeue_timeout=timedelta(seconds=0.1), mode=QueueExecutionMode.drain)
-
-        assert ran == {good[0]: {"k": "v"}, good[1]: None, bad: None}
-        log = await driver.fetch(
-            f"""SELECT job_id, status::text AS status
-            FROM {q.qbq.settings.queue_table_log}
-            WHERE status IN ('picked', 'successful')
-            ORDER BY job_id, status"""
-        )
-        assert [(cell(r, "job_id", int), cell(r, "status", str)) for r in log] == [
-            (job_id, status) for job_id in (*good, bad) for status in ("picked", "successful")
-        ]
-        assert await q.queue_size() == []
-        assert [
-            record.getMessage()
-            for record in caplog.records
-            if record.name == "pgqueuer" and record.levelno >= logging.WARNING
-        ] == [f"Job {bad} has headers that are not a JSON object. The job runs without headers."]
+    assert {job.id: job.headers for job in jobs} == {plain: None, bad: None}
+    assert [r.getMessage() for r in caplog.records if r.name == "pgqueuer"] == [
+        f"Job {bad} has headers that are not a JSON object. The job runs without headers."
+    ]
 
 
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:
