@@ -101,9 +101,6 @@ Or change the durability of existing tables without data loss:
 pgq durability volatile
 ```
 
-PostgreSQL does not replicate unlogged tables to standbys, so a failover or a switchover
-leaves them empty.
-
 See [CLI Reference](cli.md) for full details on `volatile`, `balanced`, and `durable` modes.
 
 ## Autovacuum optimization

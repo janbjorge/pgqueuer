@@ -235,12 +235,11 @@ class Queries:
     async def alter_durability(self, durability: qb.Durability | None = None) -> None:
         """Switch table durability to *durability* (default: configured) without data loss.
 
-        Each ALTER runs in its own transaction, and a table that already has its target
-        persistence gets none. An ALTER holds an ACCESS EXCLUSIVE lock until its
-        transaction ends, also when it changes nothing. A failed run can leave some
-        tables switched. Run it again to finish.
+        Each ALTER runs in its own transaction, so a rewrite locks only its own table.
+        A failed run can leave some tables switched. Run it again to finish.
         """
-        rows = await self.driver.fetch(self.qbe.build_unlogged_query())
+        query = self.qbe.build_unlogged_query()
+        rows = await self.driver.fetch(query.sql, *query.args)
         live = {cell(row, "name", str): cell(row, "unlogged", bool) for row in rows}
         for statement in self.qbe.build_alter_durability_query(durability, live):
             await self.driver.execute(statement)
