@@ -13,7 +13,7 @@ import pytest
 import pytest_asyncio
 
 from pgqueuer.db import AsyncpgDriver, Driver
-from pgqueuer.domain.types import QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint, QueueManagerId
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import EntrypointExecutionParameter, Queries
@@ -464,3 +464,116 @@ async def test_limited_dequeue_claims_top_priority_jobs_within_remaining(apgdriv
 
     claimed = await dequeue(batch_size=10)
     assert {job.id for job in claimed} == {ids[1], ids[3]}
+
+
+async def claim(
+    q: Queries,
+    limits: dict[str, int],
+    global_concurrency_limit: int | None = None,
+) -> list[Job]:
+    """Dequeue up to ten jobs as a new worker with these per-entrypoint limits."""
+    return await q.dequeue(
+        batch_size=10,
+        entrypoints={
+            QueueEntrypoint(name): EntrypointExecutionParameter(limit)
+            for name, limit in limits.items()
+        },
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=global_concurrency_limit,
+        heartbeat_timeout=timedelta(minutes=10),
+    )
+
+
+async def slots(q: Queries, status: JOB_STATUS) -> dict[JobId, int | None]:
+    """Map each queue row with this status to its slot."""
+    return {job.id: job.slot for job in await q.browse_queue(statuses=[status])}
+
+
+async def retried_under_limit(q: Queries, n_jobs: int) -> list[JobId]:
+    """Retry fetch jobs one at a time under concurrency_limit=1. Each one keeps slot 0."""
+    ids = list[JobId]()
+    for priority in range(n_jobs):
+        # A higher priority makes the limited worker take the new job, not a retried one.
+        ids += await q.enqueue(["fetch"], [None], [priority])
+        (job,) = await claim(q, {"fetch": 1})
+        await q.retry_job(job, timedelta(0), None)
+    assert await slots(q, "queued") == dict.fromkeys(ids, 0)
+    return ids
+
+
+@pytest.mark.parametrize("global_concurrency_limit", (None, 10))
+async def test_unlimited_dequeue_claims_jobs_retried_under_a_limit(
+    apgdriver: Driver,
+    global_concurrency_limit: int | None,
+) -> None:
+    """A dequeue without limits claims retried jobs that kept a slot from a limited run."""
+    q = Queries(apgdriver)
+    first, second = await retried_under_limit(q, n_jobs=2)
+    (other,) = await q.enqueue(["other"], [None], [0])
+
+    claimed = await claim(q, {"fetch": 0, "other": 0}, global_concurrency_limit)
+
+    assert sorted(job.id for job in claimed) == [first, second, other]
+    assert await slots(q, "picked") == {first: None, second: None, other: None}
+
+
+async def test_unlimited_dequeue_claims_a_retried_job_while_its_slot_is_held(
+    apgdriver: Driver,
+) -> None:
+    """A dequeue without limits claims a retried job while a limited worker holds its slot."""
+    q = Queries(apgdriver)
+    (retried,) = await retried_under_limit(q, n_jobs=1)
+    (held,) = await q.enqueue(["fetch"], [None], [1])
+    assert [job.id for job in await claim(q, {"fetch": 1})] == [held]
+
+    claimed = await claim(q, {"fetch": 0})
+
+    assert [job.id for job in claimed] == [retried]
+    assert await slots(q, "picked") == {held: 0, retried: None}
+
+
+async def test_unlimited_dequeue_claims_jobs_held_and_requeued_under_a_limit(
+    apgdriver: Driver,
+) -> None:
+    """A dequeue without limits claims held jobs that kept a slot through a requeue."""
+    q = Queries(apgdriver)
+    first, second = await q.enqueue(["fetch"] * 2, [None] * 2, [0] * 2)
+    for _ in range(2):
+        (job,) = await claim(q, {"fetch": 1})
+        await q.log_jobs([(job, "failed", None)])
+    await q.requeue_jobs([first, second])
+    assert await slots(q, "queued") == {first: 0, second: 0}
+
+    claimed = await claim(q, {"fetch": 0})
+
+    assert sorted(job.id for job in claimed) == [first, second]
+    assert await slots(q, "picked") == {first: None, second: None}
+
+
+async def test_worker_without_the_limit_drains_jobs_that_kept_a_slot(apgdriver: Driver) -> None:
+    """A worker without the limit runs each job once, also the jobs that kept a slot."""
+    q = Queries(apgdriver)
+    expected = [*await retried_under_limit(q, n_jobs=2), *await q.enqueue(["other"], [None], [0])]
+    qm = QueueManager(q)
+    ran = list[JobId]()
+    drained = asyncio.Event()
+
+    async def run_once(job: Job) -> None:
+        ran.append(job.id)
+        if len(ran) == len(expected):
+            drained.set()
+
+    qm.entrypoint("fetch")(run_once)
+    qm.entrypoint("other")(run_once)
+
+    async def stop_when_drained() -> None:
+        # The bound only ends a stalled run. A working run sets drained long before.
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(10):
+                await drained.wait()
+        qm.shutdown.set()
+
+    await asyncio.gather(qm.run(dequeue_timeout=timedelta(hours=1)), stop_when_drained())
+
+    assert sorted(ran) == expected
+    assert await q.queue_size() == []

@@ -473,6 +473,8 @@ class DequeueSql:
 
     def claimed(self) -> Cte:
         """Columns: every job column. Reads eligible."""
+        # A row keeps its slot through retry, hold and requeue. Clear it here, or two
+        # rows with the same old slot break the unique picked-slot index.
         return Cte(
             "claimed",
             f"""
@@ -480,7 +482,8 @@ class DequeueSql:
                 SET status = 'picked',
                     updated   = NOW(),
                     heartbeat = NOW(),
-                    queue_manager_id = {self.queue_manager}
+                    queue_manager_id = {self.queue_manager},
+                    slot = NULL
                 WHERE id IN (SELECT id FROM eligible)
                 RETURNING *
             """,

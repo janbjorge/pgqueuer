@@ -52,7 +52,8 @@ claimed AS (
     SET status = 'picked',
         updated   = NOW(),
         heartbeat = NOW(),
-        queue_manager_id = $2
+        queue_manager_id = $2,
+        slot = NULL
     WHERE id IN (SELECT id FROM eligible)
     RETURNING *
 ),
