@@ -250,7 +250,9 @@ class InMemoryQueries:
         ],
     ) -> None:
         now = utc_now()
-        for job, status, record in job_status:
+        # Serialize first, so a record that fails changes no row, as in PostgreSQL.
+        tracebacks = [record.model_dump_json() if record else None for _, _, record in job_status]
+        for (job, status, _), traceback in zip(job_status, tracebacks, strict=True):
             if not self.job_table.finish(job, status, now):
                 continue
             self.logs.append(
@@ -259,7 +261,7 @@ class InMemoryQueries:
                 status=status,
                 priority=job.priority,
                 entrypoint=job.entrypoint,
-                traceback=record.model_dump_json() if record else None,
+                traceback=traceback,
             )
         # The SQL DELETE runs on every call, and its statement trigger always notifies.
         await self.emit_table_changed("delete")
@@ -271,6 +273,8 @@ class InMemoryQueries:
         traceback_record: models.TracebackRecord | None,
     ) -> None:
         now = utc_now()
+        # Serialize first, so a record that fails changes no row, as in PostgreSQL.
+        traceback = traceback_record.model_dump_json() if traceback_record else None
         row = self.job_table.retry(job, delay, now)
         if row is None:
             return
@@ -280,7 +284,7 @@ class InMemoryQueries:
             status="queued",
             priority=row.priority,
             entrypoint=row.entrypoint,
-            traceback=traceback_record.model_dump_json() if traceback_record else None,
+            traceback=traceback,
         )
         await self.emit_table_changed("update")
 
