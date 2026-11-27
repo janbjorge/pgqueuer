@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -11,6 +12,7 @@ from pgqueuer.metrics import prometheus as metrics
 from pgqueuer.metrics.fastapi import create_metrics_router
 from pgqueuer.models import LogStatistics, QueueStatistics
 from pgqueuer.ports.repository import QueueRepositoryPort
+from tools.prometheus.prometheus import create_app, get_queries
 
 
 class FakeQueries:
@@ -167,3 +169,21 @@ def test_fastapi_create_metrics_router_custom_path() -> None:
         response = client.get("/custom/metrics")
 
     assert response.status_code == 200
+
+
+def test_prometheus_tool_escapes_label_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The service in tools/prometheus escapes label values and keeps PGQUEUER_PREFIX."""
+    monkeypatch.setenv("PGQUEUER_PREFIX", "acme_")
+    queued = QueueStatistics(
+        entrypoint=QueueEntrypoint('report "daily"'), status="queued", count=2, priority=0
+    )
+    app = create_app()
+    app.dependency_overrides[get_queries] = lambda: FakeQueries(queue_stats=[queued])
+
+    # No `with` block: the lifespan connects to Postgres.
+    body = TestClient(app).get("/metrics").text
+
+    assert body == (
+        "acme_pgqueuer_queue_count"
+        '{aggregation="sum",entrypoint="report \\"daily\\"",status="queued"} 2'
+    )
