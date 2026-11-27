@@ -24,8 +24,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from opentelemetry.trace import SpanKind, StatusCode
 
 from pgqueuer.adapters.tracing.opentelemetry import OpenTelemetryTracing
+from pgqueuer.core.applications import PgQueuer
 from pgqueuer.domain.models import Job
-from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueManagerId
+from pgqueuer.domain.types import JobId, QueueEntrypoint, QueueExecutionMode, QueueManagerId
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -342,6 +343,29 @@ async def test_trace_process_missing_otel_key_is_noop(
         pass
 
     assert not any(s.name.startswith("process") for s in exporter.get_finished_spans())
+
+
+async def test_queue_manager_span_status_follows_handler(
+    tracing: OpenTelemetryTracing,
+    exporter: InMemorySpanExporter,
+) -> None:
+    """The queue manager marks the span ERROR when the handler raises, and OK when it returns."""
+    pgq = PgQueuer.in_memory(tracer=tracing)
+
+    @pgq.entrypoint("fails")
+    async def fails(job: Job) -> None:
+        raise ValueError("boom")
+
+    @pgq.entrypoint("works")
+    async def works(job: Job) -> None:
+        pass
+
+    await pgq.qm.queries.enqueue(["fails", "works"], [None, None], [0, 0])
+    await pgq.qm.run(mode=QueueExecutionMode.drain)
+
+    spans = {s.name: s for s in exporter.get_finished_spans()}
+    assert spans["process fails"].status.status_code == StatusCode.ERROR
+    assert spans["process works"].status.status_code == StatusCode.OK
 
 
 # ---------------------------------------------------------------------------

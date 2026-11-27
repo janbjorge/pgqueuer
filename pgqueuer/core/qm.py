@@ -677,19 +677,14 @@ class QueueManager:
 
         active_tracer = self.tracer or tracing.TRACER.tracer
         trace_context = active_tracer.trace_process(job) if active_tracer else nullcontext()
-        async with (
-            trace_context,
-            heartbeat.Heartbeat(
-                job.id,
-                heartbeat_timeout / 2,
-                hbuff,
-            ),
-        ):
+        async with heartbeat.Heartbeat(job.id, heartbeat_timeout / 2, hbuff):
             try:
                 ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     try:
-                        await executor.execute(job, ctx)
+                        # The span must see the handler error before the except branches catch it.
+                        async with trace_context:
+                            await executor.execute(job, ctx)
                     except Exception as e:
                         # A TaskGroup wraps a child's RetryRequested in an ExceptionGroup.
                         if (retry := errors.retry_request(e)) is not None and retry is not e:
