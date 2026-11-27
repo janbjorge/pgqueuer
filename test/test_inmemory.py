@@ -9,11 +9,12 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import time_machine
+from pydantic_core import PydanticSerializationError
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.inmemory.jobs import ReadyLane
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.models import CronExpressionEntrypoint
+from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
@@ -719,6 +720,46 @@ async def test_log_jobs_logs_job_still_in_queue(queries: InMemoryQueries) -> Non
     history = await queries.job_log_history(jid)
     assert [e.status for e in history] == ["queued", "picked", "successful"]
     assert await queries.job_status([jid]) == [(jid, "successful")]
+
+
+async def test_log_jobs_with_unserializable_record_keeps_batch_picked(
+    queries: InMemoryQueries,
+) -> None:
+    """A record that does not serialize changes no row in its batch, as in PostgreSQL."""
+    await queries.enqueue(["ep", "ep"], [None, None], [0, 0])
+    (done, failed) = await queries.dequeue(
+        10,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    record = TracebackRecord.from_exception(ValueError("boom"), failed.id, {"x": object()})
+
+    with pytest.raises(PydanticSerializationError):
+        await queries.log_jobs([(done, "successful", None), (failed, "exception", record)])
+
+    assert [row.status for row in queries.jobs.values()] == ["picked", "picked"]
+
+
+async def test_retry_job_with_unserializable_record_keeps_job_picked(
+    queries: InMemoryQueries,
+) -> None:
+    """A retry with a record that does not serialize changes no row, as in PostgreSQL."""
+    await queries.enqueue("ep", None)
+    (job,) = await queries.dequeue(
+        10,
+        {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
+        QueueManagerId(uuid.uuid4()),
+        None,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
+    record = TracebackRecord.from_exception(ValueError("boom"), job.id, {"x": object()})
+
+    with pytest.raises(PydanticSerializationError):
+        await queries.retry_job(job, timedelta(0), record)
+
+    assert [(row.status, row.attempts) for row in queries.jobs.values()] == [("picked", 0)]
 
 
 # ---------------------------------------------------------------------------
