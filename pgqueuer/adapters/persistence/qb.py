@@ -630,13 +630,18 @@ class QueryQueueBuilder:
         """
 
     def build_next_deferred_eta_query(self) -> str:
-        return f"""SELECT execute_after - NOW() AS eta
-        FROM {self.qualified.queue_table}
-        WHERE status = 'queued'
-          AND NOT ({due()})
-          AND entrypoint = ANY($1)
-        ORDER BY execute_after
-        LIMIT 1
+        # Per-entrypoint LIMIT 1 reads the (entrypoint, execute_after) index in order.
+        return f"""SELECT MIN(soonest.eta) AS eta
+        FROM UNNEST($1::text[]) AS wanted(entrypoint)
+        CROSS JOIN LATERAL (
+            SELECT job.execute_after - NOW() AS eta
+            FROM {self.qualified.queue_table} job
+            WHERE job.status = 'queued'
+              AND job.entrypoint = wanted.entrypoint
+              AND NOT ({due("job")})
+            ORDER BY job.execute_after
+            LIMIT 1
+        ) soonest
         """
 
     def build_next_stale_eta_query(self) -> str:

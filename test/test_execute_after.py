@@ -150,6 +150,20 @@ async def test_next_deferred_eta_returns_soonest_of_many(apgdriver: Driver) -> N
     assert 20 < eta.total_seconds() <= 30
 
 
+async def test_next_deferred_eta_soonest_across_entrypoints(apgdriver: Driver) -> None:
+    """The soonest deferred job wins when it belongs to the second entrypoint."""
+    q = Queries(apgdriver)
+    await q.enqueue(
+        ["foo", "bar"],
+        [None, None],
+        [0, 0],
+        [timedelta(seconds=300), timedelta(seconds=30)],
+    )
+    eta = await q.next_deferred_eta([QueueEntrypoint("foo"), QueueEntrypoint("bar")])
+    assert eta is not None
+    assert 20 < eta.total_seconds() <= 30
+
+
 async def test_next_deferred_eta_inmemory(queries: InMemoryQueries) -> None:
     await queries.enqueue("ep", None, 0, timedelta(seconds=10))
     eta = await queries.next_deferred_eta([QueueEntrypoint("ep")])

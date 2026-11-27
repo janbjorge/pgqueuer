@@ -160,6 +160,24 @@ async def test_next_deferred_eta_uses_execute_after_index(apgdriver: db.Driver) 
     assert any(n.get("Node Type") == "Limit" for n in nodes), "eta lost its LIMIT shape"
 
 
+async def test_next_deferred_eta_reads_one_row_per_entrypoint(apgdriver: db.Driver) -> None:
+    """next_deferred_eta reads one index entry per entrypoint, not the whole deferred backlog."""
+    q = queries.Queries(apgdriver)
+    await apgdriver.execute(
+        f"""
+        INSERT INTO {QUEUE_TABLE} (priority, entrypoint, status, execute_after)
+        SELECT 0, 'a', 'queued', NOW() + g * interval '1 second'
+        FROM generate_series(1, {SEED}) g;
+        """
+    )
+    await apgdriver.execute(f"ANALYZE {QUEUE_TABLE};")
+    nodes = await _analyze_nodes(apgdriver, q.qbq.build_next_deferred_eta_query(), ENTRYPOINTS)
+    scanned = _rows_scanned(nodes)
+    assert scanned <= len(ENTRYPOINTS), (
+        f"eta scanned {scanned} rows; one per entrypoint expected. nodes={_scan_summary(nodes)}"
+    )
+
+
 async def test_has_queued_work_is_existence_probe(apgdriver: db.Driver) -> None:
     """has_queued_work keeps its LIMIT 1 existence shape, not a full COUNT(*) (#668)."""
     q = await _seed(apgdriver)
