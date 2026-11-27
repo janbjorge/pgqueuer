@@ -744,7 +744,7 @@ class QuerySchedulerBuilder:
                UNNEST($3::interval[])   AS delay
         )
         INSERT INTO {self.qualified.schedules_table} (expression, next_run, entrypoint)
-        SELECT expression, date_trunc('seconds', NOW() + delay), entrypoint FROM params
+        SELECT expression, NOW() + delay, entrypoint FROM params
         ON CONFLICT (entrypoint, expression) DO NOTHING"""
 
     def build_fetch_schedule_query(self) -> str:
@@ -770,12 +770,12 @@ class QuerySchedulerBuilder:
         status = 'picked',
         updated = NOW(),
         heartbeat = NOW(),
-        next_run = date_trunc('seconds', NOW() + (
+        next_run = NOW() + (
                 SELECT delay FROM params
                 WHERE
                     params.entrypoint = {self.qualified.schedules_table}.entrypoint
                 AND params.expression = {self.qualified.schedules_table}.expression
-            ))
+            )
     WHERE (entrypoint, expression) IN (SELECT entrypoint, expression FROM picked_jobs)
     RETURNING *;"""
 

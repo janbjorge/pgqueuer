@@ -432,7 +432,7 @@ async def test_schedule_fetch_moves_next_run_on(
 
     assert await queries.fetch_schedule({key: timedelta(hours=1)}) == []
     (schedule,) = await queries.peek_schedule()
-    assert schedule.next_run == (picked.updated + timedelta(hours=1)).replace(microsecond=0)
+    assert schedule.next_run == picked.updated + timedelta(hours=1)
 
 
 async def test_schedule_heartbeat_update_persists_timestamps(

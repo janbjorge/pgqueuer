@@ -136,17 +136,21 @@ class SchedulerManager:
             await self._wait_for_next_tick()
 
     async def _wait_for_next_tick(self) -> None:
-        # Under the one-second cron resolution: a full second of slack woke the
-        # loop after the next tick of an every-second schedule had passed.
-        leeway = timedelta(milliseconds=100)
+        with suppress(TimeoutError):
+            async with asyncio.timeout(self.next_poll_in().total_seconds()):
+                await self.shutdown.wait()
+
+    def next_poll_in(self) -> timedelta:
+        """Return the time until the first poll after the next tick."""
+        # Each tick runs once, at most about 0.5 s late, while query latency stays under 0.5 s.
+        # Worker and database clock skew does not change this for one scheduler process.
+        leeway = timedelta(milliseconds=500)
         delay = (
             min(executor.next_in() for executor in self.registry.values())
             if self.registry
             else timedelta(seconds=1)
         )
-        with suppress(TimeoutError):
-            async with asyncio.timeout((delay + leeway).total_seconds()):
-                await self.shutdown.wait()
+        return delay + leeway
 
     async def dispatch(
         self,
