@@ -9,7 +9,7 @@ import asyncpg
 import pytest
 from psycopg import sql
 
-from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver, AsyncpgPoolDriver, _released
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
 from pgqueuer.ports.driver import ListenerRemover
 
@@ -85,6 +85,39 @@ async def test_asyncpg_pool_releases_listener_with_last_callback(dsn: str) -> No
         async with driver:
             pass
         assert idle == 2
+
+
+@pytest.mark.parametrize("remove_first", [True, False])
+async def test_asyncpg_pool_listens_again_after_a_lost_connection(
+    dsn: str, remove_first: bool
+) -> None:
+    """A lost listener connection breaks neither remove_listener nor the next add_listener."""
+    async with asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2) as pool:
+        driver = AsyncpgPoolDriver(pool)
+        await driver.add_listener("ch", print)
+        lost = driver.listener.connection
+        assert lost is not None
+        await pool.execute("SELECT pg_terminate_backend($1)", lost.get_server_pid())
+        async with asyncio.timeout(5):
+            while not _released(lost):
+                await asyncio.sleep(0.01)
+
+        if remove_first:
+            await driver.remove_listener("ch", print)
+
+        heard = asyncio.Event()
+
+        def hear(payload: str | bytes | bytearray) -> None:
+            heard.set()
+
+        await driver.add_listener("ch", hear)
+        await pool.execute("NOTIFY ch")
+        async with asyncio.timeout(5):
+            await heard.wait()
+
+        await driver.remove_listener("ch", print)
+        await driver.remove_listener("ch", hear)
+        assert driver.listener.connection is None
 
 
 @dataclass

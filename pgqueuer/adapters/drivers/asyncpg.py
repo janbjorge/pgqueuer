@@ -136,6 +136,11 @@ class PoolListener:
 
     async def add(self, channel: str, callback: NotifyCallback) -> None:
         async with self.lock:
+            if self.connection is not None and _released(self.connection):
+                # The LISTENs ended with the lost connection. Start again on a new one.
+                lost, self.connection = self.connection, None
+                self.subscriptions.clear()
+                await self.pool.release(lost)
             if self.connection is None:
                 # The listener keeps this connection; queries need at least one more.
                 if self.pool.get_max_size() < 2:
@@ -152,7 +157,9 @@ class PoolListener:
             subscription = Subscription(channel, Relay(callback))
             if self.connection is None or subscription not in self.subscriptions:
                 return
-            await self.connection.remove_listener(channel, subscription.relay)
+            # A lost connection has no listener to remove.
+            if not _released(self.connection):
+                await self.connection.remove_listener(channel, subscription.relay)
             self.subscriptions.discard(subscription)
             if self.subscriptions:
                 return
