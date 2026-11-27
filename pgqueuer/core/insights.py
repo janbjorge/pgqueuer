@@ -131,7 +131,9 @@ class InsightsService:
                 (a.oldest_age_seconds for a in ages),
                 default=None,
             ),
-            exceptions_recent=sum(t.total_count for t in throughput if t.status == "exception"),
+            exceptions_recent=sum(
+                t.total_count for t in throughput if t.status in ("exception", "failed")
+            ),
         )
 
     async def entrypoint_stats(
