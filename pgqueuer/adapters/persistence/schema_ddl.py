@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import textwrap
 from collections.abc import Generator
 from typing import assert_never
 
@@ -18,7 +19,7 @@ from pgqueuer.domain.schema.model import (
 )
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY, unique_count_name
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import IndexName, TableName
+from pgqueuer.domain.types import ColumnName, IndexName, TableName
 
 try:
     from pgqueuer._version import version as VERSION  # noqa: N812 - module constant
@@ -158,6 +159,29 @@ def redefined_indexes(settings: DBSettings) -> tuple[IndexName, ...]:
     )
 
 
+def guarded(condition: str, statement: str) -> str:
+    """Run *statement* only when *condition* is true.
+
+    DDL that changes nothing still locks its table, and every enqueue waits
+    behind that lock. The catalog read in *condition* takes no such lock.
+    """
+    body = textwrap.indent(statement, " " * 8)
+    return f"""DO $$
+BEGIN
+    IF {condition} THEN
+{body}
+    END IF;
+END $$;"""
+
+
+def column_lookup(table: TableName, column: ColumnName, settings: DBSettings) -> str:
+    """The ``information_schema`` row of *column*, in the scope the planner reads."""
+    return f"""FROM information_schema.columns
+        WHERE table_schema = {settings.schema_expr}
+          AND table_name = '{table}'
+          AND column_name = '{column}'"""
+
+
 def converge_namespace(settings: DBSettings) -> Generator[str, None, None]:
     if settings.db_schema:
         yield f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema};"
@@ -192,10 +216,10 @@ def retirement_note(table: Table, settings: DBSettings) -> str:
 
 
 def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
-    """Create absent tables, then add absent plain columns to the rest.
+    """Create absent tables, add absent plain columns, and converge column defaults.
 
-    ``ADD COLUMN`` cannot introduce a serial primary key, and ``SET DEFAULT`` is
-    catalog-only, so re-stating a default costs nothing and converges its spelling.
+    ``ADD COLUMN`` cannot introduce a serial primary key. Each column change is
+    guarded on the catalog: even a no-op ``ALTER TABLE`` takes ACCESS EXCLUSIVE.
     """
     for table in schema.tables:
         qualified = settings.qualify(table.name)
@@ -203,12 +227,20 @@ def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None
         for column in table.columns:
             if column.kind != "plain":
                 continue
+            found = column_lookup(table.name, column.name, settings)
             rendered_column = render_column(column, settings)
-            yield f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {rendered_column};"
+            yield guarded(
+                f"NOT EXISTS (SELECT 1 {found})",
+                f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {rendered_column};",
+            )
             if column.default is not None:
-                yield (
+                # pg_get_expr qualifies the enum off search_path; strip it as unqualify() does.
+                installed = f"replace(column_default, {settings.schema_expr} || '.', '')"
+                declared = column.default.replace("'", "''")
+                yield guarded(
+                    f"(SELECT {installed} {found}) IS DISTINCT FROM '{declared}'",
                     f"ALTER TABLE {qualified} ALTER COLUMN {column.name} "
-                    f"SET DEFAULT {spelled(column.default, settings)};"
+                    f"SET DEFAULT {spelled(column.default, settings)};",
                 )
 
 
@@ -223,7 +255,8 @@ BEGIN
     IF EXISTS (SELECT 1 FROM information_schema.columns
                WHERE table_schema = {settings.schema_expr}
                  AND table_name = '{entry.table}'
-                 AND column_name = '{entry.column}') THEN
+                 AND column_name = '{entry.column}'
+                 AND is_nullable = 'NO') THEN
         ALTER TABLE {settings.qualify(entry.table)}
             ALTER COLUMN {entry.column} DROP NOT NULL;
     END IF;
@@ -309,15 +342,34 @@ def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, Non
     for entry in schema.indexes:
         if entry.name in changed:
             yield drop_redefined_index(entry, settings)
-        yield render_index(entry, settings, if_not_exists=True)
+        # CREATE INDEX takes SHARE on its table before it checks IF NOT EXISTS.
+        yield guarded(
+            f"""NOT EXISTS (SELECT 1 FROM pg_indexes
+        WHERE schemaname = {settings.schema_expr}
+          AND indexname = '{entry.name}')""",
+            render_index(entry, settings, if_not_exists=True),
+        )
 
 
 def converge_routines(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
     for function in schema.functions:
         yield render_function(function, settings, replace=True)
     for trigger in schema.triggers:
-        yield f"DROP TRIGGER IF EXISTS {trigger.name} ON {settings.qualify(trigger.table)};"
-        yield render_trigger(trigger, settings)
+        # Name, table and function: what inspect() reads, so a current trigger is left alone.
+        yield guarded(
+            f"""NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger trigger_info
+        JOIN pg_class table_class ON table_class.oid = trigger_info.tgrelid
+        JOIN pg_namespace namespace ON namespace.oid = table_class.relnamespace
+        JOIN pg_proc function_info ON function_info.oid = trigger_info.tgfoid
+        WHERE namespace.nspname = {settings.schema_expr}
+          AND trigger_info.tgname = '{trigger.name}'
+          AND table_class.relname = '{trigger.table}'
+          AND function_info.proname = '{trigger.function}'
+    )""",
+            render_trigger(trigger, settings, replace=True),
+        )
 
 
 def widen_id_column(table: TableName, settings: DBSettings) -> str:
@@ -336,13 +388,16 @@ END $$;"""
 def widen_id_sequence(table: TableName, settings: DBSettings) -> str:
     """Widen a legacy int4 sequence, which ``ALTER COLUMN TYPE`` leaves capped.
 
-    ``AS BIGINT`` is a no-op on an already wide sequence, so it needs no guard.
+    Guarded on the type: even a no-op ``ALTER SEQUENCE`` takes SHARE ROW EXCLUSIVE,
+    and every ``nextval()`` waits behind it.
     """
     return f"""DO $$
 DECLARE
     seq TEXT := pg_get_serial_sequence('{settings.qualify(table)}', 'id');
 BEGIN
-    IF seq IS NOT NULL THEN
+    IF seq IS NOT NULL
+       AND (SELECT seqtypid FROM pg_sequence WHERE seqrelid = seq::regclass)
+           <> 'bigint'::regtype THEN
         EXECUTE format('ALTER SEQUENCE %s AS BIGINT', seq);
     END IF;
 END $$;"""
