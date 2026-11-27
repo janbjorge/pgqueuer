@@ -717,9 +717,11 @@ class QueueManager:
                 self.job_context.pop(job.id, None)
                 await self.write_retry(job, retry_exc.delay, tbr)
             except asyncio.CancelledError as e:
-                if (task := asyncio.current_task()) is not None and not task.cancelling():
-                    # No cancel is pending on this task, so the job code raised it.
-                    # After a cancel request, the job stops this way. Else it is a failure.
+                # No cancel is pending on this task, so the job code raised it.
+                # After a cancel request, the job stops this way. Else it is a failure.
+                task = asyncio.current_task()
+                raised_by_job = task is not None and task.cancelling() == 0
+                if raised_by_job:
                     if ctx.cancellation.cancel_called:
                         await jbuff.add((job, "canceled", None))
                     else:

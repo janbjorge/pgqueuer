@@ -54,6 +54,6 @@ A queued job is logged `canceled` immediately. A picked job is logged `canceled`
 its worker sees the request and the handler returns; until that log, the row stays
 `picked`. See [Architecture](../reference/architecture.md) for the full status lifecycle.
 
-After a cancel request, the worker also logs the job `canceled` when the handler raises
+After a cancel request, the worker logs the job `canceled` when the handler raises
 `CancelledError` or asks for a retry. The job does not run again. With no cancel request,
 a `CancelledError` from job code is a job failure with a traceback.
