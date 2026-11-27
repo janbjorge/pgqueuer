@@ -170,7 +170,7 @@ async def test_varying_retry_timers(apgdriver: db.Driver) -> None:
 
 
 async def test_cancellation_marks_canceled_no_retry(apgdriver: db.Driver) -> None:
-    """CancelledError in a handler marks the job 'canceled' and is not retried (GH #630)."""
+    """A cancel of the running dispatch marks the job 'canceled' and is not retried (GH #630)."""
     retry_timer = timedelta(seconds=0.100)
     qm = QueueManager(queries.Queries(apgdriver))
     calls = Counter[JobId]()
@@ -179,7 +179,11 @@ async def test_cancellation_marks_canceled_no_retry(apgdriver: db.Driver) -> Non
     async def fetch(context: Job) -> None:
         calls[context.id] += 1
         qm.shutdown.set()
-        raise asyncio.CancelledError("Simulated cancellation")
+        # Cancel the dispatch task, as a shutdown does. The cancel lands at the next await.
+        task = asyncio.current_task()
+        assert task is not None
+        task.cancel()
+        await asyncio.sleep(0)
 
     await qm.queries.enqueue(["fetch"], [None], [0])
 

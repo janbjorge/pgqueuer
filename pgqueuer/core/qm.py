@@ -604,7 +604,7 @@ class QueueManager:
         self,
         job: models.Job,
         executor: executors.AbstractEntrypointExecutor,
-        exc: Exception,
+        exc: BaseException,
         jbuff: buffers.JobStatusLogBuffer,
     ) -> None:
         """Log *exc* and record *job* as failed, honouring the entrypoint's on_failure."""
@@ -678,8 +678,8 @@ class QueueManager:
         active_tracer = self.tracer or tracing.TRACER.tracer
         trace_context = active_tracer.trace_process(job) if active_tracer else nullcontext()
         async with heartbeat.Heartbeat(job.id, heartbeat_timeout / 2, hbuff):
+            ctx = self.get_context(job.id)
             try:
-                ctx = self.get_context(job.id)
                 if not ctx.cancellation.cancel_called:
                     try:
                         # The span must see the handler error before the except branches catch it.
@@ -691,6 +691,10 @@ class QueueManager:
                             raise retry from e
                         raise
             except errors.RetryRequested as retry_exc:
+                if ctx.cancellation.cancel_called:
+                    # The worker saw a cancel, so a retry must not run the job again.
+                    await jbuff.add((job, "canceled", None))
+                    return
                 logconfig.logger.info(
                     "Retry requested for entrypoint/job-id: %s/%s (attempt=%d, delay=%s)",
                     job.entrypoint,
@@ -712,7 +716,15 @@ class QueueManager:
                 # Release before re-queueing, or our own dequeue skips the re-picked row.
                 self.job_context.pop(job.id, None)
                 await self.write_retry(job, retry_exc.delay, tbr)
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as e:
+                if (task := asyncio.current_task()) is not None and not task.cancelling():
+                    # No cancel is pending on this task, so the job code raised it.
+                    # After a cancel request, the job stops this way. Else it is a failure.
+                    if ctx.cancellation.cancel_called:
+                        await jbuff.add((job, "canceled", None))
+                    else:
+                        await self.log_failure(job, executor, e, jbuff)
+                    return
                 logconfig.logger.debug(
                     "Job canceled mid-flight for entrypoint/id: %s/%s",
                     job.entrypoint,
