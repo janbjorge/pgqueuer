@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import itertools
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -366,11 +367,15 @@ async def test_max_concurrent_tasks(
 
 
 @pytest.mark.parametrize("fails", (False, True))
-async def test_run_drains_jobs_before_driver_exit(fails: bool) -> None:
-    """In-flight jobs finish while the driver, and its LISTEN, is still open (#896)."""
+async def test_run_drains_jobs_before_unlisten(fails: bool) -> None:
+    """In-flight jobs finish before the LISTEN goes (#896), and run never exits the driver."""
     events: list[str] = []
 
     class RecordingDriver(InMemoryDriver):
+        async def remove_listener(self, channel: str, callback: Callable[[str], None]) -> None:
+            events.append("unlisten")
+            await super().remove_listener(channel, callback)
+
         async def __aexit__(self, *_: object) -> None:
             events.append("driver exit")
 
@@ -391,7 +396,7 @@ async def test_run_drains_jobs_before_driver_exit(fails: bool) -> None:
     qm.shutdown.set()
     await asyncio.wait_for(run, timeout=5)
 
-    assert events == ["job done", "driver exit"]
+    assert events == ["job done", "unlisten"]
 
 
 async def test_run_failure_leaves_no_pending_lifecycle_tasks(
