@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import traceback
 from collections.abc import MutableMapping
@@ -82,6 +83,19 @@ class AnyEvent(
 ): ...
 
 
+def parse_headers(value: object) -> dict[str, object] | None:
+    """Return the job headers as a dict. Return None for a value that is not a JSON object.
+
+    asyncpg returns jsonb as text, and psycopg returns it as parsed data.
+    So a JSON string from psycopg is text that can fail to parse.
+    """
+    decoded = value
+    if isinstance(value, (str, bytes)):
+        with contextlib.suppress(ValueError):
+            decoded = from_json(value)
+    return decoded if isinstance(decoded, dict) else None
+
+
 class Job(BaseModel):
     """A queued or in-flight job row.
 
@@ -101,10 +115,7 @@ class Job(BaseModel):
     attempts: int = 0
     queue_manager_id: QueueManagerId | None
     slot: Slot | None = None
-    headers: Annotated[
-        dict[str, object] | None,
-        BeforeValidator(lambda x: x if x is None or isinstance(x, dict) else from_json(x)),
-    ]
+    headers: Annotated[dict[str, object] | None, BeforeValidator(parse_headers)]
 
     def header_section(self, key: str) -> dict[str, object] | None:
         """Return the nested header dict under *key*, or None when absent or not a dict."""
