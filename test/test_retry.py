@@ -2,7 +2,7 @@ import asyncio
 import asyncio.selector_events
 import contextlib
 from collections import Counter, defaultdict
-from collections.abc import AsyncIterator, Generator
+from collections.abc import Generator
 from datetime import datetime, timedelta
 
 import pytest
@@ -315,12 +315,12 @@ async def test_job_reruns_after_its_dispatch_dies_before_it_starts(apgdriver: db
             for _ in entrypoints:
                 yield {}
 
-        @contextlib.asynccontextmanager
-        async def trace_process(self, job: Job) -> AsyncIterator[None]:
+        def trace_process(self, job: Job) -> contextlib.AbstractAsyncContextManager[None]:
+            # The call fails before the job starts. An error in the span is a job error.
             self.spans += 1
             if self.spans == 1:
                 raise RuntimeError("span failed")
-            yield
+            return contextlib.nullcontext()
 
     qm = QueueManager(queries.Queries(apgdriver), tracer=FailFirstSpan())
 
