@@ -44,8 +44,8 @@ async def metrics() -> Response:
 
 ## Standalone metrics service
 
-A Docker-based standalone metrics service is available in `tools/prometheus`. This
-service uses its own implementation, separate from the `pgqueuer.metrics` library module.
+A Docker-based standalone metrics service is available in `tools/prometheus`. The
+service formats its metrics with the `pgqueuer.metrics` module.
 
 ### Building the image
 

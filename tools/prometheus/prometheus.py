@@ -1,21 +1,17 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator, Callable, Generator, Iterable
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import timedelta
-from itertools import groupby
-from typing import Annotated, TypeAlias
+from typing import Annotated
 
 import asyncpg
 from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.responses import Response
 
 from pgqueuer.db import AsyncpgDriver
-from pgqueuer.models import LogStatistics, QueueStatistics
+from pgqueuer.metrics.prometheus import MetricNames, collect_metrics
 from pgqueuer.queries import Queries
-
-ReduceFn: TypeAlias = Callable[[Iterable[float]], float]
 
 
 def get_queries(request: Request) -> Queries:
@@ -36,78 +32,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await connection.close()
 
 
-def prometheus_format(
-    metric_name: str,
-    labels: dict[str, str],
-    value: float,
-) -> str:
-    """Format metric data into a Prometheus-compatible string."""
-    label_parts = ",".join(f'{k}="{v}"' for k, v in labels.items())
-    prefix = os.environ.get("PGQUEUER_PREFIX", "")
-    return f"{prefix}{metric_name}{{{label_parts}}} {value}"
-
-
-def aggregated_queue_statistics(
-    queue_statistics: list[QueueStatistics],
-) -> Generator[str, None, None]:
-    """Generate Prometheus-formatted strings for aggregated queue statistics."""
-    aggregated = (
-        (entrypoint, status, tuple(items))
-        for (entrypoint, status), items in groupby(
-            sorted(queue_statistics, key=lambda x: (x.entrypoint, x.status)),
-            key=lambda x: (x.entrypoint, x.status),
-        )
-    )
-    for entrypoint, status, items in aggregated:
-        yield prometheus_format(
-            metric_name="pgqueuer_queue_count",
-            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
-            value=sum(x.count for x in items),
-        )
-
-
-def aggregated_log_statistics(
-    log_statistics: list[LogStatistics],
-) -> Generator[str, None, None]:
-    """Generate Prometheus lines for aggregated log statistics, incl. time in queue."""
-    aggregated_log_statistics = (
-        (entrypoint, status, tuple(items))
-        for (entrypoint, status), items in groupby(
-            sorted(log_statistics, key=lambda x: (x.entrypoint, x.status)),
-            key=lambda x: (x.entrypoint, x.status),
-        )
-    )
-
-    for entrypoint, status, items in aggregated_log_statistics:
-        yield prometheus_format(
-            metric_name="pgqueuer_logs_count",
-            labels={"aggregation": "sum", "entrypoint": entrypoint, "status": status},
-            value=sum(x.count for x in items),
-        )
-
-
-def aggregated_statistics(
-    queue_statistics: list[QueueStatistics],
-    log_statistics: list[LogStatistics],
-) -> Generator[str, None, None]:
-    """Combine and generate Prometheus metrics for both queue and log statistics."""
-    yield from aggregated_queue_statistics(queue_statistics)
-    yield from aggregated_log_statistics(log_statistics)
-
-
 def create_metrics_router() -> APIRouter:
     """Create an API router that includes the metrics endpoint."""
     router = APIRouter()
 
     @router.get("/metrics", response_class=Response)
     async def metrics(queries: Annotated[Queries, Depends(get_queries)]) -> Response:
-        queue_statistics = await queries.queue_size()
-        log_statistics = await queries.log_statistics(
-            limit=None,
-            last=timedelta(minutes=5),
+        prefix = os.environ.get("PGQUEUER_PREFIX", "")
+        metric_names = MetricNames(
+            queue_count=f"{prefix}pgqueuer_queue_count",
+            log_count=f"{prefix}pgqueuer_logs_count",
         )
         return Response(
-            content="\n".join(aggregated_statistics(queue_statistics, log_statistics)),
+            content=await collect_metrics(queries, metric_names=metric_names),
             media_type="text/plain",
         )
 
