@@ -474,7 +474,7 @@ class DequeueSql:
     def claimed(self) -> Cte:
         """Columns: every job column. Reads eligible."""
         # A row keeps its slot through retry, hold and requeue. Clear it here, or two
-        # rows with the same old slot break the unique picked-slot index.
+        # picked rows can share a slot and break the unique picked-slot index.
         return Cte(
             "claimed",
             f"""
