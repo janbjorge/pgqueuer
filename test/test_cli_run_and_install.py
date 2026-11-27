@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from pgqueuer.adapters.cli import supervisor
 from pgqueuer.adapters.cli.cli import app
+from pgqueuer.domain.errors import PgqException
 from pgqueuer.domain.settings import DBSettings
 from test.helpers import env_from_dsn
 
@@ -203,6 +204,48 @@ def test_cli_verify_warns_on_a_missing_non_unique_index(dsn: str) -> None:
 
     assert result.exit_code == 0, result.stdout
     assert f"warning: missing index '{name}'" in result.stdout
+
+
+def put_a_schema_before_public(dsn: str) -> None:
+    """New sessions on the test database resolve bare names in the schema tenant first."""
+    database = env_from_dsn(dsn)["PGDATABASE"]
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(b"CREATE SCHEMA tenant")
+        connection.execute(f"ALTER DATABASE {database} SET search_path TO tenant, public".encode())
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        pytest.param(["verify", "--expect", "absent"], id="verify-absent"),
+        pytest.param(["uninstall"], id="uninstall"),
+    ],
+)
+def test_cli_refuses_a_queue_table_outside_current_schema(dsn: str, args: list[str]) -> None:
+    """The command fails and drops nothing when search_path resolves the queue table elsewhere."""
+    put_a_schema_before_public(dsn)
+    runner = CliRunner()
+    env = env_from_dsn(dsn)
+
+    refused = runner.invoke(app, args, env=env)
+
+    assert refused.exit_code == 1, refused.output
+    assert isinstance(refused.exception, PgqException)
+    assert "resolves to the schema public" in str(refused.exception)
+    present = runner.invoke(app, ["--schema", "public", "verify", "--expect", "present"], env=env)
+    assert present.exit_code == 0, present.output
+
+
+def test_cli_verify_absent_with_a_schema_ignores_search_path(dsn: str) -> None:
+    """With --schema set, verify --expect absent checks that schema, wherever search_path points."""
+    put_a_schema_before_public(dsn)
+
+    result = CliRunner().invoke(
+        app, ["--schema", "tenant", "verify", "--expect", "absent"], env=env_from_dsn(dsn)
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "No PgQueuer database objects found" in result.stdout
 
 
 @pytest.mark.parametrize("flag", ["--durability", "-d"])
