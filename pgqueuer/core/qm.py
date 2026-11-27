@@ -24,6 +24,8 @@ from pgqueuer.domain import errors, models, types
 from pgqueuer.ports import RepositoryPort, tracing
 from pgqueuer.ports.repository import EntrypointExecutionParameter, SchemaVerifier
 
+MAX_POLL_FAILURES = 3
+
 
 @dataclasses.dataclass
 class QueueManager:
@@ -537,26 +539,57 @@ class QueueManager:
             listener_cleanup.push_async_callback(listener.remove_listener, self.channel, callback)
             self.listening.set()
 
+            poll_failures = 0
             while not self.shutdown.is_set():
-                async for job in self.fetch_jobs(
-                    batch_size, max_concurrent_tasks, heartbeat_timeout
-                ):
-                    # A late heartbeat lets our own dequeue re-pick a job still running here.
-                    if job.id in self.job_context:
-                        continue
-                    context = models.Context(
-                        cancellation=anyio.CancelScope(),
-                        resources=self.resources,
-                    )
-                    self.job_context[job.id] = context
-                    task = asyncio.create_task(self._dispatch(job, jbuff, hbuff, heartbeat_timeout))
-                    task.add_done_callback(functools.partial(self.forget_job, job.id, context))
-                    task_manager.add(task)
+                try:
+                    async for job in self.fetch_jobs(
+                        batch_size, max_concurrent_tasks, heartbeat_timeout
+                    ):
+                        # A late heartbeat lets our own dequeue re-pick a job still running here.
+                        if job.id in self.job_context:
+                            continue
+                        context = models.Context(
+                            cancellation=anyio.CancelScope(),
+                            resources=self.resources,
+                        )
+                        self.job_context[job.id] = context
+                        task = asyncio.create_task(
+                            self._dispatch(job, jbuff, hbuff, heartbeat_timeout)
+                        )
+                        task.add_done_callback(functools.partial(self.forget_job, job.id, context))
+                        task_manager.add(task)
 
-                # NOTIFY follows commit, so the checks below already see what drained events signal.
-                while not notice_event_listener.empty():
-                    notice_event_listener.get_nowait()
-                await self._maybe_drain_shutdown(mode, task_manager)
+                    # NOTIFY follows commit, so the checks below already see what drained
+                    # events signal.
+                    while not notice_event_listener.empty():
+                        notice_event_listener.get_nowait()
+                    await self._maybe_drain_shutdown(mode, task_manager)
+                    timeout = await self._effective_dequeue_timeout(
+                        dequeue_timeout,
+                        max_concurrent_tasks,
+                        len(task_manager.tasks),
+                        heartbeat_timeout,
+                    )
+                except Exception:
+                    poll_failures += 1
+                    if poll_failures >= MAX_POLL_FAILURES:
+                        # run() raises only after the jobs end, so the log tells the operator now.
+                        logconfig.logger.exception(
+                            "Poll failed %d times in a row. The worker takes no new jobs.",
+                            MAX_POLL_FAILURES,
+                        )
+                        raise
+                    # One failed query does not prove a dead connection.
+                    logconfig.logger.warning(
+                        "Poll %d/%d failed. The worker tries again.",
+                        poll_failures,
+                        MAX_POLL_FAILURES,
+                        exc_info=True,
+                    )
+                    timeout = timedelta(seconds=poll_failures)
+                else:
+                    poll_failures = 0
+                # Outside the try: a listener failure must end the run, not get a retry.
                 await self._maybe_health_shutdown(
                     periodic_health_check_task, mode, shutdown_on_listener_failure
                 )
@@ -566,12 +599,6 @@ class QueueManager:
                 # would otherwise wake every wait and spin the loop.
                 wake_on_listener_failure = (
                     shutdown_on_listener_failure and mode is not types.QueueExecutionMode.drain
-                )
-                timeout = await self._effective_dequeue_timeout(
-                    dequeue_timeout,
-                    max_concurrent_tasks,
-                    len(task_manager.tasks),
-                    heartbeat_timeout,
                 )
                 async with tm.cancel_on_exit(
                     listeners.wait_for_notice_event(notice_event_listener, timeout)
