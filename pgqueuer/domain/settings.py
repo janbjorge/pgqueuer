@@ -55,7 +55,10 @@ def prefixed_default(base: str) -> Callable[[dict[str, str]], str]:
 
 @dataclasses.dataclass(frozen=True)
 class DurabilityPolicy:
-    """Per-table persistence: ``""`` = LOGGED (WAL); ``"UNLOGGED"`` = faster, crash-lossy."""
+    """Per-table persistence: ``""`` = LOGGED (WAL); ``"UNLOGGED"`` = faster, crash-lossy.
+
+    A failover or a switchover also leaves an unlogged table empty.
+    """
 
     queue_table: Literal["", "UNLOGGED"]
     queue_log_table: Literal["", "UNLOGGED"]
@@ -80,6 +83,9 @@ class Durability(Enum):
 
         - `durable`: All tables are logged, ensuring maximum data durability and safety.
           This is ideal for production environments where data integrity is critical.
+
+    PostgreSQL does not replicate unlogged tables to standbys, so a failover or a
+    switchover leaves them empty.
     """
 
     volatile = "volatile"

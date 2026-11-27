@@ -75,6 +75,9 @@ Choose the durability level that matches your risk tolerance:
 | `balanced` | Queue + Schedules: logged; Log + Statistics: unlogged | Statistics lost on crash | ~2× |
 | `volatile` | All unlogged | All data lost on crash | Highest |
 
+PostgreSQL does not replicate unlogged tables to standbys, so a failover or a switchover
+leaves them empty.
+
 Change durability after installation without data loss:
 
 ```bash

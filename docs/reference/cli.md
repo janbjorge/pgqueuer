@@ -11,7 +11,8 @@ Set up the necessary database schema for PgQueuer.
 
 **Options:**
 
-- `--durability`: Define the durability level for tables.
+- `--durability`: Define the durability level for tables. A failover or a switchover
+  leaves unlogged tables empty.
   - `volatile`: All tables are unlogged: maximum performance, no crash recovery.
   - `balanced`: Critical tables (`pgqueuer`, `pgqueuer_schedules`) are logged; auxiliary
     tables are unlogged.
@@ -139,6 +140,11 @@ pgq verify --expect present
 ### `durability`
 
 Change the durability level of existing PgQueuer tables **without data loss**.
+
+The command switches one table at a time and does not lock a table that is already at
+the level. PostgreSQL rewrites each table that changes and holds an `ACCESS EXCLUSIVE`
+lock on it during the rewrite. Enqueue and dequeue write a row to the log table, so they
+wait while that table is rewritten. If the command stops before it completes, run it again.
 
 **Arguments:**
 
@@ -564,7 +570,8 @@ Use **continuous** for long-running workers and **drain** for batch processing.
 ## Durability levels
 
 Durability controls whether PgQueuer tables are WAL-logged, which trades write speed
-against crash recovery.
+against crash recovery. PostgreSQL does not replicate unlogged tables to standbys, so a
+failover or a switchover leaves them empty.
 
 ### Volatile
 

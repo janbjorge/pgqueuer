@@ -150,8 +150,13 @@ class QueryBuilderEnvironment:
     def build_alter_durability_query(
         self,
         durability: Durability | None = None,
+        live: Mapping[str, bool] | None = None,
     ) -> Generator[str, None, None]:
-        """ALTER statements for *durability*, or the configured level when None."""
+        """ALTER statements for *durability*, or the configured level when None.
+
+        *live* tells if each table is unlogged now, as :meth:`build_unlogged_query` reads it.
+        A table that already has its target persistence then gets no statement.
+        """
         config = (self.settings.durability if durability is None else durability).config
         policies = {
             self.qualified.queue_table: config.queue_table,
@@ -160,7 +165,27 @@ class QueryBuilderEnvironment:
             self.qualified.schedules_table: config.schedules_table,
         }
         for table, policy in policies.items():
+            if live is not None and live.get(table) == (policy == "UNLOGGED"):
+                continue
             yield f"ALTER TABLE {table} SET {'LOGGED' if policy == '' else 'UNLOGGED'};"
+
+    def build_unlogged_query(self) -> str:
+        """Tell if each table is unlogged now, by the name that the ALTER statements use.
+
+        to_regclass finds a name as ALTER TABLE does, and takes no lock on the table.
+        """
+        names = ", ".join(
+            f"'{table}'"
+            for table in (
+                self.qualified.queue_table,
+                self.qualified.queue_table_log,
+                self.qualified.statistics_table,
+                self.qualified.schedules_table,
+            )
+        )
+        return f"""SELECT name, tbl.relpersistence = 'u' AS unlogged
+        FROM unnest(ARRAY[{names}]) AS name
+        JOIN pg_class tbl ON tbl.oid = to_regclass(name)"""
 
     def autovacuum_settings(self) -> dict[str, Mapping[str, str]]:
         return {
