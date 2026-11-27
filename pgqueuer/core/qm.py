@@ -504,13 +504,11 @@ class QueueManager:
                 timeout=heartbeat_timeout / 8,
                 repository=self.queries,
             ) as hbuff,
-            self.queries.driver,
-            # This stack removes the listener after the jobs stop and before the driver closes.
+            # This stack removes the listener after the jobs stop.
             AsyncExitStack() as listener_cleanup,
-            # Inside the driver so draining jobs can still receive cancel NOTIFYs.
+            # Inside the listener stack so draining jobs can still receive cancel NOTIFYs.
             tm.TaskManager() as task_manager,
-            # Listed after the driver so they are cancelled before it closes;
-            # a failing loop body must not leak tasks probing a closing driver.
+            # Listed last, so they stop first. A failing loop body must not leak tasks.
             tm.cancel_on_exit(
                 asyncio.create_task(self._run_periodic_health_check())
             ) as periodic_health_check_task,

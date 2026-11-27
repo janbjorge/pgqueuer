@@ -115,7 +115,6 @@ class SchedulerManager:
 
         finished = asyncio.Event()
         async with (
-            self.queries.driver,
             # Outside the TaskManager so it keeps beating until running schedules drain.
             tm.cancel_on_exit(asyncio.create_task(self._heartbeat_loop(finished))),
         ):

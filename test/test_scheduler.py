@@ -191,8 +191,8 @@ async def test_scheduler_runs_tasks(scheduler: SchedulerManager, mocker: Mock) -
 
 
 @pytest.mark.parametrize("fails", (False, True))
-async def test_scheduler_releases_schedule_before_driver_exit(mocker: Mock, fails: bool) -> None:
-    """In-flight schedules are released before the driver exits (#897)."""
+async def test_scheduler_releases_schedule_and_leaves_driver(mocker: Mock, fails: bool) -> None:
+    """In-flight schedules are released (#897), and run never exits the driver."""
     events: list[str] = []
 
     class RecordingDriver(InMemoryDriver):
@@ -231,7 +231,7 @@ async def test_scheduler_releases_schedule_before_driver_exit(mocker: Mock, fail
     scheduler.shutdown.set()
     await run
 
-    assert events == ["release", "driver exit"]
+    assert events == ["release"]
 
 
 @pytest.mark.parametrize("trigger", ("error", "cancel"))

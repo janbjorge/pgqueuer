@@ -53,6 +53,10 @@
 
 ### Changed
 
+- `QueueManager.run`, `SchedulerManager.run` and `PgQueuer.run` no longer
+  enter or exit the driver you give them (ADR-0026). Before, a stopped worker
+  could drop the listeners of your application on a shared psycopg or pool
+  driver. If your own driver needs `async with`, enter it yourself.
 - `max_concurrent_tasks` must now be at least `batch_size`, not twice
   `batch_size`. `batch_size=1, max_concurrent_tasks=1` runs one job at a time
   per worker (#1150).
