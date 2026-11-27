@@ -145,13 +145,9 @@ empty batch.
 `pgq sql upgrade` has no connection, so it re-states every object behind
 guards that make a rerun a no-op: `IF NOT EXISTS` on tables, a `DO` block
 around `CREATE TYPE`, and catalog-guarded `DO` blocks for each column,
-default, index, trigger, retype and widening. The guards are for locks as
-much as for data. A re-stated `ALTER TABLE` or `CREATE INDEX IF NOT EXISTS`
-changes nothing, but it still takes a lock that conflicts with
-`ROW EXCLUSIVE`. Behind one open transaction on the table, that lock
-queues every enqueue and dequeue. Each guard reads the catalog in the
-scope the planner reads, so a rerun on a current database takes no such
-lock, and `test_schema_converge_script.py` fails if a statement does.
+default, index, trigger, retype and widening. DDL that changes nothing
+still locks its table. Behind an open transaction, that lock makes every
+enqueue and dequeue wait.
 The redefined indexes are a hand-kept list, `redefined_indexes`: a new
 index redefinition must be added there, or the offline script keeps the
 old definition while the connected upgrade rebuilds it.

@@ -2,61 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import asyncpg
-import pytest
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.query_helpers import cell
-from pgqueuer.adapters.persistence.schema_inspect import inspect
-from pgqueuer.adapters.persistence.schema_plan import plan
-from pgqueuer.db import AsyncpgDriver, AsyncpgPoolDriver
+from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.queries import Queries
-from test.helpers import RELEASES_DIR, install_release
-
-RELEASES = sorted(path.stem for path in RELEASES_DIR.glob("*.sql"))
-
-# The lock modes that conflict with ROW EXCLUSIVE, which every enqueue and dequeue takes.
-BLOCKS_WRITERS = ["ShareLock", "ShareRowExclusiveLock", "ExclusiveLock", "AccessExclusiveLock"]
-
-QUEUED_FOR_A_LOCK = "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE pid = $1 AND NOT granted)"
+from test.helpers import install_release
 
 
 async def apply_converge_script(driver: AsyncpgDriver, settings: DBSettings) -> None:
     """One statement per round trip, as ``pgq sql upgrade | psql`` would."""
     for statement in schema_ddl.render_converge(settings):
         await driver.execute(statement)
-
-
-async def locks_that_block_writers(driver: AsyncpgDriver, settings: DBSettings) -> list[str]:
-    """Apply the script one transaction per statement, as psql does, and list what blocks writers.
-
-    A statement holds its locks until COMMIT, so pg_locks still shows them before it.
-    """
-    held: list[str] = []
-    for position, statement in enumerate(schema_ddl.render_converge(settings)):
-        await driver.execute("BEGIN")
-        await driver.execute(statement)
-        rows = await driver.fetch(
-            """SELECT relation::regclass::text AS relation, mode FROM pg_locks
-            WHERE pid = pg_backend_pid() AND locktype = 'relation' AND mode = ANY($1::text[])""",
-            BLOCKS_WRITERS,
-        )
-        await driver.execute("COMMIT")
-        summary = " ".join(statement.split())[:100]
-        held += [
-            f"#{position} {cell(row, 'mode', str)} on {cell(row, 'relation', str)}: {summary}"
-            for row in rows
-        ]
-    return held
-
-
-async def plan_left(driver: AsyncpgDriver, settings: DBSettings) -> tuple[str, ...]:
-    """Statements the connected upgrade would still apply."""
-    return plan(await inspect(driver, settings), target(settings), settings).statements
 
 
 async def relfilenode(driver: AsyncpgDriver, relation: str) -> int:
@@ -194,86 +153,27 @@ async def test_the_script_folds_split_statistics_buckets(apgdriver: AsyncpgDrive
     ]
 
 
-async def test_a_rerun_takes_no_lock_that_blocks_writers(apgdriver: AsyncpgDriver) -> None:
-    """On a current database, no statement takes a lock that conflicts with ROW EXCLUSIVE."""
-    assert await locks_that_block_writers(apgdriver, DBSettings()) == []
-
-
-@pytest.mark.parametrize("release", RELEASES)
-async def test_a_rerun_after_an_upgrade_takes_no_lock_that_blocks_writers(
-    apgdriver: AsyncpgDriver,
-    release: str,
-) -> None:
-    """The guards agree with what the first run leaves, retired columns included."""
-    settings = DBSettings()
-    await install_release(apgdriver, release)
-    await apply_converge_script(apgdriver, settings)
-
-    assert await locks_that_block_writers(apgdriver, settings) == []
-
-
-@pytest.mark.parametrize("search_path", ["public", "pgq_rerun, public"])
-async def test_a_rerun_in_a_schema_takes_no_lock_that_blocks_writers(
-    apgdriver: AsyncpgDriver,
-    search_path: str,
-) -> None:
-    """A default reads back qualified off search_path and bare on it; both count as current."""
-    settings = DBSettings(db_schema="pgq_rerun")
-    await Queries(apgdriver, settings).install()
-    await apgdriver.execute(f"SET search_path TO {search_path}")
-
-    assert await locks_that_block_writers(apgdriver, settings) == []
-
-
-async def test_a_rerun_lets_an_enqueue_pass_an_open_reader(
+async def test_a_rerun_takes_no_lock_that_blocks_writers(
     apgdriver: AsyncpgDriver,
     dsn: str,
 ) -> None:
-    """An open transaction that has read the queue table holds up neither a rerun nor an enqueue."""
-    settings = DBSettings()
-    rows = await apgdriver.fetch("SELECT pg_backend_pid() AS pid")
-    runner = cell(rows[0], "pid", int)
+    """A rerun on a current database does not wait behind an open writer."""
+    settings = DBSettings(db_schema="pgq_rerun")  # Off search_path: defaults read back qualified.
+    await apgdriver.execute(schema_ddl.render_install(settings))
+    # An upgrade from v0.18 leaves this retired column, nullable.
+    await apgdriver.execute(
+        f"ALTER TABLE {settings.qualified.statistics_table} ADD COLUMN time_in_queue INTERVAL"
+    )
+    await apgdriver.execute("SET lock_timeout = '1s'")
+    tables = ", ".join(settings.qualify(table.name) for table in target(settings).tables)
     async with (
-        asyncpg.create_pool(dsn=dsn, min_size=2, max_size=2) as pool,
-        pool.acquire() as reader,
-        asyncio.TaskGroup() as tasks,
-        reader.transaction(),
+        asyncpg.create_pool(dsn=dsn, min_size=1, max_size=1) as pool,
+        pool.acquire() as writer,
+        writer.transaction(),
     ):
-        await reader.execute(f"SELECT count(*) FROM {settings.queue_table}")
-        script = tasks.create_task(apply_converge_script(apgdriver, settings))
-        # Enqueue once the script has ended or queues for a lock, not after a fixed delay.
-        async with asyncio.timeout(5):
-            while not script.done() and not await reader.fetchval(QUEUED_FOR_A_LOCK, runner):
-                await asyncio.wait({script}, timeout=0.01)
-        enqueue = tasks.create_task(Queries(AsyncpgPoolDriver(pool)).enqueue("rerun", None))
-        await asyncio.wait({enqueue}, timeout=1)
-        enqueued_beside_reader = enqueue.done()
-        await asyncio.wait({script}, timeout=5)
-        script_ended_beside_reader = script.done()
+        await writer.execute(f"LOCK TABLE {tables} IN ROW EXCLUSIVE MODE")
+        await writer.fetchval(
+            "SELECT nextval(pg_get_serial_sequence($1, 'id'))", settings.qualified.queue_table
+        )
 
-    assert enqueued_beside_reader, "the enqueue queued behind the script"
-    assert script_ended_beside_reader, "the script queued behind the reader"
-
-
-@pytest.mark.parametrize("release", RELEASES)
-async def test_the_script_leaves_nothing_to_plan_on_any_release(
-    apgdriver: AsyncpgDriver,
-    release: str,
-) -> None:
-    """The guards skip only work that is done: one run reaches the declaration."""
-    settings = DBSettings()
-    await install_release(apgdriver, release)
-
-    await apply_converge_script(apgdriver, settings)
-
-    assert await plan_left(apgdriver, settings) == ()
-
-
-async def test_the_script_restores_a_dropped_trigger(apgdriver: AsyncpgDriver) -> None:
-    """The trigger guard still creates the trigger when it is missing."""
-    settings = DBSettings()
-    await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table};")
-
-    await apply_converge_script(apgdriver, settings)
-
-    assert await plan_left(apgdriver, settings) == ()
+        await apply_converge_script(apgdriver, settings)

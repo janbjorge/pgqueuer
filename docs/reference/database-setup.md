@@ -40,10 +40,11 @@ pgq sql upgrade > migrations/V2__pgqueuer_upgrade.sql
 ```
 
 `sql upgrade` never connects, so it re-states every object behind `IF NOT EXISTS`
-and catalog checks. That is what makes it the right thing to check in: it is a
-property of the release, identical for every database, and reproducible from the
-version alone. A rerun on a current database changes nothing and takes no lock
-that blocks enqueue or dequeue.
+and catalog checks.
+That is what makes it the right thing to check in: it is a property of the
+release, identical for every database, and reproducible from the version alone.
+A rerun on a current database changes nothing and takes no lock that blocks
+enqueue or dequeue.
 
 `pgq upgrade --plan` is the other half. It connects, prints the exact delta
 this database needs, and applies nothing:

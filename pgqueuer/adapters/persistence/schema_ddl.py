@@ -19,7 +19,7 @@ from pgqueuer.domain.schema.model import (
 )
 from pgqueuer.domain.schema.statistics import UNIQUE_COUNT_KEY, unique_count_name
 from pgqueuer.domain.settings import DBSettings
-from pgqueuer.domain.types import ColumnName, IndexName, TableName
+from pgqueuer.domain.types import IndexName, TableName
 
 try:
     from pgqueuer._version import version as VERSION  # noqa: N812 - module constant
@@ -174,14 +174,6 @@ BEGIN
 END $$;"""
 
 
-def column_lookup(table: TableName, column: ColumnName, settings: DBSettings) -> str:
-    """The ``information_schema`` row of *column*, in the scope the planner reads."""
-    return f"""FROM information_schema.columns
-        WHERE table_schema = {settings.schema_expr}
-          AND table_name = '{table}'
-          AND column_name = '{column}'"""
-
-
 def converge_namespace(settings: DBSettings) -> Generator[str, None, None]:
     if settings.db_schema:
         yield f"CREATE SCHEMA IF NOT EXISTS {settings.db_schema};"
@@ -218,8 +210,7 @@ def retirement_note(table: Table, settings: DBSettings) -> str:
 def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None, None]:
     """Create absent tables, add absent plain columns, and converge column defaults.
 
-    ``ADD COLUMN`` cannot introduce a serial primary key. Each column change is
-    guarded on the catalog: even a no-op ``ALTER TABLE`` takes ACCESS EXCLUSIVE.
+    ``ADD COLUMN`` cannot introduce a serial primary key.
     """
     for table in schema.tables:
         qualified = settings.qualify(table.name)
@@ -227,14 +218,18 @@ def converge_tables(schema: Schema, settings: DBSettings) -> Generator[str, None
         for column in table.columns:
             if column.kind != "plain":
                 continue
-            found = column_lookup(table.name, column.name, settings)
+            found = f"""FROM information_schema.columns
+        WHERE table_schema = {settings.schema_expr}
+          AND table_name = '{table.name}'
+          AND column_name = '{column.name}'"""
             rendered_column = render_column(column, settings)
             yield guarded(
                 f"NOT EXISTS (SELECT 1 {found})",
                 f"ALTER TABLE {qualified} ADD COLUMN IF NOT EXISTS {rendered_column};",
             )
             if column.default is not None:
-                # pg_get_expr qualifies the enum off search_path; strip it as unqualify() does.
+                # pg_get_expr qualifies the enum when the schema is not on search_path.
+                # Remove the schema name, as unqualify() does.
                 installed = f"replace(column_default, {settings.schema_expr} || '.', '')"
                 declared = column.default.replace("'", "''")
                 yield guarded(
@@ -342,7 +337,6 @@ def converge_indexes(schema: Schema, settings: DBSettings) -> Generator[str, Non
     for entry in schema.indexes:
         if entry.name in changed:
             yield drop_redefined_index(entry, settings)
-        # CREATE INDEX takes SHARE on its table before it checks IF NOT EXISTS.
         yield guarded(
             f"""NOT EXISTS (SELECT 1 FROM pg_indexes
         WHERE schemaname = {settings.schema_expr}
@@ -355,7 +349,7 @@ def converge_routines(schema: Schema, settings: DBSettings) -> Generator[str, No
     for function in schema.functions:
         yield render_function(function, settings, replace=True)
     for trigger in schema.triggers:
-        # Name, table and function: what inspect() reads, so a current trigger is left alone.
+        # The guard compares what inspect() reads: name, table and function.
         yield guarded(
             f"""NOT EXISTS (
         SELECT 1
@@ -388,8 +382,7 @@ END $$;"""
 def widen_id_sequence(table: TableName, settings: DBSettings) -> str:
     """Widen a legacy int4 sequence, which ``ALTER COLUMN TYPE`` leaves capped.
 
-    Guarded on the type: even a no-op ``ALTER SEQUENCE`` takes SHARE ROW EXCLUSIVE,
-    and every ``nextval()`` waits behind it.
+    A no-op ``ALTER SEQUENCE`` still locks the sequence, and every ``nextval()`` waits behind it.
     """
     return f"""DO $$
 DECLARE
