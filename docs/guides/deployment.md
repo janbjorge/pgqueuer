@@ -215,12 +215,12 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 
 ## Schema migrations on deploy
 
-Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database and never drops a table or a column:
+Run `pgq upgrade` before deploying new application code. It never drops a table or a
+column. Some of its steps block the queue while they run, so read the plan first:
 
 ```bash
 # Deploy workflow
-pgq upgrade --plan   # optional: review the delta first
+pgq upgrade --plan   # review the delta and read each note: line
 pgq upgrade          # apply schema changes
 # then roll out new workers
 ```
@@ -231,12 +231,25 @@ current database, it applies nothing and reports `PgQueuer schema is already up 
 
 Anything it will not do on its own is printed as a `note:` line on stderr. A column an
 older release left behind is reported, never dropped -- it holds data, and discarding it
-is your call. Worth reading the notes on the first upgrade after a long gap.
+is your call.
 
-One class of note is about what the upgrade *will* do: converting a column type rewrites
-the table under `ACCESS EXCLUSIVE`, blocking the queue for the duration. Only a database
-still on `int4` ids or the pre-v0.27 statistics enum hits it, and `pgq upgrade --plan`
-says so before you commit to the window.
+Other notes are about what the upgrade *will* do. Two kinds of step block a table for a
+time that grows with its row count, and each gets a note:
+
+- Converting a column type rewrites the table under `ACCESS EXCLUSIVE`. All reads and
+  writes of that table wait until the rewrite ends. Only a database still on `int4` ids
+  or the pre-v0.27 statistics enum needs a conversion.
+- Building an index holds a `SHARE` lock on its table. Writes to that table wait until
+  the build ends. Reads continue. The upgrade builds each index that the database lacks,
+  and rebuilds each index whose definition changed.
+
+Enqueues, dequeues and job completions write to the queue table and to the log table. An
+index build on either table stops them until the build ends. An index on a table that the
+same upgrade creates has no rows to build, so it gets no note.
+
+`pgq upgrade` prints its notes only after it has applied the plan. Run `pgq upgrade --plan`
+first and read the notes. If a note names a large table, upgrade in a maintenance window
+or a low-traffic period.
 
 Concurrent upgrades serialize on an advisory lock. It is session-scoped, so hold schema
 changes on a single connection; see [`pgq upgrade`](../reference/cli.md#upgrade).

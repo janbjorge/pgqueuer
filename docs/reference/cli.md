@@ -65,34 +65,43 @@ pgq upgrade                 # apply it
 ```
 
 `upgrade` never changes durability. Switching a table between `LOGGED` and
-`UNLOGGED` rewrites it, which does not belong in a command the deployment guide
-calls safe to run against a live database. A table whose durability differs
-from the declared level is reported as a `note:` and left alone; use
-[`pgq durability`](#durability) to change it. The declared level comes from
-`PGQUEUER_DURABILITY` (default `durable`), so an installation running
-`volatile` should set that variable for the notes to be accurate.
+`UNLOGGED` rewrites it, which does not belong in a command that runs on every
+deploy. A table whose durability differs from the declared level is reported
+as a `note:` and left alone; use [`pgq durability`](#durability) to change it.
+The declared level comes from `PGQUEUER_DURABILITY` (default `durable`), so an
+installation running `volatile` should set that variable for the notes to be
+accurate.
 
 Output goes to stderr: `PgQueuer schema is already up to date.`, or
 `Applied 3 statements.` Anything the upgrade will not do on its own is reported
 as a `note:` line -- a column an older release left behind, for instance, is
 never dropped for you.
 
-An upgrade that rewrites a table also gets a `note:`, but `pgq upgrade` prints
-its notes only after it has applied, so read them from `--plan`. Converting a
-column type is the only thing here that rewrites a table, and Postgres holds
-`ACCESS EXCLUSIVE` for the whole rewrite, blocking enqueues, dequeues and
-reads. Run `--plan` first on any database old enough to still be on `int4` ids
-or the pre-v0.27 statistics enum:
+Two kinds of step block a table for a time that grows with its row count. Each
+gets a `note:`:
+
+- Converting a column type rewrites the table. Postgres holds
+  `ACCESS EXCLUSIVE` for the whole rewrite, which blocks every read and write
+  of the table. Only a database still on `int4` ids or the pre-v0.27
+  statistics enum needs a conversion.
+- Building an index holds a `SHARE` lock on its table for the whole build,
+  which blocks writes to the table. Reads continue. The upgrade builds each
+  declared index that the database lacks, and rebuilds each index whose
+  definition differs. Enqueues, dequeues and job completions write to the
+  queue table and to the log table, so a build on either table stops them.
+
+An index on a table that the same upgrade creates gets no note: that table has
+no rows yet. `pgq upgrade` prints its notes only after it has applied, so run
+`--plan` first and read them:
 
 ```
 note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
       the whole rewrite, blocking enqueues, dequeues and reads, for a time that
       scales with row count. Prefer a maintenance window.
+note: Upgrading creates pgqueuer_picked_heartbeat_idx. Postgres holds a SHARE
+      lock on pgqueuer for the whole build, blocking writes to it, for a time
+      that scales with row count. Prefer a maintenance window.
 ```
-
-Rebuilding an index whose definition differs from the declared one does not
-rewrite the table, but the build holds a `SHARE` lock that blocks writes to it,
-so it gets a `note:` too.
 
 A column whose installed type the planner has no conversion for stops the
 upgrade rather than guessing at a cast. It exits `1` with one line on stderr
