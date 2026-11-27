@@ -137,7 +137,7 @@ class ReadyLane:
             self.jobs.append(entry)
             return
         self.compact()
-        # take_due starts at the cursor. An entry inserted before it is never taken.
+        # take_due starts at the cursor and never takes an entry before the cursor.
         bisect.insort(self.jobs, entry, lo=self.head, key=lambda item: item.order)
 
     def take_due(self, cap: int, now: datetime) -> list[JobRow]:

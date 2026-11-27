@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import json
-import random
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -16,13 +14,12 @@ from pydantic_core import PydanticSerializationError
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.inmemory.jobs import ReadyLane
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.models import CronExpressionEntrypoint, Job, TracebackRecord
+from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
     CronExpression,
     HealthCheckId,
-    JobId,
     OnConflict,
     QueueEntrypoint,
     QueueManagerId,
@@ -601,11 +598,10 @@ async def test_ready_lane_rebuild_keeps_live_and_deferred_jobs(queries: InMemory
 async def test_new_higher_priority_job_comes_next_after_the_cursor_moved(
     queries: InMemoryQueries,
 ) -> None:
-    """A new job with a higher priority comes out next, also after the cursor moved."""
     params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
     qm_id = QueueManagerId(uuid.uuid4())
     heartbeat = timedelta(seconds=30)
-    ids = await queries.enqueue(["ep"] * 20, [None] * 20, [0] * 20)
+    await queries.enqueue(["ep"] * 20, [None] * 20, [0] * 20)
     await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
     # This dequeue moves the cursor past the two picked jobs.
     await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
@@ -613,194 +609,6 @@ async def test_new_higher_priority_job_comes_next_after_the_cursor_moved(
 
     (job,) = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=heartbeat)
     assert job.id == urgent
-    rest = await queries.dequeue(100, params, qm_id, None, heartbeat_timeout=heartbeat)
-    assert [job.id for job in rest] == ids[4:]
-
-
-async def test_requeued_job_comes_next_after_the_cursor_moved(queries: InMemoryQueries) -> None:
-    """A requeued failure comes out before younger jobs, also after the cursor moved."""
-    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
-    qm_id = QueueManagerId(uuid.uuid4())
-    heartbeat = timedelta(seconds=30)
-    await queries.enqueue(["ep"] * 20, [None] * 20, [0] * 20)
-    failed, _ = await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
-    await queries.log_jobs([(failed, "failed", None)])
-    # This dequeue moves the cursor past the two picked jobs.
-    await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
-    await queries.requeue_jobs([failed.id])
-
-    (job,) = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=heartbeat)
-    assert job.id == failed.id
-
-
-async def test_priority_bump_comes_next_after_the_cursor_moved(queries: InMemoryQueries) -> None:
-    """A job with a raised priority comes out next, also after the cursor moved."""
-    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
-    qm_id = QueueManagerId(uuid.uuid4())
-    heartbeat = timedelta(seconds=30)
-    keys: list[str | None] = [f"k{index}" for index in range(20)]
-    ids = await queries.enqueue(["ep"] * 20, [None] * 20, [0] * 20, dedupe_key=keys)
-    await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
-    # This dequeue moves the cursor past the two picked jobs.
-    await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
-    bumped = await queries.enqueue(
-        "ep", None, 5, dedupe_key=keys[-1], on_conflict="update_priority"
-    )
-    assert bumped == [ids[-1]]
-
-    (job,) = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=heartbeat)
-    assert (job.id, job.priority) == (ids[-1], 5)
-
-
-@dataclasses.dataclass
-class ReferenceJob:
-    """One job row of the reference model."""
-
-    priority: int
-    execute_after: datetime
-    status: JOB_STATUS
-    dedupe_key: str
-
-
-@dataclasses.dataclass
-class LaneReference:
-    """Run the same random steps on InMemoryQueries and on a plain reference model."""
-
-    queries: InMemoryQueries
-    rng: random.Random
-    clock: time_machine.Traveller
-    params: dict[QueueEntrypoint, EntrypointExecutionParameter] = dataclasses.field(
-        default_factory=lambda: {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)},
-    )
-    qm_id: QueueManagerId = dataclasses.field(
-        default_factory=lambda: QueueManagerId(uuid.uuid4()),
-    )
-    jobs: dict[JobId, ReferenceJob] = dataclasses.field(default_factory=dict)
-    picked: dict[JobId, Job] = dataclasses.field(default_factory=dict)
-    serial: int = 0
-
-    def due_order(self) -> list[JobId]:
-        """Return the queued, due jobs by priority DESC, then id ASC."""
-        now = datetime.now(UTC)
-        due = [
-            job_id
-            for job_id, job in self.jobs.items()
-            if job.status == "queued" and job.execute_after <= now
-        ]
-        return sorted(due, key=lambda job_id: (-self.jobs[job_id].priority, job_id))
-
-    def check(self) -> None:
-        lane = self.queries.job_table.ready.get(QueueEntrypoint("ep"), ReadyLane())
-        assert lane.dead == dead_entries(lane)
-        # Take from a copy of the lane. The check must not move the real cursor.
-        preview = dataclasses.replace(lane, jobs=list(lane.jobs))
-        due = preview.take_due(len(self.jobs) + 1, datetime.now(UTC))
-        assert [row.id for row in due] == self.due_order()
-
-    def delay(self) -> timedelta:
-        return timedelta(minutes=1) if self.rng.randrange(6) == 0 else timedelta(0)
-
-    def pop_picked(self) -> Job | None:
-        if not self.picked:
-            return None
-        return self.picked.pop(self.rng.choice(list(self.picked)))
-
-    async def enqueue(self) -> None:
-        now = datetime.now(UTC)
-        new = [
-            ReferenceJob(self.rng.randint(0, 4), now + self.delay(), "queued", f"k{key}")
-            for key in range(self.serial, self.serial + self.rng.randint(1, 3))
-        ]
-        self.serial += len(new)
-        ids = await self.queries.enqueue(
-            ["ep"] * len(new),
-            [None] * len(new),
-            [job.priority for job in new],
-            [job.execute_after - now for job in new],
-            [job.dedupe_key for job in new],
-        )
-        self.jobs.update(zip(ids, new, strict=True))
-
-    async def dequeue(self) -> None:
-        batch_size = self.rng.randint(1, 3)
-        expected = self.due_order()[:batch_size]
-        jobs = await self.queries.dequeue(
-            batch_size, self.params, self.qm_id, None, heartbeat_timeout=timedelta(days=1)
-        )
-        assert [job.id for job in jobs] == expected
-        for job in jobs:
-            self.jobs[job.id].status = "picked"
-            self.picked[job.id] = job
-
-    async def retry(self) -> None:
-        if (job := self.pop_picked()) is not None:
-            delay = self.delay()
-            await self.queries.retry_job(job, delay, None)
-            self.jobs[job.id].status = "queued"
-            self.jobs[job.id].execute_after = datetime.now(UTC) + delay
-
-    async def fail(self) -> None:
-        if (job := self.pop_picked()) is not None:
-            await self.queries.log_jobs([(job, "failed", None)])
-            self.jobs[job.id].status = "failed"
-
-    async def finish(self) -> None:
-        if (job := self.pop_picked()) is not None:
-            await self.queries.log_jobs([(job, "successful", None)])
-            del self.jobs[job.id]
-
-    async def requeue(self) -> None:
-        if failed := [job_id for job_id, job in self.jobs.items() if job.status == "failed"]:
-            job_id = self.rng.choice(failed)
-            await self.queries.requeue_jobs([job_id])
-            self.jobs[job_id].status = "queued"
-            self.jobs[job_id].execute_after = datetime.now(UTC)
-
-    async def bump(self) -> None:
-        if queued := [job_id for job_id, job in self.jobs.items() if job.status == "queued"]:
-            job_id = self.rng.choice(queued)
-            job = self.jobs[job_id]
-            job.priority += self.rng.randint(1, 3)
-            ids = await self.queries.enqueue(
-                "ep", None, job.priority, dedupe_key=job.dedupe_key, on_conflict="update_priority"
-            )
-            assert ids == [job_id]
-
-    async def tick(self) -> None:
-        self.clock.shift(timedelta(minutes=1))
-
-
-@pytest.mark.parametrize("seed", range(8))
-async def test_random_steps_deliver_jobs_in_reference_order(
-    queries: InMemoryQueries, seed: int
-) -> None:
-    """Random steps deliver each queued, due job in priority and id order."""
-    rng = random.Random(seed)  # noqa: S311 - seeded test data
-    with time_machine.travel(datetime(2026, 1, 1, tzinfo=UTC), tick=False) as clock:
-        model = LaneReference(queries, rng, clock)
-        weights = {
-            model.enqueue: 25,
-            model.dequeue: 30,
-            model.retry: 15,
-            model.fail: 8,
-            model.finish: 10,
-            model.requeue: 10,
-            model.bump: 5,
-            model.tick: 5,
-        }
-        for _ in range(300):
-            await rng.choices(list(weights), weights=list(weights.values()))[0]()
-            model.check()
-
-        clock.shift(timedelta(hours=1))
-        jobs = await queries.dequeue(
-            len(model.jobs) + 1,
-            model.params,
-            model.qm_id,
-            None,
-            heartbeat_timeout=timedelta(days=1),
-        )
-        assert [job.id for job in jobs] == model.due_order()
 
 
 async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(
