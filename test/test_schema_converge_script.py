@@ -6,6 +6,8 @@ import asyncpg
 
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.query_helpers import cell
+from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.db import AsyncpgDriver
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.settings import DBSettings
@@ -177,3 +179,13 @@ async def test_a_rerun_takes_no_lock_that_blocks_writers(
         )
 
         await apply_converge_script(apgdriver, settings)
+
+
+async def test_the_script_still_converges_the_oldest_release(apgdriver: AsyncpgDriver) -> None:
+    """The guards let each statement run when the catalog shows work to do."""
+    settings = DBSettings()
+    await install_release(apgdriver, "v0.18.10")
+    # The release has the current trigger. The drop gives the trigger guard work to do.
+    await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table};")
+    await apply_converge_script(apgdriver, settings)
+    assert plan(await inspect(apgdriver, settings), target(settings), settings).statements == ()
