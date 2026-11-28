@@ -63,7 +63,7 @@ class ScheduleTable:
                 heartbeat=now,
                 created=now,
                 updated=now,
-                next_run=(now + delay).replace(microsecond=0),
+                next_run=now + delay,
                 last_run=None,
                 status="queued",
             )
@@ -90,8 +90,7 @@ class ScheduleTable:
                 row.status = "picked"
             row.heartbeat = now
             row.updated = now
-            # Match date_trunc('seconds', now + delay).
-            row.next_run = (now + delay).replace(microsecond=0)
+            row.next_run = now + delay
             selected.append(row)
         return [row.to_model() for row in selected]
 

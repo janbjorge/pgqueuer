@@ -26,7 +26,10 @@ async def heartbeat(schedule: Schedule) -> None:
 The `@schedule` decorator registers a name and a cron expression as a row in
 `pgqueuer_schedules`. The scheduler polls that table, runs the tasks whose expressions
 are due, and records the run. Because the state lives in PostgreSQL, schedules survive
-process restarts and only one worker runs each due task.
+process restarts and only one worker runs each due task. A tick runs once, at most about
+0.5 s after its time, while the scheduler's queries take under 0.5 s. Clock skew between
+the worker and the database does not change this. With more than one scheduler process,
+keep their clocks in sync with NTP.
 
 ### Scheduler flow diagram
 

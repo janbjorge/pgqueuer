@@ -13,8 +13,10 @@ from pydantic_core import PydanticSerializationError
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.adapters.inmemory.jobs import ReadyLane
+from pgqueuer.core import executors
+from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.domain.errors import DuplicateJobError
-from pgqueuer.domain.models import CronExpressionEntrypoint, TracebackRecord
+from pgqueuer.domain.models import CronExpressionEntrypoint, Schedule, TracebackRecord, utc_now
 from pgqueuer.domain.types import (
     JOB_STATUS,
     CronEntrypoint,
@@ -25,6 +27,7 @@ from pgqueuer.domain.types import (
     QueueManagerId,
 )
 from pgqueuer.ports.repository import EntrypointExecutionParameter
+from test.helpers import poll_schedules
 
 # ---------------------------------------------------------------------------
 # Enqueue
@@ -1203,7 +1206,7 @@ async def test_fetch_schedule_moves_next_run_on(queries: InMemoryQueries) -> Non
         assert await queries.fetch_schedule({key: timedelta(hours=1)}) == []
 
     (schedule,) = await queries.peek_schedule()
-    assert schedule.next_run == datetime(2026, 10, 22, 13, 0, 0, tzinfo=UTC)
+    assert schedule.next_run == datetime(2026, 10, 22, 13, 0, 0, 250_000, tzinfo=UTC)
 
 
 async def test_fetch_schedule_reclaim_moves_next_run_on(queries: InMemoryQueries) -> None:
@@ -1218,7 +1221,7 @@ async def test_fetch_schedule_reclaim_moves_next_run_on(queries: InMemoryQueries
         (reclaimed,) = await queries.fetch_schedule({key: timedelta(hours=1)})
 
     assert reclaimed.id == first.id
-    assert reclaimed.next_run == datetime(2026, 10, 22, 13, 0, 31, tzinfo=UTC)
+    assert reclaimed.next_run == datetime(2026, 10, 22, 13, 0, 31, 250_000, tzinfo=UTC)
 
 
 async def test_fetch_schedule_picks_again_once_next_run_is_due(
@@ -1235,6 +1238,60 @@ async def test_fetch_schedule_picks_again_once_next_run_is_due(
         (again,) = await queries.fetch_schedule({key: timedelta(hours=1)})
 
     assert again.id == picked.id
+
+
+async def test_fetch_schedule_runs_once_per_tick_with_worker_clock_ahead(
+    queries: InMemoryQueries,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A schedule runs once per tick when the worker clock is 5 ms ahead of the adapter."""
+    monkeypatch.setattr(executors, "utc_now", lambda: utc_now() + timedelta(milliseconds=5))
+    scheduler = SchedulerManager(queries)
+
+    @scheduler.schedule("every_second", "* * * * * *")
+    async def every_second(schedule: Schedule) -> None:
+        pass
+
+    start = datetime(2026, 10, 22, 12, 0, 0, 250_000, tzinfo=UTC)
+    with time_machine.travel(start, tick=False) as traveller:
+        runs = [await poll_schedules(scheduler, insert=True)]
+        traveller.move_to(start + timedelta(seconds=1))
+        runs += [await poll_schedules(scheduler), await poll_schedules(scheduler)]
+        traveller.move_to(start + timedelta(seconds=2))
+        runs.append(await poll_schedules(scheduler))
+
+    # The polls alternate: inside the second before a tick, then just after the tick.
+    assert runs == [0, 1, 0, 1]
+
+
+async def test_fetch_schedule_poll_after_a_slow_query_runs_the_tick(
+    queries: InMemoryQueries,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After queries that start 300 ms late, the poll after next_poll_in() runs the tick."""
+    stall = timedelta(milliseconds=300)
+    scheduler = SchedulerManager(queries)
+
+    @scheduler.schedule("every_second", "* * * * * *")
+    async def every_second(schedule: Schedule) -> None:
+        pass
+
+    async def poll(lag: timedelta, *, insert: bool = False) -> int:
+        # The worker read its clock *lag* before this query.
+        monkeypatch.setattr(executors, "utc_now", lambda: utc_now() - lag)
+        runs = await poll_schedules(scheduler, insert=insert)
+        monkeypatch.setattr(executors, "utc_now", utc_now)
+        return runs
+
+    start = datetime(2026, 10, 22, 12, 0, 0, 500_000, tzinfo=UTC)
+    with time_machine.travel(start, tick=False) as traveller:
+        runs = [await poll(stall, insert=True)]
+        traveller.shift(scheduler.next_poll_in() + stall)
+        runs.append(await poll(stall))
+        traveller.shift(scheduler.next_poll_in())
+        runs.append(await poll(timedelta(0)))
+
+    assert runs == [0, 1, 1]
 
 
 # ---------------------------------------------------------------------------
