@@ -517,6 +517,24 @@ def test_finishing_a_cut_off_rebuild_is_not_announced() -> None:
     assert result.notes == ()
 
 
+def test_an_index_created_on_an_existing_table_is_announced() -> None:
+    """Only the build on a table that exists has a note, because a new table is empty."""
+    settings = DBSettings()
+    schema = target(settings)
+    name = f"{settings.queue_table}_ep_ea_idx"
+    log = settings.queue_table_log
+    live = dataclasses.replace(
+        without_table(schema, log),
+        indexes=tuple(
+            entry for entry in schema.indexes if entry.name != name and entry.table != log
+        ),
+    )
+
+    notes = plan(live, schema, settings).notes
+    assert len(notes) == 1
+    assert notes[0].startswith(f"Upgrading creates {name}. ")
+
+
 def test_a_missing_statistics_index_on_an_existing_table_folds_first() -> None:
     """Where an upgrade that dropped the index and failed to rebuild it left off."""
     settings = DBSettings()

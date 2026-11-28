@@ -69,8 +69,8 @@ pgq upgrade                 # apply it
 ```
 
 `upgrade` never changes durability. Switching a table between `LOGGED` and
-`UNLOGGED` rewrites it, which does not belong in a command the deployment guide
-calls safe to run against a live database. A table whose durability differs
+`UNLOGGED` rewrites it, which does not belong in a command that runs on every
+deploy. A table whose durability differs
 from the declared level is reported as a `note:` and left alone; use
 [`pgq durability`](#durability) to change it. The declared level comes from
 `PGQUEUER_DURABILITY` (default `durable`), so an installation running
@@ -94,9 +94,9 @@ note: Upgrading pgqueuer rewrites it (id). Postgres holds ACCESS EXCLUSIVE for
       scales with row count. Prefer a maintenance window.
 ```
 
-Rebuilding an index whose definition differs from the declared one does not
-rewrite the table, but the build holds a `SHARE` lock that blocks writes to it,
-so it gets a `note:` too.
+An index build does not rewrite the table, but it holds a `SHARE` lock that
+blocks writes to the table. Each build of an absent or redefined index on a
+table that exists has a `note:` too.
 
 A column whose installed type the planner has no conversion for stops the
 upgrade rather than guessing at a cast. It exits `1` with one line on stderr

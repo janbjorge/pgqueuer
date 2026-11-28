@@ -215,8 +215,7 @@ in-flight jobs finish provided the `terminationGracePeriodSeconds` is long enoug
 
 ## Schema migrations on deploy
 
-Run `pgq upgrade` before deploying new application code. It is safe to run against a live
-database and never drops a table or a column:
+Run `pgq upgrade` before deploying new application code. It never drops a table or a column:
 
 ```bash
 # Deploy workflow
@@ -237,6 +236,8 @@ One class of note is about what the upgrade *will* do: converting a column type 
 the table under `ACCESS EXCLUSIVE`, blocking the queue for the duration. Only a database
 still on `int4` ids or the pre-v0.27 statistics enum hits it, and `pgq upgrade --plan`
 says so before you commit to the window.
+
+An index build on a table that exists blocks writes to that table, so it has a note too.
 
 Concurrent upgrades serialize on an advisory lock. It is session-scoped, so hold schema
 changes on a single connection; see [`pgq upgrade`](../reference/cli.md#upgrade).

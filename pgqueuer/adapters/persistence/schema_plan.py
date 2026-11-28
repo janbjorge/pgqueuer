@@ -316,16 +316,33 @@ def plan_rebuild(index: Index, settings: DBSettings) -> list[str]:
     ]
 
 
-def rebuild_notes(live: Schema, declared: Schema) -> list[str]:
-    """Warn before a rebuild: the build blocks writes to its table until it finishes."""
+def awaits_rename(index: Index, leftover: Index | None) -> bool:
+    """Whether *leftover* is *index* under its rebuild name, so a rename finishes it."""
+    return leftover is not None and dataclasses.replace(leftover, name=index.name) == index
+
+
+def build_notes(live: Schema, declared: Schema) -> list[str]:
+    """Warn before an index build: it blocks writes to its table until it finishes.
+
+    A table that this plan creates is empty, so its indexes have no note. A rename
+    that finishes a cut-off rebuild builds nothing, so it has no note either.
+    """
     found = {entry.name: entry for entry in live.indexes}
-    return [
-        f"Upgrading rebuilds {index.name}. Postgres holds a SHARE lock on {index.table} "
-        f"for the whole build, blocking writes to it, for a time that scales with row "
-        f"count. Prefer a maintenance window."
-        for index in declared.indexes
-        if (installed := found.get(index.name)) is not None and installed != index
-    ]
+    tables = {entry.name for entry in live.tables}
+    notes = []
+    for index in declared.indexes:
+        installed = found.get(index.name)
+        if installed == index or index.table not in tables:
+            continue
+        if installed is None and awaits_rename(index, found.get(rebuild_name(index))):
+            continue
+        verb = "creates" if installed is None else "rebuilds"
+        notes.append(
+            f"Upgrading {verb} {index.name}. Postgres holds a SHARE lock on {index.table} "
+            f"for the whole build, blocking writes to it, for a time that scales with row "
+            f"count. Prefer a maintenance window."
+        )
+    return notes
 
 
 def plan_create(index: Index, leftover: Index | None, settings: DBSettings) -> list[str]:
@@ -333,8 +350,8 @@ def plan_create(index: Index, leftover: Index | None, settings: DBSettings) -> l
 
     A leftover replacement from an older declaration is dropped, not renamed in.
     """
-    if leftover is not None and dataclasses.replace(leftover, name=index.name) == index:
-        return [f"ALTER INDEX {settings.qualify(leftover.name)} RENAME TO {index.name};"]
+    if awaits_rename(index, leftover):
+        return [f"ALTER INDEX {settings.qualify(rebuild_name(index))} RENAME TO {index.name};"]
     stale = [] if leftover is None else [f"DROP INDEX {settings.qualify(leftover.name)};"]
     return [*stale, render_index(index, settings)]
 
@@ -470,7 +487,7 @@ def plan(live: Schema, declared: Schema, settings: DBSettings) -> Plan:
         + plan_routines(live, declared, settings)
         + plan_retired_types(live, settings)
     )
-    notes = table_notes(live, declared, settings) + rebuild_notes(live, declared) + list(gone.notes)
+    notes = table_notes(live, declared, settings) + build_notes(live, declared) + list(gone.notes)
     return Plan(statements=tuple(statements), notes=tuple(notes))
 
 
