@@ -71,6 +71,6 @@ After the service starts, the metrics endpoint is available at
 ### Health check
 
 `GET /health` runs `SELECT 1` on the database connection of the service. It returns
-200 when the query succeeds and 503 when it fails. The service does not reconnect.
+200 when the query succeeds and 500 when it fails. The service does not reconnect.
 Point the liveness probe of your orchestrator at `/health`. The orchestrator then
 restarts the container when the service loses its connection.

@@ -191,7 +191,7 @@ def test_prometheus_tool_escapes_label_values(monkeypatch: pytest.MonkeyPatch) -
     )
 
 
-async def test_prometheus_tool_health_is_503_after_postgres_ends_its_connection(
+async def test_prometheus_tool_health_is_500_after_postgres_ends_its_connection(
     dsn: str,
     apgdriver: AsyncpgDriver,
     monkeypatch: pytest.MonkeyPatch,
@@ -199,7 +199,7 @@ async def test_prometheus_tool_health_is_503_after_postgres_ends_its_connection(
     for key, value in env_from_dsn(dsn).items():
         monkeypatch.setenv(key, value)
 
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(), raise_server_exceptions=False) as client:
         assert client.get("/health").status_code == 200
 
         # The test database is new. Its only other client backend belongs to the service.
@@ -215,4 +215,4 @@ async def test_prometheus_tool_health_is_503_after_postgres_ends_its_connection(
         )
         assert terminated == [{"terminated": True}]
 
-        assert client.get("/health").status_code == 503
+        assert client.get("/health").status_code == 500
