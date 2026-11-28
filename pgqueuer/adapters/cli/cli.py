@@ -102,6 +102,8 @@ class AppConfig:
             os.environ["PGQUEUER_PREFIX"] = self.prefix
         if self.schema:
             os.environ["PGQUEUER_SCHEMA"] = self.schema
+        if self.pg_dsn:
+            os.environ["PGQUEUER_DSN"] = self.pg_dsn
 
 
 @app.callback()

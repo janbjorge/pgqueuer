@@ -35,14 +35,14 @@ from pgqueuer.db import SyncPsycopgDriver
 def _restore_pgqueuer_env() -> Generator[None, None, None]:
     """Restore the env vars the CLI callback writes via AppConfig.setup_env.
 
-    setup_env writes PGQUEUER_PREFIX/PGQUEUER_SCHEMA straight into os.environ,
+    setup_env writes PGQUEUER_PREFIX/PGQUEUER_SCHEMA/PGQUEUER_DSN straight into os.environ,
     and monkeypatch.delenv on an absent key records nothing to undo, so a CLI
-    invocation with --prefix/--schema would otherwise leak into every later
+    invocation with --prefix/--schema/--pg-dsn would otherwise leak into every later
     test on the same worker. Restore just those keys here; swapping os.environ
     for a dict copy is not an option because it would stop monkeypatch.setenv
     from calling os.putenv, which the libpq integration tests rely on.
     """
-    keys = ("PGQUEUER_PREFIX", "PGQUEUER_SCHEMA")
+    keys = ("PGQUEUER_PREFIX", "PGQUEUER_SCHEMA", "PGQUEUER_DSN")
     saved = {k: os.environ.get(k) for k in keys}
     try:
         yield

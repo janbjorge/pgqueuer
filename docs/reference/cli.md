@@ -629,18 +629,19 @@ Bare awaitables and sync context managers are **not** accepted; passing one rais
 
 ```python
 from contextlib import asynccontextmanager
-import asyncpg
 from pgqueuer import PgQueuer
+from pgqueuer.adapters.connections import connect_asyncpg
 
 @asynccontextmanager
 async def create_pgqueuer():
-    conn = await asyncpg.connect()
-    pgq = PgQueuer.from_asyncpg_connection(conn)
+    # connect_asyncpg() reads PGQUEUER_DSN, which pgq sets from --pg-dsn.
+    async with connect_asyncpg() as conn:
+        pgq = PgQueuer.from_asyncpg_connection(conn)
 
-    @pgq.entrypoint("fetch")
-    async def process(job): ...
+        @pgq.entrypoint("fetch")
+        async def process(job): ...
 
-    yield pgq
+        yield pgq
 ```
 
 ```bash
@@ -747,6 +748,8 @@ All commands accept the following connection options:
 When `--pg-dsn` is omitted, the database drivers (asyncpg / psycopg) read standard
 libpq environment variables automatically: `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`,
 `PGDATABASE`.
+
+A custom factory receives the `--pg-dsn` value through `PGQUEUER_DSN`.
 
 `pgq install` accepts `--create-schema/--no-create-schema` (default: create). It
 controls whether `CREATE SCHEMA IF NOT EXISTS` is emitted when `--schema` is set;
