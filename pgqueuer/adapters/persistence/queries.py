@@ -311,7 +311,15 @@ class Queries:
             if lost_capacity_slot_race(exc, slot_index):
                 return []
             raise
-        return [models.Job.model_validate(row) for row in rows]
+        jobs = [models.Job.model_validate(row) for row in rows]
+        for row, job in zip(rows, jobs, strict=True):
+            # Enqueue stores missing headers as jsonb null. asyncpg returns it as the text "null".
+            if job.headers is None and row["headers"] not in (None, "null"):
+                logging.getLogger("pgqueuer").warning(
+                    "Job %d has headers that are not a JSON object. The job runs without headers.",
+                    job.id,
+                )
+        return jobs
 
     @overload
     async def enqueue(
