@@ -9,6 +9,7 @@ import asyncpg
 import psycopg
 import pytest
 
+from pgqueuer.adapters.persistence.composer import ComposedQuery
 from pgqueuer.adapters.persistence.qb import (
     DBSettings,
     QueryBuilderEnvironment,
@@ -169,7 +170,7 @@ async def test_notify_channel_needs_quoting(
 )
 async def test_valid_query_syntax(
     dsn: str,
-    query: Callable[..., str | Iterable[str]],
+    query: Callable[..., str | Iterable[str] | ComposedQuery],
     name: str,
     driver: Callable[..., AbstractAsyncContextManager[Driver]],
 ) -> None:
@@ -181,6 +182,8 @@ async def test_valid_query_syntax(
         pytest.skip("builder requires arguments; covered by dedicated tests")
 
     sql = query()
+    if isinstance(sql, ComposedQuery):
+        sql = sql.sql
     sql = sql if isinstance(sql, str) else f"\n{'-' * 50}\n".join(sql)
     assert isinstance(sql, str)
 

@@ -140,6 +140,12 @@ pgq verify --expect present
 
 Change the durability level of existing PgQueuer tables **without data loss**.
 
+The command switches one table at a time and does not lock a table that is already at
+the level. PostgreSQL rewrites each table that changes and holds an `ACCESS EXCLUSIVE`
+lock on it during the rewrite. Enqueue, dequeue and job completion write to the log table,
+so they wait while PostgreSQL rewrites it. If the command stops before it completes, run
+it again.
+
 **Arguments:**
 
 - `durability` *(required)*: `volatile`, `balanced`, or `durable`.
@@ -564,7 +570,8 @@ Use **continuous** for long-running workers and **drain** for batch processing.
 ## Durability levels
 
 Durability controls whether PgQueuer tables are WAL-logged, which trades write speed
-against crash recovery.
+against crash recovery. PostgreSQL does not replicate unlogged tables to standbys, so a
+failover or a switchover leaves them empty.
 
 ### Volatile
 

@@ -233,8 +233,16 @@ class Queries:
         await self.apply_upgrade()
 
     async def alter_durability(self, durability: qb.Durability | None = None) -> None:
-        """Switch table durability to *durability* (default: configured) without data loss."""
-        await self.driver.execute("\n\n".join(self.qbe.build_alter_durability_query(durability)))
+        """Switch table durability to *durability* (default: configured) without data loss.
+
+        Each ALTER runs in its own transaction, so a rewrite locks only its own table.
+        A failed run can leave some tables switched. Run it again to finish.
+        """
+        query = self.qbe.build_unlogged_query()
+        rows = await self.driver.fetch(query.sql, *query.args)
+        live = {cell(row, "name", str): cell(row, "unlogged", bool) for row in rows}
+        for statement in self.qbe.build_alter_durability_query(durability, live):
+            await self.driver.execute(statement)
 
     async def optimize_autovacuum(self) -> None:
         """Apply autovacuum settings."""
