@@ -84,16 +84,15 @@ class AnyEvent(
 
 
 def parse_headers(value: object) -> dict[str, object] | None:
-    """Return the job headers as a dict. Return None for a value that is not a JSON object.
+    """Return the job headers, or None for a value that is not a JSON object.
 
     asyncpg returns jsonb as text, and psycopg returns it as parsed data.
     So a JSON string from psycopg is text that can fail to parse.
     """
-    decoded = value
     if isinstance(value, (str, bytes)):
         with contextlib.suppress(ValueError):
-            decoded = from_json(value)
-    return decoded if isinstance(decoded, dict) else None
+            value = from_json(value)
+    return value if isinstance(value, dict) else None
 
 
 class Job(BaseModel):
