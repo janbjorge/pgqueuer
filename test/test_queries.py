@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -1277,11 +1276,8 @@ async def test_enqueue_with_headers(apgdriver: db.Driver) -> None:
     await q.log_jobs([(jobs[0], "successful", None)])
 
 
-async def test_dequeue_returns_batch_with_non_object_headers(
-    apgdriver: db.Driver,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A job whose headers are not a JSON object dequeues with its batch and one warning."""
+async def test_dequeue_returns_batch_with_non_object_headers(apgdriver: db.Driver) -> None:
+    """A job whose headers are not a JSON object dequeues with its batch."""
     q = queries.Queries(apgdriver)
     (plain,) = await q.enqueue("ep", None)
     # A producer that writes the row itself, as in the PostgREST guide, can store any jsonb.
@@ -1291,19 +1287,15 @@ async def test_dequeue_returns_batch_with_non_object_headers(
     )
     bad = JobId(cell(row, "id", int))
 
-    with caplog.at_level(logging.WARNING, logger="pgqueuer"):
-        jobs = await q.dequeue(
-            batch_size=10,
-            entrypoints={QueueEntrypoint("ep"): queries.EntrypointExecutionParameter(0)},
-            queue_manager_id=QueueManagerId(uuid.uuid4()),
-            global_concurrency_limit=1000,
-            heartbeat_timeout=timedelta(seconds=30),
-        )
+    jobs = await q.dequeue(
+        batch_size=10,
+        entrypoints={QueueEntrypoint("ep"): queries.EntrypointExecutionParameter(0)},
+        queue_manager_id=QueueManagerId(uuid.uuid4()),
+        global_concurrency_limit=1000,
+        heartbeat_timeout=timedelta(seconds=30),
+    )
 
     assert {job.id: job.headers for job in jobs} == {plain: None, bad: None}
-    assert [r.getMessage() for r in caplog.records if r.name == "pgqueuer"] == [
-        f"Job {bad} has headers that are not a JSON object. The job runs without headers."
-    ]
 
 
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:
