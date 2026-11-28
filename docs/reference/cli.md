@@ -634,7 +634,6 @@ from pgqueuer.adapters.connections import connect_asyncpg
 
 @asynccontextmanager
 async def create_pgqueuer():
-    # connect_asyncpg() reads PGQUEUER_DSN, which pgq sets from --pg-dsn.
     async with connect_asyncpg() as conn:
         pgq = PgQueuer.from_asyncpg_connection(conn)
 
