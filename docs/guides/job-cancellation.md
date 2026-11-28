@@ -33,6 +33,9 @@ queue until its worker logs the outcome, so it keeps its `concurrency_limit` slo
 its `dedupe_key` while the handler runs. The NOTIFY still asks the handler to stop.
 Jobs that have already completed are unaffected.
 
+The list can have any length. A long list goes out as several NOTIFY events, because
+PostgreSQL rejects a NOTIFY payload of 8000 bytes or more.
+
 ## Handling cancellation in job code
 
 Use the job's cancellation scope to stop processing when a cancel request arrives:

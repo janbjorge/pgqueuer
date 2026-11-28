@@ -64,6 +64,26 @@ def lost_capacity_slot_race(exc: Exception, slot_index: str) -> bool:
     return sqlstate.is_unique_violation(exc) and sqlstate.constraint_of(exc) == slot_index
 
 
+# PostgreSQL rejects a NOTIFY payload of this many bytes or more.
+NOTIFY_PAYLOAD_LIMIT = 8000
+
+
+def cancellation_payloads(event: models.CancellationEvent) -> list[str]:
+    """Serialize *event* as NOTIFY payloads that each hold as many of its ids as fit."""
+    # Each id adds its JSON width and one comma. The first id of a payload has no comma.
+    base = len(event.model_copy(update={"ids": []}).model_dump_json().encode()) - 1
+    batches: list[list[types.JobId]] = [[]]
+    size = base
+    for job_id in event.ids:
+        width = len(to_json(job_id)) + 1
+        if size + width >= NOTIFY_PAYLOAD_LIMIT:
+            batches.append([])
+            size = base
+        batches[-1].append(job_id)
+        size += width
+    return [event.model_copy(update={"ids": batch}).model_dump_json() for batch in batches]
+
+
 @dataclasses.dataclass
 class Queries:
     """High-level job-queue operations: schema install/upgrade, enqueue/dequeue, log, stats."""
@@ -441,19 +461,21 @@ class Queries:
             await self.driver.execute(self.qbq.build_truncate_queue_query())
 
     async def mark_job_as_cancelled(self, ids: list[types.JobId]) -> None:
-        """Cancel *ids* and emit a cancellation NOTIFY.
+        """Cancel *ids* and emit the cancellation NOTIFYs.
 
         A ``queued`` or ``failed`` row is logged ``canceled`` and removed. A
         ``picked`` row stays until its worker logs the outcome, so the job keeps
         its concurrency slot and dedupe key while the handler runs.
         """
+        # The log query writes one row per input id, so each id must occur once.
+        unique_ids = list(dict.fromkeys(ids))
         await asyncio.gather(
             self.driver.execute(
                 self.qbq.build_log_job_query(),
-                ids,
-                ["canceled"] * len(ids),
-                [None] * len(ids),
-                [None] * len(ids),
+                unique_ids,
+                ["canceled"] * len(unique_ids),
+                [None] * len(unique_ids),
+                [None] * len(unique_ids),
             ),
             self.notify_job_cancellation(ids),
         )
@@ -579,16 +601,15 @@ class Queries:
         return [models.LogStatistics.model_validate(row) for row in rows]
 
     async def notify_job_cancellation(self, ids: list[types.JobId]) -> None:
-        """Emit a ``cancellation_event`` NOTIFY carrying *ids*."""
-        await self.driver.notify(
-            self.qbq.settings.channel,
-            models.CancellationEvent(
-                channel=self.qbq.settings.channel,
-                ids=ids,
-                sent_at=models.utc_now(),
-                type="cancellation_event",
-            ).model_dump_json(),
+        """Emit ``cancellation_event`` NOTIFYs that together carry *ids*."""
+        event = models.CancellationEvent(
+            channel=self.qbq.settings.channel,
+            ids=ids,
+            sent_at=models.utc_now(),
+            type="cancellation_event",
         )
+        for payload in cancellation_payloads(event):
+            await self.driver.notify(self.qbq.settings.channel, payload)
 
     async def notify_table_changed(self, operation: types.OPERATIONS) -> None:
         """Emit a ``table_changed_event`` NOTIFY, as the queue table trigger does."""
