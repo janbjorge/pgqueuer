@@ -358,6 +358,7 @@ If the comment prose in a function is a noticeable fraction of its code, that is
 - Fixtures create a **fresh database per test** via `CREATE DATABASE ... TEMPLATE`
 - Key fixtures in `test/conftest.py`: `dsn` (per-test DB URL), `apgdriver` (AsyncpgDriver), `pgdriver` (SyncPsycopgDriver)
 - In-memory tests (`test_inmemory.py`) don't need Postgres
+- The SQL of every `Queries` statement is snapshotted under `test/query_shapes/`; a change regenerates with `PGQUEUER_UPDATE_SNAPSHOTS=1` and is reviewed as a diff.
 
 ## Versioning
 
