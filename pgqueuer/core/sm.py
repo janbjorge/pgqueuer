@@ -136,12 +136,6 @@ class SchedulerManager:
             await self._wait_for_next_tick()
 
     async def _wait_for_next_tick(self) -> None:
-        with suppress(TimeoutError):
-            async with asyncio.timeout(self.next_poll_in().total_seconds()):
-                await self.shutdown.wait()
-
-    def next_poll_in(self) -> timedelta:
-        """Return the time until the first poll after the next tick."""
         # Each tick runs once, at most about 0.5 s late, while query latency stays under 0.5 s.
         # Worker and database clock skew does not change this for one scheduler process.
         leeway = timedelta(milliseconds=500)
@@ -150,7 +144,9 @@ class SchedulerManager:
             if self.registry
             else timedelta(seconds=1)
         )
-        return delay + leeway
+        with suppress(TimeoutError):
+            async with asyncio.timeout((delay + leeway).total_seconds()):
+                await self.shutdown.wait()
 
     async def dispatch(
         self,

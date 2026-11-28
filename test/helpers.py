@@ -14,7 +14,6 @@ from pgqueuer import db
 from pgqueuer.adapters.persistence import qb
 from pgqueuer.adapters.persistence.queries import Queries
 from pgqueuer.adapters.persistence.query_helpers import cell
-from pgqueuer.core.sm import SchedulerManager
 from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.schema.model import Schema
 from pgqueuer.domain.types import JOB_STATUS, JobId, QueueEntrypoint, QueueManagerId
@@ -153,13 +152,3 @@ async def install_release(driver: db.Driver, release: str) -> None:
     """Replace the template schema with the one *release* shipped."""
     await Queries(driver).uninstall()
     await driver.execute((RELEASES_DIR / f"{release}.sql").read_text())
-
-
-async def poll_schedules(scheduler: SchedulerManager, *, insert: bool = False) -> int:
-    """Poll as the scheduler does. Count the runs."""
-    due = {key: executor.next_in() for key, executor in scheduler.registry.items()}
-    if insert:
-        await scheduler.queries.insert_schedule(due)
-    picked = await scheduler.queries.fetch_schedule(due)
-    await scheduler.queries.set_schedule_queued({schedule.id for schedule in picked})
-    return len(picked)

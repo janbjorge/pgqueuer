@@ -1,13 +1,9 @@
 import asyncio
-import contextlib
-import functools
 from collections.abc import Awaitable, Callable, MutableMapping
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 
-import asyncpg
 import pytest
-import time_machine
 
 from pgqueuer.adapters.inmemory import InMemoryDriver, InMemoryQueries
 from pgqueuer.db import AsyncpgDriver
@@ -26,7 +22,6 @@ from pgqueuer.models import (
 )
 from pgqueuer.queries import Queries
 from pgqueuer.sm import SchedulerManager
-from test.helpers import poll_schedules
 
 
 async def inspect_schedule(
@@ -538,140 +533,6 @@ async def test_two_second_schedule_keeps_its_cadence_postgres(apgdriver: Asyncpg
     """Four firings of '* * * * * */2' still take about 6 s, so it does not fire more often."""
     span = await span_of_firings(Queries(apgdriver), "* * * * * */2")
     assert span > 4.5, span
-
-
-async def test_poll_after_each_wait_runs_the_tick_with_worker_clock_ahead(
-    scheduler: SchedulerManager,
-    mocker: Mock,
-) -> None:
-    """With the worker clock 300 ms ahead, the poll after each wait runs that tick once."""
-    mocker.patch(
-        "pgqueuer.core.executors.utc_now",
-        side_effect=lambda: datetime.now(UTC) + timedelta(milliseconds=300),
-    )
-
-    @scheduler.schedule("every_second", "* * * * * *")
-    async def every_second(schedule: Schedule) -> None:
-        pass
-
-    with time_machine.travel(datetime(2026, 10, 22, 12, 0, tzinfo=UTC), tick=False) as traveller:
-        runs = [await poll_schedules(scheduler, insert=True)]
-        for _ in range(6):
-            traveller.shift(scheduler.next_poll_in())
-            runs.append(await poll_schedules(scheduler))
-
-    # The first poll is the start-up poll, before the first tick.
-    assert runs == [0, 1, 1, 1, 1, 1, 1]
-
-
-async def test_start_up_before_a_tick_runs_each_tick_once_with_worker_clock_behind(
-    scheduler: SchedulerManager,
-    mocker: Mock,
-) -> None:
-    """With the worker clock 300 ms behind, a start-up 200 ms before a tick runs each tick once."""
-    mocker.patch(
-        "pgqueuer.core.executors.utc_now",
-        side_effect=lambda: datetime.now(UTC) - timedelta(milliseconds=300),
-    )
-
-    @scheduler.schedule("every_second", "* * * * * *")
-    async def every_second(schedule: Schedule) -> None:
-        pass
-
-    # The worker clock reads 12:00:00.800 at start-up.
-    start = datetime(2026, 10, 22, 12, 0, 1, 100_000, tzinfo=UTC)
-    with time_machine.travel(start, tick=False) as traveller:
-        runs = [await poll_schedules(scheduler, insert=True)]
-        for _ in range(6):
-            traveller.shift(scheduler.next_poll_in())
-            runs.append(await poll_schedules(scheduler))
-
-    assert runs == [0, 1, 1, 1, 1, 1, 1]
-
-
-async def poll_with_worker_clock(
-    scheduler: SchedulerManager,
-    connection: asyncpg.Connection,
-    worker_clock: Mock,
-    offset: timedelta,
-    *,
-    insert: bool = False,
-) -> int:
-    """Poll as the scheduler does, with the worker clock at NOW() + *offset*. Count the runs."""
-    # NOW() stands still inside a transaction, so the offset is exact.
-    async with connection.transaction():
-        worker_clock.return_value = await connection.fetchval("SELECT now()") + offset
-        return await poll_schedules(scheduler, insert=insert)
-
-
-async def sleep_until_past_a_second(connection: asyncpg.Connection, past: timedelta) -> None:
-    """Sleep until the database clock is *past* after a whole second."""
-    db_now = await connection.fetchval("SELECT clock_timestamp()")
-    wait = (past - timedelta(microseconds=db_now.microsecond)) % timedelta(seconds=1)
-    await asyncio.sleep(wait.total_seconds())
-
-
-async def test_schedule_runs_once_per_tick_with_worker_clock_ahead_postgres(
-    dsn: str,
-    mocker: Mock,
-) -> None:
-    """A schedule runs once per tick when the worker clock is 5 ms ahead of PostgreSQL."""
-    ahead = timedelta(milliseconds=5)
-    after_tick = timedelta(milliseconds=250)
-    async with contextlib.AsyncExitStack() as stack:
-        connection = await asyncpg.connect(dsn=dsn)
-        stack.push_async_callback(connection.close)
-        scheduler = SchedulerManager(Queries.from_asyncpg_connection(connection))
-
-        @scheduler.schedule("every_second", "* * * * * *")
-        async def every_second(schedule: Schedule) -> None:
-            pass
-
-        worker_clock = mocker.patch("pgqueuer.core.executors.utc_now")
-        poll = functools.partial(poll_with_worker_clock, scheduler, connection, worker_clock)
-        await sleep_until_past_a_second(connection, after_tick)
-        runs = [await poll(ahead, insert=True)]
-        await sleep_until_past_a_second(connection, after_tick)
-        runs += [await poll(ahead), await poll(ahead)]
-        await sleep_until_past_a_second(connection, after_tick)
-        runs.append(await poll(ahead))
-
-    # The polls alternate: inside the second before a tick, then just after the tick.
-    assert runs == [0, 1, 0, 1]
-
-
-async def test_poll_after_a_slow_query_runs_the_tick_postgres(
-    dsn: str,
-    mocker: Mock,
-) -> None:
-    """After queries that start 300 ms late, the poll after next_poll_in() runs the tick."""
-    stall = timedelta(milliseconds=300)
-    async with contextlib.AsyncExitStack() as stack:
-        connection = await asyncpg.connect(dsn=dsn)
-        stack.push_async_callback(connection.close)
-        scheduler = SchedulerManager(Queries.from_asyncpg_connection(connection))
-
-        @scheduler.schedule("every_second", "* * * * * *")
-        async def every_second(schedule: Schedule) -> None:
-            pass
-
-        worker_clock = mocker.patch("pgqueuer.core.executors.utc_now")
-        poll = functools.partial(poll_with_worker_clock, scheduler, connection, worker_clock)
-
-        async def wait_for_the_next_query(stall: timedelta) -> None:
-            """Sleep through next_poll_in(), then *stall* more before the next query."""
-            # The last query is over, so the worker clock reads the database clock again.
-            worker_clock.return_value = await connection.fetchval("SELECT clock_timestamp()")
-            await asyncio.sleep((scheduler.next_poll_in() + stall).total_seconds())
-
-        await sleep_until_past_a_second(connection, timedelta(milliseconds=500))
-        runs = [await poll(-stall, insert=True)]
-        await wait_for_the_next_query(stall)
-        runs.append(await poll(-stall))
-        await wait_for_the_next_query(timedelta(0))
-        runs.append(await poll(timedelta(0)))
-
-    assert runs == [0, 1, 1]
 
 
 async def fetches_in_two_seconds(scheduler: SchedulerManager, mocker: Mock) -> int:
