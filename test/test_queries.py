@@ -1298,6 +1298,18 @@ async def test_dequeue_returns_batch_with_non_object_headers(apgdriver: db.Drive
     assert {job.id: job.headers for job in jobs} == {plain: None, bad: None}
 
 
+async def test_queue_log_reads_a_traceback_that_is_not_a_json_object(apgdriver: db.Driver) -> None:
+    """A log row whose traceback is not a JSON object reads as no traceback."""
+    q = queries.Queries(apgdriver)
+    await q.clear_queue_log()
+    await apgdriver.execute(
+        f"""INSERT INTO {q.qbq.settings.queue_table_log}
+        (job_id, status, priority, entrypoint, traceback) VALUES (1, 'exception', 0, 'ep', '[1]')"""
+    )
+
+    assert [log.traceback for log in await q.queue_log()] == [None]
+
+
 async def test_queries_from_asyncpg_connection(dsn: str) -> None:
     """Test creating Queries from an asyncpg connection."""
     connection = await asyncpg.connect(dsn=dsn)
