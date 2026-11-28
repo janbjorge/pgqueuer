@@ -464,3 +464,29 @@ async def test_limited_dequeue_claims_top_priority_jobs_within_remaining(apgdriv
 
     claimed = await dequeue(batch_size=10)
     assert {job.id for job in claimed} == {ids[1], ids[3]}
+
+
+async def test_unlimited_dequeue_claims_a_retried_job_while_its_slot_is_held(
+    apgdriver: Driver,
+) -> None:
+    """A dequeue without limits claims a retried job while a limited worker holds its slot."""
+    q = Queries(apgdriver)
+
+    async def dequeue(limit: int) -> list[Job]:
+        return await q.dequeue(
+            batch_size=10,
+            entrypoints={FETCH: EntrypointExecutionParameter(limit)},
+            queue_manager_id=QueueManagerId(uuid.uuid4()),
+            global_concurrency_limit=None,
+            heartbeat_timeout=timedelta(minutes=10),
+        )
+
+    (retried,) = await q.enqueue(["fetch"], [None], [0])
+    (job,) = await dequeue(limit=1)
+    await q.retry_job(job, timedelta(0), None)
+    (held,) = await q.enqueue(["fetch"], [None], [1])
+    assert [job.id for job in await dequeue(limit=1)] == [held]
+
+    claimed = await dequeue(limit=0)
+
+    assert [(job.id, job.slot) for job in claimed] == [(retried, None)]
