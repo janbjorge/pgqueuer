@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (adoption is incremental; dequeue has migrated)
+Superseded by ADR-0027
 
 ## Context
 
