@@ -6,10 +6,10 @@ import pytest
 from pgqueuer import db
 from pgqueuer.adapters.inmemory import InMemoryQueries
 from pgqueuer.errors import RetryRequested
-from pgqueuer.models import Job
+from pgqueuer.models import AnyEvent, CancellationEvent, Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
-from pgqueuer.types import QueueExecutionMode
+from pgqueuer.types import JobId, QueueExecutionMode
 
 
 @pytest.mark.parametrize("N", (1, 4, 32, 100))
@@ -167,3 +167,30 @@ async def test_retry_after_cancel_ends_the_job_canceled(queries: InMemoryQueries
 
     log = await queries.queue_log()
     assert [entry.status for entry in log] == ["queued", "picked", "canceled"]
+
+
+async def test_cancel_too_large_for_one_notify_payload(apgdriver: db.Driver) -> None:
+    """A listener receives each id of a cancel too large for one NOTIFY payload."""
+    q = Queries(apgdriver)
+    ids = [JobId(n) for n in range(2000)]
+    notices = asyncio.Queue[str | bytes | bytearray]()
+    await q.add_listener(q.qbq.settings.channel, notices.put_nowait)
+
+    await q.mark_job_as_cancelled(ids)
+
+    notified = list[JobId]()
+    async with asyncio.timeout(5):
+        while len(notified) < len(ids):
+            event = AnyEvent.model_validate_json(await notices.get()).root
+            if isinstance(event, CancellationEvent):
+                notified += event.ids
+    assert sorted(notified) == ids
+
+
+async def test_cancel_logs_a_repeated_id_once(apgdriver: db.Driver) -> None:
+    q = Queries(apgdriver)
+    (jid,) = await q.enqueue(["to_be_canceled"], [None], [0])
+
+    await q.mark_job_as_cancelled([jid, jid])
+
+    assert [log.job_id for log in await q.queue_log() if log.status == "canceled"] == [jid]
