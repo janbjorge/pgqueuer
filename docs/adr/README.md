@@ -26,9 +26,10 @@ Conventions:
 - [ADR-0004: Delivery is at-least-once](ADR-0004-delivery-is-at-least-once.md)
 - [ADR-0005: Worker liveness is an application-level signal, not DB session state](ADR-0005-worker-liveness-is-application-signal.md)
 - [ADR-0016: Schema upgrades are computed from the live database](ADR-0016-schema-upgrades-are-computed-from-the-live-database.md)
-- [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
+- [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md) (superseded by ADR-0027)
 - [ADR-0025: The schema contract is a declared manifest](ADR-0025-the-schema-contract-is-a-declared-manifest.md)
 - [ADR-0026: The code that makes a connection controls its lifecycle](ADR-0026-connection-creator-controls-its-lifecycle.md)
+- [ADR-0027: SQL statements are fixed text](ADR-0027-sql-statements-are-fixed-text.md)
 
 ## Backlog
 
@@ -250,7 +251,7 @@ leaves open.
   - Not covered: the integration list, header namespacing for trace
     context, degradation mechanics.
 
-- [x] **ADR-0024: SQL statements are assembled by the composer**
+- [x] **ADR-0024: SQL statements are assembled by the composer** (superseded by ADR-0027)
   - Decision: statements are built from conditional fragments, binds
     auto-numbered, text and arguments emerging as one pair; unconfigured
     is absence, never a sentinel. Adoption is incremental; dequeue has
@@ -277,6 +278,20 @@ leaves open.
     in `pgqueuer/core/`.
   - Not covered: how the declaration is expressed, how per-object versions
     are recorded, the severity vocabulary (see the schema manifest model).
+
+- [x] **ADR-0027: SQL statements are fixed text**
+  - Decision: a statement is fixed text with fixed `$n`, next to the code
+    that runs it; a statement with variants is one plain function per
+    variant family; no generic composer.
+  - Fork: fixed text vs. the composer (ADR-0024) vs. one statement for
+    every variant with neutral parameters.
+  - Consequences: `$n` numbers are written by hand; the four dequeue texts
+    stay until the worker budget leaves the SQL; the fixed `log_statistics`
+    text is slower without a window.
+  - Pointers: query builders in `pgqueuer/adapters/persistence/qb.py`;
+    dequeue text in `pgqueuer/adapters/persistence/dequeue.py`.
+  - Not covered: schema DDL (ADR-0016, ADR-0025), which statements get
+    variants, the order in which builders move.
 
 ### Runtime & process
 
@@ -343,7 +358,7 @@ Implementation detail; documented in AGENTS.md or reference docs and free to
 change without touching a record:
 
 - The claim query's CTE mechanics, index definitions, query-plan tests
-  (the composition *policy* is ADR-0024; the rendered shapes stay detail)
+  (the fixed-text *policy* is ADR-0027; the rendered shapes stay detail)
 - Advisory locking in statistics aggregation; batching, jitter, debounce
 - Tool picks: import-linter, testcontainers, pydantic-settings, htmx
 - The in-memory adapter (consequence of 0014 + 0021)

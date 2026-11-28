@@ -271,6 +271,8 @@ When surrounding indentation would leak into the string, normalize with `textwra
 
 ### SQL Style
 
+**A statement is fixed text with fixed `$n`**, next to the Python that runs it; no composer (ADR-0027).
+
 **No single-letter table or CTE aliases** (`q`, `a`, `p`, `pk`). The SQL here is dense enough already — use the full table/CTE name, or a descriptive alias (`candidate`, `stale`, `job`) when the name is parameterized or shadowed.
 
 **Follow the PostgreSQL wiki [Don't Do This](https://wiki.postgresql.org/wiki/Don%27t_Do_This)** in all SQL, DDL, schema declarations, docs snippets, and tooling. Check new or changed SQL against it in review. The rules most likely to bite here: `timestamptz` not `timestamp`; `text` not `varchar(n)`/`char(n)`; identity columns not `serial`; `NOT EXISTS` not `NOT IN`; half-open ranges (`>=` and `<`) not `BETWEEN`; lower-case identifiers. A deliberate departure needs a one-line comment at the site or an ADR (`docs/adr/`). The `bigserial` ids on `queue`, `statistics` and `schedules` are grandfathered; add no more.
