@@ -29,6 +29,7 @@ Conventions:
 - [ADR-0024: SQL statements are assembled by the composer](ADR-0024-sql-is-assembled-by-the-composer.md)
 - [ADR-0025: The schema contract is a declared manifest](ADR-0025-the-schema-contract-is-a-declared-manifest.md)
 - [ADR-0026: The code that makes a connection controls its lifecycle](ADR-0026-connection-creator-controls-its-lifecycle.md)
+- [ADR-0028: Persistence internals can change in a minor release](ADR-0028-persistence-internals-may-change-in-a-minor-release.md)
 
 ## Backlog
 
@@ -336,6 +337,20 @@ leaves open.
   - Note: this is the one record that makes a decision rather than
     documenting an existing one; it needs maintainer sign-off on the policy
     itself.
+
+- [x] **ADR-0028: Persistence internals can change in a minor release**
+  - Decision: code in `pgqueuer/adapters/persistence/`, with the query
+    builders behind `Queries.qbe`, `qbq` and `qbs`, can change in a minor
+    release that notes the change. Names that `pgqueuer/__init__.py` or a
+    root shim exports stay public.
+  - Fork: an exception for the persistence internals vs. every importable
+    name public until a major release.
+  - Consequences: the SQL simplification can go into minor releases of v2;
+    user code that imports these internals can break in a minor release.
+  - Cross-ref: a narrow exception to ADR-0020; fold it into that record
+    once it defines the public surface.
+  - Not covered: the database schema, the CLI, the protocols in
+    `pgqueuer/ports/`, the other adapters.
 
 ## Explicitly not ADRs
 

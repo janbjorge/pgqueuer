@@ -368,6 +368,8 @@ PgQueuer follows **strict semantic versioning** (SemVer) from v1.0.0 onward:
 
 Never introduce a breaking change in a patch or minor release. If a change would break any public API (function signatures, class fields, import paths, CLI behavior, database schema), it requires a major version bump.
 
+Persistence internals may change in a minor release, with a release note (ADR-0028).
+
 ## Issues and Pull Requests
 
 Every issue or pull request an agent writes **must** carry the `Agentic` label ("Issue or PR written mainly by an AI agent. Required on all agent-authored contributions."). See [CONTRIBUTING.md](CONTRIBUTING.md#agentic-contributions).
