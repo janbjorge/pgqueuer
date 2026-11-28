@@ -143,10 +143,12 @@ empty batch.
 ## Offline converge script
 
 `pgq sql upgrade` has no connection, so it re-states every object behind
-guards that make a rerun a no-op: `IF NOT EXISTS` on tables, columns and
-indexes, a `DO` block around `CREATE TYPE`, and catalog-guarded `DO`
-blocks for the statistics retype, the id widening and the redefined
-indexes. Those last are a hand-kept list, `redefined_indexes`: a new
+guards that make a rerun a no-op: `IF NOT EXISTS` on tables, a `DO` block
+around `CREATE TYPE`, and catalog-guarded `DO` blocks for each column,
+default, index, trigger, retype and widening. DDL that changes nothing
+still locks its table. Behind an open transaction, that lock makes every
+enqueue and dequeue wait.
+The redefined indexes are a hand-kept list, `redefined_indexes`: a new
 index redefinition must be added there, or the offline script keeps the
 old definition while the connected upgrade rebuilds it.
 

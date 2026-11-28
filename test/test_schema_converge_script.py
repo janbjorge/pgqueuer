@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import asyncpg
+
 from pgqueuer.adapters.persistence import schema_ddl
 from pgqueuer.adapters.persistence.query_helpers import cell
+from pgqueuer.adapters.persistence.schema_inspect import inspect
+from pgqueuer.adapters.persistence.schema_plan import plan
 from pgqueuer.db import AsyncpgDriver
+from pgqueuer.domain.schema.declaration import target
 from pgqueuer.domain.settings import DBSettings
 from test.helpers import install_release
 
@@ -148,3 +153,39 @@ async def test_the_script_folds_split_statistics_buckets(apgdriver: AsyncpgDrive
         ("alone", 5),
         ("split", 3),
     ]
+
+
+async def test_a_rerun_takes_no_lock_that_blocks_writers(
+    apgdriver: AsyncpgDriver,
+    dsn: str,
+) -> None:
+    """A rerun on a current database does not wait behind an open writer."""
+    settings = DBSettings(db_schema="pgq_rerun")  # Off search_path: defaults read back qualified.
+    await apgdriver.execute(schema_ddl.render_install(settings))
+    # An upgrade from v0.18 leaves this retired column, nullable.
+    await apgdriver.execute(
+        f"ALTER TABLE {settings.qualified.statistics_table} ADD COLUMN time_in_queue INTERVAL"
+    )
+    await apgdriver.execute("SET lock_timeout = '1s'")
+    tables = ", ".join(settings.qualify(table.name) for table in target(settings).tables)
+    async with (
+        asyncpg.create_pool(dsn=dsn, min_size=1, max_size=1) as pool,
+        pool.acquire() as writer,
+        writer.transaction(),
+    ):
+        await writer.execute(f"LOCK TABLE {tables} IN ROW EXCLUSIVE MODE")
+        await writer.fetchval(
+            "SELECT nextval(pg_get_serial_sequence($1, 'id'))", settings.qualified.queue_table
+        )
+
+        await apply_converge_script(apgdriver, settings)
+
+
+async def test_the_script_still_converges_the_oldest_release(apgdriver: AsyncpgDriver) -> None:
+    """The guards let each statement run when the catalog shows work to do."""
+    settings = DBSettings()
+    await install_release(apgdriver, "v0.18.10")
+    # The release has the current trigger. The drop gives the trigger guard work to do.
+    await apgdriver.execute(f"DROP TRIGGER {settings.trigger} ON {settings.queue_table};")
+    await apply_converge_script(apgdriver, settings)
+    assert plan(await inspect(apgdriver, settings), target(settings), settings).statements == ()
