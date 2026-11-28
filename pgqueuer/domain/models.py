@@ -142,11 +142,7 @@ class Log(BaseModel):
     status: JOB_STATUS
     priority: int
     entrypoint: QueueEntrypoint
-    traceback: Annotated[
-        TracebackRecord | None,
-        # asyncpg returns jsonb as text, psycopg as an already-parsed dict.
-        BeforeValidator(lambda x: x if x is None or isinstance(x, dict) else from_json(x)),
-    ]
+    traceback: Annotated[TracebackRecord | None, BeforeValidator(parse_headers)]
     aggregated: bool
 
 
