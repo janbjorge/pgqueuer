@@ -595,6 +595,22 @@ async def test_ready_lane_rebuild_keeps_live_and_deferred_jobs(queries: InMemory
     assert lane.dead == dead_entries(lane)
 
 
+async def test_new_higher_priority_job_comes_next_after_the_cursor_moved(
+    queries: InMemoryQueries,
+) -> None:
+    params = {QueueEntrypoint("ep"): EntrypointExecutionParameter(0)}
+    qm_id = QueueManagerId(uuid.uuid4())
+    heartbeat = timedelta(seconds=30)
+    await queries.enqueue(["ep"] * 20, [None] * 20, [0] * 20)
+    await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
+    # This dequeue moves the cursor past the two picked jobs.
+    await queries.dequeue(2, params, qm_id, None, heartbeat_timeout=heartbeat)
+    (urgent,) = await queries.enqueue("ep", None, priority=5)
+
+    (job,) = await queries.dequeue(1, params, qm_id, None, heartbeat_timeout=heartbeat)
+    assert job.id == urgent
+
+
 async def test_clear_queue_filtered_then_reenqueue_same_entrypoint(
     queries: InMemoryQueries,
 ) -> None:
