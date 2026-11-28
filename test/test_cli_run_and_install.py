@@ -205,6 +205,20 @@ def test_cli_verify_warns_on_a_missing_non_unique_index(dsn: str) -> None:
     assert f"warning: missing index '{name}'" in result.stdout
 
 
+def test_cli_verify_absent_stops_on_a_queue_table_outside_current_schema(dsn: str) -> None:
+    env = env_from_dsn(dsn)
+    with psycopg.connect(dsn, autocommit=True) as connection:
+        connection.execute(b"CREATE SCHEMA tenant")
+        connection.execute(
+            f"ALTER DATABASE {env['PGDATABASE']} SET search_path TO tenant, public".encode()
+        )
+
+    result = CliRunner().invoke(app, ["verify", "--expect", "absent"], env=env)
+
+    assert result.exit_code == 1, result.output
+    assert "resolves to the schema public" in str(result.exception)
+
+
 @pytest.mark.parametrize("flag", ["--durability", "-d"])
 def test_cli_upgrade_rejects_a_durability_flag(flag: str) -> None:
     result = CliRunner().invoke(app, ["upgrade", flag, "volatile"])

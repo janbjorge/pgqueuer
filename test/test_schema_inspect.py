@@ -178,3 +178,13 @@ async def test_queue_table_outside_current_schema_stops_inspect(apgdriver: Async
     await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
     with pytest.raises(PgqException, match="resolves to the schema public"):
         await Queries(apgdriver).schema_is_installed()
+
+
+async def test_queue_table_outside_current_schema_stops_uninstall(apgdriver: AsyncpgDriver) -> None:
+    """Uninstall drops nothing when search_path resolves the queue table to a later schema."""
+    await apgdriver.execute("CREATE SCHEMA app; SET search_path TO app, public")
+    with pytest.raises(PgqException, match="resolves to the schema public"):
+        await Queries(apgdriver).uninstall()
+
+    await apgdriver.execute("SET search_path TO public")
+    assert collapse(await inspect(apgdriver, DBSettings())) == declared_schema(DBSettings())

@@ -39,6 +39,10 @@ Remove the PgQueuer schema from the database.
 pgq uninstall
 ```
 
+Without `--schema`, `uninstall` drops nothing and exits `1` when `search_path`
+resolves the queue table outside `current_schema()`. Set `--schema` to that
+schema, or change `search_path`.
+
 ---
 
 ### `upgrade`
@@ -128,7 +132,8 @@ index only slows queries: it prints as a `warning:` line and does not change
 the exit code. With `absent`, checks the tables, the function and the trigger.
 
 Exits with code `1` if an object a worker needs is missing (`present`) or any
-object is found (`absent`); `0` otherwise.
+object is found (`absent`); `0` otherwise. Without `--schema`, both modes also
+exit `1` when `search_path` resolves the queue table outside `current_schema()`.
 
 ```bash
 pgq verify --expect present
