@@ -16,7 +16,7 @@ A **job** is a unit of work stored as a row in the `pgqueuer` table. Each job ha
 | `execute_after` | `timestamptz` | Earliest time the job can be picked up |
 | `attempts` | `int` | Number of previous retry attempts (starts at 0) |
 | `heartbeat` | `timestamptz` | Last time the worker confirmed it is alive |
-| `slot` | `int \| None` | Capacity seat held while picked under a `concurrency_limit`; `None` otherwise |
+| `slot` | `int \| None` | Capacity seat while picked under a `concurrency_limit`. A job keeps it through retry, hold and requeue, until its next dequeue |
 | `dedupe_key` | `str \| None` | Optional unique key to prevent duplicate enqueuing |
 
 Jobs are created by calling `Queries.enqueue()` and processed by functions registered

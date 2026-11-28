@@ -12,6 +12,56 @@
 
 ---
 
+## v2.2.1
+
+### Fixed
+
+- `QueueManager` retries a failed poll query. Before, one failed poll stopped
+  new work until the last job ended. Three failed polls in a row still end
+  the run (#1169).
+- A job error text with a lone surrogate no longer fails the whole log write
+  (#1171). `InMemoryQueries` serializes a record before it changes a row, as
+  `Queries` does (#1172).
+- Traces show a failed job as an error. Before, OpenTelemetry, Sentry and
+  Logfire showed it as OK (#1173).
+- The Prometheus service escapes label values. An entrypoint name with a double
+  quote no longer fails the whole scrape (#1174). Its `/health` returns 500
+  when the database connection is lost (#1189, #1196).
+- `pgq requeue` says that only failed jobs move (#1177).
+- The dashboard overview shows recent held failures in their own card (#1181).
+- A dequeue without concurrency limits clears the slot that a retried, held or
+  requeued job kept. Before, two picked jobs could share a slot (#1182).
+- The in-memory adapter delivers retried and requeued jobs, and new jobs with a
+  higher priority. Before, they could stay queued and a drain did not end (#1183).
+- `pgq uninstall` and `pgq verify --expect absent` run the `search_path`
+  guard. Before, uninstall could drop tables in a different schema (#1184).
+- Jobs whose headers are not a JSON object run with `headers=None` (#1185,
+  #1195). A log row whose traceback is not a JSON object reads with
+  `traceback=None` (#1201).
+- `pgq durability` changes one table at a time, so the queue table lock is not
+  held while the log table is rewritten (#1186).
+- `pgq upgrade` notes each index it builds on an installed table. That build
+  blocks writes to the table (#1187).
+- `pgq sql upgrade` runs a statement only when it changes something, so a rerun
+  takes no locks on a current database (#1188).
+- `pgq run --pg-dsn` gives the DSN to user factories through `PGQUEUER_DSN`
+  (#1190).
+- A `CancelledError` raised by job code fails the job when no cancel was
+  requested. A retry request after a cancel ends the job canceled (#1191).
+- A cancel of many jobs is split into several NOTIFYs, under the PostgreSQL
+  payload limit, and logs each job once (#1192).
+- Each cron tick runs once under clock skew and query latency (#1193).
+- Deleting stale schedules no longer keeps every row when the keep list holds a
+  NULL (#1199).
+
+### Changed
+
+- `next_deferred_eta` reads one index entry per entrypoint. It took 17.95 ms
+  and now takes 0.30 ms with 100,000 deferred jobs (#1170).
+- The web `/healthz` reads one row by primary key (#1176).
+
+---
+
 ## v2.2.0
 
 ### Added
