@@ -126,6 +126,19 @@ class TestInsightsService:
         assert snapshot.queued_total == 0
         assert snapshot.oldest_queued_age_seconds is None
 
+    async def test_overview_counts_recent_held_failures_apart(
+        self, queries: InMemoryQueries
+    ) -> None:
+        # on_failure="hold" logs a failure as "failed", not "exception".
+        await queries.enqueue(["ep", "ep"], [None, None], [0, 0])
+        jobs = await dequeue_all(queries, "ep")
+        await queries.log_jobs([(jobs[0], "exception", None), (jobs[1], "failed", None)])
+
+        snapshot = await InsightsService(queries).overview()
+        assert snapshot.failed_total == 1
+        assert snapshot.exceptions_recent == 1
+        assert snapshot.failed_recent == 1
+
     async def test_queue_age_groups_by_entrypoint(self, queries: InMemoryQueries) -> None:
         await queries.enqueue(["ep_a", "ep_a", "ep_b"], [None] * 3, [0] * 3)
         ages = await InsightsService(queries).queue_age()

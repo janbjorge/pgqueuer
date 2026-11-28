@@ -5,6 +5,7 @@
   <div class="card"><span class="value">{{ snapshot.active_workers }}</span><span class="label">workers</span></div>
   <div class="card"><span class="value">{{ snapshot.oldest_queued_age_seconds | age }}</span><span class="label">oldest queued</span></div>
   <div class="card {% if snapshot.exceptions_recent %}alert{% endif %}"><span class="value">{{ snapshot.exceptions_recent }}</span><span class="label">exceptions (1h)</span></div>
+  <div class="card {% if snapshot.failed_recent %}alert{% endif %}"><span class="value">{{ snapshot.failed_recent }}</span><span class="label">failed (1h)</span></div>
 </div>
 
 <h2>Throughput <small>(last hour)</small></h2>

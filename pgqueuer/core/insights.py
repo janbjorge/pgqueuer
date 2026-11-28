@@ -117,7 +117,7 @@ class InsightsService:
         return await self.repository.unaggregated_log_count()
 
     async def overview(self, last: timedelta | None = None) -> models.OverviewSnapshot:
-        """Headline dashboard numbers; ``exceptions_recent`` counts within *last*."""
+        """Headline dashboard numbers; the ``*_recent`` counts are within *last*."""
         sizes = await self.repository.queue_size()
         ages = await self.repository.queue_age()
         workers = await self.repository.active_workers()
@@ -132,6 +132,7 @@ class InsightsService:
                 default=None,
             ),
             exceptions_recent=sum(t.total_count for t in throughput if t.status == "exception"),
+            failed_recent=sum(t.total_count for t in throughput if t.status == "failed"),
         )
 
     async def entrypoint_stats(
