@@ -347,7 +347,7 @@ class TracebackRecord(BaseModel):
     @classmethod
     def from_exception(
         cls,
-        exc: Exception,
+        exc: BaseException,
         job_id: JobId,
         additional_context: dict[str, object] | None = None,
     ) -> TracebackRecord:

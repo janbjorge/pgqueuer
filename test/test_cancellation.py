@@ -4,6 +4,8 @@ from datetime import timedelta
 import pytest
 
 from pgqueuer import db
+from pgqueuer.adapters.inmemory import InMemoryQueries
+from pgqueuer.errors import RetryRequested
 from pgqueuer.models import Job
 from pgqueuer.qm import QueueManager
 from pgqueuer.queries import Queries
@@ -126,3 +128,42 @@ async def test_cancellation_drain_mode(apgdriver: db.Driver) -> None:
     )
 
     assert sum(x.status == "canceled" for x in await q.queue_log()) == N
+
+
+async def test_cancelled_error_from_job_code_fails_the_job(queries: InMemoryQueries) -> None:
+    """A CancelledError from job code with no cancel request fails the job."""
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("ep")
+    async def handler(job: Job) -> None:
+        raise asyncio.CancelledError
+
+    await queries.enqueue(["ep"], [None], [0])
+    async with asyncio.timeout(5):
+        await qm.run(mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(seconds=1))
+
+    log = await queries.queue_log()
+    assert [entry.status for entry in log] == ["queued", "picked", "exception"]
+    assert log[-1].traceback is not None
+    assert log[-1].traceback.exception_type == "CancelledError"
+
+
+async def test_retry_after_cancel_ends_the_job_canceled(queries: InMemoryQueries) -> None:
+    """A retry request after the worker saw a cancel ends the job canceled, with no re-run."""
+    qm = QueueManager(queries)
+
+    @qm.entrypoint("ep")
+    async def handler(job: Job) -> None:
+        if job.attempts > 0:
+            return
+        await queries.mark_job_as_cancelled([job.id])
+        with qm.get_context(job.id).cancellation:
+            await asyncio.Event().wait()  # The cancel ends this wait when it reaches the worker.
+        raise RetryRequested
+
+    await queries.enqueue(["ep"], [None], [0])
+    async with asyncio.timeout(5):
+        await qm.run(mode=QueueExecutionMode.drain, dequeue_timeout=timedelta(seconds=1))
+
+    log = await queries.queue_log()
+    assert [entry.status for entry in log] == ["queued", "picked", "canceled"]
