@@ -798,8 +798,10 @@ class QuerySchedulerBuilder:
         WHERE id = ANY($1)
             OR (
                 entrypoint = ANY($2)
-                AND (entrypoint, expression) NOT IN (
-                    SELECT entrypoint, expression FROM keep
+                AND NOT EXISTS (
+                    SELECT 1 FROM keep
+                    WHERE keep.entrypoint = {self.qualified.schedules_table}.entrypoint
+                    AND keep.expression = {self.qualified.schedules_table}.expression
                 )
             )
         """
