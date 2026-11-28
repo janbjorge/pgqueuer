@@ -67,3 +67,23 @@ docker run -p 8000:8000 \
 
 After the service starts, the metrics endpoint is available at
 `http://localhost:8000/metrics` for Prometheus to scrape.
+
+### Health check
+
+`GET /health` runs `SELECT 1` on the database connection of the service. It returns
+200 when the query succeeds and 503 when it fails.
+
+The service does not reconnect. After a Postgres restart, a failover or a terminated
+backend, `/metrics` fails until the service starts again. Point the liveness probe of
+your orchestrator at `/health`. The orchestrator then restarts the container when the
+service loses its connection. For example, in Kubernetes:
+
+```yaml
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+```
+
+PgQueuer workers follow the same policy. See
+[Connection loss](../guides/deployment.md#connection-loss).
