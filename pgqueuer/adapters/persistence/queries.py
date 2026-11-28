@@ -147,7 +147,12 @@ class Queries:
         )
 
     async def uninstall(self) -> None:
-        """Drop every PgQueuer schema object. Destructive."""
+        """Drop every PgQueuer schema object. Destructive.
+
+        Without db_schema, raise PgqException and drop nothing when search_path
+        resolves the queue table outside current_schema().
+        """
+        await schema_inspect.require_current_schema(self.driver, self.qbe.settings)
         await self.driver.execute(self.qbe.build_uninstall_query())
 
     async def schema_is_installed(self) -> bool:

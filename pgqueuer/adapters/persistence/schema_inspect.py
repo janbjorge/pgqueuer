@@ -219,6 +219,19 @@ async def namespace_present(driver: Driver, queries: CatalogQueries) -> bool:
     return cell(rows[0], "present", bool)
 
 
+async def require_current_schema(driver: Driver, settings: DBSettings) -> None:
+    """Raise when search_path resolves the bare queue table outside current_schema()."""
+    if settings.db_schema is not None:
+        return
+    rows = await driver.fetch(CatalogQueries(settings).resolved_elsewhere(), settings.queue_table)
+    if rows:
+        found = cell(rows[0], "found", str)
+        raise PgqException(
+            f"The queue table {settings.queue_table} resolves to the schema {found}, "
+            f"not to current_schema(). Set db_schema to {found}, or change search_path."
+        )
+
+
 R = TypeVar("R", bound=BaseModel)
 
 
@@ -241,14 +254,7 @@ async def inspect(driver: Driver, settings: DBSettings) -> Schema:
     if settings.db_schema is not None and not await namespace_present(driver, queries):
         return Schema((), (), (), (), (), namespace_exists=False)
 
-    if settings.db_schema is None and (
-        rows := await driver.fetch(queries.resolved_elsewhere(), settings.queue_table)
-    ):
-        found = cell(rows[0], "found", str)
-        raise PgqException(
-            f"The queue table {settings.queue_table} resolves to the schema {found}, "
-            f"not to current_schema(). Set db_schema to {found}, or change search_path."
-        )
+    await require_current_schema(driver, settings)
 
     columns = await rows_of(driver, ColumnRow, queries.columns(), table_names)
     indexes = await rows_of(driver, IndexRow, queries.indexes(), table_names)

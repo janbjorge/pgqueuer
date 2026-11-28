@@ -63,7 +63,8 @@ compares qualified text.
 The NOTIFY channel is database-wide and never qualified. With
 `db_schema` unset, statements resolve through the whole `search_path`,
 but catalog reads use `current_schema()`. When the queue table resolves to
-a later schema, inspection stops with an error. Set `db_schema` to that schema.
+a later schema, inspection, uninstall and `pgq verify --expect absent` stop
+with an error. Set `db_schema` to that schema.
 
 ## Identifiers and values
 

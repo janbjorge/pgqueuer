@@ -21,7 +21,7 @@ from pgqueuer.adapters.cli import factories, sql_cmd, supervisor
 from pgqueuer.adapters.connections import connect_asyncpg, connect_psycopg
 from pgqueuer.adapters.drivers.asyncpg import AsyncpgDriver
 from pgqueuer.adapters.drivers.psycopg import PsycopgDriver
-from pgqueuer.adapters.persistence import qb, queries
+from pgqueuer.adapters.persistence import qb, queries, schema_inspect
 from pgqueuer.core import listeners, logconfig
 from pgqueuer.core.insights import InsightsService
 from pgqueuer.domain import errors, models, types
@@ -342,6 +342,7 @@ async def verify_present(q: queries.Queries) -> int:
 
 async def verify_absent(q: queries.Queries) -> int:
     settings = q.qbe.settings
+    await schema_inspect.require_current_schema(q.driver, settings)
     divergence = [
         f"unexpected table '{table}'"
         for table in (
