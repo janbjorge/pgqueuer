@@ -409,6 +409,21 @@ async def test_peek_schedule_order_matches(apgdriver: AsyncpgDriver) -> None:
     assert await run(memory) == await run(postgres)
 
 
+async def test_delete_schedule_null_keep_matches(apgdriver: AsyncpgDriver) -> None:
+    """A keep pair with a NULL expression does not spare the entrypoint's other rows."""
+    memory, postgres = pair(apgdriver)
+
+    async def run(q: Repository) -> list[str]:
+        nightly = CronExpressionEntrypoint(CronEntrypoint("ep"), CronExpression("0 3 * * *"))
+        hourly = CronExpressionEntrypoint(CronEntrypoint("ep"), CronExpression("0 * * * *"))
+        await q.insert_schedule({nightly: timedelta(0), hourly: timedelta(0)})
+        unset = CronExpressionEntrypoint(CronEntrypoint("ep"), None)  # type: ignore[arg-type]
+        await q.delete_schedule(set(), {CronEntrypoint("ep")}, keep={nightly, unset})
+        return [str(row.expression) for row in await q.peek_schedule()]
+
+    assert await run(memory) == await run(postgres) == ["0 3 * * *"]
+
+
 async def test_job_status_order_matches(apgdriver: AsyncpgDriver) -> None:
     memory, postgres = pair(apgdriver)
 
